@@ -1,0 +1,128 @@
+import json
+from pathlib import Path
+
+import pytest
+
+from nokori.config import Config
+from nokori.extract.compressor import compress
+from nokori.extract.extractor import _parse_candidates, extract
+from nokori.extract.reader import read as read_transcript
+from nokori.models import Turn
+
+
+class FakeLLM:
+    def __init__(self, response):
+        self.response = response
+        self.calls = 0
+
+    def complete(self, prompt, *, max_tokens=2000, timeout=30):
+        self.calls += 1
+        return self.response
+
+
+def test_extractor_parses_array(tmp_path):
+    response = json.dumps([
+        {
+            "trigger": "Force push to a shared branch",
+            "trigger_variants": ["git push --force"],
+            "search_terms": {"en": ["force", "push"], "zh": ["强推"]},
+            "behavior": "git push --force",
+            "action": "use --force-with-lease",
+            "rationale": "force push overwrites peers' work",
+            "source_type": "correction",
+            "confidence": "high",
+        }
+    ])
+    cands = extract("[User] dummy transcript\n", FakeLLM(response))
+    assert len(cands) == 1
+    c = cands[0]
+    assert c.confidence == "high"
+    assert c.source_type == "correction"
+    assert "git push --force" in c.trigger_variants
+    assert c.search_terms["zh"] == ["强推"]
+
+
+def test_extractor_parses_single_object():
+    response = json.dumps({
+        "trigger": "x", "action": "y",
+        "source_type": "correction", "confidence": "high",
+    })
+    cands = extract("nonempty", FakeLLM(response))
+    assert len(cands) == 1
+
+
+def test_extractor_handles_fenced_json():
+    response = "```json\n[]\n```"
+    cands = extract("nonempty", FakeLLM(response))
+    assert cands == []
+
+
+def test_extractor_skips_invalid_json():
+    cands = extract("nonempty", FakeLLM("this is not json {"))
+    assert cands == []
+
+
+def test_extractor_skips_invalid_source_type():
+    response = json.dumps([{
+        "trigger": "x", "action": "y",
+        "source_type": "WAT", "confidence": "high",
+    }])
+    cands = extract("nonempty", FakeLLM(response))
+    assert cands == []
+
+
+def test_extractor_returns_empty_on_empty_transcript():
+    cands = extract("", FakeLLM(json.dumps([{"trigger": "x", "action": "y"}])))
+    assert cands == []
+
+
+def test_compressor_truncates_long_assistant():
+    long = "X" * 1000
+    turns = [
+        Turn(role="human", content="hi"),
+        Turn(role="assistant", content=long),
+    ]
+    out = compress(turns)
+    assert "[User] hi" in out
+    assert "..." in out
+    assert len(out) < len(long)
+
+
+def test_compressor_marks_tool_error():
+    turns = [
+        Turn(role="tool_use", content="", tool_name="Bash",
+             input_summary="rm -rf /tmp/foo"),
+        Turn(role="tool_result", content="", is_error=True,
+             error_line="permission denied"),
+    ]
+    out = compress(turns)
+    assert "[Tool: Bash]" in out
+    assert "[Result: ERROR]" in out
+    assert "permission denied" in out
+
+
+def test_reader_parses_jsonl(tmp_path):
+    path = tmp_path / "session.jsonl"
+    path.write_text("\n".join([
+        json.dumps({"type": "user", "message": "hello"}),
+        json.dumps({"type": "assistant", "message": "hi back"}),
+        json.dumps({"type": "tool_use", "name": "Bash", "input": {"cmd": "ls"}}),
+        json.dumps({"type": "tool_result", "content": "out", "is_error": False}),
+    ]) + "\n")
+    turns = read_transcript(path)
+    roles = [t.role for t in turns]
+    assert roles == ["human", "assistant", "tool_use", "tool_result"]
+    assert turns[0].content == "hello"
+    assert turns[2].tool_name == "Bash"
+
+
+def test_reader_tolerates_malformed_lines(tmp_path):
+    path = tmp_path / "session.jsonl"
+    path.write_text(
+        "this is not json\n"
+        + json.dumps({"type": "user", "message": "ok"})
+        + "\n"
+    )
+    turns = read_transcript(path)
+    assert len(turns) == 1
+    assert turns[0].role == "human"
