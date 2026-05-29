@@ -1,0 +1,23 @@
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.venv/
+venv/
+.env
+.pytest_cache/
+.coverage
+htmlcov/
+*.db
+.nokori/
+
+# Project-local config (not for repo)
+docs/
+.claude/
+.trellis/
+CLAUDE.md
+AGENTS.md
