@@ -1,0 +1,44 @@
+from __future__ import annotations
+
+import argparse
+from datetime import datetime, timezone
+
+from ..config import Config
+from ..db import fetch_rule_by_short_id, open_db
+from ..errors import NokoriError
+
+
+def run(args: argparse.Namespace, cfg: Config) -> int:
+    db = open_db(cfg.db_path)
+    try:
+        rule = fetch_rule_by_short_id(db, args.short_id)
+        if rule is None:
+            raise NokoriError(f"no rule with short_id {args.short_id!r}")
+
+        updates: list[tuple[str, str | int]] = []
+        if args.action is not None:
+            updates.append(("action", args.action))
+        if args.rationale is not None:
+            updates.append(("rationale", args.rationale))
+        if args.confidence is not None:
+            updates.append(("confidence", args.confidence))
+        if args.status is not None:
+            updates.append(("status", args.status))
+
+        if not updates:
+            print("nothing to update")
+            return 0
+
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+        sets = ", ".join(f"{col} = ?" for col, _ in updates)
+        params: list = [val for _, val in updates]
+        params.extend([now, rule.id])
+        with db.transaction() as tx:
+            tx.execute(
+                f"UPDATE rules SET {sets}, updated_at = ? WHERE id = ?",
+                tuple(params),
+            )
+        print(f"updated {rule.short_id}: {', '.join(c for c, _ in updates)}")
+    finally:
+        db.close()
+    return 0
