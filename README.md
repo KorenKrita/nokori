@@ -275,12 +275,52 @@ nokori install [--dry-run | --uninstall | --disable | --enable]
 
 ---
 
+## 配置文件
+
+除环境变量外，Nokori 支持 TOML 配置文件 `~/.nokori/config.toml`（路径随 `NOKORI_DATA_DIR`）。
+
+**优先级**：环境变量 > config.toml > 内置默认值。
+
+```toml
+# ~/.nokori/config.toml
+
+log_level = "info"
+dismiss_phrase = "dismiss"
+
+[llm]
+base_url = "http://127.0.0.1:8317/v1"
+model = "deepseek-v4-flash"
+api_key = "sk-xxx"
+
+[embed]
+base_url = "https://api.example.com/v1"
+model = "text-embedding-v4"
+api_key = "sk-xxx"
+dimensions = 384
+chunk_size = 512
+chunk_count = 3
+enabled = true
+
+[gate]
+enabled = true
+ttl_seconds = 600
+matcher = "Edit|Write|MultiEdit|Bash|NotebookEdit"
+
+[extract]
+mode = "manual"
+```
+
+所有字段与环境变量一一对应。文件不存在时静默忽略，纯环境变量模式照常工作。
+
+---
+
 ## 数据存储
 
 所有数据存储在本地 `~/.nokori/`：
 
 ```
 ~/.nokori/
+├── config.toml           # 配置文件（可选，env vars 优先）
 ├── rules.db              # SQLite (WAL mode): 规则 + 索引 + 元数据
 ├── jobs/                 # Extract job 队列
 ├── active_sessions/      # Session registry

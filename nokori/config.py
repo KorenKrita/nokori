@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, field
+import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 from .errors import ConfigError
@@ -10,9 +11,128 @@ from .errors import ConfigError
 _TRUE = {"1", "true", "yes", "on"}
 _FALSE = {"0", "false", "no", "off", ""}
 
+_CONFIG_FILE_NAME = "config.toml"
 
-def _bool(name: str, default: bool) -> bool:
-    raw = os.environ.get(name)
+
+# --- TOML loading (stdlib tomllib on 3.11+, minimal fallback for 3.10) ---
+
+def _load_toml(path: Path) -> dict:
+    if not path.exists():
+        return {}
+    text = path.read_text(encoding="utf-8")
+    if sys.version_info >= (3, 11):
+        import tomllib
+        return tomllib.loads(text)
+    return _parse_toml_minimal(text)
+
+
+def _parse_toml_minimal(text: str) -> dict:
+    """Minimal TOML parser: supports [section], key = "value", key = number, key = bool."""
+    result: dict = {}
+    current_section: dict = result
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("[") and line.endswith("]"):
+            section_name = line[1:-1].strip()
+            parts = section_name.split(".")
+            current_section = result
+            for part in parts:
+                current_section = current_section.setdefault(part, {})
+            continue
+        if "=" not in line:
+            continue
+        key, _, val = line.partition("=")
+        key = key.strip()
+        val = val.strip()
+        if (val.startswith('"') and val.endswith('"')) or (val.startswith("'") and val.endswith("'")):
+            val = val[1:-1]
+        elif val.lower() in ("true", "false"):
+            val = val.lower() == "true"
+        else:
+            try:
+                val = int(val)
+            except ValueError:
+                try:
+                    val = float(val)
+                except ValueError:
+                    pass
+        current_section[key] = val
+    return result
+
+
+# --- Config file → flat dict mapping ---
+
+_TOML_TO_ENV = {
+    ("data_dir",): "NOKORI_DATA_DIR",
+    ("max_injection_chars",): "NOKORI_MAX_INJECTION_CHARS",
+    ("gate", "enabled"): "NOKORI_GATE_ENABLED",
+    ("gate", "ttl_seconds"): "NOKORI_GATE_TTL_SECONDS",
+    ("gate", "matcher"): "NOKORI_GATE_MATCHER",
+    ("extract", "mode"): "NOKORI_EXTRACT_MODE",
+    ("llm", "base_url"): "NOKORI_LLM_BASE_URL",
+    ("llm", "model"): "NOKORI_LLM_MODEL",
+    ("llm", "api_key"): "NOKORI_LLM_API_KEY",
+    ("embed", "enabled"): "NOKORI_EMBED_ENABLED",
+    ("embed", "base_url"): "NOKORI_EMBED_BASE_URL",
+    ("embed", "model"): "NOKORI_EMBED_MODEL",
+    ("embed", "api_key"): "NOKORI_EMBED_API_KEY",
+    ("embed", "dimensions"): "NOKORI_EMBED_DIMENSIONS",
+    ("embed", "chunk_size"): "NOKORI_EMBED_CHUNK_SIZE",
+    ("embed", "chunk_count"): "NOKORI_EMBED_CHUNK_COUNT",
+    ("disabled",): "NOKORI_DISABLED",
+    ("dismiss_phrase",): "NOKORI_DISMISS_PHRASE",
+    ("log_level",): "NOKORI_LOG_LEVEL",
+}
+
+
+def _get_nested(d: dict, keys: tuple[str, ...]):
+    for k in keys:
+        if not isinstance(d, dict):
+            return None
+        d = d.get(k)
+        if d is None:
+            return None
+    return d
+
+
+def _resolve_file_values(data_dir_hint: str) -> dict[str, str]:
+    """Read config.toml and return a flat {ENV_NAME: value_str} dict."""
+    data_dir = Path(data_dir_hint).expanduser().resolve()
+    config_path = data_dir / _CONFIG_FILE_NAME
+    if not config_path.exists():
+        config_path = Path("~/.nokori").expanduser() / _CONFIG_FILE_NAME
+    toml = _load_toml(config_path)
+    if not toml:
+        return {}
+    flat: dict[str, str] = {}
+    for keys, env_name in _TOML_TO_ENV.items():
+        val = _get_nested(toml, keys)
+        if val is None:
+            continue
+        if isinstance(val, bool):
+            flat[env_name] = "1" if val else "0"
+        else:
+            flat[env_name] = str(val)
+    return flat
+
+
+# --- Env + file resolution helpers ---
+
+_file_cache: dict[str, str] | None = None
+
+
+def _get(name: str, file_values: dict[str, str]) -> str | None:
+    """Env var takes priority over config file value."""
+    env = os.environ.get(name)
+    if env is not None:
+        return env
+    return file_values.get(name)
+
+
+def _bool_val(name: str, default: bool, file_values: dict[str, str]) -> bool:
+    raw = _get(name, file_values)
     if raw is None:
         return default
     v = raw.strip().lower()
@@ -23,9 +143,9 @@ def _bool(name: str, default: bool) -> bool:
     raise ConfigError(f"{name} must be a boolean (got {raw!r})")
 
 
-def _int(name: str, default: int, *, min_value: int | None = None) -> int:
-    raw = os.environ.get(name)
-    if raw is None or raw == "":
+def _int_val(name: str, default: int, file_values: dict[str, str], *, min_value: int | None = None) -> int:
+    raw = _get(name, file_values)
+    if raw is None or raw.strip() == "":
         return default
     try:
         n = int(raw)
@@ -36,22 +156,22 @@ def _int(name: str, default: int, *, min_value: int | None = None) -> int:
     return n
 
 
-def _str_or_none(name: str) -> str | None:
-    raw = os.environ.get(name)
+def _str_or_none_val(name: str, file_values: dict[str, str]) -> str | None:
+    raw = _get(name, file_values)
     if raw is None or raw.strip() == "":
         return None
-    return raw
+    return raw.strip()
 
 
-def _str(name: str, default: str) -> str:
-    raw = os.environ.get(name)
+def _str_val(name: str, default: str, file_values: dict[str, str]) -> str:
+    raw = _get(name, file_values)
     if raw is None or raw == "":
         return default
     return raw
 
 
-def _enum(name: str, default: str, choices: tuple[str, ...]) -> str:
-    raw = _str(name, default)
+def _enum_val(name: str, default: str, choices: tuple[str, ...], file_values: dict[str, str]) -> str:
+    raw = _str_val(name, default, file_values)
     if raw not in choices:
         raise ConfigError(f"{name} must be one of {choices} (got {raw!r})")
     return raw
@@ -85,29 +205,31 @@ class Config:
 
     @classmethod
     def from_env(cls) -> "Config":
-        data_dir = _expand_path(_str("NOKORI_DATA_DIR", "~/.nokori"))
+        data_dir_raw = os.environ.get("NOKORI_DATA_DIR") or "~/.nokori"
+        file_values = _resolve_file_values(data_dir_raw)
+        data_dir = _expand_path(_str_val("NOKORI_DATA_DIR", "~/.nokori", file_values))
         return cls(
             data_dir=data_dir,
-            max_injection_chars=_int("NOKORI_MAX_INJECTION_CHARS", 1500, min_value=0),
-            gate_enabled=_bool("NOKORI_GATE_ENABLED", True),
-            gate_ttl_seconds=_int("NOKORI_GATE_TTL_SECONDS", 600, min_value=0),
-            gate_matcher=_str(
-                "NOKORI_GATE_MATCHER", "Edit|Write|MultiEdit|Bash|NotebookEdit"
+            max_injection_chars=_int_val("NOKORI_MAX_INJECTION_CHARS", 1500, file_values, min_value=0),
+            gate_enabled=_bool_val("NOKORI_GATE_ENABLED", True, file_values),
+            gate_ttl_seconds=_int_val("NOKORI_GATE_TTL_SECONDS", 600, file_values, min_value=0),
+            gate_matcher=_str_val(
+                "NOKORI_GATE_MATCHER", "Edit|Write|MultiEdit|Bash|NotebookEdit", file_values
             ),
-            extract_mode=_enum("NOKORI_EXTRACT_MODE", "manual", ("manual", "async")),
-            llm_base_url=_str_or_none("NOKORI_LLM_BASE_URL"),
-            llm_model=_str_or_none("NOKORI_LLM_MODEL"),
-            llm_api_key=_str_or_none("NOKORI_LLM_API_KEY"),
-            embed_enabled=_bool("NOKORI_EMBED_ENABLED", False),
-            embed_base_url=_str_or_none("NOKORI_EMBED_BASE_URL"),
-            embed_model=_str_or_none("NOKORI_EMBED_MODEL"),
-            embed_api_key=_str_or_none("NOKORI_EMBED_API_KEY"),
-            embed_dimensions=_int("NOKORI_EMBED_DIMENSIONS", 384, min_value=1),
-            embed_chunk_size=_int("NOKORI_EMBED_CHUNK_SIZE", 512, min_value=16),
-            embed_chunk_count=_int("NOKORI_EMBED_CHUNK_COUNT", 3, min_value=1),
-            disabled=_bool("NOKORI_DISABLED", False),
-            dismiss_phrase=_str("NOKORI_DISMISS_PHRASE", "dismiss"),
-            log_level=_str("NOKORI_LOG_LEVEL", "warn"),
+            extract_mode=_enum_val("NOKORI_EXTRACT_MODE", "manual", ("manual", "async"), file_values),
+            llm_base_url=_str_or_none_val("NOKORI_LLM_BASE_URL", file_values),
+            llm_model=_str_or_none_val("NOKORI_LLM_MODEL", file_values),
+            llm_api_key=_str_or_none_val("NOKORI_LLM_API_KEY", file_values),
+            embed_enabled=_bool_val("NOKORI_EMBED_ENABLED", False, file_values),
+            embed_base_url=_str_or_none_val("NOKORI_EMBED_BASE_URL", file_values),
+            embed_model=_str_or_none_val("NOKORI_EMBED_MODEL", file_values),
+            embed_api_key=_str_or_none_val("NOKORI_EMBED_API_KEY", file_values),
+            embed_dimensions=_int_val("NOKORI_EMBED_DIMENSIONS", 384, file_values, min_value=1),
+            embed_chunk_size=_int_val("NOKORI_EMBED_CHUNK_SIZE", 512, file_values, min_value=16),
+            embed_chunk_count=_int_val("NOKORI_EMBED_CHUNK_COUNT", 3, file_values, min_value=1),
+            disabled=_bool_val("NOKORI_DISABLED", False, file_values),
+            dismiss_phrase=_str_val("NOKORI_DISMISS_PHRASE", "dismiss", file_values),
+            log_level=_str_val("NOKORI_LOG_LEVEL", "warn", file_values),
         )
 
     @property
