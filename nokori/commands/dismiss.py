@@ -1,0 +1,25 @@
+from __future__ import annotations
+
+import argparse
+from datetime import datetime, timezone
+
+from ..config import Config
+from ..db import archive_rule, fetch_rule_by_short_id, open_db
+from ..errors import NokoriError
+
+
+def run(args: argparse.Namespace, cfg: Config) -> int:
+    db = open_db(cfg.db_path)
+    try:
+        rule = fetch_rule_by_short_id(db, args.short_id)
+        if rule is None:
+            raise NokoriError(f"no rule with short_id {args.short_id!r}")
+        if rule.status == "archived":
+            print(f"{rule.short_id} already archived")
+            return 0
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+        archive_rule(db, rule.id, "user_dismissed_cli", now)
+    finally:
+        db.close()
+    print(f"dismissed {args.short_id}")
+    return 0
