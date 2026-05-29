@@ -21,7 +21,7 @@ def test_defaults(monkeypatch, tmp_path):
     assert cfg.gate_enabled is True
     assert cfg.gate_ttl_seconds == 600
     assert cfg.extract_mode == "manual"
-    assert cfg.embed_dimensions == 384
+    assert cfg.embed_dimensions == 0
     assert cfg.disabled is False
     assert cfg.dismiss_phrase == "dismiss"
 

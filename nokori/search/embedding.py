@@ -90,7 +90,7 @@ class EmbeddingClient:
 
     def _embed_one(self, text: str, timeout: int) -> list[float]:
         payload: dict = {"model": self.cfg.embed_model, "input": text}
-        if self.cfg.embed_dimensions:
+        if self.cfg.embed_dimensions and self.cfg.embed_dimensions > 0:
             payload["dimensions"] = self.cfg.embed_dimensions
         headers = {"Content-Type": "application/json"}
         if self.cfg.embed_api_key:

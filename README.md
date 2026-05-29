@@ -264,7 +264,7 @@ nokori install [--dry-run | --uninstall | --disable | --enable]
 | `NOKORI_EMBED_BASE_URL` | — | OpenAI-compatible embeddings 端点 |
 | `NOKORI_EMBED_MODEL` | — | Embedding 模型名 |
 | `NOKORI_EMBED_API_KEY` | — | Embedding API key |
-| `NOKORI_EMBED_DIMENSIONS` | `384` | 向量维度 |
+| `NOKORI_EMBED_DIMENSIONS` | `0`（不传，用模型默认） | 向量维度（仅支持该参数的模型需要设） |
 | `NOKORI_EMBED_CHUNK_SIZE` | `512` | 文本分块字符数 |
 | `NOKORI_EMBED_CHUNK_COUNT` | `3` | 每规则最多分块数 |
 | `NOKORI_DISABLED` | `0` | 完全禁用 |
@@ -296,7 +296,7 @@ api_key = "sk-xxx"
 base_url = "https://api.example.com/v1"
 model = "text-embedding-v4"
 api_key = "sk-xxx"
-dimensions = 384
+# dimensions = 768  # 可选，不填则不传给 API（用模型默认维度）
 chunk_size = 512
 chunk_count = 3
 enabled = true

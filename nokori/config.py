@@ -224,7 +224,7 @@ class Config:
             embed_base_url=_str_or_none_val("NOKORI_EMBED_BASE_URL", file_values),
             embed_model=_str_or_none_val("NOKORI_EMBED_MODEL", file_values),
             embed_api_key=_str_or_none_val("NOKORI_EMBED_API_KEY", file_values),
-            embed_dimensions=_int_val("NOKORI_EMBED_DIMENSIONS", 384, file_values, min_value=1),
+            embed_dimensions=_int_val("NOKORI_EMBED_DIMENSIONS", 0, file_values, min_value=0),
             embed_chunk_size=_int_val("NOKORI_EMBED_CHUNK_SIZE", 512, file_values, min_value=16),
             embed_chunk_count=_int_val("NOKORI_EMBED_CHUNK_COUNT", 3, file_values, min_value=1),
             disabled=_bool_val("NOKORI_DISABLED", False, file_values),
