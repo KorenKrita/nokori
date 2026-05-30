@@ -166,9 +166,9 @@ def reactivate_dormant_on_retrieval_hot(db: Db, rule_id: str) -> None:
 
 def run_due_jobs(db: Db, cfg=None) -> dict:
     if cfg is not None:
-        from . import deferred
+        from ..extract import jobs as job_io
 
-        deferred.flush_deferred_writes(db, cfg)
+        job_io.quarantine_corrupt_jobs(cfg)
     summary = {
         "dormant_scan": run_dormant_scan(db),
         "candidate_cleanup": run_candidate_cleanup(db),

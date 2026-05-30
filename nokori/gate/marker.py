@@ -134,19 +134,8 @@ def delete(
     delete_session(cfg, session_id)
 
 
-def _orphan_legacy_marker_path(cfg: Config, session_id: str) -> Path:
-    """Pre–per-hash layout; delete only (no read)."""
-    return cfg.data_dir / f"pending-ack-{cfg._safe_session_id(session_id)}.marker"
-
-
 def delete_session(cfg: Config, session_id: str) -> None:
     """Remove all gate markers for a session."""
-    try:
-        _orphan_legacy_marker_path(cfg, session_id).unlink()
-    except FileNotFoundError:
-        pass
-    except OSError:
-        pass
     mdir = cfg.marker_dir(session_id)
     if not mdir.is_dir():
         return

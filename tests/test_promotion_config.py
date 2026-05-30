@@ -72,9 +72,6 @@ def test_handle_runs_shadow_when_formal_pool_empty(monkeypatch, tmp_path):
         }
         result = handle(payload, cfg)
         assert result == {"continue": True}
-        from nokori.lifecycle import deferred
-
-        deferred.flush_deferred_writes(db, cfg)
         row = db.fetchone(
             "SELECT shadow_hit_count FROM rules WHERE id = 'rule-other'"
         )

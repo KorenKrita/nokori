@@ -394,7 +394,11 @@ export NOKORI_EXTRACT_MODE=async
 
 日志在 `~/.nokori/logs/async-extract.log`。没配 LLM 时会尝试本机 `claude -p` 兜底。
 
+若 `{data_dir}/extract.lock` 已被占用（另一实例正在跑 extract，或异常残留），SessionEnd **不会**自动 spawn 子进程，pending job 保留，需稍后手动 `nokori extract`。
+
 若 SessionEnd 之后 transcript 仍被追加（文件 `mtime` 变化），`nokori extract` 会**刷新 job 的 mtime 并保留 pending**，不会静默丢弃 job。
+
+损坏的 `extract-*.json`（无法解析）会在 `list_jobs` / `nokori extract` / `SessionStart` 维护时移到 `{data_dir}/jobs/bad/`，避免僵尸 job 占目录。
 
 可选：`NOKORI_EXTRACT_DEFER_ACTIVE=1` 时，async 模式下若仍有**其他未 SessionEnd 的 session**（`active_sessions/` 里 `ended_at` 为空，`count_open_sessions`），当前 SessionEnd **只写 job、不 fork** `nokori extract`；待其它 session 结束后再手动或下次 SessionEnd 触发提取。
 
@@ -404,7 +408,12 @@ Extract jobs 仅由 `nokori extract`（手动或 async 子进程）消费，Sess
 
 ### 热缓存
 
-SessionStart 在**当前** `transcript_path` **同目录**下，取 mtime 严格早于当前文件的最新 `*.jsonl` 作为上一场（**不**查 `active_sessions/`）；若该文件在 `extract_state` 中尚未以当前 mtime extract 过，则注入最后 3 条 user 消息（500 chars，独立预算）。并发多 session 同目录时可能不是语义上的「上一场」——v0.1 接受该启发式；详见本地 `docs/product-spec.md` / `docs/design-decisions.md`。
+SessionStart 找「上一场 transcript」：
+
+1. **优先**读 `{data_dir}/transcript_index/`（SessionEnd 写入的 previous/current 指针）——表示**上一个在该目录正常结束的 session** 的文件，不一定是 mtime 最大的更早 `*.jsonl`。
+2. **回退**：同目录下 mtime 严格早于当前文件的最新 `*.jsonl`（启发式）。
+
+若上一场尚未 extract 过，从文件**尾部**读取最后 3 条 user 消息注入（500 chars，独立预算）。**Dormant 伪 HOT、shadow 计数、HOT 的 `hit_count`** 均在 **UserPromptSubmit 当轮** 写库（与 product-spec 一致），不等到下次 SessionStart。
 
 **Shadow 与 candidate 激活**：跨项目 shadow HOT 会 `add_evidence(..., shadow_hot, 1)`。若其它项目的规则仍是 `candidate`，多次（不同天）shadow 命中可能凑够纯 AI 激活条件（score≥2 且 2 个活跃日）——**与「只服务 promotion」的直觉不同，v0.1 有意允许**跨项目检索证据参与激活。
 

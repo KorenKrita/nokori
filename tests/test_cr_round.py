@@ -123,10 +123,9 @@ def test_export_atomic_replace(tmp_path, monkeypatch):
         db.close()
 
 
-def test_deferred_rule_hits_flushed(monkeypatch, tmp_path):
+def test_hot_injection_updates_hit_count_same_turn(monkeypatch, tmp_path):
     monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
-    cfg = Config.from_env()
-    db = open_db(cfg.db_path)
+    db = open_db(Config.from_env().db_path)
     try:
         now = now_iso()
         with db.transaction() as tx:
@@ -139,16 +138,54 @@ def test_deferred_rule_hits_flushed(monkeypatch, tmp_path):
                     "global", None, now, now,
                 ),
             )
-        log_injections_batch(
-            db, "sess", "phash", [("id1", "hot")], now,
-            cfg=cfg, defer_rule_updates=True,
-        )
-        row = db.fetchone("SELECT hit_count FROM rules WHERE id = 'id1'")
-        assert row["hit_count"] == 0
-        from nokori.lifecycle import deferred
-
-        deferred.flush_deferred_writes(db, cfg)
-        row = db.fetchone("SELECT hit_count FROM rules WHERE id = 'id1'")
+        log_injections_batch(db, "sess", "phash", [("id1", "hot")], now)
+        row = db.fetchone("SELECT hit_count, last_hit FROM rules WHERE id = 'id1'")
         assert row["hit_count"] == 1
+        assert row["last_hit"] == now
+    finally:
+        db.close()
+
+
+def test_corrupt_extract_job_quarantined(monkeypatch, tmp_path):
+    monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+    cfg = Config.from_env()
+    cfg.ensure_dirs()
+    bad = cfg.jobs_dir / "extract-deadbeef.json"
+    bad.write_text("{not json", encoding="utf-8")
+    from nokori.extract import jobs as job_io
+
+    pending = job_io.list_jobs(cfg)
+    assert bad not in pending
+    assert not bad.exists()
+    assert (cfg.jobs_dir / "bad" / "extract-deadbeef.json").exists()
+
+
+def test_dormant_reactivates_same_session(monkeypatch, tmp_path):
+    monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+    cfg = Config.from_env()
+    db = open_db(cfg.db_path)
+    try:
+        now = now_iso()
+        with db.transaction() as tx:
+            tx.execute(
+                "INSERT INTO rules (id, short_id, trigger_text, action, "
+                "source_type, confidence, status, project_scope, project_id, "
+                "created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                (
+                    "d1", "dorm01", "git push force remote",
+                    "use lease", "correction", "high", "dormant",
+                    "global", None, now, now,
+                ),
+            )
+        from nokori.hooks.user_prompt_submit import handle
+
+        handle({
+            "session_id": "s-dorm",
+            "prompt": "git push force remote branch please",
+            "cwd": str(tmp_path),
+        }, cfg)
+        row = db.fetchone("SELECT status, last_hit FROM rules WHERE id = 'd1'")
+        assert row["status"] == "active"
+        assert row["last_hit"] is not None
     finally:
         db.close()

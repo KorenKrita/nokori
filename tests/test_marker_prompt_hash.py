@@ -91,33 +91,6 @@ def test_pre_tool_use_skips_block_on_stale_prompt_hash(monkeypatch, tmp_path):
         db.close()
 
 
-def test_delete_session_removes_orphan_legacy_marker_file(monkeypatch, tmp_path):
-    """Pre–per-hash pending-ack file is not read; delete_session removes it."""
-    monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
-    cfg = Config.from_env()
-    sess = "s-legacy"
-    legacy = cfg.data_dir / f"pending-ack-{cfg._safe_session_id(sess)}.marker"
-    cfg.ensure_dirs()
-    legacy.write_text(
-        json.dumps({
-            "session_id": sess,
-            "prompt_hash": "oldhash00000000",
-            "created_at": "2026-01-01T00:00:00Z",
-            "rules": [
-                {
-                    "short_id": "rule01",
-                    "action": "use lease",
-                    "source_type": "correction",
-                }
-            ],
-        }),
-        encoding="utf-8",
-    )
-    assert marker_io.read(cfg, sess, prompt_hash_value="oldhash00000000") is None
-    marker_io.delete_session(cfg, sess)
-    assert not legacy.exists()
-
-
 def test_per_prompt_hash_markers_do_not_overwrite(monkeypatch, tmp_path):
     monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
     cfg = Config.from_env()

@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from ..config import Config
-from ..db import Db, total_rule_count
+from ..db import Db
 from ..models import Rule, ScoredResult
 from . import bm25, ranker
 from . import embedding as embedding_search

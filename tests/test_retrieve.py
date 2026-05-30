@@ -188,9 +188,6 @@ def test_formal_shadow_pool_size_for_embed(monkeypatch, tmp_path):
             return False
 
         monkeypatch.setattr(embedding_search, "auto_enabled", fake_auto)
-        monkeypatch.setattr(
-            "nokori.search.retrieve.total_rule_count", lambda _db: 999
-        )
         retrieve_formal_and_shadow(
             "only local",
             formal,

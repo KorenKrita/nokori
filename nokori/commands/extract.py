@@ -109,7 +109,8 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
         for job_path in pending:
             job = job_io.read_job(job_path)
             if not job:
-                log.warning("skipping corrupt extract job (not deleted): %s", job_path.name)
+                job_io.quarantine_corrupt_job(job_path, cfg)
+                log.warning("quarantined corrupt extract job: %s", job_path.name)
                 continue
             path = Path(job["transcript_path"])
             if not path.exists():

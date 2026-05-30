@@ -54,6 +54,32 @@ def write_job(cfg: Config, transcript_path: Path, project_id: str | None,
     return out
 
 
+def quarantine_corrupt_job(path: Path, cfg: Config) -> None:
+    """Move unreadable extract job files out of the pending queue."""
+    bad_dir = cfg.jobs_dir / "bad"
+    bad_dir.mkdir(parents=True, exist_ok=True)
+    dest = bad_dir / path.name
+    try:
+        os.replace(path, dest)
+    except OSError:
+        try:
+            path.unlink()
+        except OSError:
+            pass
+
+
+def quarantine_corrupt_jobs(cfg: Config) -> int:
+    """Scan jobs_dir and quarantine corrupt extract-*.json files."""
+    if not cfg.jobs_dir.exists():
+        return 0
+    moved = 0
+    for path in sorted(cfg.jobs_dir.glob("extract-*.json")):
+        if read_job(path) is None:
+            quarantine_corrupt_job(path, cfg)
+            moved += 1
+    return moved
+
+
 def list_jobs(cfg: Config, *, status: str | None = "pending") -> list[Path]:
     """List extract job files; default status filters to pending only."""
     if not cfg.jobs_dir.exists():
@@ -65,6 +91,7 @@ def list_jobs(cfg: Config, *, status: str | None = "pending") -> list[Path]:
     for path in paths:
         job = read_job(path)
         if job is None:
+            quarantine_corrupt_job(path, cfg)
             continue
         if job.get("status", "pending") == status:
             out.append(path)
