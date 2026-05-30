@@ -8,6 +8,10 @@ from ..lifecycle.evidence import add_evidence, should_activate_pure_ai
 from ..llm.adapter import LLMAdapter
 from ..llm.prompts import MERGE_PROMPT
 from ..models import Rule
+from ..search.embedding import (
+    EmbeddingClient, LocalEmbeddingClient, auto_enabled,
+    store_rule_embedding, store_rule_embedding_local, use_local,
+)
 from ..utils.ids import new_uuid, short_id_for
 from ..utils.logging import get_logger
 from ..utils.time import now_iso
@@ -36,6 +40,23 @@ def _initial_status(cand: Candidate) -> str:
     if cand.confidence == "high" and cand.source_type == "correction":
         return "active"
     return "candidate"
+
+
+def _index_embedding_if_enabled(db: Db, rule: Rule, cfg=None) -> None:
+    """Best-effort embedding index after rule creation."""
+    try:
+        from ..config import Config
+        if cfg is None:
+            cfg = Config.from_env()
+        rule_count = db.fetchone("SELECT COUNT(*) AS n FROM rules")["n"]
+        if not auto_enabled(cfg, rule_count):
+            return
+        if use_local(cfg):
+            store_rule_embedding_local(db, rule, LocalEmbeddingClient(cfg))
+        else:
+            store_rule_embedding(db, rule, EmbeddingClient(cfg))
+    except Exception:
+        pass
 
 
 def _persist_new(db: Db, cand: Candidate, project_id: str | None) -> Rule:
@@ -74,17 +95,29 @@ def _persist_new(db: Db, cand: Candidate, project_id: str | None) -> Rule:
                     (rid, lang, term, "search"),
                 )
     row = db.fetchone(f"SELECT {_RULE_COLUMNS} FROM rules WHERE id = ?", (rid,))
-    return row_to_rule(row)
+    rule = row_to_rule(row)
+    _index_embedding_if_enabled(db, rule)
+    return rule
 
 
-def _candidate_neighbors(db: Db, cand: Candidate, limit: int = 5) -> list[Rule]:
-    """Cheap candidate set: pre-filter by status, leave semantic match to LLM."""
-    rows = db.fetchall(
-        f"SELECT {_RULE_COLUMNS} FROM rules "
-        "WHERE status IN ('candidate','active','dormant') "
-        "ORDER BY updated_at DESC LIMIT ?",
-        (limit,),
-    )
+def _candidate_neighbors(db: Db, cand: Candidate, limit: int = 5,
+                         project_id: str | None = None) -> list[Rule]:
+    """Pre-filter by status and project scope, leave semantic match to LLM."""
+    if project_id:
+        rows = db.fetchall(
+            f"SELECT {_RULE_COLUMNS} FROM rules "
+            "WHERE status IN ('candidate','active','dormant') "
+            "AND (project_scope = 'global' OR project_id = ? OR project_id IS NULL) "
+            "ORDER BY updated_at DESC LIMIT ?",
+            (project_id, limit),
+        )
+    else:
+        rows = db.fetchall(
+            f"SELECT {_RULE_COLUMNS} FROM rules "
+            "WHERE status IN ('candidate','active','dormant') "
+            "ORDER BY updated_at DESC LIMIT ?",
+            (limit,),
+        )
     return [row_to_rule(r) for r in rows]
 
 
@@ -135,23 +168,9 @@ def _activate(db: Db, rule_id: str, confidence: str) -> None:
             "UPDATE rules SET status = 'active', confidence = ?, updated_at = ? WHERE id = ?",
             (confidence, now_iso(), rule_id),
         )
-
-
-def _add_evidence(db: Db, rule_id: str, kind: str, points: int) -> None:
-    row = db.fetchone(
-        "SELECT evidence_score, evidence_log FROM rules WHERE id = ?", (rule_id,)
-    )
-    if row is None:
-        return
-    score = (row["evidence_score"] or 0) + points
-    log_list = json.loads(row["evidence_log"] or "[]")
-    log_list.append({"kind": kind, "points": points, "at": now_iso()})
-    with db.transaction() as tx:
-        tx.execute(
-            "UPDATE rules SET evidence_score = ?, evidence_log = ?, updated_at = ? "
-            "WHERE id = ?",
-            (score, dumps_json(log_list), now_iso(), rule_id),
-        )
+    row = db.fetchone(f"SELECT {_RULE_COLUMNS} FROM rules WHERE id = ?", (rule_id,))
+    if row:
+        _index_embedding_if_enabled(db, row_to_rule(row))
 
 
 def _supersede(db: Db, old_id: str, new_id: str) -> None:
@@ -178,7 +197,7 @@ def merge_candidate(
     llm: LLMAdapter,
     project_id: str | None = None,
 ) -> MergeOutcome:
-    neighbors = _candidate_neighbors(db, cand)
+    neighbors = _candidate_neighbors(db, cand, project_id=project_id)
     if not neighbors:
         _persist_new(db, cand, project_id)
         return MergeOutcome(inserted=1, activated=0, merged=0, superseded=0)
@@ -203,7 +222,7 @@ def merge_candidate(
                     _activate(db, existing.id, "high")
                     activated += 1
                 else:
-                    _add_evidence(db, existing.id, "same_extraction", 1)
+                    add_evidence(db, existing.id, "same_extraction", 1)
                     updated = db.fetchone(
                         "SELECT evidence_score, evidence_log FROM rules WHERE id = ?",
                         (existing.id,),

@@ -25,11 +25,9 @@ def _process_path(path: Path, project_id: str | None, cfg: Config,
     if dry_run:
         return (len(candidates), 0)
 
-    merged = 0
-    if not candidates:
-        return (0, 0)
     db = open_db(cfg.db_path)
     try:
+        merged = 0
         for cand in candidates:
             outcome = merge_candidate(cand, db, llm, project_id)
             merged += outcome.inserted + outcome.activated + outcome.superseded
