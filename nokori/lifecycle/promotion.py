@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 
 from ..db import Db, dumps_json
 from ..utils.logging import get_logger
+from .evidence import add_evidence
 
 log = get_logger("nokori.lifecycle.promotion")
 
@@ -45,6 +46,7 @@ def record_shadow_hit(db: Db, rule_id: str, current_project_id: str | None) -> b
     })
     unique_projects = {e["project_id"] for e in evidence}
 
+    promoted = False
     with db.transaction() as tx:
         tx.execute(
             "UPDATE rules SET promotion_evidence = ?, "
@@ -59,5 +61,7 @@ def record_shadow_hit(db: Db, rule_id: str, current_project_id: str | None) -> b
                 (_now_iso(), rule_id),
             )
             log.info("rule promoted to global rule=%s", rule_id)
-            return True
-    return False
+            promoted = True
+
+    add_evidence(db, rule_id, "shadow_hot", 1)
+    return promoted

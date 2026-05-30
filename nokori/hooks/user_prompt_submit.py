@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from ..config import Config
 from ..db import (
     fetch_rules,
+    fetch_shadow_rules,
     log_injection,
     open_db,
     archive_rule,
@@ -65,6 +66,23 @@ def _run_dismiss(prompt: str, session_id: str, cfg: Config) -> int:
     return count
 
 
+def _run_shadow_pool(prompt: str, project_id: str, cfg: Config) -> None:
+    """Check shadow pool rules and record hits. Never injects."""
+    db = open_db(cfg.db_path)
+    try:
+        shadow_rules = fetch_shadow_rules(db, project_id=project_id)
+        if not shadow_rules:
+            return
+        shadow_bm25 = bm25.search(prompt, shadow_rules, top_k=5)
+        shadow_fused = ranker.rrf_fuse(shadow_bm25, [])
+        for r in shadow_fused:
+            if r.rrf_score < ranker.MIN_ABSOLUTE_SCORE:
+                continue
+            promotion.record_shadow_hit(db, r.rule.id, project_id)
+    finally:
+        db.close()
+
+
 def handle(payload: dict, cfg: Config) -> dict:
     session_id = payload.get("session_id") or "-"
     prompt = payload.get("prompt") or ""
@@ -90,8 +108,16 @@ def handle(payload: dict, cfg: Config) -> dict:
     if embedding_search.auto_enabled(cfg, len(rules)):
         db = open_db(cfg.db_path)
         try:
-            client = embedding_search.EmbeddingClient(cfg)
-            embed_results = embedding_search.search(prompt, rules, db, client, top_k=10)
+            if embedding_search.use_local(cfg):
+                local_client = embedding_search.LocalEmbeddingClient(cfg)
+                embed_results = embedding_search.search_local(
+                    prompt, rules, db, local_client, top_k=10
+                )
+            else:
+                client = embedding_search.EmbeddingClient(cfg)
+                embed_results = embedding_search.search(
+                    prompt, rules, db, client, top_k=10
+                )
         finally:
             db.close()
 
@@ -142,6 +168,10 @@ def handle(payload: dict, cfg: Config) -> dict:
                     for r in gate_rules
                 ],
             )
+
+    # Shadow pool: other projects' high-confidence rules, not injected
+    if project_id:
+        _run_shadow_pool(prompt, project_id, cfg)
 
     log.info(
         "injected hot=%d warm=%d session=%s",

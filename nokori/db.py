@@ -308,6 +308,23 @@ def find_rule_id_by_recent_injection(
     return row["id"] if row else None
 
 
+def fetch_shadow_rules(db: "Db", *, project_id: str | None) -> list:
+    """Fetch shadow pool rules: other projects' high-confidence active rules
+    with source_type in (correction, anti_pattern, solution)."""
+    if project_id is None:
+        return []
+    rows = db.fetchall(
+        f"SELECT {_RULE_COLUMNS} FROM rules "
+        "WHERE status = 'active' AND confidence = 'high' "
+        "AND source_type IN ('correction','anti_pattern','solution') "
+        "AND project_scope = 'project' "
+        "AND project_id IS NOT NULL AND project_id != ? "
+        "ORDER BY updated_at DESC",
+        (project_id,),
+    )
+    return [row_to_rule(r) for r in rows]
+
+
 def archive_rule(db: "Db", rule_id: str, reason: str, now: str) -> None:
     with db.transaction() as tx:
         tx.execute(

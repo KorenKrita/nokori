@@ -178,7 +178,131 @@ def search(
     return results[:top_k]
 
 
+LOCAL_MODEL_NAME = "paraphrase-multilingual-MiniLM-L12-v2"
+LOCAL_DIMENSIONS = 384
+
+
+def _sentence_transformers_available() -> bool:
+    try:
+        import sentence_transformers  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
+class LocalEmbeddingClient:
+    """Uses sentence-transformers for local embedding when no remote endpoint is configured."""
+
+    def __init__(self, cfg: Config):
+        self.cfg = cfg
+        self._model = None
+        self._model_name = LOCAL_MODEL_NAME
+        self._cache_dir = str(cfg.data_dir / "models")
+
+    def available(self) -> bool:
+        return _sentence_transformers_available()
+
+    def _load_model(self):
+        if self._model is not None:
+            return self._model
+        from sentence_transformers import SentenceTransformer
+        self._model = SentenceTransformer(
+            self._model_name, cache_folder=self._cache_dir
+        )
+        return self._model
+
+    def embed(self, text: str) -> list[list[float]]:
+        chunks = _chunk_text(
+            text,
+            chunk_size=self.cfg.embed_chunk_size,
+            chunk_count=self.cfg.embed_chunk_count,
+        )
+        if not chunks:
+            return []
+        model = self._load_model()
+        vectors = model.encode(chunks, show_progress_bar=False)
+        return [v.tolist() for v in vectors]
+
+
+def store_rule_embedding_local(db: Db, rule: Rule, client: LocalEmbeddingClient) -> int:
+    if not client.available():
+        return 0
+    try:
+        vectors = client.embed(_rule_text(rule))
+    except Exception as e:
+        log.warning("local embed store failed rule=%s err=%s", rule.id, e)
+        return 0
+    if not vectors:
+        return 0
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+    with db.transaction() as tx:
+        tx.execute("DELETE FROM rule_embeddings WHERE rule_id = ?", (rule.id,))
+        for idx, vec in enumerate(vectors):
+            tx.execute(
+                "INSERT INTO rule_embeddings (rule_id, chunk_index, embedding, "
+                "model_version, created_at) VALUES (?,?,?,?,?)",
+                (rule.id, idx, _serialize(vec), LOCAL_MODEL_NAME, now),
+            )
+    return len(vectors)
+
+
+def search_local(
+    query: str,
+    rules: Sequence[Rule],
+    db: Db,
+    client: LocalEmbeddingClient,
+    *,
+    top_k: int = 10,
+) -> list[ScoredResult]:
+    if not client.available() or not rules:
+        return []
+    try:
+        qvecs = client.embed(query)
+    except Exception:
+        return []
+    if not qvecs:
+        return []
+    qvec = qvecs[0]
+
+    placeholders = ",".join(["?"] * len(rules))
+    rows = db.fetchall(
+        f"SELECT rule_id, chunk_index, embedding FROM rule_embeddings "
+        f"WHERE rule_id IN ({placeholders})",
+        tuple(r.id for r in rules),
+    )
+    by_rule: dict[str, list[list[float]]] = {}
+    for row in rows:
+        by_rule.setdefault(row["rule_id"], []).append(_deserialize(row["embedding"]))
+
+    results: list[ScoredResult] = []
+    for rule in rules:
+        embeddings = by_rule.get(rule.id) or []
+        if not embeddings:
+            continue
+        best = max(_cosine(qvec, emb) for emb in embeddings)
+        results.append(ScoredResult(rule=rule, cosine=best))
+    results.sort(key=lambda r: r.cosine or 0.0, reverse=True)
+    return results[:top_k]
+
+
 def auto_enabled(cfg: Config, rule_count: int) -> bool:
+    # Remote embedding configured explicitly
     if cfg.embed_enabled:
-        return cfg.embed_base_url is not None and cfg.embed_model is not None
-    return rule_count >= 20 and bool(cfg.embed_base_url and cfg.embed_model)
+        if cfg.embed_base_url and cfg.embed_model:
+            return True
+        # Explicit enable but no remote — check local availability
+        return _sentence_transformers_available()
+    # Auto-enable threshold: rules >= 20
+    if rule_count < 20:
+        return False
+    if cfg.embed_base_url and cfg.embed_model:
+        return True
+    return _sentence_transformers_available()
+
+
+def use_local(cfg: Config) -> bool:
+    """True when local embedding should be used (no remote configured, local available)."""
+    if cfg.embed_base_url and cfg.embed_model:
+        return False
+    return _sentence_transformers_available()

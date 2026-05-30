@@ -38,6 +38,9 @@ git clone https://github.com/KorenKrita/nokori.git
 cd nokori
 pip install -e .
 
+# 可选：安装本地 embedding 支持
+pip install -e ".[local-embed]"
+
 # 注册 hooks 到 Claude Code
 nokori install
 
@@ -168,6 +171,25 @@ candidate → active → dormant → (reactivated or archived)
 
 当一条 project 规则在 3 个不同项目中被 HOT 命中（`unique(project_id, date) >= 3`），自动升级为 global 规则，所有项目受益。`preference` 类型不参与升级。
 
+### Shadow Pool（影子池）
+
+其他项目的 high-confidence correction/anti_pattern/solution active 规则会在每次 prompt 时被检索（影子池）。命中时：
+- 记录 cross_project_hit（用于 global promotion）
+- 给规则 evidence_score +1（用于 candidate 激活）
+- 不注入到当前 session（不影响用户体验）
+
+这使得跨项目的规则升级完全基于检索证据驱动。
+
+### Async Extract Mode
+
+```bash
+export NOKORI_EXTRACT_MODE=async
+```
+
+设为 `async` 后，SessionEnd 时会 fork 后台进程执行 `nokori extract`，自动消费待处理的 extract jobs。后台进程带 `NOKORI_EXTRACTING=1` 防递归。spawn 失败不影响 session 关闭。
+
+默认 `manual` 模式下只写 job 文件，需手动 `nokori extract` 消费。
+
 ### 维护
 
 维护任务在 `SessionStart` 时自动触发（按间隔检查）：
@@ -194,13 +216,25 @@ nokori maintain
 
 ### Embedding（可选，rules ≥ 20 时自动启用）
 
+远程 API 模式：
+
 ```bash
 export NOKORI_EMBED_BASE_URL="http://localhost:11434/v1"
 export NOKORI_EMBED_MODEL="nomic-embed-text"
 export NOKORI_EMBED_DIMENSIONS=384
 ```
 
-启用后使用 RRF（Reciprocal Rank Fusion）融合 BM25 和 embedding 结果。Embedding API 失败时自动 fallback 到纯 BM25。
+本地模型模式（无需配置 URL）：
+
+```bash
+pip install nokori[local-embed]
+```
+
+安装 `sentence-transformers` 后，当 rules >= 20 且未配置远程 embed endpoint 时，自动使用本地 `paraphrase-multilingual-MiniLM-L12-v2` 模型（118MB，384 维，50+ 语言）。模型首次使用时自动下载到 `~/.nokori/models/`。
+
+优先级：远程 API（配了 base_url）> 本地模型（装了 sentence-transformers）> 纯 BM25。
+
+启用后使用 RRF（Reciprocal Rank Fusion）融合 BM25 和 embedding 结果。Embedding 失败时自动 fallback 到纯 BM25。
 
 ### 注入分层
 
