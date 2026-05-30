@@ -77,6 +77,7 @@ def test_pre_tool_use_passes_when_no_marker(tmp_path):
              stdin=json.dumps({"session_id": "no-marker", "tool_name": "Bash"}))
     out = json.loads(r.stdout)
     assert "decision" not in out
+    assert out.get("continue") is True
 
 
 def test_marker_consumed_once(tmp_path):

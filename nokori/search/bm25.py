@@ -10,6 +10,10 @@ from .tokenizer import tokenize
 K1 = 1.2
 B = 0.75
 
+# Reuse IDF/doc index when the rule set is unchanged (same ids + updated_at).
+_INDEX_CACHE: dict[tuple[tuple[str, str], ...], tuple] = {}
+_INDEX_CACHE_MAX = 64
+
 
 def _rule_doc_tokens(rule: Rule) -> list[str]:
     pieces: list[str] = []
@@ -29,6 +33,36 @@ def _variant_tokens(rule: Rule) -> set[str]:
     return tokens
 
 
+def _index_key(rules_list: list[Rule]) -> tuple[tuple[str, str], ...]:
+    return tuple((r.id, r.updated_at) for r in sorted(rules_list, key=lambda r: r.id))
+
+
+def _build_index(rules_list: list[Rule]):
+    docs = [(rule, _rule_doc_tokens(rule), _variant_tokens(rule)) for rule in rules_list]
+    n_docs = len(docs)
+    avgdl = sum(len(d) for _, d, _ in docs) / max(n_docs, 1)
+    df: Counter[str] = Counter()
+    for _, doc, _ in docs:
+        df.update(set(doc))
+    idf: Mapping[str, float] = {
+        term: math.log(1 + (n_docs - count + 0.5) / (count + 0.5))
+        for term, count in df.items()
+    }
+    return docs, idf, avgdl
+
+
+def _cached_index(rules_list: list[Rule]):
+    key = _index_key(rules_list)
+    cached = _INDEX_CACHE.get(key)
+    if cached is not None:
+        return cached
+    cached = _build_index(rules_list)
+    if len(_INDEX_CACHE) >= _INDEX_CACHE_MAX:
+        _INDEX_CACHE.clear()
+    _INDEX_CACHE[key] = cached
+    return cached
+
+
 def search(
     query: str, rules: Iterable[Rule], top_k: int = 5
 ) -> list[ScoredResult]:
@@ -40,18 +74,7 @@ def search(
     if not query_tokens:
         return []
 
-    docs = [(rule, _rule_doc_tokens(rule), _variant_tokens(rule)) for rule in rules_list]
-    n_docs = len(docs)
-    avgdl = sum(len(d) for _, d, _ in docs) / max(n_docs, 1)
-
-    df: Counter[str] = Counter()
-    for _, doc, _ in docs:
-        df.update(set(doc))
-
-    idf: Mapping[str, float] = {
-        term: math.log(1 + (n_docs - count + 0.5) / (count + 0.5))
-        for term, count in df.items()
-    }
+    docs, idf, avgdl = _cached_index(rules_list)
 
     qset = set(query_tokens)
     scored: list[ScoredResult] = []

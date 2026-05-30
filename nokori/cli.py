@@ -83,6 +83,16 @@ def _build_parser() -> argparse.ArgumentParser:
         choices=("session-start", "user-prompt-submit", "pre-tool-use", "session-end"),
     )
 
+    sp_embed = sub.add_parser(
+        "embed",
+        help="shared local embedding server (one model for all sessions)",
+    )
+    sp_embed.add_argument(
+        "embed_action",
+        choices=("serve", "start", "stop", "status"),
+        help="serve=run foreground; start=detach; stop=shutdown; status=probe",
+    )
+
     return p
 
 
@@ -156,6 +166,10 @@ def _dispatch(args: argparse.Namespace, cfg: Config) -> int:
         from . import hooks as hooks_pkg
 
         return hooks_pkg.dispatch(args.event, cfg)
+    if cmd == "embed":
+        from .commands import embed_cmd
+
+        return embed_cmd.run(args, cfg)
 
     print(f"nokori: unknown command {cmd!r}", file=sys.stderr)
     return 2

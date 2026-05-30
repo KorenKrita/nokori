@@ -24,6 +24,10 @@ def test_defaults(monkeypatch, tmp_path):
     assert cfg.embed_dimensions == 0
     assert cfg.disabled is False
     assert cfg.dismiss_phrase == "dismiss"
+    assert cfg.hot_cache_enabled is True
+    assert cfg.embed_hook_timeout_seconds == 2
+    assert cfg.embed_server_idle_seconds == 3600
+    assert cfg.promotion_enabled is True
 
 
 def test_bool_parsing(monkeypatch, tmp_path):

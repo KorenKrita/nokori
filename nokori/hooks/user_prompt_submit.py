@@ -51,12 +51,42 @@ def _run_dismiss(db: Db, prompt: str, session_id: str, cfg: Config) -> int:
 
 def _run_shadow_pool(db: Db, prompt: str, project_id: str, cfg: Config) -> None:
     """Check shadow pool rules and record hits. Never injects."""
+    if not cfg.promotion_enabled:
+        return
     shadow_rules = fetch_shadow_rules(db, project_id=project_id)
     if not shadow_rules:
         return
-    result = retrieve_and_tier(prompt, shadow_rules, db, cfg, top_k=5)
+    result = retrieve_and_tier(
+        prompt, shadow_rules, db, cfg, top_k=5, interaction="hook"
+    )
     for r in result.hot:
         promotion.record_shadow_hit(db, r.rule.id, project_id)
+
+
+def _update_gate_marker(
+    cfg: Config, session_id: str, prompt: str, hot, ph: str
+) -> None:
+    if not cfg.gate_enabled:
+        return
+    gate_rules = select_gate_rules(hot)
+    if gate_rules:
+        marker_io.write(
+            cfg,
+            session_id,
+            prompt,
+            [
+                MarkerRule(
+                    short_id=r.rule.short_id,
+                    action=r.rule.action,
+                    source_type=r.rule.source_type,
+                    rationale=r.rule.rationale,
+                )
+                for r in gate_rules
+            ],
+            ph=ph,
+        )
+    else:
+        marker_io.delete(cfg, session_id)
 
 
 def handle(payload: dict, cfg: Config) -> dict:
@@ -74,13 +104,18 @@ def handle(payload: dict, cfg: Config) -> dict:
             db, statuses=("active", "dormant"), project_id=project_id
         )
         if not rules:
-            # No formal-pool injection; finally still runs shadow pool below.
+            if cfg.gate_enabled:
+                marker_io.delete(cfg, session_id)
             return {"continue": True}
 
-        result = retrieve_and_tier(prompt, rules, db, cfg, top_k=10)
+        result = retrieve_and_tier(
+            prompt, rules, db, cfg, top_k=10, interaction="hook"
+        )
         hot, warm = result.hot, result.warm
 
         if not hot and not warm:
+            if cfg.gate_enabled:
+                marker_io.delete(cfg, session_id)
             return {"continue": True}
 
         text = format_injection(
@@ -96,24 +131,7 @@ def handle(payload: dict, cfg: Config) -> dict:
             if getattr(r, "retrieval_hot", False) and r.rule.status == "dormant":
                 maintenance.reactivate_dormant_on_retrieval_hot(db, r.rule.id)
 
-        if cfg.gate_enabled:
-            gate_rules = select_gate_rules(hot)
-            if gate_rules:
-                marker_io.write(
-                    cfg,
-                    session_id,
-                    prompt,
-                    [
-                        MarkerRule(
-                            short_id=r.rule.short_id,
-                            action=r.rule.action,
-                            source_type=r.rule.source_type,
-                            rationale=r.rule.rationale,
-                        )
-                        for r in gate_rules
-                    ],
-                    ph=ph,
-                )
+        _update_gate_marker(cfg, session_id, prompt, hot, ph)
 
         log.info(
             "injected hot=%d warm=%d session=%s",
@@ -129,5 +147,4 @@ def handle(payload: dict, cfg: Config) -> dict:
                 _run_shadow_pool(db, prompt, project_id, cfg)
         except Exception:
             log.warning("shadow pool failed", exc_info=True)
-        finally:
-            db.close()
+        db.close()

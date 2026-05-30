@@ -109,6 +109,8 @@ def _was_extracted(db: Db, path: Path) -> bool:
 
 def maybe_inject(payload: dict, cfg: Config, db: Db) -> str | None:
     """Inject tail user messages from the previous session if not yet extracted."""
+    if not cfg.hot_cache_enabled:
+        return None
     current = _resolve_transcript_path(payload)
     if current is None:
         return None

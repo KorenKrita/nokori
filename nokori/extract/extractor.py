@@ -25,18 +25,19 @@ class Candidate:
     confidence: str
 
 
-def extract(transcript: str, llm: LLMAdapter) -> list[Candidate]:
+def extract(transcript: str, llm: LLMAdapter) -> tuple[list[Candidate], bool]:
+    """Returns (candidates, llm_ok). llm_ok=False when the LLM call failed (not empty parse)."""
     if not transcript.strip():
-        return []
+        return [], True
     prompt = EXTRACT_PROMPT.replace("{transcript}", transcript)
     try:
         raw = llm.complete(prompt, max_tokens=3000, timeout=60)
     except Exception as e:
         log.warning("extract LLM call failed: %s", type(e).__name__)
-        return []
+        return [], False
     if raw is None:
-        return []
-    return _parse_candidates(raw)
+        return [], False
+    return _parse_candidates(raw), True
 
 
 def _parse_candidates(raw: str) -> list[Candidate]:

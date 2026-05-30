@@ -30,6 +30,7 @@ _TOML_TO_ENV = {
     ("gate", "ttl_seconds"): "NOKORI_GATE_TTL_SECONDS",
     ("gate", "matcher"): "NOKORI_GATE_MATCHER",
     ("extract", "mode"): "NOKORI_EXTRACT_MODE",
+    ("extract", "defer_when_active"): "NOKORI_EXTRACT_DEFER_ACTIVE",
     ("llm", "base_url"): "NOKORI_LLM_BASE_URL",
     ("llm", "model"): "NOKORI_LLM_MODEL",
     ("llm", "api_key"): "NOKORI_LLM_API_KEY",
@@ -40,6 +41,12 @@ _TOML_TO_ENV = {
     ("embed", "dimensions"): "NOKORI_EMBED_DIMENSIONS",
     ("embed", "chunk_size"): "NOKORI_EMBED_CHUNK_SIZE",
     ("embed", "chunk_count"): "NOKORI_EMBED_CHUNK_COUNT",
+    ("embed", "hook_timeout_seconds"): "NOKORI_HOOK_EMBED_TIMEOUT",
+    ("embed", "server_idle_seconds"): "NOKORI_EMBED_SERVER_IDLE",
+    ("embed", "server_auto_start"): "NOKORI_EMBED_SERVER_AUTO_START",
+    ("hot_cache", "enabled"): "NOKORI_HOT_CACHE",
+    ("session", "idle_seconds"): "NOKORI_SESSION_IDLE_SECONDS",
+    ("promotion", "enabled"): "NOKORI_PROMOTION_ENABLED",
     ("disabled",): "NOKORI_DISABLED",
     ("dismiss_phrase",): "NOKORI_DISMISS_PHRASE",
     ("log_level",): "NOKORI_LOG_LEVEL",
@@ -149,6 +156,7 @@ class Config:
     gate_ttl_seconds: int
     gate_matcher: str
     extract_mode: str
+    extract_defer_when_active: bool
     llm_base_url: str | None
     llm_model: str | None
     llm_api_key: str | None
@@ -159,6 +167,12 @@ class Config:
     embed_dimensions: int
     embed_chunk_size: int
     embed_chunk_count: int
+    embed_hook_timeout_seconds: int
+    embed_server_idle_seconds: int
+    embed_server_auto_start: bool
+    hot_cache_enabled: bool
+    session_idle_seconds: int
+    promotion_enabled: bool
     disabled: bool
     dismiss_phrase: str
     log_level: str
@@ -177,6 +191,9 @@ class Config:
                 "NOKORI_GATE_MATCHER", "Edit|Write|MultiEdit|Bash|NotebookEdit", file_values
             ),
             extract_mode=_enum_val("NOKORI_EXTRACT_MODE", "manual", ("manual", "async"), file_values),
+            extract_defer_when_active=_bool_val(
+                "NOKORI_EXTRACT_DEFER_ACTIVE", False, file_values
+            ),
             llm_base_url=_str_or_none_val("NOKORI_LLM_BASE_URL", file_values),
             llm_model=_str_or_none_val("NOKORI_LLM_MODEL", file_values),
             llm_api_key=_str_or_none_val("NOKORI_LLM_API_KEY", file_values),
@@ -187,6 +204,20 @@ class Config:
             embed_dimensions=_int_val("NOKORI_EMBED_DIMENSIONS", 0, file_values, min_value=0),
             embed_chunk_size=_int_val("NOKORI_EMBED_CHUNK_SIZE", 512, file_values, min_value=16),
             embed_chunk_count=_int_val("NOKORI_EMBED_CHUNK_COUNT", 3, file_values, min_value=1),
+            embed_hook_timeout_seconds=_int_val(
+                "NOKORI_HOOK_EMBED_TIMEOUT", 2, file_values, min_value=1
+            ),
+            embed_server_idle_seconds=_int_val(
+                "NOKORI_EMBED_SERVER_IDLE", 3600, file_values, min_value=60
+            ),
+            embed_server_auto_start=_bool_val(
+                "NOKORI_EMBED_SERVER_AUTO_START", True, file_values
+            ),
+            hot_cache_enabled=_bool_val("NOKORI_HOT_CACHE", True, file_values),
+            session_idle_seconds=_int_val(
+                "NOKORI_SESSION_IDLE_SECONDS", 1800, file_values, min_value=60
+            ),
+            promotion_enabled=_bool_val("NOKORI_PROMOTION_ENABLED", True, file_values),
             disabled=_bool_val("NOKORI_DISABLED", False, file_values),
             dismiss_phrase=_str_val("NOKORI_DISMISS_PHRASE", "dismiss", file_values),
             log_level=_str_val("NOKORI_LOG_LEVEL", "warn", file_values),

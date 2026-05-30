@@ -30,7 +30,9 @@ def _process_path(path: Path, project_id: str | None, cfg: Config,
                 db.close()
         return (0, 0)
     llm = LLMAdapter(cfg)
-    candidates = extract_candidates(text, llm)
+    candidates, llm_ok = extract_candidates(text, llm)
+    if not llm_ok:
+        return (0, 0)
     if dry_run:
         return (len(candidates), 0)
 
@@ -83,6 +85,15 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
             if not path.exists():
                 job_io.delete_job(job_path)
                 continue
+            job_mtime = job.get("transcript_mtime")
+            current_mtime = path.stat().st_mtime
+            if job_mtime is not None and float(job_mtime) != float(current_mtime):
+                job_path = job_io.refresh_job_mtime(
+                    cfg, job_path, path, job.get("project_id"), current_mtime,
+                )
+                job = job_io.read_job(job_path)
+                if not job:
+                    continue
             cands, applied = _process_path(
                 path, job.get("project_id"), cfg, dry_run=args.dry_run
             )

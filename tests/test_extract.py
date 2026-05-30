@@ -33,8 +33,8 @@ def test_extractor_parses_array(tmp_path):
             "confidence": "high",
         }
     ])
-    cands = extract("[User] dummy transcript\n", FakeLLM(response))
-    assert len(cands) == 1
+    cands, ok = extract("[User] dummy transcript\n", FakeLLM(response))
+    assert ok and len(cands) == 1
     c = cands[0]
     assert c.confidence == "high"
     assert c.source_type == "correction"
@@ -47,19 +47,28 @@ def test_extractor_parses_single_object():
         "trigger": "x", "action": "y",
         "source_type": "correction", "confidence": "high",
     })
-    cands = extract("nonempty", FakeLLM(response))
-    assert len(cands) == 1
+    cands, ok = extract("nonempty", FakeLLM(response))
+    assert ok and len(cands) == 1
 
 
 def test_extractor_handles_fenced_json():
     response = "```json\n[]\n```"
-    cands = extract("nonempty", FakeLLM(response))
-    assert cands == []
+    cands, ok = extract("nonempty", FakeLLM(response))
+    assert ok and cands == []
 
 
 def test_extractor_skips_invalid_json():
-    cands = extract("nonempty", FakeLLM("this is not json {"))
-    assert cands == []
+    cands, ok = extract("nonempty", FakeLLM("this is not json {"))
+    assert ok and cands == []
+
+
+def test_extractor_llm_failure_not_ok():
+    class FailLLM:
+        def complete(self, *a, **k):
+            raise RuntimeError("down")
+
+    cands, ok = extract("nonempty transcript", FailLLM())
+    assert cands == [] and ok is False
 
 
 def test_extractor_skips_invalid_source_type():
@@ -67,13 +76,13 @@ def test_extractor_skips_invalid_source_type():
         "trigger": "x", "action": "y",
         "source_type": "WAT", "confidence": "high",
     }])
-    cands = extract("nonempty", FakeLLM(response))
-    assert cands == []
+    cands, ok = extract("nonempty", FakeLLM(response))
+    assert ok and cands == []
 
 
 def test_extractor_returns_empty_on_empty_transcript():
-    cands = extract("", FakeLLM(json.dumps([{"trigger": "x", "action": "y"}])))
-    assert cands == []
+    cands, ok = extract("", FakeLLM(json.dumps([{"trigger": "x", "action": "y"}])))
+    assert ok and cands == []
 
 
 def test_compressor_truncates_long_assistant():
@@ -193,6 +202,62 @@ def test_mark_extracted_on_empty_text(tmp_path, monkeypatch):
         assert row["status"] == "done"
     finally:
         db.close()
+
+
+def test_extract_llm_failure_does_not_mark_extracted(monkeypatch, tmp_path):
+    monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+    cfg = Config.from_env()
+    path = tmp_path / "t.jsonl"
+    path.write_text('{"type":"user","message":{"content":"fix the bug"}}\n', encoding="utf-8")
+
+    class FailLLM:
+        def complete(self, *a, **k):
+            raise RuntimeError("llm down")
+
+    from nokori.commands import extract as extract_cmd
+    from nokori.db import open_db
+
+    monkeypatch.setattr(extract_cmd, "LLMAdapter", lambda cfg: FailLLM())
+    cands, applied = extract_cmd._process_path(path, None, cfg, dry_run=False)
+    assert cands == 0 and applied == 0
+    db = open_db(cfg.db_path)
+    try:
+        row = db.fetchone(
+            "SELECT 1 FROM extract_state WHERE transcript_path = ?",
+            (str(path.resolve()),),
+        )
+        assert row is None
+    finally:
+        db.close()
+
+
+def test_extract_refreshes_job_when_transcript_mtime_changes(monkeypatch, tmp_path):
+    monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+    cfg = Config.from_env()
+    cfg.ensure_dirs()
+    path = tmp_path / "stale.jsonl"
+    path.write_text('{"type":"user","message":{"content":"hi"}}\n', encoding="utf-8")
+    mtime_old = path.stat().st_mtime
+    from nokori.extract import jobs as job_io
+
+    job_path = job_io.write_job(cfg, path, "proj", mtime_old)
+    path.write_text(
+        path.read_text(encoding="utf-8") + '{"type":"user","message":{"content":"more"}}\n',
+        encoding="utf-8",
+    )
+    new_mtime = path.stat().st_mtime
+    assert new_mtime != mtime_old
+
+    from nokori.commands.extract import run
+    import argparse
+
+    args = argparse.Namespace(session=None, dry_run=True)
+    assert run(args, cfg) == 0
+    pending = job_io.list_pending(cfg)
+    assert len(pending) == 1
+    job = job_io.read_job(pending[0])
+    assert job is not None
+    assert float(job["transcript_mtime"]) == float(new_mtime)
 
 
 def test_extract_lock_exclusive(monkeypatch, tmp_path):

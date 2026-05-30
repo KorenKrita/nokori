@@ -85,14 +85,51 @@ def test_dormant_reactivation(monkeypatch, tmp_path):
     try:
         _make_rule(db, id_="dormant-1", status="dormant", last_hit_days_ago=5)
         maintenance.reactivate_dormant_on_retrieval_hot(db, "dormant-1")
-        row = db.fetchone("SELECT status FROM rules WHERE id = 'dormant-1'")
+        row = db.fetchone(
+            "SELECT status, last_hit FROM rules WHERE id = 'dormant-1'"
+        )
         assert row["status"] == "active"
+        assert row["last_hit"] is not None
+    finally:
+        db.close()
+
+
+def test_unmerge_restores_when_superseder_deleted(monkeypatch, tmp_path):
+    monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+    cfg = Config.from_env()
+    db = open_db(cfg.db_path)
+    try:
+        from datetime import datetime, timezone
+
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace(
+            "+00:00", "Z"
+        )
+        with db.transaction() as tx:
+            tx.execute(
+                "INSERT INTO rules (id, short_id, trigger_text, action, source_type, "
+                "confidence, status, project_scope, created_at, updated_at, superseded_by) "
+                "VALUES ('old-1','old001','t','a','correction','high','merged','global',?,?, 'gone-1')",
+                (now, now),
+            )
+        with db.transaction() as tx:
+            tx.execute("DELETE FROM rules WHERE id = 'gone-1'")
+        with db.transaction() as tx:
+            tx.execute(
+                "INSERT INTO maintenance_meta (key, last_run) VALUES ('unmerge_check', '2000-01-01T00:00:00Z') "
+                "ON CONFLICT(key) DO UPDATE SET last_run = excluded.last_run"
+            )
+        restored = maintenance.run_unmerge_check(db)
+        assert restored == 1
+        row = db.fetchone("SELECT status, superseded_by FROM rules WHERE id='old-1'")
+        assert row["status"] == "dormant"
+        assert row["superseded_by"] is None
     finally:
         db.close()
 
 
 def test_promotion_after_three_projects(monkeypatch, tmp_path):
     monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("NOKORI_PROMOTION_ENABLED", "1")
     cfg = Config.from_env()
     db = open_db(cfg.db_path)
     try:
@@ -113,6 +150,7 @@ def test_promotion_after_three_projects(monkeypatch, tmp_path):
 
 def test_promotion_skips_preference(monkeypatch, tmp_path):
     monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("NOKORI_PROMOTION_ENABLED", "1")
     cfg = Config.from_env()
     db = open_db(cfg.db_path)
     try:

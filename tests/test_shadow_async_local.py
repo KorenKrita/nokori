@@ -99,6 +99,7 @@ class TestFetchShadowRules:
 class TestShadowPoolHotTier:
     def test_shadow_pool_skips_non_hot_matches(self, monkeypatch, tmp_path):
         monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+        monkeypatch.setenv("NOKORI_PROMOTION_ENABLED", "1")
         cfg = Config.from_env()
         db = open_db(cfg.db_path)
         try:
@@ -130,6 +131,7 @@ class TestShadowPoolHotTier:
 
     def test_shadow_pool_records_dominant_hot(self, monkeypatch, tmp_path):
         monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+        monkeypatch.setenv("NOKORI_PROMOTION_ENABLED", "1")
         cfg = Config.from_env()
         db = open_db(cfg.db_path)
         try:

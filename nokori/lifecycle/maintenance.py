@@ -107,6 +107,13 @@ def run_unmerge_check(db: Db) -> int:
             "SELECT status FROM rules WHERE id = ?", (r["superseded_by"],)
         )
         if target is None:
+            with db.transaction() as tx:
+                tx.execute(
+                    "UPDATE rules SET status = 'dormant', superseded_by = NULL, "
+                    "updated_at = ? WHERE id = ?",
+                    (ts, r["id"]),
+                )
+            restored += 1
             continue
         if target["status"] in ("dormant", "archived"):
             with db.transaction() as tx:
@@ -126,9 +133,9 @@ def reactivate_dormant_on_retrieval_hot(db: Db, rule_id: str) -> None:
     ts = now_iso()
     with db.transaction() as tx:
         tx.execute(
-            "UPDATE rules SET status = 'active', updated_at = ? "
+            "UPDATE rules SET status = 'active', last_hit = ?, updated_at = ? "
             "WHERE id = ? AND status = 'dormant'",
-            (ts, rule_id),
+            (ts, ts, rule_id),
         )
 
 

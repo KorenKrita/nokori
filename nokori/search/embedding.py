@@ -150,11 +150,12 @@ def search(
     client: EmbeddingClient,
     *,
     top_k: int = 10,
+    timeout: int = 10,
 ) -> list[ScoredResult]:
     if not client.configured() or not rules:
         return []
     try:
-        qvecs = client.embed(query)
+        qvecs = client.embed(query, timeout=timeout)
     except EmbeddingError:
         return []
     if not qvecs:
@@ -268,6 +269,39 @@ def search_local(
     return _search_impl(qvecs[0], rules, db, top_k)
 
 
+def search_local_shared(
+    query: str,
+    rules: Sequence[Rule],
+    db: Db,
+    cfg: Config,
+    *,
+    top_k: int = 10,
+    timeout: float = 5.0,
+    interaction: str = "cli",
+) -> tuple[list[ScoredResult], str]:
+    """Local embed via shared embed server. Hook path never falls back to in-process."""
+    from . import embed_ipc
+
+    if not rules or not _sentence_transformers_available():
+        return [], "off"
+
+    max_wait = embed_ipc._STARTUP_WAIT_SECONDS if interaction == "hook" else 15.0
+    if not embed_ipc.ensure_running(cfg, max_wait=max_wait):
+        if interaction == "hook":
+            return [], "off"
+        client = LocalEmbeddingClient(cfg)
+        return search_local(query, rules, db, client, top_k=top_k), "local"
+
+    qvecs = embed_ipc.embed_text(cfg, query, timeout=timeout)
+    if not qvecs:
+        if interaction == "hook":
+            return [], "off"
+        client = LocalEmbeddingClient(cfg)
+        return search_local(query, rules, db, client, top_k=top_k), "local"
+
+    return _search_impl(qvecs[0], rules, db, top_k), "local"
+
+
 def auto_enabled(cfg: Config, rule_count: int) -> bool:
     # Remote embedding configured explicitly
     if cfg.embed_enabled:
@@ -293,10 +327,19 @@ def use_local(cfg: Config) -> bool:
 def index_rule_if_enabled(db: Db, rule: Rule, cfg: Config) -> None:
     """Index a rule's embedding if embedding is enabled. Best-effort, logs on failure."""
     try:
-        rule_count = db.fetchone("SELECT COUNT(*) AS n FROM rules")["n"]
-        if not auto_enabled(cfg, rule_count):
+        from ..db import total_rule_count
+
+        if not auto_enabled(cfg, total_rule_count(db)):
             return
         if use_local(cfg):
+            from . import embed_ipc
+
+            text = _rule_text(rule)
+            if embed_ipc.ensure_running(cfg, max_wait=15.0):
+                vectors = embed_ipc.embed_text(cfg, text, timeout=60.0)
+                if vectors:
+                    _store_impl(db, rule.id, vectors, LOCAL_MODEL_NAME)
+                    return
             store_rule_embedding_local(db, rule, LocalEmbeddingClient(cfg))
         else:
             store_rule_embedding(db, rule, EmbeddingClient(cfg))

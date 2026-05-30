@@ -59,6 +59,17 @@
 # max_injection_chars = 1500
 
 # -----------------------------------------------------------------------------
+# SessionStart 热缓存（上一场同目录 transcript 尾部用户消息）
+# -----------------------------------------------------------------------------
+
+[hot_cache]
+# 是否在 SessionStart 注入上一场未 extract 的对话尾部
+# 类型：布尔
+# 默认：true
+# 环境变量：NOKORI_HOT_CACHE
+# enabled = true
+
+# -----------------------------------------------------------------------------
 # Gate（PreToolUse 阻断）— 仅第二层配置，见 README「Gate 两层匹配」
 # -----------------------------------------------------------------------------
 #
@@ -114,6 +125,13 @@ matcher = "Edit|Write|MultiEdit|Bash|NotebookEdit"
 # 批处理与 `nokori extract --session` 共用 {data_dir}/extract.lock（Unix fcntl / Windows msvcrt）
 # 环境变量：NOKORI_EXTRACT_MODE
 mode = "manual"
+
+# async 模式下：若还有其他「活跃」Claude session，SessionEnd 只写 job、不立刻后台 extract
+# （避免多 session 同时写 transcript / 抢 LLM；job 仍在 jobs/，可手动 nokori extract）
+# 类型：布尔
+# 默认：false（设为 true 可开启推迟）
+# 环境变量：NOKORI_EXTRACT_DEFER_ACTIVE
+# defer_when_active = false
 
 # -----------------------------------------------------------------------------
 # LLM（提取 transcript、合并规则；冷路径）
@@ -189,6 +207,44 @@ chunk_size = 512
 # 环境变量：NOKORI_EMBED_CHUNK_COUNT
 chunk_count = 3
 
+# UserPromptSubmit / 影子池 走远程 embedding 时的 HTTP 超时（秒）
+# hook 路径不加载本地 sentence-transformers，避免每个 hook 子进程冷启动模型
+# 类型：整数，>= 1
+# 默认：2
+# 环境变量：NOKORI_HOOK_EMBED_TIMEOUT
+# hook_timeout_seconds = 2
+
+# 共享 embed 进程空闲多久后自动退出（秒，最小 60）
+# 类型：整数
+# 默认：3600（1 小时）
+# 环境变量：NOKORI_EMBED_SERVER_IDLE
+# server_idle_seconds = 3600
+
+# hook 是否自动拉起 embed server（默认 true）
+# 环境变量：NOKORI_EMBED_SERVER_AUTO_START
+# server_auto_start = true
+
+# -----------------------------------------------------------------------------
+# Session 活跃判定（async extract 是否推迟）
+# -----------------------------------------------------------------------------
+
+[session]
+# 无 ended_at 且 last_activity 距今不超过此秒数 → 视为「仍活跃」
+# 默认：1800（30 分钟）
+# 环境变量：NOKORI_SESSION_IDLE_SECONDS
+# idle_seconds = 1800
+
+# -----------------------------------------------------------------------------
+# 跨项目 promotion（影子池 → global）
+# -----------------------------------------------------------------------------
+
+[promotion]
+# 是否启用影子池检索与 cross_project_hits / 升 global
+# 类型：布尔
+# 默认：true
+# 环境变量：NOKORI_PROMOTION_ENABLED
+# enabled = true
+
 # -----------------------------------------------------------------------------
 # 环境变量速查（与上文 TOML 字段等价）
 # -----------------------------------------------------------------------------
@@ -200,6 +256,12 @@ chunk_count = 3
 # | NOKORI_LOG_LEVEL | warn | debug / info / warn / error |
 # | NOKORI_DISMISS_PHRASE | dismiss | 对话退役：「动词 + short_id」里的动词 |
 # | NOKORI_MAX_INJECTION_CHARS | 1500 | 规则注入字符上限 |
+# | NOKORI_HOT_CACHE | 1 | SessionStart 热缓存 |
+# | NOKORI_HOOK_EMBED_TIMEOUT | 2 | hook 远程 embed 超时（秒） |
+# | NOKORI_EMBED_SERVER_IDLE | 3600 | embed server 空闲自动退出（秒） |
+# | NOKORI_EMBED_SERVER_AUTO_START | 1 | hook 自动拉起 embed server |
+# | NOKORI_SESSION_IDLE_SECONDS | 1800 | session 活跃判定窗口（秒） |
+# | NOKORI_PROMOTION_ENABLED | 1 | 影子池 / 跨项目 promotion |
 # | NOKORI_GATE_ENABLED | 1 | 启用 Gate |
 # | NOKORI_GATE_TTL_SECONDS | 600 | Marker TTL（秒） |
 # | NOKORI_GATE_MATCHER | Edit\|Write\|... | 第二层 block 用 tool_name 正则；任意 .* |
@@ -231,8 +293,7 @@ chunk_count = 3
 # 当前不可通过配置修改的行为（硬编码）
 # -----------------------------------------------------------------------------
 #
-# - SessionStart 热缓存：同目录上一场 *.jsonl（mtime < 当前），未 extract 才注入；
-#   500 字符 / 最近 3 条用户消息（hot_cache.py）
-# - 检索：BM25 默认；embedding 自动启用阈值 rules >= 20
+# - 热缓存：见 [hot_cache]；同目录上一场 *.jsonl，未 extract 才注入（500 字 / 3 条用户消息）
+# - embed server 空闲 1h 自退出（[embed] server_idle_seconds）；检索经共享 server 做本地向量
 # - Merger 邻居：BM25 top-20，不足时最近 5 条补齐
 # - RRF 融合常数 K=60；最低证据：lexical>=2 / variant 单 token / cosine>=0.55

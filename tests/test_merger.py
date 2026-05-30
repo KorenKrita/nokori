@@ -71,6 +71,30 @@ def test_merge_unrelated_inserts_independent(monkeypatch, tmp_path):
         db.close()
 
 
+def test_merge_same_adds_evidence_to_active(monkeypatch, tmp_path):
+    monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+    cfg = Config.from_env()
+    db = open_db(cfg.db_path)
+    try:
+        merge_candidate(_cand("shared trigger", "do X"), db, FakeMergeLLM("[]"))
+        existing = fetch_rules(db, statuses=("active",))[0]
+        response = json.dumps({
+            "relationships": [
+                {"existing_id": existing.id, "judgment": "A", "reasoning": "same"}
+            ]
+        })
+        merge_candidate(_cand("shared trigger", "do X"), db, FakeMergeLLM(response))
+        row = db.fetchone(
+            "SELECT evidence_score, evidence_log FROM rules WHERE id = ?",
+            (existing.id,),
+        )
+        assert row["evidence_score"] >= 1
+        kinds = [e["kind"] for e in json.loads(row["evidence_log"])]
+        assert "same_extraction" in kinds
+    finally:
+        db.close()
+
+
 def test_merge_same_activates_candidate(monkeypatch, tmp_path):
     monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
     cfg = Config.from_env()
@@ -168,6 +192,39 @@ def test_merge_bm25_prefers_lexical_match_over_recency(monkeypatch, tmp_path):
         assert outcome.activated == 0
         rules = fetch_rules(db, statuses=("active",), project_id="proj-a")
         assert sum(1 for r in rules if "force" in r.trigger_text.lower()) == 1
+    finally:
+        db.close()
+
+
+def test_merge_multiple_bd_inserts_once(monkeypatch, tmp_path):
+    """B and D against two neighbors should create one new rule, two supersedes."""
+    monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+    cfg = Config.from_env()
+    db = open_db(cfg.db_path)
+    try:
+        merge_candidate(_cand("rule one", "act one"), db, FakeMergeLLM("[]"))
+        merge_candidate(
+            _cand("rule two", "act two"),
+            db,
+            FakeMergeLLM('{"relationships": []}'),
+        )
+        existing = fetch_rules(db, statuses=("active",))
+        assert len(existing) == 2
+        id_a, id_b = existing[0].id, existing[1].id
+        response = json.dumps({
+            "relationships": [
+                {"existing_id": id_a, "judgment": "B", "reasoning": "broader"},
+                {"existing_id": id_b, "judgment": "D", "reasoning": "contradicts"},
+            ]
+        })
+        outcome = merge_candidate(
+            _cand("unified rule", "unified act"), db, FakeMergeLLM(response)
+        )
+        assert outcome.inserted == 1
+        assert outcome.superseded == 2
+        active = fetch_rules(db, statuses=("active",))
+        assert len(active) == 1
+        assert active[0].action == "unified act"
     finally:
         db.close()
 

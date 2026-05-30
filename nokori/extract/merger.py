@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import dataclasses
 import json
 from dataclasses import dataclass
 
@@ -184,10 +185,15 @@ def _ask_llm(cand: Candidate, neighbors: list[Rule], llm: LLMAdapter) -> dict:
     if text.startswith("```"):
         text = strip_fence(text)
     try:
-        return json.loads(text)
+        data = json.loads(text)
     except json.JSONDecodeError:
         log.warning("merge LLM returned non-JSON")
         return {"relationships": []}
+    if isinstance(data, list):
+        return {"relationships": data}
+    if isinstance(data, dict):
+        return data
+    return {"relationships": []}
 
 
 def _activate(db: Db, rule_id: str, confidence: str, cfg=None) -> None:
@@ -228,6 +234,7 @@ def merge_candidate(
     inserted = activated = merged = superseded = 0
     handled_existing: set[str] = set()
     saw_strong = False
+    pending_new = None
 
     for rel in judgment:
         eid = rel.get("existing_id")
@@ -244,7 +251,6 @@ def merge_candidate(
                     _activate(db, existing.id, "high", cfg)
                     activated += 1
                 else:
-                    import dataclasses
                     score, log_list = add_evidence(db, existing.id, "same_extraction", 1)
                     check_rule = dataclasses.replace(
                         existing, evidence_score=score, evidence_log=log_list,
@@ -252,19 +258,15 @@ def merge_candidate(
                     if should_activate_pure_ai(check_rule):
                         _activate(db, existing.id, check_rule.confidence, cfg)
                         activated += 1
-        elif verdict == "B":  # BROADER — new supersedes existing
+            elif existing.status in ("active", "dormant"):
+                add_evidence(db, existing.id, "same_extraction", 1)
+        elif verdict in ("B", "D"):  # BROADER / CONTRADICTS — one new rule supersedes many
             saw_strong = True
             handled_existing.add(eid)
-            new_rule = _persist_new(db, cand, project_id, cfg)
-            inserted += 1
-            _supersede(db, existing.id, new_rule.id)
-            superseded += 1
-        elif verdict == "D":  # CONTRADICTS
-            saw_strong = True
-            handled_existing.add(eid)
-            new_rule = _persist_new(db, cand, project_id, cfg)
-            inserted += 1
-            _supersede(db, existing.id, new_rule.id)
+            if pending_new is None:
+                pending_new = _persist_new(db, cand, project_id, cfg)
+                inserted += 1
+            _supersede(db, existing.id, pending_new.id)
             superseded += 1
         # C (NARROWER) and E (UNRELATED) → coexist; no action.
 

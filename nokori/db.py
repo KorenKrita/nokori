@@ -161,11 +161,19 @@ def _migrate(conn: sqlite3.Connection) -> None:
 
 def loads_json(value: str | None, default):
     if value is None or value == "":
-        return default
+        return _json_default_copy(default)
     try:
         return json.loads(value)
     except json.JSONDecodeError:
-        return default
+        return _json_default_copy(default)
+
+
+def _json_default_copy(default):
+    if isinstance(default, list):
+        return list(default)
+    if isinstance(default, dict):
+        return dict(default)
+    return default
 
 
 def dumps_json(value) -> str:
@@ -209,6 +217,14 @@ RULE_COLUMNS = (
     "project_id, superseded_by, archived_reason, "
     "created_at, updated_at"
 )
+
+
+def total_rule_count(db: "Db") -> int:
+    """Rules in searchable pools (active + dormant); used for embedding auto-enable."""
+    row = db.fetchone(
+        "SELECT COUNT(*) AS n FROM rules WHERE status IN ('active', 'dormant')"
+    )
+    return int(row["n"]) if row else 0
 
 
 def fetch_rules(db: "Db", *, statuses: tuple[str, ...] | None = None,

@@ -53,3 +53,12 @@ def delete_job(path: Path) -> None:
         path.unlink()
     except FileNotFoundError:
         return
+
+
+def refresh_job_mtime(
+    cfg: Config, job_path: Path, transcript_path: Path,
+    project_id: str | None, new_mtime: float,
+) -> Path:
+    """Re-queue job when transcript mtime changed after SessionEnd (keep pending)."""
+    delete_job(job_path)
+    return write_job(cfg, transcript_path, project_id, new_mtime)

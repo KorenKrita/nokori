@@ -2,12 +2,15 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import Literal
 
 from ..config import Config
-from ..db import Db
+from ..db import Db, total_rule_count
 from ..models import Rule, ScoredResult
 from . import bm25, ranker
 from . import embedding as embedding_search
+
+InteractionKind = Literal["hook", "cli"]
 
 
 @dataclass(frozen=True)
@@ -25,8 +28,13 @@ def retrieve_and_tier(
     cfg: Config,
     *,
     top_k: int = 10,
+    interaction: InteractionKind = "cli",
 ) -> RetrievalResult:
-    """BM25 + optional embedding RRF, then HOT/WARM tiering (formal + shadow pools)."""
+    """BM25 + optional embedding RRF, then HOT/WARM tiering (formal + shadow pools).
+
+    Local embedding uses a shared embed server (one loaded model for all hooks).
+  Remote embed uses a shorter timeout on hook path (cfg.embed_hook_timeout_seconds).
+    """
     if not rules:
         return RetrievalResult([], [], 0, "off")
 
@@ -34,18 +42,30 @@ def retrieve_and_tier(
     embed_results: list[ScoredResult] = []
     embed_mode = "off"
 
-    if embedding_search.auto_enabled(cfg, len(rules)):
+    pool_size = total_rule_count(db)
+    if embedding_search.auto_enabled(cfg, pool_size):
         if embedding_search.use_local(cfg):
-            client = embedding_search.LocalEmbeddingClient(cfg)
-            if client.available():
-                embed_results = embedding_search.search_local(
-                    prompt, rules, db, client, top_k=top_k
-                )
-                embed_mode = "local"
+            timeout = float(
+                cfg.embed_hook_timeout_seconds if interaction == "hook" else 30
+            )
+            embed_results, embed_mode = embedding_search.search_local_shared(
+                prompt,
+                rules,
+                db,
+                cfg,
+                top_k=top_k,
+                timeout=timeout,
+                interaction=interaction,
+            )
         else:
+            timeout = (
+                cfg.embed_hook_timeout_seconds
+                if interaction == "hook"
+                else 10
+            )
             client = embedding_search.EmbeddingClient(cfg)
             embed_results = embedding_search.search(
-                prompt, rules, db, client, top_k=top_k
+                prompt, rules, db, client, top_k=top_k, timeout=timeout
             )
             embed_mode = "remote"
 

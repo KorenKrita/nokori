@@ -1,0 +1,301 @@
+"""Unix-socket IPC for a shared local embedding server (one model, all hook processes)."""
+from __future__ import annotations
+
+import json
+import os
+import signal
+import socket
+import subprocess
+import sys
+import time
+from pathlib import Path
+from typing import Any
+
+from ..config import Config
+from ..utils.logging import get_logger
+
+log = get_logger("nokori.search.embed_ipc")
+
+_STARTUP_WAIT_SECONDS = 45.0
+_STARTUP_POLL_SECONDS = 0.15
+
+
+def socket_path(cfg: Config) -> Path:
+    return cfg.data_dir / "embed.sock"
+
+
+def pid_path(cfg: Config) -> Path:
+    return cfg.data_dir / "embed-server.pid"
+
+
+def _read_pid(cfg: Config) -> int | None:
+    p = pid_path(cfg)
+    if not p.exists():
+        return None
+    try:
+        raw = p.read_text(encoding="utf-8").strip()
+        return int(raw) if raw else None
+    except (OSError, ValueError):
+        return None
+
+
+def _write_pid(cfg: Config, pid: int) -> None:
+    pid_path(cfg).write_text(str(pid), encoding="utf-8")
+
+
+def _clear_pid(cfg: Config) -> None:
+    try:
+        pid_path(cfg).unlink()
+    except FileNotFoundError:
+        pass
+
+
+def _pid_alive(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+        return True
+    except OSError:
+        return False
+
+
+def _cleanup_stale(cfg: Config) -> None:
+    pid = _read_pid(cfg)
+    if pid is not None and _pid_alive(pid):
+        return
+    if pid is not None:
+        _clear_pid(cfg)
+    sock = socket_path(cfg)
+    try:
+        sock.unlink()
+    except FileNotFoundError:
+        pass
+
+
+def request(cfg: Config, payload: dict[str, Any], *, timeout: float = 5.0) -> dict[str, Any]:
+    """Send one JSON-line request to the embed server."""
+    data = (json.dumps(payload, ensure_ascii=False) + "\n").encode("utf-8")
+    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    try:
+        sock.settimeout(timeout)
+        sock.connect(str(socket_path(cfg)))
+        sock.sendall(data)
+        chunks: list[bytes] = []
+        while True:
+            part = sock.recv(65536)
+            if not part:
+                break
+            chunks.append(part)
+            if b"\n" in part:
+                break
+    finally:
+        sock.close()
+    if not chunks:
+        raise OSError("embed server closed connection")
+    line = b"".join(chunks).split(b"\n", 1)[0].decode("utf-8", errors="replace")
+    return json.loads(line)
+
+
+def ping(cfg: Config, *, timeout: float = 0.5) -> bool:
+    try:
+        resp = request(cfg, {"op": "ping"}, timeout=timeout)
+        return bool(resp.get("ok"))
+    except (OSError, json.JSONDecodeError, KeyError):
+        return False
+
+
+def spawn_server(cfg: Config) -> None:
+    """Start detached embed server if not already running."""
+    _cleanup_stale(cfg)
+    if ping(cfg):
+        return
+    pid = _read_pid(cfg)
+    if pid is not None and _pid_alive(pid):
+        return
+
+    cfg.ensure_dirs()
+    err_log = cfg.logs_dir / "embed-server.log"
+    try:
+        err_fh = open(err_log, "a", encoding="utf-8")
+    except OSError:
+        err_fh = subprocess.DEVNULL
+    env = os.environ.copy()
+    env["NOKORI_DATA_DIR"] = str(cfg.data_dir)
+    subprocess.Popen(
+        [sys.executable, "-m", "nokori", "embed", "serve"],
+        env=env,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=err_fh,
+        start_new_session=True,
+    )
+    if err_fh is not subprocess.DEVNULL:
+        try:
+            err_fh.close()
+        except OSError:
+            pass
+
+
+def ensure_running(cfg: Config, *, max_wait: float | None = None) -> bool:
+    """Ping or auto-start the embed server; wait until ready or timeout."""
+    if not cfg.embed_server_auto_start:
+        return ping(cfg)
+    if ping(cfg):
+        return True
+    spawn_server(cfg)
+    deadline = time.monotonic() + (max_wait if max_wait is not None else _STARTUP_WAIT_SECONDS)
+    while time.monotonic() < deadline:
+        if ping(cfg):
+            return True
+        time.sleep(_STARTUP_POLL_SECONDS)
+    return False
+
+
+def stop_server(cfg: Config) -> bool:
+    """Graceful shutdown via IPC; SIGTERM stale pid if socket is dead."""
+    if ping(cfg, timeout=1.0):
+        try:
+            request(cfg, {"op": "shutdown"}, timeout=3.0)
+            for _ in range(30):
+                if not ping(cfg, timeout=0.3):
+                    _cleanup_stale(cfg)
+                    return True
+                time.sleep(0.1)
+        except (OSError, json.JSONDecodeError):
+            pass
+    pid = _read_pid(cfg)
+    if pid is not None and _pid_alive(pid):
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except OSError:
+            pass
+        for _ in range(30):
+            if not _pid_alive(pid):
+                break
+            time.sleep(0.1)
+    _cleanup_stale(cfg)
+    return not ping(cfg, timeout=0.3)
+
+
+def server_status(cfg: Config) -> dict[str, Any]:
+    alive = ping(cfg, timeout=0.5)
+    pid = _read_pid(cfg)
+    return {
+        "running": alive,
+        "pid": pid if pid is not None and _pid_alive(pid) else None,
+        "socket": str(socket_path(cfg)),
+        "idle_seconds": cfg.embed_server_idle_seconds,
+    }
+
+
+def embed_text(cfg: Config, text: str, *, timeout: float = 5.0) -> list[list[float]]:
+    """Encode text via the shared server. Returns [] on failure."""
+    if not ensure_running(cfg, max_wait=_STARTUP_WAIT_SECONDS):
+        return []
+    try:
+        resp = request(
+            cfg,
+            {"op": "embed", "text": text},
+            timeout=timeout,
+        )
+    except (OSError, json.JSONDecodeError) as e:
+        log.warning("embed IPC failed: %s", e)
+        return []
+    if not resp.get("ok"):
+        log.warning("embed IPC error: %s", resp.get("error"))
+        return []
+    vectors = resp.get("vectors") or []
+    return [list(v) for v in vectors]
+
+
+def run_server(cfg: Config) -> int:
+    """Blocking embed server loop (CLI: nokori embed serve)."""
+    from .embedding import LocalEmbeddingClient
+
+    _cleanup_stale(cfg)
+    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    sock_path = socket_path(cfg)
+    try:
+        sock_path.unlink()
+    except FileNotFoundError:
+        pass
+    sock.bind(str(sock_path))
+    sock.listen(8)
+    _write_pid(cfg, os.getpid())
+
+    client = LocalEmbeddingClient(cfg)
+    if not client.available():
+        log.error("sentence-transformers not available; embed server exiting")
+        _clear_pid(cfg)
+        try:
+            sock_path.unlink()
+        except FileNotFoundError:
+            pass
+        return 1
+
+    model = client._load_model()
+    last_activity = time.monotonic()
+    idle_limit = float(cfg.embed_server_idle_seconds)
+
+    def _handle_connection(conn: socket.socket) -> bool:
+        """Returns False to shut down the server."""
+        nonlocal last_activity
+        try:
+            with conn:
+                conn.settimeout(30.0)
+                buf = b""
+                while b"\n" not in buf:
+                    part = conn.recv(65536)
+                    if not part:
+                        return True
+                    buf += part
+                line = buf.split(b"\n", 1)[0].decode("utf-8", errors="replace")
+                req = json.loads(line)
+                op = req.get("op")
+                if op == "ping":
+                    _reply(conn, {"ok": True, "op": "ping"})
+                elif op == "shutdown":
+                    _reply(conn, {"ok": True, "op": "shutdown"})
+                    return False
+                elif op == "embed":
+                    text = req.get("text") or ""
+                    vectors = client.embed(text)
+                    _reply(conn, {"ok": True, "op": "embed", "vectors": vectors})
+                else:
+                    _reply(conn, {"ok": False, "error": f"unknown op: {op!r}"})
+        except (OSError, json.JSONDecodeError, ValueError) as e:
+            try:
+                _reply(conn, {"ok": False, "error": str(e)})
+            except OSError:
+                pass
+        last_activity = time.monotonic()
+        return True
+
+    log.info("embed server listening on %s (idle=%ss)", sock_path, int(idle_limit))
+
+    try:
+        while True:
+            sock.settimeout(1.0)
+            try:
+                conn, _ = sock.accept()
+            except socket.timeout:
+                if time.monotonic() - last_activity >= idle_limit:
+                    log.info("embed server idle timeout (%ss)", int(idle_limit))
+                    break
+                continue
+            if not _handle_connection(conn):
+                break
+    finally:
+        sock.close()
+        _clear_pid(cfg)
+        try:
+            sock_path.unlink()
+        except FileNotFoundError:
+            pass
+        del model
+    return 0
+
+
+def _reply(conn: socket.socket, payload: dict[str, Any]) -> None:
+    conn.sendall((json.dumps(payload, ensure_ascii=False) + "\n").encode("utf-8"))

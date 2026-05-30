@@ -78,9 +78,11 @@ def format_injection(
 
 
 def select_gate_rules(hot):
-    """Subset of HOT that meets gate criteria: confidence=high + status=active."""
+    """HOT rules that should block tools: high, active, correction or anti_pattern."""
     return [
         r
         for r in hot
-        if r.rule.confidence == "high" and r.rule.status == "active"
+        if r.rule.confidence == "high"
+        and r.rule.status == "active"
+        and r.rule.source_type in ("correction", "anti_pattern")
     ]

@@ -6,7 +6,7 @@ import urllib.error
 import urllib.request
 
 from ..config import Config
-from ..db import open_db
+from ..db import open_db, total_rule_count
 from ..search import embedding as embedding_search
 
 RULE_COUNT_EMBED_WARN = 500
@@ -47,17 +47,13 @@ def _check_rule_count(cfg: Config) -> tuple[str, str]:
     try:
         db = open_db(cfg.db_path)
         try:
-            row = db.fetchone(
-                "SELECT COUNT(*) AS n FROM rules "
-                "WHERE status IN ('active', 'dormant', 'candidate')"
-            )
-            count = int(row["n"]) if row else 0
+            count = total_rule_count(db)
         finally:
             db.close()
     except Exception as e:
         return ("fail", str(e))
 
-    embed_on = embedding_search.auto_enabled(cfg, count) or embedding_search.use_local(cfg)
+    embed_on = embedding_search.auto_enabled(cfg, count)
     if embed_on and count >= RULE_COUNT_EMBED_WARN:
         return (
             "warn",

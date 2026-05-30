@@ -356,6 +356,8 @@ pip install nokori[local-embed]
 
 启用后使用 RRF（Reciprocal Rank Fusion）融合 BM25 和 embedding 结果。Embedding 失败时自动 fallback 到纯 BM25。
 
+**平台说明**：本地 embedding 共享进程通过 Unix domain socket（`~/.nokori/embed.sock`）通信，**仅 macOS / Linux**。Windows 上 hook 路径使用纯 BM25（或配置远程 `NOKORI_EMBED_BASE_URL`）；`extract.lock` 在 Windows 上可用，与 embed server 无关。
+
 ### 注入分层
 
 | 层级 | 条件 | 注入内容 |
@@ -413,6 +415,12 @@ nokori install [--dry-run | --uninstall | --disable | --enable]
 | `NOKORI_GATE_TTL_SECONDS` | `600` | Marker 过期时间 |
 | `NOKORI_GATE_MATCHER` | `Edit\|Write\|MultiEdit\|Bash\|NotebookEdit` | **第二层**：hook 内 block 的 `tool_name` 正则（任意工具用 `.*`）；见 [Gate 两层匹配](#gate-与-pretooluse两层工具匹配) |
 | `NOKORI_EXTRACT_MODE` | `manual` | `manual` / `async` |
+| `NOKORI_EXTRACT_DEFER_ACTIVE` | `0` | `1` 时若有未结束 session 则推迟 async extract |
+| `NOKORI_SESSION_IDLE_SECONDS` | `300` | active session 心跳超时 |
+| `NOKORI_HOT_CACHE` | `1` | SessionStart 热缓存 |
+| `NOKORI_PROMOTION_ENABLED` | `1` | 影子池 promotion |
+| `NOKORI_HOOK_EMBED_TIMEOUT` | `2` | hook 远程 embed 超时（秒） |
+| `NOKORI_EMBED_SERVER_IDLE_SECONDS` | `3600` | 本地 embed 进程空闲退出 |
 | `NOKORI_LLM_BASE_URL` | — | OpenAI-compatible chat completions 端点 |
 | `NOKORI_LLM_MODEL` | — | LLM 模型名 |
 | `NOKORI_LLM_API_KEY` | — | LLM API key |
@@ -495,6 +503,7 @@ mode = "manual"
 - 规则不包含源代码，只含行为描述
 - LLM 调用发送压缩后的 transcript 片段（非源代码）
 - 可指向本地 Ollama 实现完全离线
+- **Schema**：当前仅支持空库初始化到 v1；`rules.db` 版本不匹配时会报错。升级前请 `nokori export` 备份，或换新 `NOKORI_DATA_DIR` / `nokori reset`（见 `docs/design-decisions.md`）。
 
 ---
 

@@ -44,8 +44,10 @@ def compress(turns: Iterable[Turn], budget_tokens: int = 30000) -> str:
 
     keep_chars = budget_tokens * 3
     if len(text) > keep_chars:
-        text = text[-keep_chars:]
-        cut = text.find("\n[")
-        if cut > 0:
-            text = text[cut + 1 :]
+        half = keep_chars // 2
+        text = (
+            text[:half]
+            + "\n...[transcript truncated: middle omitted]...\n"
+            + text[-half:]
+        )
     return text

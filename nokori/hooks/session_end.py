@@ -71,6 +71,20 @@ def handle(payload: dict, cfg: Config) -> dict:
     log.info("queued extract job session=%s transcript=%s", session_id, transcript.name)
 
     if cfg.extract_mode == "async":
-        _spawn_async_extract(cfg)
+        if cfg.extract_defer_when_active:
+            others = sessions.count_open_sessions(
+                cfg, exclude_session=session_id
+            )
+            if others > 0:
+                log.info(
+                    "defer async extract: %d other active session(s); "
+                    "job queued — run `nokori extract` when idle "
+                    "(enable extract.defer_when_active to defer)",
+                    others,
+                )
+            else:
+                _spawn_async_extract(cfg)
+        else:
+            _spawn_async_extract(cfg)
 
     return {"continue": True}
