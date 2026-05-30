@@ -134,7 +134,8 @@ class TestAsyncExtract:
             "transcript_path": str(transcript),
         }
 
-        with patch("nokori.hooks.session_end.subprocess.Popen") as mock_popen:
+        with patch("nokori.hooks.session_end.subprocess.Popen") as mock_popen, \
+             patch("nokori.utils.project.subprocess.run", return_value=type("R", (), {"returncode": 1, "stdout": ""})()) as _:
             from nokori.hooks.session_end import handle
             result = handle(payload, cfg)
 
@@ -160,7 +161,8 @@ class TestAsyncExtract:
             "transcript_path": str(transcript),
         }
 
-        with patch("nokori.hooks.session_end.subprocess.Popen") as mock_popen:
+        with patch("nokori.hooks.session_end.subprocess.Popen") as mock_popen, \
+             patch("nokori.utils.project.subprocess.run", return_value=type("R", (), {"returncode": 1, "stdout": ""})()) as _:
             from nokori.hooks.session_end import handle
             result = handle(payload, cfg)
 
@@ -182,7 +184,8 @@ class TestAsyncExtract:
         }
 
         with patch("nokori.hooks.session_end.subprocess.Popen",
-                   side_effect=OSError("no such file")):
+                   side_effect=OSError("no such file")), \
+             patch("nokori.utils.project.subprocess.run", return_value=type("R", (), {"returncode": 1, "stdout": ""})()) as _:
             from nokori.hooks.session_end import handle
             result = handle(payload, cfg)
 

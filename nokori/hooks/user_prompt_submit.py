@@ -33,14 +33,10 @@ def _run_dismiss(db: Db, prompt: str, session_id: str, cfg: Config) -> int:
     """Returns number of rules archived via inline dismiss in this prompt."""
     phrase = (cfg.dismiss_phrase or "dismiss").lower()
     count = 0
-    cutoff_iso = (
-        datetime.fromtimestamp(
-            datetime.now(timezone.utc).timestamp() - 24 * 3600, tz=timezone.utc
-        )
-        .isoformat(timespec="seconds")
-        .replace("+00:00", "Z")
-    )
     now = now_iso()
+    from datetime import timedelta
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+    cutoff_iso = cutoff.isoformat(timespec="seconds").replace("+00:00", "Z")
     for m in _DISMISS_RE.finditer(prompt or ""):
         if m.group("phrase").lower() != phrase:
             continue
@@ -115,7 +111,6 @@ def handle(payload: dict, cfg: Config) -> dict:
             log_injection(db, r.rule.id, session_id, ph, "hot", now)
         for r in warm:
             log_injection(db, r.rule.id, session_id, ph, "warm", now)
-        for r in warm:
             if getattr(r, "retrieval_hot", False) and r.rule.status == "dormant":
                 maintenance.reactivate_dormant_on_retrieval_hot(db, r.rule.id)
 
