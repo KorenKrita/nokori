@@ -266,7 +266,8 @@ def merge_candidate(
             continue
         saw_strong = True
         handled_existing.add(eid)
-        anchor_id = existing.id
+        if anchor_id is None:
+            anchor_id = existing.id
         merged += 1
         if existing.status == "candidate":
             if cand.confidence == "high" and cand.source_type == "correction":

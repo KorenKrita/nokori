@@ -208,7 +208,7 @@ def _sentence_transformers_available() -> bool:
 
 
 class LocalEmbeddingClient:
-    """Uses sentence-transformers for local embedding when no remote endpoint is configured."""
+    """Loads sentence-transformers inside the embed server process only (not in hooks)."""
 
     def __init__(self, cfg: Config):
         self.cfg = cfg

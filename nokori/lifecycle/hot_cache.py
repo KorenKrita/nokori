@@ -4,6 +4,7 @@ from datetime import datetime
 from pathlib import Path
 
 from ..config import Config
+from ..constants import TRANSCRIPT_MTIME_EPSILON_SEC
 from ..db import Db
 from ..extract.reader import read as read_transcript
 from ..utils.time import now_iso
@@ -80,7 +81,7 @@ def _was_extracted(db: Db, path: Path) -> bool:
         stored_mtime = float(row["transcript_mtime"])
     except (TypeError, ValueError):
         stored_mtime = 0.0
-    if stored_mtime >= mtime - 1e-3:
+    if stored_mtime >= mtime - TRANSCRIPT_MTIME_EPSILON_SEC:
         return True
 
     extracted_at = row["extracted_at"]

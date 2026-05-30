@@ -121,8 +121,8 @@ def handle(payload: dict, cfg: Config) -> dict:
                 try:
                     promotion.record_shadow_hit(db, r.rule.id, project_id)
                 except Exception as e:
-                    log.warning(
-                        "shadow hit skipped rule=%s: %s", r.rule.id, e,
+                    log.info(
+                        "shadow promotion skipped rule=%s: %s", r.rule.id, e,
                     )
 
         if not hot and not warm:

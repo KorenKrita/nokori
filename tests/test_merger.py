@@ -314,6 +314,45 @@ def test_merge_bd_before_a_reuses_anchor_without_orphan_insert(monkeypatch, tmp_
         db.close()
 
 
+def test_merge_multiple_a_uses_first_anchor_for_bd(monkeypatch, tmp_path):
+    """When LLM marks two neighbors as A, B/D anchor is the first A, not the last."""
+    monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+    cfg = Config.from_env()
+    db = open_db(cfg.db_path)
+    try:
+        merge_candidate(_cand("first rule", "action first"), db, FakeMergeLLM("[]"))
+        id_first = fetch_rules(db, statuses=("active",))[0].id
+        merge_candidate(_cand("second rule", "action second"), db, FakeMergeLLM("[]"))
+        merge_candidate(_cand("third rule", "action third"), db, FakeMergeLLM("[]"))
+        id_second = next(
+            r.id for r in fetch_rules(db, statuses=("active",))
+            if r.action == "action second"
+        )
+        id_third = next(
+            r.id for r in fetch_rules(db, statuses=("active",))
+            if r.action == "action third"
+        )
+        response = json.dumps({
+            "relationships": [
+                {"existing_id": id_first, "judgment": "A", "reasoning": "same"},
+                {"existing_id": id_second, "judgment": "A", "reasoning": "same"},
+                {"existing_id": id_third, "judgment": "B", "reasoning": "broader"},
+            ]
+        })
+        merge_candidate(
+            _cand("unified", "unified action"),
+            db,
+            FakeMergeLLM(response),
+        )
+        row = db.fetchone(
+            "SELECT status, superseded_by FROM rules WHERE id = ?", (id_third,)
+        )
+        assert row["status"] == "merged"
+        assert row["superseded_by"] == id_first
+    finally:
+        db.close()
+
+
 def test_merge_llm_failure_keeps_pending_when_neighbors(monkeypatch, tmp_path):
     monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
     cfg = Config.from_env()
