@@ -74,7 +74,7 @@ def _update_gate_marker(
             ph=ph,
         )
     else:
-        marker_io.delete(cfg, session_id)
+        marker_io.delete_session(cfg, session_id)
 
 
 def handle(payload: dict, cfg: Config) -> dict:
@@ -105,7 +105,7 @@ def handle(payload: dict, cfg: Config) -> dict:
         )
         if not formal_rules and not shadow_rules:
             if cfg.gate_enabled:
-                marker_io.delete(cfg, session_id)
+                marker_io.delete_session(cfg, session_id)
             return {"continue": True}
 
         result, shadow_hot = retrieve_formal_and_shadow(
@@ -124,7 +124,7 @@ def handle(payload: dict, cfg: Config) -> dict:
 
         if not hot and not warm:
             if cfg.gate_enabled:
-                marker_io.delete(cfg, session_id)
+                marker_io.delete_session(cfg, session_id)
             return {"continue": True}
 
         text = format_injection(

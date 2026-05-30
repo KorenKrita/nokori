@@ -69,7 +69,12 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
             if not path.exists():
                 print(f"nokori: transcript not found: {path}")
                 return 1
-            project_id = resolve_project_id(os.getcwd())
+            if getattr(args, "project", None):
+                project_id = args.project
+            else:
+                project_id = job_io.find_project_id_for_transcript(cfg, path)
+                if project_id is None:
+                    project_id = resolve_project_id(os.getcwd())
             cands, applied, _finished = _process_path(
                 path, project_id, cfg, dry_run=args.dry_run
             )

@@ -6,6 +6,7 @@ from pathlib import Path
 
 from ..config import Config
 from ..db import (
+    SCHEMA_VERSION,
     dumps_json,
     fetch_rule_by_short_id,
     fetch_rules,
@@ -105,7 +106,7 @@ def run_export(args: argparse.Namespace, cfg: Config) -> int:
 
     payload = {
         "format": "nokori-export",
-        "version": 1,
+        "version": SCHEMA_VERSION,
         "exported_at": now_iso(),
         "rules": [
             {
@@ -160,6 +161,20 @@ def run_import(args: argparse.Namespace, cfg: Config) -> int:
         raise NokoriError(f"invalid JSON: {e}") from e
     if data.get("format") != "nokori-export":
         raise NokoriError("unrecognized export format")
+    file_schema = data.get("version")
+    if file_schema is None:
+        raise NokoriError(
+            "export missing version field (must match rules.db PRAGMA user_version)"
+        )
+    try:
+        file_schema = int(file_schema)
+    except (TypeError, ValueError) as e:
+        raise NokoriError(f"invalid export version: {file_schema!r}") from e
+    if file_schema != SCHEMA_VERSION:
+        raise NokoriError(
+            f"export schema version {file_schema} incompatible with this nokori "
+            f"(rules.db expects {SCHEMA_VERSION}); re-export or use matching release"
+        )
     rules_in = data.get("rules") or []
 
     db = open_db(cfg.db_path)

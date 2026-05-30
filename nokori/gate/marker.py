@@ -35,30 +35,45 @@ class Marker:
     rules: list[MarkerRule]
 
 
-def write(cfg: Config, session_id: str, prompt: str, rules: list[MarkerRule], *, ph: str | None = None) -> Path:
-    cfg.ensure_dirs()
-    payload = {
-        "session_id": session_id,
-        "prompt_hash": ph if ph is not None else prompt_hash(prompt),
-        "created_at": now_iso(),
-        "rules": [asdict(r) for r in rules],
-    }
-    path = cfg.marker_path(session_id)
+def _atomic_write_json(path: Path, payload: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
     os.replace(tmp, path)
+
+
+def write(
+    cfg: Config,
+    session_id: str,
+    prompt: str,
+    rules: list[MarkerRule],
+    *,
+    ph: str | None = None,
+) -> Path:
+    cfg.ensure_dirs()
+    ph = ph if ph is not None else prompt_hash(prompt)
+    payload = {
+        "session_id": session_id,
+        "prompt_hash": ph,
+        "created_at": now_iso(),
+        "rules": [asdict(r) for r in rules],
+    }
+    path = cfg.marker_path(session_id, ph)
+    _atomic_write_json(path, payload)
     return path
 
 
-def read(cfg: Config, session_id: str) -> Marker | None:
-    path = cfg.marker_path(session_id)
+def _load_marker_file(path: Path, session_id: str) -> Marker | None:
     if not path.exists():
         return None
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as e:
         log.warning("malformed marker at %s: %s", path, e)
-        delete(cfg, session_id)
+        try:
+            path.unlink()
+        except OSError:
+            pass
         return None
     rules = [MarkerRule(**r) for r in data.get("rules", [])]
     return Marker(
@@ -69,14 +84,105 @@ def read(cfg: Config, session_id: str) -> Marker | None:
     )
 
 
-def delete(cfg: Config, session_id: str) -> None:
-    path = cfg.marker_path(session_id)
+def read_latest(cfg: Config, session_id: str) -> Marker | None:
+    """Newest per-hash marker, else legacy single-file marker (PreToolUse has no prompt)."""
+    mdir = cfg.marker_dir(session_id)
+    best_path: Path | None = None
+    best_mtime = -1.0
+    if mdir.is_dir():
+        for path in mdir.glob("*.json"):
+            try:
+                mtime = path.stat().st_mtime
+            except OSError:
+                continue
+            if mtime > best_mtime:
+                best_mtime = mtime
+                best_path = path
+    if best_path is not None:
+        marker = _load_marker_file(best_path, session_id)
+        if marker is not None:
+            return marker
+    return _load_marker_file(cfg.legacy_marker_path(session_id), session_id)
+
+
+def prune_stale_markers(cfg: Config, session_id: str, current_ph: str) -> None:
+    """Drop markers for other prompt turns once the active hash is known."""
+    mdir = cfg.marker_dir(session_id)
+    if mdir.is_dir():
+        for path in mdir.glob("*.json"):
+            if path.stem != current_ph:
+                try:
+                    path.unlink()
+                except OSError:
+                    pass
+    legacy = cfg.legacy_marker_path(session_id)
+    if legacy.exists():
+        old = _load_marker_file(legacy, session_id)
+        if old is None or old.prompt_hash != current_ph:
+            try:
+                legacy.unlink()
+            except OSError:
+                pass
+
+
+def read(
+    cfg: Config,
+    session_id: str,
+    *,
+    prompt_hash_value: str | None = None,
+) -> Marker | None:
+    """Read gate marker for this session and prompt turn (per-hash file)."""
+    if prompt_hash_value:
+        marker = _load_marker_file(
+            cfg.marker_path(session_id, prompt_hash_value), session_id
+        )
+        if marker is not None:
+            return marker
+    legacy = _load_marker_file(cfg.legacy_marker_path(session_id), session_id)
+    if legacy is None:
+        return None
+    if prompt_hash_value and legacy.prompt_hash != prompt_hash_value:
+        return None
+    return legacy
+
+
+def delete(
+    cfg: Config,
+    session_id: str,
+    *,
+    prompt_hash_value: str | None = None,
+) -> None:
+    if prompt_hash_value:
+        try:
+            cfg.marker_path(session_id, prompt_hash_value).unlink()
+        except FileNotFoundError:
+            pass
+        except OSError:
+            pass
+        return
+    delete_session(cfg, session_id)
+
+
+def delete_session(cfg: Config, session_id: str) -> None:
+    """Remove all gate markers for a session (legacy single file + per-hash dir)."""
     try:
-        path.unlink()
+        cfg.legacy_marker_path(session_id).unlink()
     except FileNotFoundError:
-        return
+        pass
     except OSError:
+        pass
+    mdir = cfg.marker_dir(session_id)
+    if not mdir.is_dir():
         return
+    for path in mdir.glob("*.json"):
+        try:
+            path.unlink()
+        except OSError:
+            pass
+    try:
+        mdir.rmdir()
+    except OSError:
+        pass
 
 
 def resolve_current_prompt_hash(

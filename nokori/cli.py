@@ -68,6 +68,11 @@ def _build_parser() -> argparse.ArgumentParser:
 
     sp_extract = sub.add_parser("extract", help="run the extraction pipeline")
     sp_extract.add_argument("--session", default=None, help="explicit transcript path")
+    sp_extract.add_argument(
+        "--project",
+        default=None,
+        help="project_id for merge pool (--session only; default: job file then cwd)",
+    )
     sp_extract.add_argument("--dry-run", action="store_true")
 
     sub.add_parser(

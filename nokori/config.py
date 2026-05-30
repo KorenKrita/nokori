@@ -254,9 +254,19 @@ class Config:
     def sessions_dir(self) -> Path:
         return self.data_dir / "active_sessions"
 
-    def marker_path(self, session_id: str) -> Path:
-        safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in session_id)
-        return self.data_dir / f"pending-ack-{safe}.marker"
+    def _safe_session_id(self, session_id: str) -> str:
+        return "".join(c if c.isalnum() or c in "-_" else "_" for c in session_id)
+
+    def marker_dir(self, session_id: str) -> Path:
+        """Per-session gate markers (one file per user prompt_hash)."""
+        return self.data_dir / "gate_markers" / self._safe_session_id(session_id)
+
+    def marker_path(self, session_id: str, prompt_hash: str) -> Path:
+        return self.marker_dir(session_id) / f"{prompt_hash}.json"
+
+    def legacy_marker_path(self, session_id: str) -> Path:
+        """Pre–per-hash layout; read-only fallback for migration."""
+        return self.data_dir / f"pending-ack-{self._safe_session_id(session_id)}.marker"
 
     def ensure_dirs(self) -> None:
         for p in (self.data_dir, self.logs_dir, self.jobs_dir, self.sessions_dir):

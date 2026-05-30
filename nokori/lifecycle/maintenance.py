@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from ..db import Db, delete_rule_cascade
 from ..utils.logging import get_logger
@@ -15,6 +15,9 @@ CANDIDATE_TTL_DAYS = 20
 ANTI_PATTERN_TTL_DAYS = 40
 CANDIDATE_CLEANUP_INTERVAL_DAYS = 30
 UNMERGE_INTERVAL_DAYS = 90
+# Dismiss looks back 24h; keep extra history for gate hash / debugging.
+INJECTION_RETENTION_DAYS = 30
+INJECTION_CLEANUP_INTERVAL_DAYS = 7
 
 
 def _now() -> datetime:
@@ -96,6 +99,23 @@ def run_candidate_cleanup(db: Db) -> int:
     return deleted
 
 
+def run_injection_cleanup(db: Db) -> int:
+    if not _due(db, "injection_cleanup", INJECTION_CLEANUP_INTERVAL_DAYS):
+        return 0
+    cutoff = _now() - timedelta(days=INJECTION_RETENTION_DAYS)
+    cutoff_iso = cutoff.isoformat(timespec="seconds").replace("+00:00", "Z")
+    with db.transaction() as tx:
+        cur = tx.execute(
+            "DELETE FROM injections WHERE created_at < ?",
+            (cutoff_iso,),
+        )
+        deleted = cur.rowcount if cur.rowcount is not None else 0
+    _set_last_run(db, "injection_cleanup")
+    if deleted:
+        log.info("injection_cleanup deleted=%d", deleted)
+    return deleted
+
+
 def run_unmerge_check(db: Db) -> int:
     if not _due(db, "unmerge_check", UNMERGE_INTERVAL_DAYS):
         return 0
@@ -146,6 +166,7 @@ def run_due_jobs(db: Db) -> dict:
     summary = {
         "dormant_scan": run_dormant_scan(db),
         "candidate_cleanup": run_candidate_cleanup(db),
+        "injection_cleanup": run_injection_cleanup(db),
         "unmerge_check": run_unmerge_check(db),
     }
     return summary

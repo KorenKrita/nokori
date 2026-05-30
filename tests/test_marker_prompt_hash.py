@@ -45,7 +45,7 @@ def test_pre_tool_use_blocks_when_marker_only_no_injection(monkeypatch, tmp_path
     out = handle({"session_id": sess, "tool_name": "Bash"}, cfg)
     hso = out.get("hookSpecificOutput") or {}
     assert hso.get("permissionDecision") == "deny"
-    assert not cfg.marker_path(sess).exists()
+    assert not cfg.marker_path(sess, ph).exists()
 
 
 def test_pre_tool_use_skips_block_on_stale_prompt_hash(monkeypatch, tmp_path):
@@ -86,6 +86,33 @@ def test_pre_tool_use_skips_block_on_stale_prompt_hash(monkeypatch, tmp_path):
         out = handle({"session_id": sess, "tool_name": "Bash"}, cfg)
         hso = out.get("hookSpecificOutput") or {}
         assert hso.get("permissionDecision") != "deny"
-        assert not cfg.marker_path(sess).exists()
+        assert not cfg.marker_path(sess, ph_old).exists()
     finally:
         db.close()
+
+
+def test_per_prompt_hash_markers_do_not_overwrite(monkeypatch, tmp_path):
+    monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+    cfg = Config.from_env()
+    sess = "s-multi"
+    ph_a = prompt_hash("prompt A about deploy")
+    ph_b = prompt_hash("prompt B about tests")
+    marker_io.write(
+        cfg, sess, "prompt A about deploy",
+        [MarkerRule("aaaaaa", "action a", "correction")], ph=ph_a,
+    )
+    marker_io.write(
+        cfg, sess, "prompt B about tests",
+        [MarkerRule("bbbbbb", "action b", "correction")], ph=ph_b,
+    )
+    assert cfg.marker_path(sess, ph_a).exists()
+    assert cfg.marker_path(sess, ph_b).exists()
+    from nokori.hooks.pre_tool_use import handle
+
+    out = handle(
+        {"session_id": sess, "tool_name": "Bash", "prompt": "prompt A about deploy"},
+        cfg,
+    )
+    assert (out.get("hookSpecificOutput") or {}).get("permissionDecision") == "deny"
+    assert not cfg.marker_path(sess, ph_a).exists()
+    assert cfg.marker_path(sess, ph_b).exists()

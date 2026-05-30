@@ -32,36 +32,43 @@ def handle(payload: dict, cfg: Config) -> dict:
 
     session_id = payload.get("session_id") or "-"
 
-    marker = marker_io.read(cfg, session_id)
-    if marker is None:
-        return {"continue": True}
-
-    if marker_io.is_expired(marker, cfg.gate_ttl_seconds):
-        marker_io.delete(cfg, session_id)
-        return {"continue": True}
-
-    if not marker.rules:
-        marker_io.delete(cfg, session_id)
-        return {"continue": True}
-
     try:
         db = open_db(cfg.db_path)
     except DbError as e:
-        log.warning("gate db open failed, clearing marker session=%s: %s", session_id, e)
-        marker_io.delete(cfg, session_id)
+        log.warning("gate db open failed, fail-open session=%s: %s", session_id, e)
         return {"continue": True}
 
     try:
         current_ph = marker_io.resolve_current_prompt_hash(
-            payload, db, session_id, marker=marker,
+            payload, db, session_id,
         )
+        if not current_ph:
+            latest = marker_io.read_latest(cfg, session_id)
+            if latest is not None:
+                current_ph = latest.prompt_hash
+        if not current_ph:
+            return {"continue": True}
+
+        marker = marker_io.read(cfg, session_id, prompt_hash_value=current_ph)
+        if marker is None:
+            marker_io.prune_stale_markers(cfg, session_id, current_ph)
+            return {"continue": True}
+
+        if marker_io.is_expired(marker, cfg.gate_ttl_seconds):
+            marker_io.delete(cfg, session_id, prompt_hash_value=current_ph)
+            return {"continue": True}
+
+        if not marker.rules:
+            marker_io.delete(cfg, session_id, prompt_hash_value=current_ph)
+            return {"continue": True}
+
         if not marker_io.prompt_hash_matches(marker, current_ph, session_id=session_id):
-            marker_io.delete(cfg, session_id)
+            marker_io.delete(cfg, session_id, prompt_hash_value=current_ph)
             return {"continue": True}
     finally:
         db.close()
 
-    marker_io.delete(cfg, session_id)
+    marker_io.delete(cfg, session_id, prompt_hash_value=current_ph)
 
     reason = format_block_reason(marker.rules, dismiss_phrase=cfg.dismiss_phrase)
     log.info(

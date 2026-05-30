@@ -76,6 +76,18 @@ def list_pending(cfg: Config) -> list[Path]:
     return list_jobs(cfg, status="pending")
 
 
+def find_project_id_for_transcript(cfg: Config, transcript_path: Path) -> str | None:
+    """Best-effort project_id from any extract job pointing at this transcript."""
+    resolved = _job_transcript_path(transcript_path)
+    for job_path in list_jobs(cfg, status=None):
+        job = read_job(job_path)
+        if job and job.get("transcript_path") == resolved:
+            pid = job.get("project_id")
+            if pid:
+                return str(pid)
+    return None
+
+
 def read_job(path: Path) -> dict | None:
     try:
         return json.loads(path.read_text(encoding="utf-8"))

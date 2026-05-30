@@ -46,7 +46,7 @@ def test_import_rejects_oversized_trigger(tmp_path):
     out = tmp_path / "huge.json"
     payload = {
         "format": "nokori-export",
-        "version": 1,
+        "version": 2,
         "rules": [
             {
                 "id": "00000000-0000-4000-8000-000000000001",
@@ -67,7 +67,7 @@ def test_import_rejects_invalid_source_type(tmp_path):
     out = tmp_path / "bad.json"
     payload = {
         "format": "nokori-export",
-        "version": 1,
+        "version": 2,
         "rules": [
             {
                 "id": "00000000-0000-4000-8000-000000000002",

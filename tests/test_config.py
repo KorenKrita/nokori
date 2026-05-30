@@ -81,9 +81,10 @@ def test_marker_path_sanitizes_session(monkeypatch, tmp_path):
     _clear_env(monkeypatch)
     monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
     cfg = Config.from_env()
-    p = cfg.marker_path("abc/../etc")
-    assert ".." not in p.name
-    assert p.parent == tmp_path.resolve()
+    p = cfg.marker_path("abc/../etc", "deadbeef")
+    assert ".." not in str(p)
+    assert p.name == "deadbeef.json"
+    assert p.parent.name == "abc____etc"  # `/` and `.` both sanitized
 
 
 def test_config_toml_loaded(monkeypatch, tmp_path):

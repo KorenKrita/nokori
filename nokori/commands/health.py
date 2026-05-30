@@ -65,6 +65,32 @@ def _check_rule_count(cfg: Config) -> tuple[str, str]:
     return ("ok", f"{count} searchable rules")
 
 
+def _check_embedding_index_gaps(cfg: Config) -> tuple[str, str]:
+    try:
+        db = open_db(cfg.db_path)
+    except Exception as e:
+        return ("fail", str(e))
+    try:
+        count = total_rule_count(db)
+        if not embedding_search.auto_enabled(cfg, count):
+            return ("skip", "embedding not enabled for this library size")
+        row = db.fetchone(
+            "SELECT COUNT(*) AS n FROM rules r "
+            "WHERE r.status IN ('active', 'dormant') "
+            "AND NOT EXISTS (SELECT 1 FROM rule_embeddings e WHERE e.rule_id = r.id)"
+        )
+        missing = int(row["n"]) if row else 0
+    finally:
+        db.close()
+    if missing:
+        return (
+            "warn",
+            f"{missing} active/dormant rule(s) have no embedding rows — "
+            "RRF uses BM25-only for those; run extract/reindex or nokori edit to refresh",
+        )
+    return ("ok", "all searchable rules have embedding rows")
+
+
 def _check_settings_registered(cfg: Config) -> tuple[str, str]:
     from pathlib import Path
 
@@ -93,6 +119,7 @@ def run(_args: argparse.Namespace, cfg: Config) -> int:
     rows = [
         ("db", *_check_db(cfg)),
         ("rules", *_check_rule_count(cfg)),
+        ("embed.index", *_check_embedding_index_gaps(cfg)),
         ("settings.json", *_check_settings_registered(cfg)),
         ("llm",
          *_check_endpoint("llm", cfg.llm_base_url, cfg.llm_model,

@@ -45,6 +45,22 @@ def _unlock(fd: int) -> None:
             pass
 
 
+def is_locked(cfg: Config) -> bool:
+    """True when another process holds the exclusive extract lock."""
+    cfg.ensure_dirs()
+    lock_path = cfg.data_dir / "extract.lock"
+    fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR, 0o600)
+    try:
+        try:
+            _lock_exclusive_nb(fd)
+        except BlockingIOError:
+            return True
+        _unlock(fd)
+        return False
+    finally:
+        os.close(fd)
+
+
 @contextmanager
 def acquire(cfg: Config) -> Iterator[bool]:
     """Exclusive extract lock under data_dir. Yields False if already held."""

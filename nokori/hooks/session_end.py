@@ -7,6 +7,7 @@ from pathlib import Path
 
 from ..config import Config
 from ..extract import jobs as job_io
+from ..extract.lock import is_locked
 from ..extract.reader import stat as transcript_stat
 from ..utils import sessions
 from ..utils.logging import get_logger
@@ -72,9 +73,19 @@ def handle(payload: dict, cfg: Config) -> dict:
                     "job queued — run `nokori extract` when idle",
                     others,
                 )
-            else:
+            elif not is_locked(cfg):
                 _spawn_async_extract(cfg)
-        else:
+            else:
+                log.info(
+                    "async extract skipped: extract already running "
+                    "(pending jobs remain)"
+                )
+        elif not is_locked(cfg):
             _spawn_async_extract(cfg)
+        else:
+            log.info(
+                "async extract skipped: extract already running "
+                "(pending jobs remain)"
+            )
 
     return {"continue": True}
