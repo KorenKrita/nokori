@@ -95,8 +95,9 @@ def test_tier_min_evidence_blocks_single_token_match():
     ]
     bm = bm25.search("thing", rules)
     fused = ranker.rrf_fuse(bm, [])
-    hot, _ = ranker.tier_results(fused)
+    hot, warm = ranker.tier_results(fused)
     assert hot == []
+    assert warm == []
 
 
 def test_chinese_query():

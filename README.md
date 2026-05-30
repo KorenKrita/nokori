@@ -390,6 +390,12 @@ mode = "manual"
 
 ---
 
+## 设计说明
+
+实现取舍与 code review 共识见 [docs/design-decisions.md](docs/design-decisions.md)（产品形态、性能边界、有意 fail-open 等）。功能规格见 [docs/product-spec.md](docs/product-spec.md)。
+
+---
+
 ## 开发
 
 ```bash

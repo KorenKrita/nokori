@@ -64,7 +64,9 @@ def tier_results(
     for i, r in enumerate(top5):
         if r.rrf_score < MIN_ABSOLUTE_SCORE:
             continue
-        if i == 0 and top1_dominant and _meets_min_evidence(r):
+        if not _meets_min_evidence(r):
+            continue
+        if i == 0 and top1_dominant:
             if r.rule.status == "active":
                 hot.append(r)
                 continue

@@ -77,7 +77,7 @@ def format_injection(
     return "".join(parts)
 
 
-def select_gate_rules(hot, max_chars: int = 1500):
+def select_gate_rules(hot):
     """Subset of HOT that meets gate criteria: confidence=high + status=active."""
     return [
         r

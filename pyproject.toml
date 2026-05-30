@@ -8,13 +8,12 @@ version = "0.1.0"
 description = "経験留下的痕迹。Claude Code learning layer — extracts rules from corrections, enforces them with a gate."
 readme = "README.md"
 license = "MIT"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 authors = [{name = "KorenKrita"}]
 keywords = ["claude-code", "memory", "learning", "hooks", "gate"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",

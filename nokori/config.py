@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-import sys
+import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -14,52 +14,11 @@ _FALSE = {"0", "false", "no", "off", ""}
 _CONFIG_FILE_NAME = "config.toml"
 
 
-# --- TOML loading (stdlib tomllib on 3.11+, minimal fallback for 3.10) ---
-
 def _load_toml(path: Path) -> dict:
     if not path.exists():
         return {}
-    text = path.read_text(encoding="utf-8")
-    if sys.version_info >= (3, 11):
-        import tomllib
-        return tomllib.loads(text)
-    return _parse_toml_minimal(text)
-
-
-def _parse_toml_minimal(text: str) -> dict:
-    """Minimal TOML parser: supports [section], key = "value", key = number, key = bool."""
-    result: dict = {}
-    current_section: dict = result
-    for line in text.splitlines():
-        line = line.strip()
-        if not line or line.startswith("#"):
-            continue
-        if line.startswith("[") and line.endswith("]"):
-            section_name = line[1:-1].strip()
-            parts = section_name.split(".")
-            current_section = result
-            for part in parts:
-                current_section = current_section.setdefault(part, {})
-            continue
-        if "=" not in line:
-            continue
-        key, _, val = line.partition("=")
-        key = key.strip()
-        val = val.strip()
-        if (val.startswith('"') and val.endswith('"')) or (val.startswith("'") and val.endswith("'")):
-            val = val[1:-1]
-        elif val.lower() in ("true", "false"):
-            val = val.lower() == "true"
-        else:
-            try:
-                val = int(val)
-            except ValueError:
-                try:
-                    val = float(val)
-                except ValueError:
-                    pass
-        current_section[key] = val
-    return result
+    with open(path, "rb") as f:
+        return tomllib.load(f)
 
 
 # --- Config file → flat dict mapping ---
