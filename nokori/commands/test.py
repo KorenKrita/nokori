@@ -4,9 +4,9 @@ import argparse
 import os
 
 from ..config import Config
-from ..db import fetch_rules, fetch_shadow_rules, open_db
+from ..db import fetch_rules, fetch_shadow_rules, open_db, total_rule_count
 from ..gate.blocker import select_gate_rules
-from ..search.retrieve import retrieve_and_tier
+from ..search.retrieve import retrieve_formal_and_shadow
 from ..utils.project import resolve_project_id
 
 
@@ -18,20 +18,35 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
     db = open_db(cfg.db_path)
     try:
         if project_id is None:
-            rules = fetch_rules(
+            formal_rules = fetch_rules(
                 db, statuses=("active", "dormant"), global_only=True
             )
         else:
-            rules = fetch_rules(
+            formal_rules = fetch_rules(
                 db, statuses=("active", "dormant"), project_id=project_id
             )
+        shadow_rules = (
+            fetch_shadow_rules(db, project_id=project_id)
+            if project_id and cfg.promotion_enabled
+            else []
+        )
+        pool_size = total_rule_count(db)
 
-        result = retrieve_and_tier(args.prompt, rules, db, cfg, top_k=10)
+        result, shadow_hot = retrieve_formal_and_shadow(
+            args.prompt,
+            formal_rules,
+            shadow_rules,
+            db,
+            cfg,
+            pool_size=pool_size,
+            interaction="cli",
+        )
         hot, warm = result.hot, result.warm
 
         print(f"prompt        {args.prompt!r}")
         print(f"project_id    {project_id!r}")
-        print(f"candidates    {len(rules)} rules in pool")
+        print(f"formal.pool   {len(formal_rules)} rules")
+        print(f"shadow.pool   {len(shadow_rules)} rules")
         print(f"bm25.matches  {result.bm25_matches}")
         print(f"embed.mode    {result.embed_mode}")
         print()
@@ -50,6 +65,8 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
                 f"  {r.rule.short_id}  rrf={r.rrf_score:.4f}  bm25={r.bm25_score:.4f}"
                 f"{cos_str}"
             )
+            if getattr(r, "retrieval_hot", False) and r.rule.status == "dormant":
+                print("    (dormant: injected as WARM; DB reactivated for next turn)")
 
         gateable = select_gate_rules(hot)
         print()
@@ -57,23 +74,20 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
         for r in gateable:
             print(f"  {r.rule.short_id}: {r.rule.action[:80]}")
 
-        if project_id:
-            shadow_rules = fetch_shadow_rules(db, project_id=project_id)
-            if shadow_rules:
-                shadow = retrieve_and_tier(
-                    args.prompt, shadow_rules, db, cfg, top_k=5
+        if shadow_hot:
+            print()
+            print(
+                f"shadow_pool HOT ({len(shadow_hot)} would record hit, "
+                f"embed={result.embed_mode}, not injected):"
+            )
+            for r in shadow_hot[:3]:
+                print(
+                    f"  {r.rule.short_id}  rrf={r.rrf_score:.4f}  "
+                    f"bm25={r.bm25_score:.4f}  proj={r.rule.project_id}"
                 )
-                if shadow.hot:
-                    print()
-                    print(
-                        f"shadow_pool HOT ({len(shadow.hot)} would record hit, "
-                        f"embed={shadow.embed_mode}, not injected):"
-                    )
-                    for r in shadow.hot[:3]:
-                        print(
-                            f"  {r.rule.short_id}  rrf={r.rrf_score:.4f}  "
-                            f"bm25={r.bm25_score:.4f}  proj={r.rule.project_id}"
-                        )
+        elif shadow_rules and cfg.promotion_enabled:
+            print()
+            print("shadow_pool HOT  (0 — no shadow HOT on this prompt)")
     finally:
         db.close()
     return 0

@@ -19,7 +19,7 @@ Nokori 通过 4 个 Claude Code hooks 运行，交互热路径零 LLM 调用：
 | Hook | 作用 | 延迟预算 |
 |------|------|----------|
 | `SessionStart` | 热缓存（上一场未 extract 的尾部 user 消息）+ 轻维护 | ≤ 1.5s |
-| `UserPromptSubmit` | 正式池注入 + gate marker；`finally` 影子池（仅 HOT 计 promotion） | ≤ 500ms |
+| `UserPromptSubmit` | 正式池注入 + gate marker；与影子池合并检索（仅影子 HOT 计 promotion） | ≤ 500ms |
 | `PreToolUse` | 读 marker → block 一次 → 删除 marker | ≤ 50ms |
 | `SessionEnd` | 写 extract job 文件（异步提取排队） | ≤ 200ms |
 
@@ -263,7 +263,7 @@ candidate → active → dormant → (reactivated or archived)
 |------|------|------|----------|
 | `candidate` | 不参与 | 否 | LLM 提取的 medium confidence 规则 |
 | `active` | 正式池 | HOT 时是 | 用户纠正 / evidence_score ≥ 2 跨 ≥ 2 天 |
-| `dormant` | 正式池（最高 WARM） | 否 | 30 天未 HOT 命中（`last_hit` 仅 HOT 注入更新；WARM 不计入） |
+| `dormant` | 正式池（命中时当轮最高 WARM，不 gate） | 否 | 30 天未 HOT 命中（`last_hit` 仅 HOT 注入更新；WARM 不计入） |
 | `merged` | 不参与 | 否 | 被更新的规则取代 |
 | `archived` | 不参与 | 否 | 用户 dismiss / candidate 超时（日历天，见维护） |
 
@@ -271,6 +271,8 @@ candidate → active → dormant → (reactivated or archived)
 
 - 用户明确纠正（high confidence correction）→ 立即 active
 - 纯 AI evidence：`evidence_score >= 2` 且跨 `>= 2` 个活跃天
+
+**Dormant 再激活**：检索分达 HOT 档时，**当轮**仍按 WARM 注入（无 gate）；DB **当轮**即 `status=active` 并更新 `last_hit`，**下一轮**可 HOT + gate。与 `UserPromptSubmit` hook 行为一致。
 
 ### Project ID
 
@@ -309,7 +311,9 @@ export NOKORI_EXTRACT_MODE=async
 
 若 SessionEnd 之后 transcript 仍被追加（文件 `mtime` 变化），`nokori extract` 会**刷新 job 的 mtime 并保留 pending**，不会静默丢弃 job。
 
-可选：`NOKORI_EXTRACT_DEFER_ACTIVE=1` 时，async 模式下若仍有「活跃」session（见 `active_sessions/` + `NOKORI_SESSION_IDLE_SECONDS`），SessionEnd 只写 job、不立刻 fork extract。
+可选：`NOKORI_EXTRACT_DEFER_ACTIVE=1` 时，async 模式下若仍有**其他未 SessionEnd 的 session**（`active_sessions/` 里 `ended_at` 为空，`count_open_sessions`），当前 SessionEnd **只写 job、不 fork** `nokori extract`；待其它 session 结束后再手动或下次 SessionEnd 触发提取。
+
+`NOKORI_SESSION_IDLE_SECONDS`（`[session] idle_seconds`）**不参与** defer，仅用于 `nokori status` 的「active」展示（open + 近期有 `touch` 心跳）。
 
 Extract jobs 仅由 `nokori extract`（手动或 async 子进程）消费，SessionStart 不处理 jobs。`nokori extract` 使用 `{data_dir}/extract.lock`（Unix / Windows 均支持）防止并发重复处理。
 
@@ -496,7 +500,7 @@ matcher = "Edit|Write|MultiEdit|Bash|NotebookEdit"
 
 [extract]
 mode = "manual"
-# defer_when_active = false
+# defer_when_active = false   # 有其他 open session 时推迟 async extract
 
 [hot_cache]
 enabled = true

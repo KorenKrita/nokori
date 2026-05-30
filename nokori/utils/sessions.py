@@ -124,7 +124,7 @@ def count_active_sessions(
     exclude_session: str | None = None,
     idle_seconds: int | None = None,
 ) -> int:
-    """Count sessions considered alive (for deferring async extract, etc.)."""
+    """Count open sessions with recent activity (status UI; not used for extract defer)."""
     idle = idle_seconds if idle_seconds is not None else cfg.session_idle_seconds
     now = datetime.now(timezone.utc)
     n = 0

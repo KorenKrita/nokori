@@ -127,8 +127,8 @@ matcher = "Edit|Write|MultiEdit|Bash|NotebookEdit"
 # 环境变量：NOKORI_EXTRACT_MODE
 mode = "manual"
 
-# async 模式下：若还有其他「活跃」Claude session，SessionEnd 只写 job、不立刻后台 extract
-# （避免多 session 同时写 transcript / 抢 LLM；job 仍在 jobs/，可手动 nokori extract）
+# async 模式下：若还有其他未 SessionEnd 的 session（active_sessions 里 ended_at 为空），
+# SessionEnd 只写 job、不立刻 fork extract（与 NOKORI_SESSION_IDLE_SECONDS 无关）
 # 类型：布尔
 # 默认：false（设为 true 可开启推迟）
 # 环境变量：NOKORI_EXTRACT_DEFER_ACTIVE
