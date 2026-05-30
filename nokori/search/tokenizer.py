@@ -20,10 +20,9 @@ def is_cjk(ch: str) -> bool:
 def _flush_latin(buf: str, out: list[str]) -> None:
     if not buf:
         return
-    for word in buf.split():
-        w = word.strip("_-")
-        if len(w) >= 2:
-            out.append(w)
+    w = buf.strip("_-")
+    if len(w) >= 2:
+        out.append(w)
 
 
 def _flush_cjk(buf: str, out: list[str]) -> None:

@@ -81,6 +81,7 @@ def handle(payload: dict, cfg: Config) -> dict:
         "gate blocked tool session=%s rules=%s",
         session_id, ",".join(r.short_id for r in marker.rules),
     )
+    # continue=True is required by Claude Code; tool denial is via permissionDecision.
     return {
         "continue": True,
         "hookSpecificOutput": {

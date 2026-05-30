@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 from ..db import Db, delete_rule_cascade
 from ..utils.logging import get_logger
+from ..utils.sql_batch import batched
 from ..utils.time import now_iso, parse_iso
 
 log = get_logger("nokori.lifecycle.maintenance")
@@ -67,13 +68,14 @@ def run_dormant_scan(db: Db) -> int:
             to_dormant.append(r["id"])
     moved = len(to_dormant)
     if to_dormant:
-        placeholders = ",".join("?" * len(to_dormant))
         with db.transaction() as tx:
-            tx.execute(
-                f"UPDATE rules SET status = 'dormant', updated_at = ? "
-                f"WHERE id IN ({placeholders})",
-                (ts, *to_dormant),
-            )
+            for batch in batched(to_dormant):
+                placeholders = ",".join("?" * len(batch))
+                tx.execute(
+                    f"UPDATE rules SET status = 'dormant', updated_at = ? "
+                    f"WHERE id IN ({placeholders})",
+                    (ts, *batch),
+                )
     _set_last_run(db, "dormant_scan")
     if moved:
         log.info("dormant_scan moved=%d", moved)
@@ -162,7 +164,11 @@ def reactivate_dormant_on_retrieval_hot(db: Db, rule_id: str) -> None:
         )
 
 
-def run_due_jobs(db: Db) -> dict:
+def run_due_jobs(db: Db, cfg=None) -> dict:
+    if cfg is not None:
+        from . import deferred
+
+        deferred.flush_deferred_writes(db, cfg)
     summary = {
         "dormant_scan": run_dormant_scan(db),
         "candidate_cleanup": run_candidate_cleanup(db),

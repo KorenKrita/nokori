@@ -86,7 +86,7 @@ def _check_embedding_index_gaps(cfg: Config) -> tuple[str, str]:
         return (
             "warn",
             f"{missing} active/dormant rule(s) have no embedding rows — "
-            "RRF uses BM25-only for those; run extract/reindex or nokori edit to refresh",
+            "RRF uses BM25-only for those; run nokori extract or nokori edit to refresh",
         )
     return ("ok", "all searchable rules have embedding rows")
 

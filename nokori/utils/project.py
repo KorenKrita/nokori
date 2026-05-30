@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hashlib
 import subprocess
-from functools import lru_cache
 from pathlib import Path
 
 
@@ -22,7 +21,6 @@ def resolve_project_id(cwd: str | None) -> str | None:
     return _project_id_for_cwd(norm)
 
 
-@lru_cache(maxsize=64)
 def _project_id_for_cwd(norm_cwd: str) -> str | None:
     root = None
     try:

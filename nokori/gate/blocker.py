@@ -45,7 +45,7 @@ def format_injection(
 
     parts: list[str] = []
     parts.append("[Nokori] past lessons relevant to this prompt:")
-    used = len(parts[0]) + 1
+    used = len(parts[0])
 
     sorted_hot = sorted(
         hot,

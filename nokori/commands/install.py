@@ -5,7 +5,6 @@ import copy
 import difflib
 import json
 import os
-import shutil
 import sys
 from pathlib import Path
 
@@ -30,9 +29,6 @@ def _settings_path() -> Path:
 
 
 def _build_command() -> str:
-    nokori = shutil.which("nokori")
-    if nokori:
-        return f"{nokori} hook"
     return f"{sys.executable} -m nokori hook"
 
 

@@ -242,7 +242,7 @@ def merge_candidate(
         return MergeOutcome(
             inserted=0, activated=0, merged=0, superseded=0, merge_ok=False,
         )
-    judgment = judgment_payload.get("relationships", [])
+    judgment = judgment_payload.get("relationships") or []
     by_id = {r.id: r for r in neighbors}
     inserted = activated = merged = superseded = 0
     handled_existing: set[str] = set()
@@ -251,13 +251,17 @@ def merge_candidate(
     anchor_id: str | None = None
 
     parsed: list[tuple[str, str, Rule]] = []
+    seen_eids: set[str] = set()
     for rel in judgment:
+        if not isinstance(rel, dict):
+            continue
         eid = rel.get("existing_id")
         verdict = (rel.get("judgment") or "").strip().upper()[:1]
         if not eid or eid not in by_id or verdict not in {"A", "B", "C", "D", "E"}:
             continue
-        if eid in handled_existing:
+        if eid in seen_eids:
             continue
+        seen_eids.add(eid)
         parsed.append((eid, verdict, by_id[eid]))
 
     # Pass 1: SAME (A) — establishes anchor before BROADER/CONTRADICTS (B/D).

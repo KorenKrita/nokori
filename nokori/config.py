@@ -134,7 +134,7 @@ def _str_or_none_val(name: str, file_values: dict[str, str]) -> str | None:
 
 def _str_val(name: str, default: str, file_values: dict[str, str]) -> str:
     raw = _get(name, file_values)
-    if raw is None or raw == "":
+    if raw is None or raw.strip() == "":
         return default
     return raw.strip()
 

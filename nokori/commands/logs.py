@@ -10,6 +10,7 @@ def run(_args: argparse.Namespace, cfg: Config) -> int:
         ("hook", cfg.logs_dir / "hook.log"),
         ("pipeline", cfg.logs_dir / "pipeline.log"),
         ("async-extract", cfg.logs_dir / "async-extract.log"),
+        ("embed-server", cfg.logs_dir / "embed-server.log"),
     ]
     any_shown = False
     for label, path in paths:

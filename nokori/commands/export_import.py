@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 
 from ..config import Config
@@ -138,7 +139,9 @@ def run_export(args: argparse.Namespace, cfg: Config) -> int:
         ],
     }
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp = target.with_suffix(target.suffix + ".tmp")
+    tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    os.replace(tmp, target)
     print(f"exported {len(rules)} rules → {target}")
     return 0
 

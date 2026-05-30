@@ -12,6 +12,7 @@ from ..db import Db
 from ..errors import EmbeddingError
 from ..models import Rule, ScoredResult
 from ..utils.logging import get_logger
+from ..utils.sql_batch import batched
 from ..utils.time import now_iso
 
 log = get_logger("nokori.search.embedding")
@@ -173,12 +174,17 @@ def _search_impl(
 ) -> list[ScoredResult]:
     if not rules or not model_version:
         return []
-    placeholders = ",".join(["?"] * len(rules))
-    rows = db.fetchall(
-        f"SELECT rule_id, chunk_index, embedding FROM rule_embeddings "
-        f"WHERE rule_id IN ({placeholders}) AND model_version = ?",
-        (*tuple(r.id for r in rules), model_version),
-    )
+    rule_ids = [r.id for r in rules]
+    rows: list = []
+    for batch in batched(rule_ids):
+        placeholders = ",".join(["?"] * len(batch))
+        rows.extend(
+            db.fetchall(
+                f"SELECT rule_id, chunk_index, embedding FROM rule_embeddings "
+                f"WHERE rule_id IN ({placeholders}) AND model_version = ?",
+                (*batch, model_version),
+            )
+        )
     by_rule: dict[str, list[list[float]]] = {}
     for row in rows:
         by_rule.setdefault(row["rule_id"], []).append(_deserialize(row["embedding"]))

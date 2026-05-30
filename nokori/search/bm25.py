@@ -10,8 +10,8 @@ from .tokenizer import tokenize
 K1 = 1.2
 B = 0.75
 
-# Reuse IDF/doc index when the rule set is unchanged (same ids + updated_at).
-_INDEX_CACHE: OrderedDict[tuple[tuple[str, str], ...], tuple] = OrderedDict()
+# Reuse IDF/doc index when BM25-relevant fields are unchanged (not updated_at).
+_INDEX_CACHE: OrderedDict[tuple, tuple] = OrderedDict()
 _INDEX_CACHE_MAX = 64
 
 
@@ -38,8 +38,20 @@ def _variant_tokens(rule: Rule) -> set[str]:
     return tokens
 
 
-def _index_key(rules_list: list[Rule]) -> tuple[tuple[str, str], ...]:
-    return tuple((r.id, r.updated_at) for r in sorted(rules_list, key=lambda r: r.id))
+def _index_key(rules_list: list[Rule]) -> tuple:
+    def _rule_key(r: Rule) -> tuple:
+        terms = tuple(
+            (lang, tuple(sorted(vals)))
+            for lang, vals in sorted(r.search_terms.items())
+        )
+        return (
+            r.id,
+            r.trigger_text,
+            tuple(r.trigger_variants),
+            terms,
+        )
+
+    return tuple(_rule_key(r) for r in sorted(rules_list, key=lambda r: r.id))
 
 
 def _build_index(rules_list: list[Rule]):

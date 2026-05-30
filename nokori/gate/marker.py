@@ -165,14 +165,11 @@ def resolve_current_prompt_hash(
     payload: dict,
     db: Db,
     session_id: str,
-    *,
-    marker: Marker | None = None,
 ) -> str | None:
     """Best-effort hash for the active user turn (PreToolUse has no prompt field)."""
-    for key in ("prompt", "user_prompt"):
-        text = payload.get(key)
-        if isinstance(text, str) and text:
-            return prompt_hash(text)
+    text = payload.get("prompt")
+    if isinstance(text, str) and text:
+        return prompt_hash(text)
     row = db.fetchone(
         "SELECT prompt_hash FROM injections WHERE session_id = ? "
         "ORDER BY created_at DESC LIMIT 1",
@@ -180,8 +177,6 @@ def resolve_current_prompt_hash(
     )
     if row and row["prompt_hash"]:
         return str(row["prompt_hash"])
-    if marker and marker.prompt_hash:
-        return marker.prompt_hash
     return None
 
 
