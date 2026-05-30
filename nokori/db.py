@@ -281,19 +281,6 @@ def fetch_short_ids(db: "Db") -> set[str]:
     return {r["short_id"] for r in rows}
 
 
-def log_injection(
-    db: "Db",
-    rule_id: str,
-    session_id: str,
-    prompt_hash: str,
-    level: str,
-    now: str,
-) -> None:
-    log_injections_batch(
-        db, session_id, prompt_hash, [(rule_id, level)], now,
-    )
-
-
 def log_injections_batch(
     db: "Db",
     session_id: str,

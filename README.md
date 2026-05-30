@@ -432,6 +432,8 @@ nokori embed stop     # 优雅关闭（SIGTERM + IPC shutdown）
 # nokori embed serve  # 前台调试；空闲超过 NOKORI_EMBED_SERVER_IDLE 秒自动退出
 ```
 
+本地 embed server 的 Unix socket 在 `NOKORI_DATA_DIR` 下，**无 IPC 鉴权**（本机单用户场景可接受；勿把数据目录放在多用户共享路径）。
+
 ### 注入分层
 
 | 层级 | 条件 | 注入内容 |
