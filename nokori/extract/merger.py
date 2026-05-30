@@ -52,18 +52,23 @@ def _persist_new(db: Db, cand: Candidate, project_id: str | None) -> Rule:
     rid = new_uuid()
     sid = short_id_for(rid, fetch_short_ids(db))
     status = _initial_status(cand)
+    is_user_correction = (cand.confidence == "high" and cand.source_type == "correction")
+    ev_score = 3 if is_user_correction else 0
+    ev_log = dumps_json([{"kind": "user_correction", "points": 3, "at": now}]) if is_user_correction else "[]"
     with db.transaction() as tx:
         tx.execute(
             "INSERT INTO rules (id, short_id, trigger_text, trigger_variants, "
             "search_terms, behavior, action, rationale, source_type, confidence, "
-            "status, project_scope, project_id, created_at, updated_at) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "status, evidence_score, evidence_log, project_scope, project_id, "
+            "created_at, updated_at) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 rid, sid, cand.trigger,
                 dumps_json(cand.trigger_variants),
                 dumps_json(cand.search_terms),
                 cand.behavior, cand.action, cand.rationale,
                 cand.source_type, cand.confidence, status,
+                ev_score, ev_log,
                 "project", project_id, now, now,
             ),
         )

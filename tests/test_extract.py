@@ -126,3 +126,30 @@ def test_reader_tolerates_malformed_lines(tmp_path):
     turns = read_transcript(path)
     assert len(turns) == 1
     assert turns[0].role == "human"
+
+
+def test_mark_extracted_on_empty_text(tmp_path, monkeypatch):
+    """Extract marks transcript as extracted even when compressed text is empty."""
+    import os
+    monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+    from nokori.config import Config
+    from nokori.db import open_db
+    cfg = Config.from_env()
+    path = tmp_path / "empty.jsonl"
+    path.write_text("")  # empty transcript
+
+    from nokori.commands.extract import _process_path
+    cands, applied = _process_path(path, None, cfg, dry_run=False)
+    assert cands == 0
+    assert applied == 0
+
+    db = open_db(cfg.db_path)
+    try:
+        row = db.fetchone(
+            "SELECT * FROM extract_state WHERE transcript_path = ?",
+            (str(path),),
+        )
+        assert row is not None
+        assert row["status"] == "done"
+    finally:
+        db.close()

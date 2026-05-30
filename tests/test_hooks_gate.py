@@ -144,3 +144,19 @@ def test_disabled_short_circuits_user_prompt(tmp_path):
              env_extra={"NOKORI_DATA_DIR": str(tmp_path), "NOKORI_DISABLED": "1"},
              stdin=json.dumps({"session_id": "x", "prompt": "git push --force"}))
     assert r.stdout.strip() == "{}"
+
+
+def test_pre_tool_use_skips_non_matching_tool(tmp_path):
+    """PreToolUse should not block tools not in gate_matcher."""
+    _add_high_active(tmp_path, "force push", "lease", variants=["git push --force"])
+    sess = "s-read-tool"
+    _run("hook", "user-prompt-submit",
+         env_extra={"NOKORI_DATA_DIR": str(tmp_path)},
+         stdin=json.dumps({"session_id": sess, "cwd": str(tmp_path),
+                           "prompt": "git push --force"}))
+    # Read tool is NOT in the default gate_matcher
+    r = _run("hook", "pre-tool-use",
+             env_extra={"NOKORI_DATA_DIR": str(tmp_path)},
+             stdin=json.dumps({"session_id": sess, "tool_name": "Read"}))
+    out = json.loads(r.stdout)
+    assert "decision" not in out

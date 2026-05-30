@@ -30,7 +30,7 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
     if args.terms_zh:
         terms["zh"] = _split_csv(args.terms_zh)
 
-    status = "active" if args.confidence == "high" else "candidate"
+    status = "active" if (args.confidence == "high" and args.source_type == "correction") else "candidate"
     evidence_score = 3 if (args.confidence == "high" and args.source_type == "correction") else 0
     evidence_log = dumps_json(
         [{"kind": "user_correction", "points": 3, "at": now}]
