@@ -97,7 +97,7 @@ def retrieve_formal_and_shadow(
         empty = RetrievalResult([], [], 0, "off")
         return empty, []
 
-    shadow_ids = {r.id for r in shadow_rules}
+    shadow_ids = {r.id for r in shadow_only}
     effective_pool = pool_size if pool_size is not None else len(combined)
     result = retrieve_and_tier(
         prompt,

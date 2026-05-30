@@ -94,12 +94,16 @@ def _write_version(conn: sqlite3.Connection, version: int) -> None:
 class Db:
     def __init__(self, conn: sqlite3.Connection):
         self.conn = conn
+        self._in_tx = False
 
     def close(self) -> None:
         self.conn.close()
 
     @contextmanager
     def transaction(self) -> Iterator[sqlite3.Connection]:
+        if self._in_tx:
+            raise DbError("nested database transaction")
+        self._in_tx = True
         try:
             self.conn.execute("BEGIN IMMEDIATE")
             yield self.conn
@@ -107,6 +111,8 @@ class Db:
         except Exception:
             self.conn.rollback()
             raise
+        finally:
+            self._in_tx = False
 
     def schema_version(self) -> int:
         return _read_version(self.conn)

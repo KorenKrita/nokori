@@ -24,11 +24,3 @@ class LlmRateLimitError(LlmError):
 
 class EmbeddingError(LlmError):
     pass
-
-
-class TranscriptParseError(NokoriError):
-    pass
-
-
-class GateMarkerError(NokoriError):
-    pass

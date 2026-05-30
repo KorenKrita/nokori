@@ -41,6 +41,27 @@ def test_export_import_roundtrip(tmp_path):
     assert "rule two" in list_out.stdout
 
 
+def test_import_rejects_oversized_trigger(tmp_path):
+    data = tmp_path / "data"
+    out = tmp_path / "huge.json"
+    payload = {
+        "format": "nokori-export",
+        "version": 1,
+        "rules": [
+            {
+                "id": "00000000-0000-4000-8000-000000000001",
+                "short_id": "big001",
+                "trigger_text": "x" * 20_000,
+                "action": "ok",
+            }
+        ],
+    }
+    out.write_text(json.dumps(payload), encoding="utf-8")
+    r = _run("import", str(out), env_extra={"NOKORI_DATA_DIR": str(data)})
+    assert r.returncode != 0
+    assert "trigger_text" in (r.stderr + r.stdout)
+
+
 def test_import_skips_duplicates(tmp_path):
     src = tmp_path / "src"
     out = tmp_path / "rules.json"

@@ -79,7 +79,7 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
                 print(f"applied:    {applied}")
             return 0
 
-        pending = job_io.list_pending(cfg)
+        pending = job_io.list_jobs(cfg)
         if not pending:
             print("(no pending extract jobs)")
             return 0

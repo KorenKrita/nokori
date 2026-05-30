@@ -31,8 +31,7 @@ def rrf_fuse(
     fused: list[ScoredResult] = []
     for rule_id, score in sorted(scores.items(), key=lambda kv: -kv[1]):
         rec = rule_map[rule_id]
-        rec.rrf_score = score
-        fused.append(rec)
+        fused.append(replace(rec, rrf_score=score))
     return fused
 
 
@@ -49,7 +48,7 @@ def meets_min_evidence(r: ScoredResult) -> bool:
 def tier_results(
     results: Sequence[ScoredResult],
 ) -> tuple[list[ScoredResult], list[ScoredResult]]:
-    """Split results into HOT and WARM tiers per docs/product-spec.md §3.2."""
+    """Split results into HOT and WARM tiers per product-spec §3.2 (docs/product-spec.md)."""
     if not results:
         return [], []
     top5 = list(results[:5])
@@ -72,8 +71,7 @@ def tier_results(
                 hot.append(r)
                 continue
             if r.rule.status == "dormant":
-                r.retrieval_hot = True
-                warm.append(r)
+                warm.append(replace(r, retrieval_hot=True))
                 continue
         warm.append(r)
     return hot, warm

@@ -62,7 +62,7 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
                 f"  {r.rule.short_id}  rrf={r.rrf_score:.4f}  bm25={r.bm25_score:.4f}"
                 f"{cos_str}"
             )
-            if getattr(r, "retrieval_hot", False) and r.rule.status == "dormant":
+            if r.retrieval_hot and r.rule.status == "dormant":
                 print("    (dormant: injected as WARM; DB reactivated for next turn)")
 
         gateable = select_gate_rules(hot)

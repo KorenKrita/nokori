@@ -136,7 +136,7 @@ def handle(payload: dict, cfg: Config) -> dict:
             log_injection(db, r.rule.id, session_id, ph, "hot", now)
         for r in warm:
             log_injection(db, r.rule.id, session_id, ph, "warm", now)
-            if getattr(r, "retrieval_hot", False) and r.rule.status == "dormant":
+            if r.retrieval_hot and r.rule.status == "dormant":
                 # Dormant reactivation: this turn stays WARM (no gate); next turn may HOT.
                 maintenance.reactivate_dormant_on_retrieval_hot(db, r.rule.id)
 

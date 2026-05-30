@@ -99,7 +99,7 @@ def search(
             ScoredResult(
                 rule=rule,
                 bm25_score=score,
-                matched_tokens=matched,
+                matched_tokens=frozenset(matched),
                 has_trigger_variant_match=variant_match,
             )
         )

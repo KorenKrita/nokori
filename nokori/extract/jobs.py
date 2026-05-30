@@ -54,10 +54,26 @@ def write_job(cfg: Config, transcript_path: Path, project_id: str | None,
     return out
 
 
-def list_pending(cfg: Config) -> list[Path]:
+def list_jobs(cfg: Config, *, status: str | None = "pending") -> list[Path]:
+    """List extract job files; default status filters to pending only."""
     if not cfg.jobs_dir.exists():
         return []
-    return sorted(cfg.jobs_dir.glob("extract-*.json"))
+    paths = sorted(cfg.jobs_dir.glob("extract-*.json"))
+    if status is None:
+        return paths
+    out: list[Path] = []
+    for path in paths:
+        job = read_job(path)
+        if job is None:
+            continue
+        if job.get("status", "pending") == status:
+            out.append(path)
+    return out
+
+
+def list_pending(cfg: Config) -> list[Path]:
+    """Alias for list_jobs(status='pending')."""
+    return list_jobs(cfg, status="pending")
 
 
 def read_job(path: Path) -> dict | None:

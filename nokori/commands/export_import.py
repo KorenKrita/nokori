@@ -17,6 +17,66 @@ from ..search.embedding import index_rule_if_enabled
 from ..utils.ids import new_uuid, short_id_for
 from ..utils.time import now_iso
 
+_MAX_TRIGGER_TEXT = 16_384
+_MAX_ACTION = 8_192
+_MAX_RATIONALE = 4_096
+_MAX_BEHAVIOR = 4_096
+_MAX_SHORT_ID = 64
+_MAX_VARIANTS = 32
+_MAX_VARIANT_LEN = 512
+_MAX_SEARCH_LANGS = 16
+_MAX_TERMS_PER_LANG = 64
+_MAX_TERM_LEN = 256
+
+
+def _str_len(value: object, field: str, limit: int) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        return f"{field} must be a string"
+    if len(value) > limit:
+        return f"{field} exceeds {limit} characters"
+    return None
+
+
+def _validate_import_record(rec: dict) -> str | None:
+    for field, limit in (
+        ("trigger_text", _MAX_TRIGGER_TEXT),
+        ("action", _MAX_ACTION),
+        ("rationale", _MAX_RATIONALE),
+        ("behavior", _MAX_BEHAVIOR),
+        ("short_id", _MAX_SHORT_ID),
+    ):
+        err = _str_len(rec.get(field), field, limit)
+        if err:
+            return err
+    variants = rec.get("trigger_variants") or []
+    if not isinstance(variants, list):
+        return "trigger_variants must be a list"
+    if len(variants) > _MAX_VARIANTS:
+        return f"trigger_variants exceeds {_MAX_VARIANTS} entries"
+    for i, v in enumerate(variants):
+        err = _str_len(v, f"trigger_variants[{i}]", _MAX_VARIANT_LEN)
+        if err:
+            return err
+    terms = rec.get("search_terms") or {}
+    if not isinstance(terms, dict):
+        return "search_terms must be an object"
+    if len(terms) > _MAX_SEARCH_LANGS:
+        return f"search_terms exceeds {_MAX_SEARCH_LANGS} languages"
+    for lang, lang_terms in terms.items():
+        if not isinstance(lang, str) or len(lang) > 32:
+            return "search_terms language key invalid"
+        if not isinstance(lang_terms, list):
+            return f"search_terms[{lang!r}] must be a list"
+        if len(lang_terms) > _MAX_TERMS_PER_LANG:
+            return f"search_terms[{lang!r}] exceeds {_MAX_TERMS_PER_LANG} terms"
+        for j, term in enumerate(lang_terms):
+            err = _str_len(term, f"search_terms[{lang!r}][{j}]", _MAX_TERM_LEN)
+            if err:
+                return err
+    return None
+
 
 def run_export(args: argparse.Namespace, cfg: Config) -> int:
     target = Path(args.path).expanduser().resolve()
@@ -84,6 +144,11 @@ def run_import(args: argparse.Namespace, cfg: Config) -> int:
         existing_ids = {r["id"] for r in db.fetchall("SELECT id FROM rules")}
         existing_short_ids = fetch_short_ids(db)
         for rec in rules_in:
+            if not isinstance(rec, dict):
+                raise NokoriError("each rule must be an object")
+            err = _validate_import_record(rec)
+            if err:
+                raise NokoriError(f"invalid import rule: {err}")
             if rec.get("id") in existing_ids:
                 skipped += 1
                 continue

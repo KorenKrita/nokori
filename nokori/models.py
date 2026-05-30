@@ -46,13 +46,13 @@ class Rule:
     updated_at: str
 
 
-@dataclass
+@dataclass(frozen=True)
 class ScoredResult:
     rule: Rule
     bm25_score: float = 0.0
     cosine: float | None = None
     rrf_score: float = 0.0
-    matched_tokens: set[str] = field(default_factory=set)
+    matched_tokens: frozenset[str] = field(default_factory=frozenset)
     has_trigger_variant_match: bool = False
     retrieval_hot: bool = False
 

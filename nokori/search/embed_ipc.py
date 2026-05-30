@@ -18,6 +18,7 @@ log = get_logger("nokori.search.embed_ipc")
 
 _STARTUP_WAIT_SECONDS = 45.0
 _STARTUP_POLL_SECONDS = 0.15
+_MAX_IPC_RESPONSE_BYTES = 1 << 20  # 1 MiB cap per JSON-line response
 
 
 def socket_path(cfg: Config) -> Path:
@@ -82,10 +83,14 @@ def request(cfg: Config, payload: dict[str, Any], *, timeout: float = 5.0) -> di
         sock.connect(str(socket_path(cfg)))
         sock.sendall(data)
         chunks: list[bytes] = []
+        total = 0
         while True:
             part = sock.recv(65536)
             if not part:
                 break
+            total += len(part)
+            if total > _MAX_IPC_RESPONSE_BYTES:
+                raise OSError("embed server response too large")
             chunks.append(part)
             if b"\n" in part:
                 break

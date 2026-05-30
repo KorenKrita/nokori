@@ -248,4 +248,8 @@ class Config:
 
     def ensure_dirs(self) -> None:
         for p in (self.data_dir, self.logs_dir, self.jobs_dir, self.sessions_dir):
-            p.mkdir(parents=True, exist_ok=True)
+            p.mkdir(parents=True, exist_ok=True, mode=0o700)
+            try:
+                p.chmod(0o700)
+            except OSError:
+                pass

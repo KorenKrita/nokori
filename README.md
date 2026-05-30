@@ -223,6 +223,8 @@ matcher = ".*"
 | `[gate] enabled` / `NOKORI_GATE_ENABLED` | 总开关；关则只注入、不 block |
 | `[gate] ttl_seconds` / `NOKORI_GATE_TTL_SECONDS` | marker 有效期（默认 600s），过期不再 block |
 
+**Prompt-hash 不匹配（fail-open）**：`UserPromptSubmit` 写入 marker 时记录当前 prompt 的 hash；`PreToolUse` 用 injections 表或 payload 解析当前 hash。若无法解析或与 marker 不一致（用户已发下一条消息），**删除 marker 并放行工具**，不 block。
+
 ---
 
 ## 自动提取
@@ -245,6 +247,16 @@ nokori extract
 ```
 
 提取流程：读 transcript → 压缩（保留用户消息，截断 AI 响应）→ LLM 提取候选规则 → 与已有规则合并（SAME/BROADER/CONTRADICTS/UNRELATED）。
+
+**Merge 判定（实现）** — LLM 关系字母 `A`–`E` 对应 SAME / BROADER / NARROWER / CONTRADICTS / UNRELATED：
+
+| 判定 | 行为 |
+|------|------|
+| **SAME (A)** + 已有 `candidate` | 加 evidence；high correction 可立即 activate，否则按 evidence 规则激活 |
+| **SAME (A)** + 已有 `active` / `dormant` | **不新建规则**；对已有行 `add_evidence(..., "same_extraction", 1)`，保留全部历史 |
+| **BROADER / CONTRADICTS (B/D)** | 插入新规则并 `supersede` 旧规则 |
+| **NARROWER / UNRELATED (C/E)** | 共存，无操作 |
+| 无强关系 | 插入新 `candidate` |
 
 **Merge LLM 失败**：若已有邻近规则但关系判断 LLM 调用失败，**不会插入**该候选；`nokori extract` **不**标记 transcript 已提取，extract job **保持 pending** 以便重试。
 

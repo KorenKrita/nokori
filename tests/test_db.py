@@ -1,4 +1,7 @@
+import pytest
+
 from nokori.db import open_db, SCHEMA_VERSION
+from nokori.errors import DbError
 
 
 def test_open_db_creates_schema(tmp_path):
@@ -67,5 +70,16 @@ def test_wal_mode(tmp_path):
     try:
         row = db.fetchone("PRAGMA journal_mode")
         assert row[0].lower() == "wal"
+    finally:
+        db.close()
+
+
+def test_nested_transaction_rejected(tmp_path):
+    db = open_db(tmp_path / "rules.db")
+    try:
+        with db.transaction():
+            with pytest.raises(DbError, match="nested"):
+                with db.transaction():
+                    pass
     finally:
         db.close()
