@@ -9,6 +9,7 @@ def run(_args: argparse.Namespace, cfg: Config) -> int:
     paths = [
         ("hook", cfg.logs_dir / "hook.log"),
         ("pipeline", cfg.logs_dir / "pipeline.log"),
+        ("async-extract", cfg.logs_dir / "async-extract.log"),
     ]
     any_shown = False
     for label, path in paths:

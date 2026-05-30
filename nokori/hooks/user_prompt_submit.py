@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from ..config import Config
 from ..db import (
     Db,
     fetch_rules,
     fetch_shadow_rules,
-    log_injection,
+    log_injections_batch,
     open_db,
     archive_rule,
     find_rule_id_by_recent_injection,
@@ -38,11 +38,10 @@ def _run_dismiss(db: Db, prompt: str, session_id: str, cfg: Config) -> int:
     pattern = _dismiss_re(phrase)
     count = 0
     now = now_iso()
-    from datetime import timedelta
     cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
     cutoff_iso = cutoff.isoformat(timespec="seconds").replace("+00:00", "Z")
     for m in pattern.finditer(prompt or ""):
-        sid = m.group("sid")
+        sid = m.group("sid").lower()
         rid = find_rule_id_by_recent_injection(db, session_id, sid, cutoff_iso)
         if rid is None:
             continue
@@ -87,7 +86,9 @@ def handle(payload: dict, cfg: Config) -> dict:
 
     db = open_db(cfg.db_path)
     try:
-        _run_dismiss(db, prompt, session_id, cfg)
+        dismiss_phrase = (cfg.dismiss_phrase or "dismiss").lower()
+        if dismiss_phrase in (prompt or "").lower():
+            _run_dismiss(db, prompt, session_id, cfg)
 
         if project_id is None:
             formal_rules = fetch_rules(
@@ -132,10 +133,10 @@ def handle(payload: dict, cfg: Config) -> dict:
 
         ph = prompt_hash(prompt)
         now = now_iso()
-        for r in hot:
-            log_injection(db, r.rule.id, session_id, ph, "hot", now)
+        entries = [(r.rule.id, "hot") for r in hot]
+        entries.extend((r.rule.id, "warm") for r in warm)
+        log_injections_batch(db, session_id, ph, entries, now)
         for r in warm:
-            log_injection(db, r.rule.id, session_id, ph, "warm", now)
             if r.retrieval_hot and r.rule.status == "dormant":
                 # Dormant reactivation: this turn stays WARM (no gate); next turn may HOT.
                 maintenance.reactivate_dormant_on_retrieval_hot(db, r.rule.id)

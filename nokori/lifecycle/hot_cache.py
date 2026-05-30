@@ -7,18 +7,10 @@ from ..config import Config
 from ..db import Db
 from ..extract.reader import read as read_transcript
 from ..utils.time import now_iso
+from ..utils.transcript import resolve_transcript_path
 
 HOT_CACHE_BUDGET_CHARS = 500
 HOT_CACHE_RECENT_TURNS = 3
-
-
-def _resolve_transcript_path(payload: dict) -> Path | None:
-    candidate = payload.get("transcript_path") or payload.get("transcript")
-    if candidate:
-        path = Path(candidate).expanduser()
-        if path.exists():
-            return path
-    return None
 
 
 def _transcript_db_key(path: Path) -> str:
@@ -104,7 +96,7 @@ def maybe_inject(payload: dict, cfg: Config, db: Db) -> str | None:
     """Inject tail user messages from the previous session if not yet extracted."""
     if not cfg.hot_cache_enabled:
         return None
-    current = _resolve_transcript_path(payload)
+    current = resolve_transcript_path(payload)
     if current is None:
         return None
 

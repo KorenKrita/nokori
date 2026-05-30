@@ -27,6 +27,11 @@ _MAX_VARIANT_LEN = 512
 _MAX_SEARCH_LANGS = 16
 _MAX_TERMS_PER_LANG = 64
 _MAX_TERM_LEN = 256
+_MAX_IMPORT_FILE_BYTES = 100 * 1024 * 1024
+_SOURCE_TYPES = frozenset({"correction", "preference", "solution", "anti_pattern"})
+_CONFIDENCE = frozenset({"high", "medium"})
+_STATUSES = frozenset({"candidate", "active", "merged", "archived", "dormant"})
+_PROJECT_SCOPES = frozenset({"project", "global"})
 
 
 def _str_len(value: object, field: str, limit: int) -> str | None:
@@ -75,6 +80,18 @@ def _validate_import_record(rec: dict) -> str | None:
             err = _str_len(term, f"search_terms[{lang!r}][{j}]", _MAX_TERM_LEN)
             if err:
                 return err
+    st = rec.get("source_type", "correction")
+    if st not in _SOURCE_TYPES:
+        return f"source_type must be one of {sorted(_SOURCE_TYPES)}"
+    conf = rec.get("confidence", "medium")
+    if conf not in _CONFIDENCE:
+        return f"confidence must be one of {sorted(_CONFIDENCE)}"
+    status = rec.get("status", "candidate")
+    if status not in _STATUSES:
+        return f"status must be one of {sorted(_STATUSES)}"
+    scope = rec.get("project_scope", "project")
+    if scope not in _PROJECT_SCOPES:
+        return f"project_scope must be one of {sorted(_PROJECT_SCOPES)}"
     return None
 
 
@@ -130,6 +147,14 @@ def run_import(args: argparse.Namespace, cfg: Config) -> int:
     if not src.exists():
         raise NokoriError(f"file not found: {src}")
     try:
+        size = src.stat().st_size
+    except OSError as e:
+        raise NokoriError(f"cannot read import file: {e}") from e
+    if size > _MAX_IMPORT_FILE_BYTES:
+        raise NokoriError(
+            f"import file exceeds {_MAX_IMPORT_FILE_BYTES // (1024 * 1024)} MiB limit"
+        )
+    try:
         data = json.loads(src.read_text(encoding="utf-8"))
     except json.JSONDecodeError as e:
         raise NokoriError(f"invalid JSON: {e}") from e
@@ -181,10 +206,7 @@ def run_import(args: argparse.Namespace, cfg: Config) -> int:
                         dumps_json(rec.get("evidence_log") or []),
                         rec.get("hit_count", 0),
                         rec.get("last_hit"),
-                        rec.get(
-                            "shadow_hit_count",
-                            rec.get("cross_project_hits", 0),
-                        ),
+                        rec.get("shadow_hit_count", 0),
                         dumps_json(rec.get("promotion_evidence") or []),
                         rec.get("project_scope", "project"),
                         rec.get("project_id"),

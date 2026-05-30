@@ -91,7 +91,7 @@
 # 若只把本节 matcher 改成 .* 而不改 settings.json，Read/Grep 仍不会进 hook。
 
 [gate]
-# 是否启用 Gate（HOT + high + active 时写 marker，下次匹配工具调用前 block 一次）
+# 是否启用 Gate（仅 correction/anti_pattern 且 HOT+high+active 写 marker 并 block 一次；solution 等只注入）
 # 类型：布尔
 # 默认：true
 # 可选：true | false
@@ -303,6 +303,6 @@ chunk_count = 3
 # - 热缓存：见 [hot_cache]；同目录上一场 *.jsonl，未 extract 才注入（500 字 / 3 条用户消息）
 # - embed server：Unix socket {data_dir}/embed.sock；空闲自退出见 server_idle_seconds；hook 启动等待硬编码约 45s
 # - 本地模型文件缓存在 {data_dir}/models/（非 cache/）；cache/ 目录仅预留
-# - rules.db schema v1：版本不匹配时报错，见 README「数据存储」
+# - rules.db：与当前 nokori 版本绑定；不兼容时报错，见 README「数据存储」
 # - Merger 邻居：BM25 top-20，不足时最近 5 条补齐
 # - RRF 融合常数 K=60；最低证据：lexical>=2 / variant 单 token / cosine>=0.55

@@ -8,16 +8,23 @@
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 
 from ..config import Config
-from .time import now_iso
+from .time import now_iso, parse_iso
 
 
 def _path_for(cfg: Config, session_id: str) -> Path:
     safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in session_id)
     return cfg.sessions_dir / f"{safe}.json"
+
+
+def _atomic_write_json(path: Path, payload: dict) -> None:
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    os.replace(tmp, path)
 
 
 def register(cfg: Config, session_id: str, project_id: str | None = None) -> None:
@@ -29,7 +36,7 @@ def register(cfg: Config, session_id: str, project_id: str | None = None) -> Non
         "last_activity": now_iso(),
         "ended_at": None,
     }
-    _path_for(cfg, session_id).write_text(json.dumps(payload), encoding="utf-8")
+    _atomic_write_json(_path_for(cfg, session_id), payload)
 
 
 def touch(cfg: Config, session_id: str) -> None:
@@ -43,7 +50,7 @@ def touch(cfg: Config, session_id: str) -> None:
         register(cfg, session_id)
         return
     data["last_activity"] = now_iso()
-    p.write_text(json.dumps(data), encoding="utf-8")
+    _atomic_write_json(p, data)
 
 
 def end(cfg: Config, session_id: str) -> None:
@@ -55,16 +62,7 @@ def end(cfg: Config, session_id: str) -> None:
     except (OSError, json.JSONDecodeError):
         return
     data["ended_at"] = now_iso()
-    p.write_text(json.dumps(data), encoding="utf-8")
-
-
-def _parse_iso(ts: str | None) -> datetime | None:
-    if not ts:
-        return None
-    try:
-        return datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
-    except (ValueError, AttributeError):
-        return None
+    _atomic_write_json(p, data)
 
 
 def is_session_open(data: dict) -> bool:
@@ -97,7 +95,7 @@ def is_active_record(
     if data.get("ended_at"):
         return False
     now = now or datetime.now(timezone.utc)
-    last = _parse_iso(data.get("last_activity")) or _parse_iso(data.get("started_at"))
+    last = parse_iso(data.get("last_activity")) or parse_iso(data.get("started_at"))
     if last is None:
         return True
     if last.tzinfo is None:

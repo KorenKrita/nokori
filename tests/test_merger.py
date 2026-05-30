@@ -229,6 +229,46 @@ def test_merge_multiple_bd_inserts_once(monkeypatch, tmp_path):
         db.close()
 
 
+def test_merge_a_then_bd_reuses_anchor_without_second_insert(monkeypatch, tmp_path):
+    """SAME on X then BROADER on Y should supersede Y onto X, not insert a second active rule."""
+    monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+    cfg = Config.from_env()
+    db = open_db(cfg.db_path)
+    try:
+        merge_candidate(_cand("old narrow", "do A"), db, FakeMergeLLM("[]"))
+        merge_candidate(
+            _cand("other rule", "do B"),
+            db,
+            FakeMergeLLM('{"relationships": []}'),
+        )
+        rules = fetch_rules(db, statuses=("active",))
+        assert len(rules) == 2
+        by_action = {r.action: r for r in rules}
+        id_narrow = by_action["do A"].id
+        id_other = by_action["do B"].id
+        response = json.dumps({
+            "relationships": [
+                {"existing_id": id_narrow, "judgment": "A", "reasoning": "same"},
+                {"existing_id": id_other, "judgment": "B", "reasoning": "broader"},
+            ]
+        })
+        outcome = merge_candidate(
+            _cand("unified advice", "do unified"),
+            db,
+            FakeMergeLLM(response),
+        )
+        assert outcome.inserted == 0
+        assert outcome.superseded == 1
+        active = fetch_rules(db, statuses=("active",))
+        assert len(active) == 1
+        assert active[0].id == id_narrow
+        merged = db.fetchone("SELECT status, superseded_by FROM rules WHERE id = ?", (id_other,))
+        assert merged["status"] == "merged"
+        assert merged["superseded_by"] == id_narrow
+    finally:
+        db.close()
+
+
 def test_merge_llm_failure_keeps_pending_when_neighbors(monkeypatch, tmp_path):
     monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
     cfg = Config.from_env()

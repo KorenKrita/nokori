@@ -38,6 +38,11 @@ def format_injection(
     if not hot and not warm:
         return ""
 
+    footer = (
+        f"\n(Say `{dismiss_phrase} <short_id>` to retire an outdated rule.)"
+    )
+    budget = max(0, max_chars - len(footer))
+
     parts: list[str] = []
     parts.append("[Nokori] past lessons relevant to this prompt:")
     used = len(parts[0]) + 1
@@ -58,7 +63,7 @@ def format_injection(
         )
         if r.rule.rationale:
             block += f"\n  why: {r.rule.rationale}"
-        if used + len(block) > max_chars:
+        if used + len(block) > budget:
             spillover.append(r)
             continue
         parts.append(block)
@@ -66,19 +71,22 @@ def format_injection(
 
     for r in list(warm) + spillover:
         line = f"\n[warm {r.rule.short_id}] {r.rule.trigger_text} — {r.rule.action}"
-        if used + len(line) > max_chars:
+        if used + len(line) > budget:
             break
         parts.append(line)
         used += len(line)
 
-    parts.append(
-        f"\n(Say `{dismiss_phrase} <short_id>` to retire an outdated rule.)"
-    )
+    parts.append(footer)
     return "".join(parts)
 
 
 def select_gate_rules(hot):
-    """HOT rules that should block tools: high, active, correction or anti_pattern."""
+    """HOT rules that trigger PreToolUse block (not the same as injection).
+
+    Injection uses all formal-pool HOT/WARM tiers. Gate is narrower:
+    high + active + source_type in (correction, anti_pattern) only.
+    solution / preference may still appear as HOT/WARM context but never block tools.
+    """
     return [
         r
         for r in hot

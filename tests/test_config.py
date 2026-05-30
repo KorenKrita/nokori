@@ -134,6 +134,22 @@ def test_env_overrides_config_toml(monkeypatch, tmp_path):
     assert cfg.llm_base_url == "http://from-file/v1"
 
 
+def test_str_val_strips_whitespace(monkeypatch, tmp_path):
+    _clear_env(monkeypatch)
+    monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("NOKORI_LOG_LEVEL", " debug ")
+    cfg = Config.from_env()
+    assert cfg.log_level == "debug"
+
+
+def test_gate_matcher_max_length(monkeypatch, tmp_path):
+    _clear_env(monkeypatch)
+    monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("NOKORI_GATE_MATCHER", "x" * 513)
+    with pytest.raises(ConfigError):
+        Config.from_env()
+
+
 def test_missing_config_toml_is_fine(monkeypatch, tmp_path):
     _clear_env(monkeypatch)
     monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))

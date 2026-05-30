@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import sys
 
 from ..config import Config
 from ..search import embed_ipc
@@ -29,7 +30,7 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
         if embed_ipc.ensure_running(cfg):
             print("embed server ready")
             return 0
-        print("nokori: embed server failed to start (see logs/embed-server.log)", file=__import__("sys").stderr)
+        print("nokori: embed server failed to start (see logs/embed-server.log)", file=sys.stderr)
         return 1
-    print(f"nokori: unknown embed action {action!r}", file=__import__("sys").stderr)
+    print(f"nokori: unknown embed action {action!r}", file=sys.stderr)
     return 2

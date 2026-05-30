@@ -61,7 +61,7 @@ def _pid_alive(pid: int) -> bool:
         return False
 
 
-def _cleanup_stale(cfg: Config) -> None:
+def cleanup_stale(cfg: Config) -> None:
     pid = _read_pid(cfg)
     if pid is not None and _pid_alive(pid):
         return
@@ -112,7 +112,7 @@ def ping(cfg: Config, *, timeout: float = 0.5) -> bool:
 
 def spawn_server(cfg: Config) -> None:
     """Start detached embed server if not already running."""
-    _cleanup_stale(cfg)
+    cleanup_stale(cfg)
     if ping(cfg):
         return
     pid = _read_pid(cfg)
@@ -178,7 +178,7 @@ def stop_server(cfg: Config) -> bool:
             request(cfg, {"op": "shutdown"}, timeout=3.0)
             for _ in range(30):
                 if not ping(cfg, timeout=0.3):
-                    _cleanup_stale(cfg)
+                    cleanup_stale(cfg)
                     return True
                 time.sleep(0.1)
         except (OSError, json.JSONDecodeError):
@@ -193,7 +193,7 @@ def stop_server(cfg: Config) -> bool:
             if not _pid_alive(pid):
                 break
             time.sleep(0.1)
-    _cleanup_stale(cfg)
+    cleanup_stale(cfg)
     return not ping(cfg, timeout=0.3)
 
 

@@ -50,7 +50,7 @@ def acquire(cfg: Config) -> Iterator[bool]:
     """Exclusive extract lock under data_dir. Yields False if already held."""
     cfg.ensure_dirs()
     lock_path = cfg.data_dir / "extract.lock"
-    fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR)
+    fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR, 0o600)
     try:
         try:
             if os.path.getsize(str(lock_path)) == 0:

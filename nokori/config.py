@@ -135,13 +135,27 @@ def _str_val(name: str, default: str, file_values: dict[str, str]) -> str:
     raw = _get(name, file_values)
     if raw is None or raw == "":
         return default
-    return raw
+    return raw.strip()
 
 
 def _enum_val(name: str, default: str, choices: tuple[str, ...], file_values: dict[str, str]) -> str:
     raw = _str_val(name, default, file_values)
     if raw not in choices:
         raise ConfigError(f"{name} must be one of {choices} (got {raw!r})")
+    return raw
+
+
+_GATE_MATCHER_MAX_LEN = 512
+
+
+def _gate_matcher_val(file_values: dict[str, str]) -> str:
+    raw = _str_val(
+        "NOKORI_GATE_MATCHER", "Edit|Write|MultiEdit|Bash|NotebookEdit", file_values
+    )
+    if len(raw) > _GATE_MATCHER_MAX_LEN:
+        raise ConfigError(
+            f"NOKORI_GATE_MATCHER exceeds {_GATE_MATCHER_MAX_LEN} characters"
+        )
     return raw
 
 
@@ -189,9 +203,7 @@ class Config:
             max_injection_chars=_int_val("NOKORI_MAX_INJECTION_CHARS", 1500, file_values, min_value=0),
             gate_enabled=_bool_val("NOKORI_GATE_ENABLED", True, file_values),
             gate_ttl_seconds=_int_val("NOKORI_GATE_TTL_SECONDS", 600, file_values, min_value=0),
-            gate_matcher=_str_val(
-                "NOKORI_GATE_MATCHER", "Edit|Write|MultiEdit|Bash|NotebookEdit", file_values
-            ),
+            gate_matcher=_gate_matcher_val(file_values),
             extract_mode=_enum_val("NOKORI_EXTRACT_MODE", "manual", ("manual", "async"), file_values),
             extract_defer_when_active=_bool_val(
                 "NOKORI_EXTRACT_DEFER_ACTIVE", False, file_values

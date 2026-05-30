@@ -11,17 +11,9 @@ from ..extract.reader import stat as transcript_stat
 from ..utils import sessions
 from ..utils.logging import get_logger
 from ..utils.project import resolve_project_id
+from ..utils.transcript import resolve_transcript_path
 
 log = get_logger("nokori.hooks.session_end")
-
-
-def _resolve_transcript(payload: dict) -> Path | None:
-    candidate = payload.get("transcript_path") or payload.get("transcript")
-    if candidate:
-        path = Path(candidate).expanduser()
-        if path.exists():
-            return path
-    return None
 
 
 def _spawn_async_extract(cfg: Config) -> None:
@@ -60,7 +52,7 @@ def handle(payload: dict, cfg: Config) -> dict:
     session_id = payload.get("session_id") or "-"
     sessions.end(cfg, session_id)
 
-    transcript = _resolve_transcript(payload)
+    transcript = resolve_transcript_path(payload)
     if transcript is None:
         return {"continue": True}
 

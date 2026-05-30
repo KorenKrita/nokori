@@ -19,7 +19,7 @@ def _check_db(cfg: Config) -> tuple[str, str]:
             v = db.schema_version()
         finally:
             db.close()
-        return ("ok", f"schema_version={v}")
+        return ("ok", "rules.db readable")
     except Exception as e:
         return ("fail", str(e))
 
@@ -57,8 +57,10 @@ def _check_rule_count(cfg: Config) -> tuple[str, str]:
     if embed_on and count >= RULE_COUNT_EMBED_WARN:
         return (
             "warn",
-            f"{count} rules — embedding scans all indexed rules per prompt; "
-            f"consider fewer rules or disable embed above ~{RULE_COUNT_EMBED_WARN}",
+            f"{count} searchable rules (active+dormant) — UserPromptSubmit embed "
+            f"threshold uses per-prompt pool size; SessionStart warmup uses this "
+            f"full count; consider fewer rules or disable embed above "
+            f"~{RULE_COUNT_EMBED_WARN}",
         )
     return ("ok", f"{count} searchable rules")
 

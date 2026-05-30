@@ -30,18 +30,30 @@ def _gate_deny_reason(out: dict) -> str:
     return hso.get("permissionDecisionReason") or ""
 
 
-def _add_high_active(tmp_path, trigger, action, variants=None):
+def _add_rule(
+    tmp_path,
+    trigger,
+    action,
+    *,
+    source_type: str = "correction",
+    confidence: str = "high",
+    variants=None,
+):
     args = [
         "--trigger", trigger,
         "--action", action,
-        "--source-type", "correction",
-        "--confidence", "high",
+        "--source-type", source_type,
+        "--confidence", confidence,
     ]
     if variants:
         args.extend(["--variants", ",".join(variants)])
     r = _run("add", *args, env_extra={"NOKORI_DATA_DIR": str(tmp_path)})
     assert r.returncode == 0, r.stderr
     return r.stdout.split()[1]
+
+
+def _add_high_active(tmp_path, trigger, action, variants=None):
+    return _add_rule(tmp_path, trigger, action, variants=variants)
 
 
 def test_user_prompt_injects(tmp_path):
@@ -205,6 +217,51 @@ def test_hook_without_cwd_injects_global_rules_only(tmp_path):
     text = json.loads(r.stdout).get("hookSpecificOutput", {}).get("additionalContext", "")
     assert global_short in text
     assert proj_short not in text
+
+
+def test_solution_hot_injects_without_gate(monkeypatch, tmp_path):
+    """solution may HOT-inject but must not write a gate marker or block tools."""
+    monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+    short = _add_rule(
+        tmp_path,
+        "Never force push to a shared branch",
+        "use --force-with-lease",
+        source_type="solution",
+        variants=["git push --force"],
+    )
+    env_extra = {"NOKORI_DATA_DIR": str(tmp_path)}
+    r_act = _run("edit", short, "--status", "active", env_extra=env_extra)
+    assert r_act.returncode == 0, r_act.stderr
+    sess = "s-solution-no-gate"
+    r = _run(
+        "hook",
+        "user-prompt-submit",
+        env_extra=env_extra,
+        stdin=json.dumps({
+            "session_id": sess,
+            "cwd": str(tmp_path),
+            "prompt": "ok let me git push --force this fix",
+        }),
+    )
+    assert r.returncode == 0, r.stderr
+    text = json.loads(r.stdout).get("hookSpecificOutput", {}).get(
+        "additionalContext", ""
+    )
+    assert short in text
+
+    from nokori.config import Config
+    from nokori.gate import marker as marker_io
+
+    cfg = Config.from_env()
+    assert marker_io.read(cfg, sess) is None
+
+    r2 = _run(
+        "hook",
+        "pre-tool-use",
+        env_extra=env_extra,
+        stdin=json.dumps({"session_id": sess, "tool_name": "Bash"}),
+    )
+    assert not _gate_denied(json.loads(r2.stdout))
 
 
 def test_pre_tool_use_skips_non_matching_tool(tmp_path):

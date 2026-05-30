@@ -9,6 +9,7 @@ from ..lifecycle.promotion import (
     CROSS_PROJECT_PROMOTE_THRESHOLD,
     unique_promotion_project_ids,
 )
+from ..extract import jobs as job_io
 from ..search import embed_ipc
 from ..utils import sessions
 
@@ -16,7 +17,6 @@ from ..utils import sessions
 def run(_args: argparse.Namespace, cfg: Config) -> int:
     db = open_db(cfg.db_path)
     try:
-        version = db.schema_version()
         rules = db.fetchall("SELECT status, COUNT(*) AS n FROM rules GROUP BY status")
         cutoff = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat(
             timespec="seconds"
@@ -46,7 +46,6 @@ def run(_args: argparse.Namespace, cfg: Config) -> int:
 
     print(f"data_dir       {cfg.data_dir}")
     print(f"db             {cfg.db_path}")
-    print(f"schema_version {version}")
     print(f"rules.total    {total}")
     print(f"rules.active   {by_status.get('active', 0)}")
     print(f"rules.dormant  {by_status.get('dormant', 0)}")
@@ -56,6 +55,8 @@ def run(_args: argparse.Namespace, cfg: Config) -> int:
     print(f"injections.last_24h {injected_24h['n'] if injected_24h else 0}")
     print(f"gate.enabled   {cfg.gate_enabled}")
     print(f"extract.mode   {cfg.extract_mode}")
+    pending_jobs = len(job_io.list_jobs(cfg, status="pending"))
+    print(f"extract.pending {pending_jobs}")
     print(f"llm.configured {bool(cfg.llm_base_url and cfg.llm_model)}")
     print(f"embed.configured {bool(cfg.embed_base_url and cfg.embed_model)}")
     print(f"hot_cache.enabled {cfg.hot_cache_enabled}")

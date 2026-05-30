@@ -56,7 +56,7 @@ def configure(logs_dir: Path, level: str = "warn") -> None:
         pipeline_handler.setFormatter(formatter)
         pipeline_handler.addFilter(sess_filter)
         pipeline_handler.addFilter(_NameStartsWith(
-            ("nokori.extract.", "nokori.lifecycle.", "nokori.llm.", "nokori.search.embedding"),
+            ("nokori.extract.", "nokori.lifecycle.", "nokori.llm.", "nokori.search."),
             negate_other=False,
         ))
         root.addHandler(pipeline_handler)

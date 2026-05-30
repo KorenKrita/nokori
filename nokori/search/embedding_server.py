@@ -14,6 +14,8 @@ from . import embed_ipc
 
 log = get_logger("nokori.search.embedding_server")
 
+_MAX_REQUEST_BYTES = 1 << 20  # 1 MiB per JSON-line request
+
 
 def _reply(conn: socket.socket, payload: dict[str, Any]) -> None:
     conn.sendall((json.dumps(payload, ensure_ascii=False) + "\n").encode("utf-8"))
@@ -29,6 +31,9 @@ def _handle_connection(
             conn.settimeout(30.0)
             buf = b""
             while b"\n" not in buf:
+                if len(buf) >= _MAX_REQUEST_BYTES:
+                    _reply(conn, {"ok": False, "error": "request too large"})
+                    return True
                 part = conn.recv(65536)
                 if not part:
                     return True
@@ -57,7 +62,7 @@ def _handle_connection(
 
 def run_server(cfg: Config) -> int:
     """CLI entry: ``nokori embed serve``."""
-    embed_ipc._cleanup_stale(cfg)
+    embed_ipc.cleanup_stale(cfg)
     sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     sock_path = embed_ipc.socket_path(cfg)
     try:
@@ -65,6 +70,10 @@ def run_server(cfg: Config) -> int:
     except FileNotFoundError:
         pass
     sock.bind(str(sock_path))
+    try:
+        os.chmod(sock_path, 0o600)
+    except OSError as e:
+        log.warning("could not chmod embed socket %s: %s", sock_path, e)
     sock.listen(8)
     embed_ipc._write_pid(cfg, os.getpid())
 

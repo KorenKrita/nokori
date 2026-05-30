@@ -244,17 +244,21 @@ def merge_candidate(
     inserted = activated = merged = superseded = 0
     handled_existing: set[str] = set()
     saw_strong = False
-    pending_new = None
+    pending_new: Rule | None = None
+    anchor_id: str | None = None
 
     for rel in judgment:
         eid = rel.get("existing_id")
         verdict = (rel.get("judgment") or "").strip().upper()[:1]
         if not eid or eid not in by_id or verdict not in {"A", "B", "C", "D", "E"}:
             continue
+        if eid in handled_existing:
+            continue
         existing = by_id[eid]
         if verdict == "A":  # SAME
             saw_strong = True
             handled_existing.add(eid)
+            anchor_id = existing.id
             if existing.status == "candidate":
                 if cand.confidence == "high" and cand.source_type == "correction":
                     add_evidence(db, existing.id, "user_correction", 3)
@@ -270,13 +274,18 @@ def merge_candidate(
                         activated += 1
             elif existing.status in ("active", "dormant"):
                 add_evidence(db, existing.id, "same_extraction", 1)
-        elif verdict in ("B", "D"):  # BROADER / CONTRADICTS — one new rule supersedes many
+        elif verdict in ("B", "D"):  # BROADER / CONTRADICTS
             saw_strong = True
             handled_existing.add(eid)
-            if pending_new is None:
+            if pending_new is not None:
+                winner_id = pending_new.id
+            elif anchor_id is not None:
+                winner_id = anchor_id
+            else:
                 pending_new = _persist_new(db, cand, project_id, cfg)
                 inserted += 1
-            _supersede(db, existing.id, pending_new.id)
+                winner_id = pending_new.id
+            _supersede(db, existing.id, winner_id)
             superseded += 1
         # C (NARROWER) and E (UNRELATED) → coexist; no action.
 

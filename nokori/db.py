@@ -157,8 +157,7 @@ def _migrate(conn: sqlite3.Connection) -> None:
     current = _read_version(conn)
     if current > SCHEMA_VERSION:
         raise DbError(
-            f"database schema version {current} is newer than this nokori build "
-            f"(supported {SCHEMA_VERSION}); upgrade nokori"
+            "rules.db was created by a newer nokori; upgrade this installation"
         )
     if current >= SCHEMA_VERSION:
         return
@@ -169,19 +168,15 @@ def _migrate(conn: sqlite3.Connection) -> None:
             f"PRAGMA user_version = {int(SCHEMA_VERSION)};\n"
             "COMMIT;\n"
         )
-    elif current == 1:
-        script = (
-            "BEGIN;\n"
-            "ALTER TABLE rules RENAME COLUMN cross_project_hits TO shadow_hit_count;\n"
-            f"PRAGMA user_version = {int(SCHEMA_VERSION)};\n"
-            "COMMIT;\n"
-        )
     else:
-        raise DbError(f"unsupported schema version {current}")
+        raise DbError(
+            "rules.db format is not compatible with this nokori; "
+            "use a fresh NOKORI_DATA_DIR or nokori export + reset"
+        )
     try:
         conn.executescript(script)
     except Exception as e:
-        raise DbError(f"schema migration failed: {e}") from e
+        raise DbError(f"failed to initialize rules.db: {e}") from e
 
 
 def loads_json(value: str | None, default):
@@ -297,18 +292,33 @@ def log_injection(
     level: str,
     now: str,
 ) -> None:
+    log_injections_batch(
+        db, session_id, prompt_hash, [(rule_id, level)], now,
+    )
+
+
+def log_injections_batch(
+    db: "Db",
+    session_id: str,
+    prompt_hash: str,
+    entries: list[tuple[str, str]],
+    now: str,
+) -> None:
+    if not entries:
+        return
     with db.transaction() as tx:
-        tx.execute(
-            "INSERT INTO injections (rule_id, session_id, prompt_hash, level, created_at) "
-            "VALUES (?,?,?,?,?)",
-            (rule_id, session_id, prompt_hash, level, now),
-        )
-        if level == "hot":
+        for rule_id, level in entries:
             tx.execute(
-                "UPDATE rules SET hit_count = hit_count + 1, last_hit = ?, "
-                "updated_at = ? WHERE id = ?",
-                (now, now, rule_id),
+                "INSERT INTO injections (rule_id, session_id, prompt_hash, level, created_at) "
+                "VALUES (?,?,?,?,?)",
+                (rule_id, session_id, prompt_hash, level, now),
             )
+            if level == "hot":
+                tx.execute(
+                    "UPDATE rules SET hit_count = hit_count + 1, last_hit = ?, "
+                    "updated_at = ? WHERE id = ?",
+                    (now, now, rule_id),
+                )
 
 
 def find_rule_id_by_recent_injection(
