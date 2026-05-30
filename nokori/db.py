@@ -40,26 +40,6 @@ CREATE TABLE IF NOT EXISTS rules (
     updated_at TEXT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS rule_terms (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    rule_id TEXT NOT NULL REFERENCES rules(id),
-    lang TEXT NOT NULL,
-    term TEXT NOT NULL,
-    term_type TEXT NOT NULL DEFAULT 'search'
-);
-CREATE INDEX IF NOT EXISTS idx_rule_terms_rule ON rule_terms(rule_id);
-CREATE INDEX IF NOT EXISTS idx_rule_terms_term ON rule_terms(term);
-
-CREATE TABLE IF NOT EXISTS idf_cache (
-    token TEXT PRIMARY KEY,
-    weight REAL NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS idf_meta (
-    key TEXT PRIMARY KEY,
-    value TEXT NOT NULL
-);
-
 CREATE TABLE IF NOT EXISTS rule_embeddings (
     rule_id TEXT NOT NULL REFERENCES rules(id),
     chunk_index INTEGER NOT NULL DEFAULT 0,

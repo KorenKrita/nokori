@@ -15,9 +15,6 @@ def test_open_db_creates_schema(tmp_path):
         }
         for required in (
             "rules",
-            "rule_terms",
-            "idf_cache",
-            "idf_meta",
             "rule_embeddings",
             "extract_state",
             "injections",

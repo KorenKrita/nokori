@@ -56,21 +56,6 @@ def _persist_new(db: Db, cand: Candidate, project_id: str | None, cfg=None) -> R
                 "project", project_id, now, now,
             ),
         )
-        tx.execute(
-            "INSERT INTO rule_terms (rule_id, lang, term, term_type) VALUES (?,?,?,?)",
-            (rid, "en", cand.trigger, "trigger"),
-        )
-        for v in cand.trigger_variants:
-            tx.execute(
-                "INSERT INTO rule_terms (rule_id, lang, term, term_type) VALUES (?,?,?,?)",
-                (rid, "en", v, "variant"),
-            )
-        for lang, items in cand.search_terms.items():
-            for term in items:
-                tx.execute(
-                    "INSERT INTO rule_terms (rule_id, lang, term, term_type) VALUES (?,?,?,?)",
-                    (rid, lang, term, "search"),
-                )
     row = db.fetchone(f"SELECT {RULE_COLUMNS} FROM rules WHERE id = ?", (rid,))
     rule = row_to_rule(row)
     if cfg:

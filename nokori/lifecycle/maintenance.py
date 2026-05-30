@@ -84,7 +84,6 @@ def run_candidate_cleanup(db: Db) -> int:
         age = _days_since_iso(r["created_at"])
         if age is not None and age >= ttl:
             with db.transaction() as tx:
-                tx.execute("DELETE FROM rule_terms WHERE rule_id = ?", (r["id"],))
                 tx.execute("DELETE FROM rule_embeddings WHERE rule_id = ?", (r["id"],))
                 tx.execute("DELETE FROM rules WHERE id = ?", (r["id"],))
             deleted += 1

@@ -68,21 +68,6 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
                     now,
                 ),
             )
-            tx.execute(
-                "INSERT INTO rule_terms (rule_id, lang, term, term_type) VALUES (?,?,?,?)",
-                (rid, "en", args.trigger, "trigger"),
-            )
-            for term in variants:
-                tx.execute(
-                    "INSERT INTO rule_terms (rule_id, lang, term, term_type) VALUES (?,?,?,?)",
-                    (rid, "en", term, "variant"),
-                )
-            for lang, items in terms.items():
-                for term in items:
-                    tx.execute(
-                        "INSERT INTO rule_terms (rule_id, lang, term, term_type) VALUES (?,?,?,?)",
-                        (rid, lang, term, "search"),
-                    )
         rule = fetch_rule_by_short_id(db, sid)
         if rule:
             index_rule_if_enabled(db, rule, cfg)
