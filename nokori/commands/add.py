@@ -31,6 +31,10 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
         terms["zh"] = _split_csv(args.terms_zh)
 
     status = "active" if args.confidence == "high" else "candidate"
+    evidence_score = 3 if (args.confidence == "high" and args.source_type == "correction") else 0
+    evidence_log = dumps_json(
+        [{"kind": "user_correction", "points": 3, "at": now}]
+    ) if evidence_score else "[]"
 
     db = open_db(cfg.db_path)
     try:
@@ -40,8 +44,9 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
             tx.execute(
                 "INSERT INTO rules (id, short_id, trigger_text, trigger_variants, "
                 "search_terms, behavior, action, rationale, source_type, confidence, "
-                "status, project_scope, project_id, created_at, updated_at) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "status, evidence_score, evidence_log, project_scope, project_id, "
+                "created_at, updated_at) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     rid,
                     sid,
@@ -54,6 +59,8 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
                     args.source_type,
                     args.confidence,
                     status,
+                    evidence_score,
+                    evidence_log,
                     "project",
                     args.project_id,
                     now,

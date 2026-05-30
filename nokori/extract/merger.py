@@ -198,6 +198,7 @@ def merge_candidate(
             handled_existing.add(eid)
             if existing.status == "candidate":
                 if cand.confidence == "high" and cand.source_type == "correction":
+                    add_evidence(db, existing.id, "user_correction", 3)
                     _activate(db, existing.id, "high")
                     activated += 1
                 else:
