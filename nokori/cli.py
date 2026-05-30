@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import sys
 from collections.abc import Sequence
+from dataclasses import replace
 
 from . import __version__
 from .config import Config
@@ -13,11 +14,16 @@ from .utils.logging import configure as configure_logging
 def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="nokori", description="Claude Code 反复犯错纠正层")
     p.add_argument("--version", action="version", version=f"nokori {__version__}")
+    p.add_argument(
+        "-v", "--verbose",
+        action="store_true",
+        help="debug logging (same as NOKORI_LOG_LEVEL=debug)",
+    )
     sub = p.add_subparsers(dest="command", required=False, metavar="<command>")
 
     sp_add = sub.add_parser("add", help="add a rule manually")
-    sp_add.add_argument("--trigger", help="trigger scenario (English canonical)")
-    sp_add.add_argument("--action", help="correct behavior")
+    sp_add.add_argument("--trigger", required=True, help="trigger scenario (English canonical)")
+    sp_add.add_argument("--action", required=True, help="correct behavior")
     sp_add.add_argument("--behavior", default=None, help="incorrect behavior")
     sp_add.add_argument("--rationale", default=None, help="one-line evidence")
     sp_add.add_argument(
@@ -43,8 +49,12 @@ def _build_parser() -> argparse.ArgumentParser:
 
     sp_edit = sub.add_parser("edit", help="edit a rule by short id")
     sp_edit.add_argument("short_id")
+    sp_edit.add_argument("--trigger", default=None, help="replace trigger_text")
     sp_edit.add_argument("--action", default=None)
     sp_edit.add_argument("--rationale", default=None)
+    sp_edit.add_argument("--variants", default=None, help="comma-separated variants")
+    sp_edit.add_argument("--terms-en", default=None, help="comma-separated English terms")
+    sp_edit.add_argument("--terms-zh", default=None, help="comma-separated Chinese terms")
     sp_edit.add_argument("--confidence", default=None, choices=("high", "medium"))
     sp_edit.add_argument("--status", default=None, choices=("active", "dormant", "archived"))
 
@@ -60,11 +70,22 @@ def _build_parser() -> argparse.ArgumentParser:
     sp_extract.add_argument("--session", default=None, help="explicit transcript path")
     sp_extract.add_argument("--dry-run", action="store_true")
 
-    sub.add_parser("status", help="print current rule + extract status")
+    sub.add_parser(
+        "status",
+        help="rules counts, promotion progress, open sessions (operational snapshot)",
+    )
     sub.add_parser("logs", help="tail nokori log files")
-    sub.add_parser("health", help="check db / hooks / llm / embedding")
+    sub.add_parser(
+        "health",
+        help="connectivity checks: db, hooks, LLM, embedding readiness",
+    )
     sub.add_parser("maintain", help="run maintenance jobs now")
-    sub.add_parser("reset", help="reset the database (destructive)")
+    sp_reset = sub.add_parser("reset", help="reset the database (destructive)")
+    sp_reset.add_argument(
+        "--force",
+        action="store_true",
+        help="skip confirmation prompt",
+    )
 
     sp_export = sub.add_parser("export", help="export rules to JSON")
     sp_export.add_argument("path")
@@ -73,9 +94,10 @@ def _build_parser() -> argparse.ArgumentParser:
 
     sp_install = sub.add_parser("install", help="install/uninstall hooks")
     sp_install.add_argument("--dry-run", action="store_true")
-    sp_install.add_argument("--uninstall", action="store_true")
-    sp_install.add_argument("--disable", action="store_true")
-    sp_install.add_argument("--enable", action="store_true")
+    install_mode = sp_install.add_mutually_exclusive_group()
+    install_mode.add_argument("--uninstall", action="store_true")
+    install_mode.add_argument("--disable", action="store_true")
+    install_mode.add_argument("--enable", action="store_true")
 
     sp_hook = sub.add_parser("hook", help="hook entry (called by Claude Code)")
     sp_hook.add_argument(
@@ -184,6 +206,9 @@ def main(argv: Sequence[str]) -> int:
     except NokoriError as e:
         print(f"nokori: {e}", file=sys.stderr)
         return 1
+
+    if getattr(args, "verbose", False):
+        cfg = replace(cfg, log_level="debug")
 
     if cfg.disabled and args.command == "hook":
         print('{"continue": true}')

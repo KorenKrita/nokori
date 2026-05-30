@@ -3,10 +3,10 @@ from datetime import datetime, timezone
 
 from nokori.config import Config
 from nokori.db import open_db
-from nokori.hooks.user_prompt_submit import _run_shadow_pool
-from nokori.models import Rule, ScoredResult
+from nokori.db import fetch_rules, fetch_shadow_rules, total_rule_count
+from nokori.models import ScoredResult
 from nokori.search import embedding as embedding_search
-from nokori.search.retrieve import retrieve_and_tier
+from nokori.search.retrieve import retrieve_and_tier, retrieve_formal_and_shadow
 
 
 def _utcnow_iso() -> str:
@@ -40,48 +40,41 @@ def test_retrieve_and_tier_empty(monkeypatch, tmp_path):
         db.close()
 
 
-def test_shadow_pool_calls_embedding_path(monkeypatch, tmp_path):
-    """Shadow pool uses retrieve_and_tier (embedding when auto_enabled)."""
+def test_retrieve_formal_and_shadow_splits_pools(monkeypatch, tmp_path):
     monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
-    monkeypatch.setenv("NOKORI_PROMOTION_ENABLED", "1")
     cfg = Config.from_env()
     db = open_db(cfg.db_path)
     try:
         _insert_rule(
             db,
+            id_="rule-formal",
+            trigger="never git force push shared branch",
+            project_id="my-proj",
+            short_id="form01",
+        )
+        _insert_rule(
+            db,
             id_="rule-shadow",
             trigger="never git force push remote branch",
             project_id="other-proj",
+            short_id="shad01",
         )
-        embed_calls: list[int] = []
-
-        def fake_auto(cfg, n):
-            return True
-
-        def fake_use_local(cfg):
-            return False
-
-        def fake_search(prompt, rules, db, client, top_k=10, timeout=10):
-            embed_calls.append(1)
-            return [
-                ScoredResult(
-                    rule=rules[0],
-                    cosine=0.9,
-                    bm25_score=0.0,
-                    rrf_score=0.0,
-                )
-            ]
-
-        monkeypatch.setattr(embedding_search, "auto_enabled", fake_auto)
-        monkeypatch.setattr(embedding_search, "use_local", fake_use_local)
-        monkeypatch.setattr(embedding_search, "search", fake_search)
-
-        _run_shadow_pool(db, "git push force remote", "my-proj", cfg, pool_size=30)
-        assert embed_calls, "shadow pool should use remote embedding when auto_enabled"
-        row = db.fetchone(
-            "SELECT cross_project_hits FROM rules WHERE id = 'rule-shadow'"
+        formal_rules = fetch_rules(
+            db, statuses=("active",), project_id="my-proj"
         )
-        assert row["cross_project_hits"] == 1
+        shadow_rules = fetch_shadow_rules(db, project_id="my-proj")
+        result, shadow_hot = retrieve_formal_and_shadow(
+            "git push --force to remote",
+            formal_rules,
+            shadow_rules,
+            db,
+            cfg,
+            pool_size=total_rule_count(db),
+        )
+        formal_ids = {r.id for r in formal_rules}
+        assert all(r.rule.id in formal_ids for r in result.hot + result.warm)
+        if shadow_hot:
+            assert shadow_hot[0].rule.id == "rule-shadow"
     finally:
         db.close()
 

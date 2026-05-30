@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from ..db import Db
+from ..db import Db, delete_rule_cascade
 from ..utils.logging import get_logger
 from ..utils.time import now_iso, parse_iso
 
@@ -10,6 +10,7 @@ log = get_logger("nokori.lifecycle.maintenance")
 
 DORMANT_AFTER_DAYS = 30
 DORMANT_SCAN_INTERVAL_DAYS = 7
+# Calendar days since created_at (not evidence active-days).
 CANDIDATE_TTL_DAYS = 20
 ANTI_PATTERN_TTL_DAYS = 40
 CANDIDATE_CLEANUP_INTERVAL_DAYS = 30
@@ -54,18 +55,22 @@ def run_dormant_scan(db: Db) -> int:
         "SELECT id, last_hit, created_at FROM rules WHERE status = 'active'"
     )
     cutoff_days = DORMANT_AFTER_DAYS
-    moved = 0
     ts = now_iso()
+    to_dormant: list[str] = []
     for r in rows:
         last_seen = r["last_hit"] or r["created_at"]
         age = _days_since_iso(last_seen)
         if age is not None and age >= cutoff_days:
-            with db.transaction() as tx:
-                tx.execute(
-                    "UPDATE rules SET status = 'dormant', updated_at = ? WHERE id = ?",
-                    (ts, r["id"]),
-                )
-            moved += 1
+            to_dormant.append(r["id"])
+    moved = len(to_dormant)
+    if to_dormant:
+        placeholders = ",".join("?" * len(to_dormant))
+        with db.transaction() as tx:
+            tx.execute(
+                f"UPDATE rules SET status = 'dormant', updated_at = ? "
+                f"WHERE id IN ({placeholders})",
+                (ts, *to_dormant),
+            )
     _set_last_run(db, "dormant_scan")
     if moved:
         log.info("dormant_scan moved=%d", moved)
@@ -83,9 +88,7 @@ def run_candidate_cleanup(db: Db) -> int:
         ttl = ANTI_PATTERN_TTL_DAYS if r["source_type"] == "anti_pattern" else CANDIDATE_TTL_DAYS
         age = _days_since_iso(r["created_at"])
         if age is not None and age >= ttl:
-            with db.transaction() as tx:
-                tx.execute("DELETE FROM rule_embeddings WHERE rule_id = ?", (r["id"],))
-                tx.execute("DELETE FROM rules WHERE id = ?", (r["id"],))
+            delete_rule_cascade(db, r["id"])
             deleted += 1
     _set_last_run(db, "candidate_cleanup")
     if deleted:

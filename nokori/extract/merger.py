@@ -284,8 +284,12 @@ def merge_candidate(
         _persist_new(db, cand, project_id, cfg)
         inserted += 1
 
-    if "A" in {(r.get("judgment") or "").upper()[:1] for r in judgment}:
-        merged = sum(1 for eid in handled_existing if by_id[eid].status == "candidate")
+    merged = sum(
+        1
+        for rel in judgment
+        if (rel.get("judgment") or "").strip().upper()[:1] == "A"
+        and rel.get("existing_id") in by_id
+    )
 
     return MergeOutcome(
         inserted=inserted,

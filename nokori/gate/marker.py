@@ -9,8 +9,10 @@ from pathlib import Path
 
 from ..config import Config
 from ..db import Db
-from ..errors import GateMarkerError
+from ..utils.logging import get_logger
 from ..utils.time import now_iso, parse_iso
+
+log = get_logger("nokori.gate.marker")
 
 
 def prompt_hash(prompt: str) -> str:
@@ -55,7 +57,9 @@ def read(cfg: Config, session_id: str) -> Marker | None:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as e:
-        raise GateMarkerError(f"malformed marker at {path}: {e}") from e
+        log.warning("malformed marker at %s: %s", path, e)
+        delete(cfg, session_id)
+        return None
     rules = [MarkerRule(**r) for r in data.get("rules", [])]
     return Marker(
         session_id=data.get("session_id", session_id),
@@ -99,11 +103,29 @@ def resolve_current_prompt_hash(
     return None
 
 
-def prompt_hash_matches(marker: Marker, current_ph: str | None) -> bool:
+def prompt_hash_matches(
+    marker: Marker,
+    current_ph: str | None,
+    *,
+    session_id: str | None = None,
+) -> bool:
     """False when unknown or stale — caller should fail-open (no block)."""
-    if not current_ph or not marker.prompt_hash:
+    if not marker.prompt_hash:
         return False
-    return marker.prompt_hash == current_ph
+    if not current_ph:
+        if session_id:
+            log.info(
+                "gate prompt_hash unknown, fail-open session=%s", session_id
+            )
+        return False
+    if marker.prompt_hash != current_ph:
+        if session_id:
+            log.info(
+                "gate prompt_hash stale session=%s marker=%s current=%s",
+                session_id, marker.prompt_hash[:8], current_ph[:8],
+            )
+        return False
+    return True
 
 
 def is_expired(marker: Marker, ttl_seconds: int) -> bool:

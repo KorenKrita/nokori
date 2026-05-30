@@ -239,14 +239,10 @@ class Config:
     def sessions_dir(self) -> Path:
         return self.data_dir / "active_sessions"
 
-    @property
-    def cache_dir(self) -> Path:
-        return self.data_dir / "cache"
-
     def marker_path(self, session_id: str) -> Path:
         safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in session_id)
         return self.data_dir / f"pending-ack-{safe}.marker"
 
     def ensure_dirs(self) -> None:
-        for p in (self.data_dir, self.logs_dir, self.jobs_dir, self.sessions_dir, self.cache_dir):
+        for p in (self.data_dir, self.logs_dir, self.jobs_dir, self.sessions_dir):
             p.mkdir(parents=True, exist_ok=True)

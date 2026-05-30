@@ -189,9 +189,18 @@ def server_status(cfg: Config) -> dict[str, Any]:
     }
 
 
-def embed_text(cfg: Config, text: str, *, timeout: float = 5.0) -> list[list[float]]:
+def embed_text(
+    cfg: Config,
+    text: str,
+    *,
+    timeout: float = 5.0,
+    auto_start: bool = True,
+) -> list[list[float]]:
     """Encode text via the shared server. Returns [] on failure."""
-    if not ensure_running(cfg, max_wait=_STARTUP_WAIT_SECONDS):
+    if auto_start:
+        if not ensure_running(cfg, max_wait=_STARTUP_WAIT_SECONDS):
+            return []
+    elif not ping(cfg, timeout=min(timeout, 1.0)):
         return []
     try:
         resp = request(

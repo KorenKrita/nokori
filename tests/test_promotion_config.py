@@ -1,6 +1,6 @@
 from nokori.config import Config
 from nokori.db import open_db
-from nokori.hooks.user_prompt_submit import _run_shadow_pool, handle
+from nokori.hooks.user_prompt_submit import handle
 from nokori.utils.project import resolve_project_id
 from nokori.utils.time import now_iso
 
@@ -29,7 +29,13 @@ def test_shadow_pool_noop_when_promotion_disabled(monkeypatch, tmp_path):
                     "other-proj", now, now,
                 ),
             )
-        _run_shadow_pool(db, "git push force remote", "my-proj", cfg)
+        proj = tmp_path / "mine"
+        proj.mkdir()
+        handle({
+            "session_id": "s-no-promo",
+            "prompt": "git push force remote",
+            "cwd": str(proj),
+        }, cfg)
         row = db.fetchone(
             "SELECT cross_project_hits FROM rules WHERE id = 'rule-x'"
         )

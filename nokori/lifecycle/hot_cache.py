@@ -102,7 +102,7 @@ def _was_extracted(db: Db, path: Path) -> bool:
     try:
         extracted = datetime.fromisoformat(str(extracted_at).replace("Z", "+00:00"))
     except (ValueError, AttributeError):
-        return True
+        return False
 
     return extracted.timestamp() >= mtime
 

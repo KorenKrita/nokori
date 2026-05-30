@@ -8,7 +8,7 @@ import urllib.request
 from typing import Callable
 
 from ..config import Config
-from ..errors import LlmError, LlmTimeoutError
+from ..errors import LlmError, LlmRateLimitError, LlmTimeoutError
 from ..utils.logging import get_logger
 
 log = get_logger("nokori.llm.adapter")
@@ -59,6 +59,8 @@ class LLMAdapter:
                 body = resp.read().decode("utf-8", errors="replace")
         except urllib.error.HTTPError as e:
             log.warning("LLM HTTP error %s on %s", e.code, url)
+            if e.code == 429:
+                raise LlmRateLimitError(f"HTTP {e.code}") from e
             raise LlmError(f"HTTP {e.code}") from e
         except (urllib.error.URLError, TimeoutError) as e:
             log.warning("LLM connection failed: %s", type(e).__name__)

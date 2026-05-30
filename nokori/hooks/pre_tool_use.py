@@ -4,7 +4,7 @@ import re
 
 from ..config import Config
 from ..db import open_db
-from ..errors import GateMarkerError
+from ..errors import DbError
 from ..gate import marker as marker_io
 from ..gate.blocker import format_block_reason
 from ..utils.logging import get_logger
@@ -32,13 +32,7 @@ def handle(payload: dict, cfg: Config) -> dict:
 
     session_id = payload.get("session_id") or "-"
 
-    try:
-        marker = marker_io.read(cfg, session_id)
-    except GateMarkerError as e:
-        log.warning("gate marker unreadable, removing: %s", e)
-        marker_io.delete(cfg, session_id)
-        return {"continue": True}
-
+    marker = marker_io.read(cfg, session_id)
     if marker is None:
         return {"continue": True}
 
@@ -50,16 +44,18 @@ def handle(payload: dict, cfg: Config) -> dict:
         marker_io.delete(cfg, session_id)
         return {"continue": True}
 
-    db = open_db(cfg.db_path)
+    try:
+        db = open_db(cfg.db_path)
+    except DbError as e:
+        log.warning("gate db open failed, clearing marker session=%s: %s", session_id, e)
+        marker_io.delete(cfg, session_id)
+        return {"continue": True}
+
     try:
         current_ph = marker_io.resolve_current_prompt_hash(
             payload, db, session_id, marker=marker,
         )
-        if not marker_io.prompt_hash_matches(marker, current_ph):
-            log.info(
-                "gate marker stale (prompt_hash mismatch), clearing session=%s",
-                session_id,
-            )
+        if not marker_io.prompt_hash_matches(marker, current_ph, session_id=session_id):
             marker_io.delete(cfg, session_id)
             return {"continue": True}
     finally:
@@ -72,8 +68,6 @@ def handle(payload: dict, cfg: Config) -> dict:
         "gate blocked tool session=%s rules=%s",
         session_id, ",".join(r.short_id for r in marker.rules),
     )
-    # PreToolUse: use hookSpecificOutput only (top-level decision/reason are deprecated).
-    # https://code.claude.com/docs/en/hooks — PreToolUse decision control
     return {
         "continue": True,
         "hookSpecificOutput": {

@@ -299,6 +299,22 @@ def test_batch_extract_keeps_job_on_merge_llm_failure(monkeypatch, tmp_path):
         db.close()
 
 
+def test_write_job_updates_existing_project_id(monkeypatch, tmp_path):
+    monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+    cfg = Config.from_env()
+    cfg.ensure_dirs()
+    path = tmp_path / "proj.jsonl"
+    path.write_text('{"type":"user"}\n', encoding="utf-8")
+    mtime = path.stat().st_mtime
+    from nokori.extract import jobs as job_io
+
+    job_io.write_job(cfg, path, "proj-a", mtime)
+    job_io.write_job(cfg, path, "proj-b", mtime)
+    job = job_io.read_job(cfg.jobs_dir / f"extract-{job_io.transcript_hash(path, mtime)}.json")
+    assert job is not None
+    assert job["project_id"] == "proj-b"
+
+
 def test_batch_extract_keeps_job_on_llm_failure(monkeypatch, tmp_path):
     monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
     cfg = Config.from_env()

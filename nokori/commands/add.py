@@ -17,9 +17,6 @@ def _split_csv(raw: str | None) -> list[str]:
 
 
 def run(args: argparse.Namespace, cfg: Config) -> int:
-    if not args.trigger or not args.action:
-        raise NokoriError("--trigger and --action are required")
-
     now = now_iso()
     rid = new_uuid()
 

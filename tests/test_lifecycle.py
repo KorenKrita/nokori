@@ -59,6 +59,45 @@ def test_dormant_scan_respects_interval(monkeypatch, tmp_path):
         db.close()
 
 
+def test_candidate_cleanup_deletes_injections(monkeypatch, tmp_path):
+    monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+    cfg = Config.from_env()
+    db = open_db(cfg.db_path)
+    try:
+        _make_rule(db, id_="cand-fk", status="candidate",
+                   last_hit_days_ago=30, source_type="correction")
+        with db.transaction() as tx:
+            tx.execute(
+                "INSERT INTO injections (rule_id, session_id, prompt_hash, level, created_at) "
+                "VALUES (?,?,?,?,?)",
+                ("cand-fk", "s1", "abc", "hot", _utcnow_iso()),
+            )
+        deleted = maintenance.run_candidate_cleanup(db)
+        assert deleted >= 1
+        assert db.fetchone("SELECT 1 FROM rules WHERE id = 'cand-fk'") is None
+        assert db.fetchone(
+            "SELECT 1 FROM injections WHERE rule_id = 'cand-fk'"
+        ) is None
+    finally:
+        db.close()
+
+
+def test_evidence_concurrent_append(monkeypatch, tmp_path):
+    monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+    cfg = Config.from_env()
+    db = open_db(cfg.db_path)
+    try:
+        _make_rule(db, id_="ev-1", status="active", last_hit_days_ago=0)
+        evidence.add_evidence(db, "ev-1", "same_extraction", 1)
+        evidence.add_evidence(db, "ev-1", "same_extraction", 1)
+        row = db.fetchone(
+            "SELECT evidence_score FROM rules WHERE id = 'ev-1'"
+        )
+        assert row["evidence_score"] == 2
+    finally:
+        db.close()
+
+
 def test_candidate_cleanup_removes_old(monkeypatch, tmp_path):
     monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
     cfg = Config.from_env()

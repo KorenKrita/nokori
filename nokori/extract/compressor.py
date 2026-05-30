@@ -11,7 +11,10 @@ TOOL_ERROR_LIMIT = 120
 
 
 def _approx_tokens(text: str) -> int:
-    return max(1, len(text) // 3)
+    # Conservative for CJK: count wide chars ~1 token, ASCII ~1/4 word.
+    wide = sum(1 for c in text if ord(c) > 127)
+    narrow = len(text) - wide
+    return max(1, wide + narrow // 4)
 
 
 def compress(turns: Iterable[Turn], budget_tokens: int = 30000) -> str:
@@ -42,7 +45,7 @@ def compress(turns: Iterable[Turn], budget_tokens: int = 30000) -> str:
     if _approx_tokens(text) <= budget_tokens:
         return text
 
-    keep_chars = budget_tokens * 3
+    keep_chars = budget_tokens * 2
     if len(text) > keep_chars:
         half = keep_chars // 2
         text = (

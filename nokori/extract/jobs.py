@@ -28,6 +28,20 @@ def write_job(cfg: Config, transcript_path: Path, project_id: str | None,
     }
     out = cfg.jobs_dir / f"extract-{h}.json"
     if out.exists():
+        try:
+            existing = json.loads(out.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            existing = {}
+        existing.update({
+            "transcript_path": str(transcript_path),
+            "transcript_hash": h,
+            "transcript_mtime": mtime,
+            "project_id": project_id,
+            "status": "pending",
+        })
+        tmp = out.with_suffix(out.suffix + ".tmp")
+        tmp.write_text(json.dumps(existing, ensure_ascii=False), encoding="utf-8")
+        os.replace(tmp, out)
         return out
     tmp = out.with_suffix(out.suffix + ".tmp")
     tmp.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")

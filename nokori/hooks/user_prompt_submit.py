@@ -18,7 +18,7 @@ from ..gate import marker as marker_io
 from ..gate.blocker import format_injection, select_gate_rules
 from ..gate.marker import MarkerRule, prompt_hash
 from ..lifecycle import maintenance, promotion
-from ..search.retrieve import retrieve_and_tier
+from ..search.retrieve import retrieve_formal_and_shadow
 from ..utils import sessions
 from ..utils.logging import get_logger
 from ..utils.project import resolve_project_id
@@ -48,23 +48,6 @@ def _run_dismiss(db: Db, prompt: str, session_id: str, cfg: Config) -> int:
         log.info("rule dismissed via prompt short=%s session=%s", sid, session_id)
         count += 1
     return count
-
-
-def _run_shadow_pool(
-    db: Db, prompt: str, project_id: str, cfg: Config, pool_size: int = 0
-) -> None:
-    """Check shadow pool rules and record hits. Never injects."""
-    if not cfg.promotion_enabled:
-        return
-    shadow_rules = fetch_shadow_rules(db, project_id=project_id)
-    if not shadow_rules:
-        return
-    result = retrieve_and_tier(
-        prompt, shadow_rules, db, cfg, top_k=5, interaction="hook",
-        pool_size=pool_size,
-    )
-    for r in result.hot:
-        promotion.record_shadow_hit(db, r.rule.id, project_id)
 
 
 def _update_gate_marker(
@@ -100,29 +83,44 @@ def handle(payload: dict, cfg: Config) -> dict:
 
     sessions.touch(cfg, session_id)
 
-    pool_size = 0
     db = open_db(cfg.db_path)
     try:
         _run_dismiss(db, prompt, session_id, cfg)
 
         if project_id is None:
-            rules = fetch_rules(
+            formal_rules = fetch_rules(
                 db, statuses=("active", "dormant"), global_only=True
             )
         else:
-            rules = fetch_rules(
+            formal_rules = fetch_rules(
                 db, statuses=("active", "dormant"), project_id=project_id
             )
+        shadow_rules = (
+            fetch_shadow_rules(db, project_id=project_id)
+            if project_id and cfg.promotion_enabled
+            else []
+        )
         pool_size = total_rule_count(db)
-        if not rules:
+
+        if not formal_rules and not shadow_rules:
             if cfg.gate_enabled:
                 marker_io.delete(cfg, session_id)
             return {"continue": True}
-        result = retrieve_and_tier(
-            prompt, rules, db, cfg, top_k=10, interaction="hook",
+
+        result, shadow_hot = retrieve_formal_and_shadow(
+            prompt,
+            formal_rules,
+            shadow_rules,
+            db,
+            cfg,
             pool_size=pool_size,
+            interaction="hook",
         )
         hot, warm = result.hot, result.warm
+
+        for r in shadow_hot:
+            if project_id:
+                promotion.record_shadow_hit(db, r.rule.id, project_id)
 
         if not hot and not warm:
             if cfg.gate_enabled:
@@ -140,22 +138,18 @@ def handle(payload: dict, cfg: Config) -> dict:
         for r in warm:
             log_injection(db, r.rule.id, session_id, ph, "warm", now)
             if getattr(r, "retrieval_hot", False) and r.rule.status == "dormant":
+                # Dormant reactivation: this turn stays WARM (no gate); next turn may HOT.
                 maintenance.reactivate_dormant_on_retrieval_hot(db, r.rule.id)
 
         _update_gate_marker(cfg, session_id, prompt, hot, ph)
 
         log.info(
-            "injected hot=%d warm=%d session=%s",
-            len(hot), len(warm), session_id,
+            "injected hot=%d warm=%d shadow_hot=%d session=%s",
+            len(hot), len(warm), len(shadow_hot), session_id,
         )
         if not text:
             return {"continue": True}
         return {"hookSpecificOutput": {"hookEventName": "UserPromptSubmit",
                                        "additionalContext": text}}
     finally:
-        try:
-            if project_id:
-                _run_shadow_pool(db, prompt, project_id, cfg, pool_size)
-        except Exception:
-            log.warning("shadow pool failed", exc_info=True)
         db.close()

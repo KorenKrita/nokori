@@ -153,14 +153,18 @@ def _migrate(conn: sqlite3.Connection) -> None:
         return
     if current != 0:
         raise DbError(f"unsupported schema version {current}")
+    # executescript() issues an implicit COMMIT before running; wrap DDL+version
+    # in one script so schema and user_version stay atomic.
+    script = (
+        "BEGIN;\n"
+        f"{_DDL_V1}\n"
+        f"PRAGMA user_version = {int(SCHEMA_VERSION)};\n"
+        "COMMIT;\n"
+    )
     try:
-        conn.execute("BEGIN")
-        conn.executescript(_DDL_V1)
-        _write_version(conn, SCHEMA_VERSION)
-        conn.commit()
-    except Exception:
-        conn.rollback()
-        raise
+        conn.executescript(script)
+    except Exception as e:
+        raise DbError(f"schema migration failed: {e}") from e
 
 
 def loads_json(value: str | None, default):
@@ -326,3 +330,11 @@ def archive_rule(db: "Db", rule_id: str, reason: str, now: str) -> None:
             "updated_at = ? WHERE id = ?",
             (reason, now, rule_id),
         )
+
+
+def delete_rule_cascade(db: "Db", rule_id: str) -> None:
+    """Remove rule and dependent rows (foreign_keys=ON)."""
+    with db.transaction() as tx:
+        tx.execute("DELETE FROM injections WHERE rule_id = ?", (rule_id,))
+        tx.execute("DELETE FROM rule_embeddings WHERE rule_id = ?", (rule_id,))
+        tx.execute("DELETE FROM rules WHERE id = ?", (rule_id,))

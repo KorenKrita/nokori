@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import math
-from collections import Counter
+from collections import Counter, OrderedDict
 from collections.abc import Iterable, Mapping
 
 from ..models import Rule, ScoredResult
@@ -11,7 +11,7 @@ K1 = 1.2
 B = 0.75
 
 # Reuse IDF/doc index when the rule set is unchanged (same ids + updated_at).
-_INDEX_CACHE: dict[tuple[tuple[str, str], ...], tuple] = {}
+_INDEX_CACHE: OrderedDict[tuple[tuple[str, str], ...], tuple] = OrderedDict()
 _INDEX_CACHE_MAX = 64
 
 
@@ -53,13 +53,13 @@ def _build_index(rules_list: list[Rule]):
 
 def _cached_index(rules_list: list[Rule]):
     key = _index_key(rules_list)
-    cached = _INDEX_CACHE.get(key)
-    if cached is not None:
-        return cached
+    if key in _INDEX_CACHE:
+        _INDEX_CACHE.move_to_end(key)
+        return _INDEX_CACHE[key]
     cached = _build_index(rules_list)
-    if len(_INDEX_CACHE) >= _INDEX_CACHE_MAX:
-        _INDEX_CACHE.clear()
     _INDEX_CACHE[key] = cached
+    while len(_INDEX_CACHE) > _INDEX_CACHE_MAX:
+        _INDEX_CACHE.popitem(last=False)
     return cached
 
 

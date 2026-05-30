@@ -74,3 +74,40 @@ def retrieve_and_tier(
     fused = ranker.rrf_fuse(bm25_results, embed_results)
     hot, warm = ranker.tier_results(fused)
     return RetrievalResult(hot, warm, len(bm25_results), embed_mode)
+
+
+def retrieve_formal_and_shadow(
+    prompt: str,
+    formal_rules: Sequence[Rule],
+    shadow_rules: Sequence[Rule],
+    db: Db,
+    cfg: Config,
+    *,
+    pool_size: int,
+    interaction: InteractionKind = "hook",
+) -> tuple[RetrievalResult, list[ScoredResult]]:
+    """One BM25/RRF pass over formal∪shadow; split tiers by pool membership."""
+    formal_ids = {r.id for r in formal_rules}
+    shadow_only = [r for r in shadow_rules if r.id not in formal_ids]
+    combined = list(formal_rules) + shadow_only
+    if not combined:
+        empty = RetrievalResult([], [], 0, "off")
+        return empty, []
+
+    shadow_ids = {r.id for r in shadow_rules}
+    result = retrieve_and_tier(
+        prompt,
+        combined,
+        db,
+        cfg,
+        top_k=10,
+        interaction=interaction,
+        pool_size=pool_size,
+    )
+    formal_hot = [r for r in result.hot if r.rule.id in formal_ids]
+    formal_warm = [r for r in result.warm if r.rule.id in formal_ids]
+    shadow_hot = [r for r in result.hot if r.rule.id in shadow_ids]
+    formal_result = RetrievalResult(
+        formal_hot, formal_warm, result.bm25_matches, result.embed_mode
+    )
+    return formal_result, shadow_hot

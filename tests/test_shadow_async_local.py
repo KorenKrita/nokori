@@ -119,8 +119,15 @@ class TestShadowPoolHotTier:
                             now, now,
                         ),
                     )
-            from nokori.hooks.user_prompt_submit import _run_shadow_pool
-            _run_shadow_pool(db, "deploy prisma schema", "my-proj", cfg, pool_size=0)
+            from nokori.hooks.user_prompt_submit import handle
+
+            proj = tmp_path / "my-proj"
+            proj.mkdir()
+            handle({
+                "session_id": "s-shadow-warm",
+                "prompt": "deploy prisma schema",
+                "cwd": str(proj),
+            }, cfg)
             for rid in ("rule-a", "rule-b"):
                 row = db.fetchone(
                     "SELECT cross_project_hits FROM rules WHERE id = ?", (rid,)
@@ -149,8 +156,15 @@ class TestShadowPoolHotTier:
                         now, now,
                     ),
                 )
-            from nokori.hooks.user_prompt_submit import _run_shadow_pool
-            _run_shadow_pool(db, "git push force remote branch", "my-proj", cfg, pool_size=0)
+            from nokori.hooks.user_prompt_submit import handle
+
+            proj = tmp_path / "my-proj"
+            proj.mkdir()
+            handle({
+                "session_id": "s-shadow-hot",
+                "prompt": "git push force remote branch",
+                "cwd": str(proj),
+            }, cfg)
             row = db.fetchone(
                 "SELECT cross_project_hits, evidence_score FROM rules WHERE id = ?",
                 ("rule-strong",),

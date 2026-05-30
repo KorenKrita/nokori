@@ -20,15 +20,15 @@ def compute_evidence_append(
 
 
 def add_evidence(db: Db, rule_id: str, kind: str, points: int) -> tuple[int, list[dict]]:
-    row = db.fetchone(
-        "SELECT evidence_score, evidence_log FROM rules WHERE id = ?", (rule_id,)
-    )
-    if row is None:
-        return (0, [])
-    score, log_json = compute_evidence_append(
-        row["evidence_score"], row["evidence_log"], kind, points
-    )
     with db.transaction() as tx:
+        row = tx.execute(
+            "SELECT evidence_score, evidence_log FROM rules WHERE id = ?", (rule_id,)
+        ).fetchone()
+        if row is None:
+            return (0, [])
+        score, log_json = compute_evidence_append(
+            row["evidence_score"], row["evidence_log"], kind, points
+        )
         tx.execute(
             "UPDATE rules SET evidence_score = ?, evidence_log = ?, updated_at = ? "
             "WHERE id = ?",

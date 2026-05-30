@@ -270,7 +270,7 @@ def search_local_shared(
     if not embed_ipc.ensure_running(cfg, max_wait=max_wait):
         return [], "off"
 
-    qvecs = embed_ipc.embed_text(cfg, query, timeout=timeout)
+    qvecs = embed_ipc.embed_text(cfg, query, timeout=timeout, auto_start=False)
     if not qvecs:
         return [], "off"
 
@@ -312,7 +312,7 @@ def index_rule_if_enabled(db: Db, rule: Rule, cfg: Config) -> None:
             text = _rule_text(rule)
             if not embed_ipc.ensure_running(cfg, max_wait=15.0):
                 return
-            vectors = embed_ipc.embed_text(cfg, text, timeout=60.0)
+            vectors = embed_ipc.embed_text(cfg, text, timeout=60.0, auto_start=False)
             if vectors:
                 _store_impl(db, rule.id, vectors, LOCAL_MODEL_NAME)
         else:

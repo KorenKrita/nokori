@@ -27,6 +27,7 @@ def _flush_latin(buf: str, out: list[str]) -> None:
 
 
 def _flush_cjk(buf: str, out: list[str]) -> None:
+    # Single CJK char → unigram (recall over strict bigram-only spec).
     if len(buf) == 1:
         out.append(buf)
         return
