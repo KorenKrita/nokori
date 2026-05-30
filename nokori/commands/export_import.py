@@ -3,7 +3,6 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 
 from ..config import Config
@@ -15,10 +14,7 @@ from ..db import (
 )
 from ..errors import NokoriError
 from ..utils.ids import new_uuid, short_id_for
-
-
-def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+from ..utils.time import now_iso
 
 
 def run_export(args: argparse.Namespace, cfg: Config) -> int:
@@ -32,7 +28,7 @@ def run_export(args: argparse.Namespace, cfg: Config) -> int:
     payload = {
         "format": "nokori-export",
         "version": 1,
-        "exported_at": _now_iso(),
+        "exported_at": now_iso(),
         "rules": [
             {
                 "id": r.id,
@@ -128,8 +124,8 @@ def run_import(args: argparse.Namespace, cfg: Config) -> int:
                         rec.get("merged_into"),
                         rec.get("superseded_by"),
                         rec.get("archived_reason"),
-                        rec.get("created_at") or _now_iso(),
-                        rec.get("updated_at") or _now_iso(),
+                        rec.get("created_at") or now_iso(),
+                        rec.get("updated_at") or now_iso(),
                     ),
                 )
             inserted += 1

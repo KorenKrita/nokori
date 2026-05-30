@@ -3,14 +3,10 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-from datetime import datetime, timezone
 from pathlib import Path
 
 from ..config import Config
-
-
-def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+from ..utils.time import now_iso
 
 
 def transcript_hash(path: Path, mtime: float) -> str:
@@ -27,7 +23,7 @@ def write_job(cfg: Config, transcript_path: Path, project_id: str | None,
         "transcript_hash": h,
         "transcript_mtime": mtime,
         "project_id": project_id,
-        "created_at": _now_iso(),
+        "created_at": now_iso(),
         "status": "pending",
     }
     out = cfg.jobs_dir / f"extract-{h}.json"

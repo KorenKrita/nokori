@@ -202,22 +202,14 @@ def merge_candidate(
                     _activate(db, existing.id, "high", cfg)
                     activated += 1
                 else:
-                    add_evidence(db, existing.id, "same_extraction", 1)
-                    updated = db.fetchone(
-                        "SELECT evidence_score, evidence_log FROM rules WHERE id = ?",
-                        (existing.id,),
+                    import dataclasses
+                    score, log_list = add_evidence(db, existing.id, "same_extraction", 1)
+                    check_rule = dataclasses.replace(
+                        existing, evidence_score=score, evidence_log=log_list,
                     )
-                    if updated:
-                        from ..models import Rule as _R
-                        import dataclasses
-                        check_rule = dataclasses.replace(
-                            existing,
-                            evidence_score=updated["evidence_score"],
-                            evidence_log=json.loads(updated["evidence_log"] or "[]"),
-                        )
-                        if should_activate_pure_ai(check_rule):
-                            _activate(db, existing.id, check_rule.confidence, cfg)
-                            activated += 1
+                    if should_activate_pure_ai(check_rule):
+                        _activate(db, existing.id, check_rule.confidence, cfg)
+                        activated += 1
         elif verdict == "B":  # BROADER — new supersedes existing
             saw_strong = True
             handled_existing.add(eid)
