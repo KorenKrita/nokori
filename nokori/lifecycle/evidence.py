@@ -7,22 +7,34 @@ from ..models import Rule
 from ..utils.time import now_iso
 
 
+def compute_evidence_append(
+    evidence_score: int | None,
+    evidence_log_json: str | None,
+    kind: str,
+    points: int,
+) -> tuple[int, str]:
+    score = (evidence_score or 0) + points
+    log_list = json.loads(evidence_log_json or "[]")
+    log_list.append({"kind": kind, "points": points, "at": now_iso()})
+    return score, dumps_json(log_list)
+
+
 def add_evidence(db: Db, rule_id: str, kind: str, points: int) -> tuple[int, list[dict]]:
     row = db.fetchone(
         "SELECT evidence_score, evidence_log FROM rules WHERE id = ?", (rule_id,)
     )
     if row is None:
         return (0, [])
-    score = (row["evidence_score"] or 0) + points
-    log_list = json.loads(row["evidence_log"] or "[]")
-    log_list.append({"kind": kind, "points": points, "at": now_iso()})
+    score, log_json = compute_evidence_append(
+        row["evidence_score"], row["evidence_log"], kind, points
+    )
     with db.transaction() as tx:
         tx.execute(
             "UPDATE rules SET evidence_score = ?, evidence_log = ?, updated_at = ? "
             "WHERE id = ?",
-            (score, dumps_json(log_list), now_iso(), rule_id),
+            (score, log_json, now_iso(), rule_id),
         )
-    return (score, log_list)
+    return (score, json.loads(log_json))
 
 
 def evidence_active_days(log_list: list[dict]) -> int:

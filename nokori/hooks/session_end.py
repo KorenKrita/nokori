@@ -32,16 +32,29 @@ def _spawn_async_extract(cfg: Config) -> None:
     # (see LLMAdapter); the extract CLI must be able to call the configured LLM.
     env.pop("NOKORI_EXTRACTING", None)
     env["NOKORI_DATA_DIR"] = str(cfg.data_dir)
+    cfg.ensure_dirs()
+    err_log = cfg.logs_dir / "async-extract.log"
+    err_fh = subprocess.DEVNULL
+    try:
+        err_fh = open(err_log, "a", encoding="utf-8")
+    except OSError as e:
+        log.warning("async extract log open failed: %s", e)
     try:
         subprocess.Popen(
             [sys.executable, "-m", "nokori", "extract"],
             env=env,
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stderr=err_fh,
             start_new_session=True,
         )
     except Exception as e:
         log.warning("async extract spawn failed: %s", e)
+    finally:
+        if err_fh is not subprocess.DEVNULL:
+            try:
+                err_fh.close()
+            except OSError:
+                pass
 
 
 def handle(payload: dict, cfg: Config) -> dict:

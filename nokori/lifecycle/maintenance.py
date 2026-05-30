@@ -132,7 +132,7 @@ def reactivate_dormant_on_retrieval_hot(db: Db, rule_id: str) -> None:
         )
 
 
-def run_due_jobs(db: Db, *, deadline_seconds: float | None = None) -> dict:
+def run_due_jobs(db: Db) -> dict:
     summary = {
         "dormant_scan": run_dormant_scan(db),
         "candidate_cleanup": run_candidate_cleanup(db),

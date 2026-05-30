@@ -17,8 +17,7 @@ from ..gate import marker as marker_io
 from ..gate.blocker import format_injection, select_gate_rules
 from ..gate.marker import MarkerRule, prompt_hash
 from ..lifecycle import maintenance, promotion
-from ..search import bm25, ranker
-from ..search import embedding as embedding_search
+from ..search.retrieve import retrieve_and_tier
 from ..utils import sessions
 from ..utils.logging import get_logger
 from ..utils.project import resolve_project_id
@@ -50,15 +49,13 @@ def _run_dismiss(db: Db, prompt: str, session_id: str, cfg: Config) -> int:
     return count
 
 
-def _run_shadow_pool(db: Db, prompt: str, project_id: str) -> None:
+def _run_shadow_pool(db: Db, prompt: str, project_id: str, cfg: Config) -> None:
     """Check shadow pool rules and record hits. Never injects."""
     shadow_rules = fetch_shadow_rules(db, project_id=project_id)
     if not shadow_rules:
         return
-    shadow_bm25 = bm25.search(prompt, shadow_rules, top_k=5)
-    shadow_fused = ranker.rrf_fuse(shadow_bm25, [])
-    shadow_hot, _ = ranker.tier_results(shadow_fused)
-    for r in shadow_hot:
+    result = retrieve_and_tier(prompt, shadow_rules, db, cfg, top_k=5)
+    for r in result.hot:
         promotion.record_shadow_hit(db, r.rule.id, project_id)
 
 
@@ -80,23 +77,8 @@ def handle(payload: dict, cfg: Config) -> dict:
             # No formal-pool injection; finally still runs shadow pool below.
             return {"continue": True}
 
-        bm25_results = bm25.search(prompt, rules, top_k=10)
-
-        embed_results = []
-        if embedding_search.auto_enabled(cfg, len(rules)):
-            if embedding_search.use_local(cfg):
-                local_client = embedding_search.LocalEmbeddingClient(cfg)
-                embed_results = embedding_search.search_local(
-                    prompt, rules, db, local_client, top_k=10
-                )
-            else:
-                client = embedding_search.EmbeddingClient(cfg)
-                embed_results = embedding_search.search(
-                    prompt, rules, db, client, top_k=10
-                )
-
-        fused = ranker.rrf_fuse(bm25_results, embed_results)
-        hot, warm = ranker.tier_results(fused)
+        result = retrieve_and_tier(prompt, rules, db, cfg, top_k=10)
+        hot, warm = result.hot, result.warm
 
         if not hot and not warm:
             return {"continue": True}
@@ -144,7 +126,7 @@ def handle(payload: dict, cfg: Config) -> dict:
     finally:
         try:
             if project_id:
-                _run_shadow_pool(db, prompt, project_id)
+                _run_shadow_pool(db, prompt, project_id, cfg)
         except Exception:
             log.warning("shadow pool failed", exc_info=True)
         finally:

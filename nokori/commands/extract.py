@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 
 from ..config import Config
@@ -13,6 +14,7 @@ from ..extract.merger import merge_candidate
 from ..extract.reader import read as read_transcript
 from ..lifecycle.hot_cache import mark_extracted
 from ..llm.adapter import LLMAdapter
+from ..utils.project import resolve_project_id
 
 
 def _process_path(path: Path, project_id: str | None, cfg: Config,
@@ -55,7 +57,10 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
             if not path.exists():
                 print(f"nokori: transcript not found: {path}")
                 return 1
-            cands, applied = _process_path(path, None, cfg, dry_run=args.dry_run)
+            project_id = resolve_project_id(os.getcwd())
+            cands, applied = _process_path(
+                path, project_id, cfg, dry_run=args.dry_run
+            )
             print(f"transcript: {path}")
             print(f"candidates: {cands}")
             if not args.dry_run:

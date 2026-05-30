@@ -220,7 +220,7 @@ def fetch_rules(db: "Db", *, statuses: tuple[str, ...] | None = None,
         where.append(f"status IN ({placeholders})")
         params.extend(statuses)
     if project_id is not None:
-        where.append("(project_scope = 'global' OR project_id = ? OR project_id IS NULL)")
+        where.append("(project_scope = 'global' OR project_id = ?)")
         params.append(project_id)
     sql = f"SELECT {RULE_COLUMNS} FROM rules"
     if where:

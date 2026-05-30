@@ -50,7 +50,11 @@ def _build_parser() -> argparse.ArgumentParser:
 
     sp_test = sub.add_parser("test", help="simulate retrieval for a prompt")
     sp_test.add_argument("prompt", help="user prompt to simulate")
-    sp_test.add_argument("--project", default=None)
+    sp_test.add_argument(
+        "--project",
+        default=None,
+        help="project_id filter (default: cwd via git root hash, same as hooks)",
+    )
 
     sp_extract = sub.add_parser("extract", help="run the extraction pipeline")
     sp_extract.add_argument("--session", default=None, help="explicit transcript path")

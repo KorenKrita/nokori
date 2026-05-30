@@ -44,6 +44,10 @@ def _persist_new(db: Db, cand: Candidate, project_id: str | None, cfg=None) -> R
     is_user_correction = (status == "active")
     ev_score = 3 if is_user_correction else 0
     ev_log = dumps_json([{"kind": "user_correction", "points": 3, "at": now}]) if is_user_correction else "[]"
+    if project_id:
+        scope, pid = "project", project_id
+    else:
+        scope, pid = "global", None
     with db.transaction() as tx:
         tx.execute(
             "INSERT INTO rules (id, short_id, trigger_text, trigger_variants, "
@@ -58,7 +62,7 @@ def _persist_new(db: Db, cand: Candidate, project_id: str | None, cfg=None) -> R
                 cand.behavior, cand.action, cand.rationale,
                 cand.source_type, cand.confidence, status,
                 ev_score, ev_log,
-                "project", project_id, now, now,
+                scope, pid, now, now,
             ),
         )
     row = db.fetchone(f"SELECT {RULE_COLUMNS} FROM rules WHERE id = ?", (rid,))
@@ -84,7 +88,7 @@ def _fetch_merge_pool(db: Db, project_id: str | None) -> list[Rule]:
         rows = db.fetchall(
             f"SELECT {RULE_COLUMNS} FROM rules "
             "WHERE status IN ('candidate','active','dormant') "
-            "AND (project_scope = 'global' OR project_id = ? OR project_id IS NULL) "
+            "AND (project_scope = 'global' OR project_id = ?) "
             "ORDER BY updated_at DESC",
             (project_id,),
         )
@@ -92,6 +96,7 @@ def _fetch_merge_pool(db: Db, project_id: str | None) -> list[Rule]:
         rows = db.fetchall(
             f"SELECT {RULE_COLUMNS} FROM rules "
             "WHERE status IN ('candidate','active','dormant') "
+            "AND project_scope = 'global' "
             "ORDER BY updated_at DESC",
         )
     return [row_to_rule(r) for r in rows]
@@ -104,7 +109,7 @@ def _recent_neighbors(
         rows = db.fetchall(
             f"SELECT {RULE_COLUMNS} FROM rules "
             "WHERE status IN ('candidate','active','dormant') "
-            "AND (project_scope = 'global' OR project_id = ? OR project_id IS NULL) "
+            "AND (project_scope = 'global' OR project_id = ?) "
             "ORDER BY updated_at DESC LIMIT ?",
             (project_id, limit),
         )
@@ -112,6 +117,7 @@ def _recent_neighbors(
         rows = db.fetchall(
             f"SELECT {RULE_COLUMNS} FROM rules "
             "WHERE status IN ('candidate','active','dormant') "
+            "AND project_scope = 'global' "
             "ORDER BY updated_at DESC LIMIT ?",
             (limit,),
         )

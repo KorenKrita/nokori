@@ -1,46 +1,33 @@
 from __future__ import annotations
 
 import argparse
+import os
 
 from ..config import Config
 from ..db import fetch_rules, fetch_shadow_rules, open_db
-from ..search import bm25, ranker
-from ..search import embedding as embedding_search
+from ..search.retrieve import retrieve_and_tier
+from ..utils.project import resolve_project_id
 
 
 def run(args: argparse.Namespace, cfg: Config) -> int:
+    project_id = args.project
+    if project_id is None:
+        project_id = resolve_project_id(os.getcwd())
+
     db = open_db(cfg.db_path)
     try:
         rules = fetch_rules(
-            db, statuses=("active", "dormant"), project_id=args.project
+            db, statuses=("active", "dormant"), project_id=project_id
         )
 
-        bm25_results = bm25.search(args.prompt, rules, top_k=10)
-
-        embed_results = []
-        embed_mode = "off"
-        if embedding_search.auto_enabled(cfg, len(rules)):
-            if embedding_search.use_local(cfg):
-                client = embedding_search.LocalEmbeddingClient(cfg)
-                if client.available():
-                    embed_results = embedding_search.search_local(
-                        args.prompt, rules, db, client, top_k=10
-                    )
-                    embed_mode = "local"
-            else:
-                client = embedding_search.EmbeddingClient(cfg)
-                embed_results = embedding_search.search(
-                    args.prompt, rules, db, client, top_k=10
-                )
-                embed_mode = "remote"
-
-        fused = ranker.rrf_fuse(bm25_results, embed_results)
-        hot, warm = ranker.tier_results(fused)
+        result = retrieve_and_tier(args.prompt, rules, db, cfg, top_k=10)
+        hot, warm = result.hot, result.warm
 
         print(f"prompt        {args.prompt!r}")
+        print(f"project_id    {project_id!r}")
         print(f"candidates    {len(rules)} rules in pool")
-        print(f"bm25.matches  {len(bm25_results)}")
-        print(f"embed.mode    {embed_mode} ({len(embed_results)} results)")
+        print(f"bm25.matches  {result.bm25_matches}")
+        print(f"embed.mode    {result.embed_mode}")
         print()
         print(f"HOT  ({len(hot)}):")
         for r in hot:
@@ -66,20 +53,22 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
         for r in gateable:
             print(f"  {r.rule.short_id}: {r.rule.action[:80]}")
 
-        # Shadow pool preview (same threshold as hook)
-        if args.project:
-            shadow_rules = fetch_shadow_rules(db, project_id=args.project)
+        if project_id:
+            shadow_rules = fetch_shadow_rules(db, project_id=project_id)
             if shadow_rules:
-                shadow_bm25 = bm25.search(args.prompt, shadow_rules, top_k=5)
-                shadow_fused = ranker.rrf_fuse(shadow_bm25, [])
-                shadow_hot, _ = ranker.tier_results(shadow_fused)
-                if shadow_hot:
+                shadow = retrieve_and_tier(
+                    args.prompt, shadow_rules, db, cfg, top_k=5
+                )
+                if shadow.hot:
                     print()
-                    print(f"shadow_pool HOT ({len(shadow_hot)} would record hit, not injected):")
-                    for r in shadow_hot[:3]:
+                    print(
+                        f"shadow_pool HOT ({len(shadow.hot)} would record hit, "
+                        f"embed={shadow.embed_mode}, not injected):"
+                    )
+                    for r in shadow.hot[:3]:
                         print(
-                            f"  {r.rule.short_id}  bm25={r.bm25_score:.4f}  "
-                            f"proj={r.rule.project_id}"
+                            f"  {r.rule.short_id}  rrf={r.rrf_score:.4f}  "
+                            f"bm25={r.bm25_score:.4f}  proj={r.rule.project_id}"
                         )
     finally:
         db.close()

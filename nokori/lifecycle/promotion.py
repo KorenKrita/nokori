@@ -4,6 +4,7 @@ import json
 from datetime import datetime, timezone
 
 from ..db import Db, dumps_json
+from ..lifecycle.evidence import compute_evidence_append
 from ..utils.logging import get_logger
 from ..utils.time import now_iso
 
@@ -42,9 +43,9 @@ def record_shadow_hit(db: Db, rule_id: str, current_project_id: str | None) -> b
     })
     unique_projects = {e["project_id"] for e in evidence}
 
-    score = (row["evidence_score"] or 0) + 1
-    log_list = json.loads(row["evidence_log"] or "[]")
-    log_list.append({"kind": "shadow_hot", "points": 1, "at": now_iso()})
+    score, ev_log = compute_evidence_append(
+        row["evidence_score"], row["evidence_log"], "shadow_hot", 1
+    )
     now = now_iso()
 
     promoted = False
@@ -54,7 +55,7 @@ def record_shadow_hit(db: Db, rule_id: str, current_project_id: str | None) -> b
             "cross_project_hits = cross_project_hits + 1, "
             "evidence_score = ?, evidence_log = ?, updated_at = ? "
             "WHERE id = ?",
-            (dumps_json(evidence), score, dumps_json(log_list), now, rule_id),
+            (dumps_json(evidence), score, ev_log, now, rule_id),
         )
         if len(unique_projects) >= CROSS_PROJECT_PROMOTE_THRESHOLD:
             tx.execute(

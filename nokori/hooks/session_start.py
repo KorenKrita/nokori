@@ -15,13 +15,17 @@ def handle(payload: dict, cfg: Config) -> dict:
     project_id = resolve_project_id(payload.get("cwd"))
     sessions.register(cfg, session_id, project_id)
 
-    db = open_db(cfg.db_path)
     cache_text = None
+    db = open_db(cfg.db_path)
     try:
-        maintenance.run_due_jobs(db)
-        cache_text = hot_cache.maybe_inject(payload, cfg, db)
-    except Exception:
-        log.exception("session_start maintenance failed")
+        try:
+            maintenance.run_due_jobs(db)
+        except Exception:
+            log.exception("session_start maintenance failed")
+        try:
+            cache_text = hot_cache.maybe_inject(payload, cfg, db)
+        except Exception:
+            log.exception("session_start hot_cache failed")
     finally:
         db.close()
 
