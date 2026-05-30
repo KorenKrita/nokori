@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-import json
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 
 from ..config import Config
 from ..db import Db
 from ..extract.reader import read as read_transcript
+from ..utils.time import now_iso
 
 HOT_CACHE_BUDGET_CHARS = 500
 HOT_CACHE_RECENT_TURNS = 3
@@ -64,7 +64,7 @@ def maybe_inject(payload: dict, cfg: Config, db: Db) -> str | None:
 
 
 def mark_extracted(db: Db, path: Path, mtime: float) -> None:
-    now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+    now = now_iso()
     with db.transaction() as tx:
         tx.execute(
             "INSERT INTO extract_state (transcript_path, transcript_mtime, "

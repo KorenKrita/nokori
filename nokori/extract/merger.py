@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 
-from ..db import Db, dumps_json, fetch_short_ids, row_to_rule
+from ..db import Db, _RULE_COLUMNS, dumps_json, fetch_short_ids, row_to_rule
 from ..lifecycle.evidence import add_evidence, should_activate_pure_ai
 from ..llm.adapter import LLMAdapter
 from ..llm.prompts import MERGE_PROMPT
@@ -12,17 +12,9 @@ from ..search.embedding import index_rule_if_enabled
 from ..utils.ids import new_uuid, short_id_for
 from ..utils.logging import get_logger
 from ..utils.time import now_iso
-from .extractor import Candidate
+from .extractor import Candidate, _strip_fence
 
 log = get_logger("nokori.extract.merger")
-
-_RULE_COLUMNS = (
-    "id, short_id, trigger_text, trigger_variants, search_terms, behavior, action, "
-    "rationale, source_type, confidence, status, evidence_score, evidence_log, "
-    "hit_count, last_hit, cross_project_hits, promotion_evidence, project_scope, "
-    "project_id, merged_from, merged_into, superseded_by, archived_reason, "
-    "created_at, updated_at"
-)
 
 
 @dataclass
@@ -44,7 +36,7 @@ def _persist_new(db: Db, cand: Candidate, project_id: str | None, cfg=None) -> R
     rid = new_uuid()
     sid = short_id_for(rid, fetch_short_ids(db))
     status = _initial_status(cand)
-    is_user_correction = (cand.confidence == "high" and cand.source_type == "correction")
+    is_user_correction = (status == "active")
     ev_score = 3 if is_user_correction else 0
     ev_log = dumps_json([{"kind": "user_correction", "points": 3, "at": now}]) if is_user_correction else "[]"
     with db.transaction() as tx:
@@ -135,12 +127,7 @@ def _ask_llm(cand: Candidate, neighbors: list[Rule], llm: LLMAdapter) -> dict:
         return {"relationships": []}
     text = raw.strip()
     if text.startswith("```"):
-        lines = text.splitlines()
-        if lines and lines[0].startswith("```"):
-            lines = lines[1:]
-        if lines and lines[-1].startswith("```"):
-            lines = lines[:-1]
-        text = "\n".join(lines)
+        text = _strip_fence(text)
     try:
         return json.loads(text)
     except json.JSONDecodeError:

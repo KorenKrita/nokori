@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import argparse
-from datetime import datetime, timezone
 
 from ..config import Config
 from ..db import dumps_json, fetch_rule_by_short_id, fetch_short_ids, open_db
 from ..errors import NokoriError
 from ..search.embedding import index_rule_if_enabled
 from ..utils.ids import new_uuid, short_id_for
+from ..utils.time import now_iso
 
 
 def _split_csv(raw: str | None) -> list[str]:
@@ -20,7 +20,7 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
     if not args.trigger or not args.action:
         raise NokoriError("--trigger and --action are required")
 
-    now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+    now = now_iso()
     rid = new_uuid()
 
     variants = _split_csv(args.variants)

@@ -1,17 +1,18 @@
 from __future__ import annotations
 
 import array
+import functools
 import json
 import urllib.error
 import urllib.request
 from collections.abc import Sequence
-from datetime import datetime, timezone
 
 from ..config import Config
 from ..db import Db
 from ..errors import EmbeddingError
 from ..models import Rule, ScoredResult
 from ..utils.logging import get_logger
+from ..utils.time import now_iso
 
 log = get_logger("nokori.search.embedding")
 
@@ -130,7 +131,7 @@ def store_rule_embedding(db: Db, rule: Rule, client: EmbeddingClient) -> int:
 def _store_impl(db: Db, rule_id: str, vectors: list[list[float]], model_name: str) -> int:
     if not vectors:
         return 0
-    now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+    now = now_iso()
     with db.transaction() as tx:
         tx.execute("DELETE FROM rule_embeddings WHERE rule_id = ?", (rule_id,))
         for idx, vec in enumerate(vectors):
@@ -194,6 +195,7 @@ LOCAL_MODEL_NAME = "paraphrase-multilingual-MiniLM-L12-v2"
 LOCAL_DIMENSIONS = 384
 
 
+@functools.lru_cache(maxsize=1)
 def _sentence_transformers_available() -> bool:
     try:
         import sentence_transformers  # noqa: F401

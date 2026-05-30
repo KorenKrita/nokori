@@ -80,8 +80,6 @@ def handle(payload: dict, cfg: Config) -> dict:
             db, statuses=("active", "dormant"), project_id=project_id
         )
         if not rules:
-            if project_id:
-                _run_shadow_pool(db, prompt, project_id)
             return {"continue": True}
 
         bm25_results = bm25.search(prompt, rules, top_k=10)
@@ -103,8 +101,6 @@ def handle(payload: dict, cfg: Config) -> dict:
         hot, warm = ranker.tier_results(fused)
 
         if not hot and not warm:
-            if project_id:
-                _run_shadow_pool(db, prompt, project_id)
             return {"continue": True}
 
         text = format_injection(
@@ -139,10 +135,6 @@ def handle(payload: dict, cfg: Config) -> dict:
                     ph=ph,
                 )
 
-        # Shadow pool: other projects' high-confidence rules, not injected
-        if project_id:
-            _run_shadow_pool(db, prompt, project_id)
-
         log.info(
             "injected hot=%d warm=%d session=%s",
             len(hot), len(warm), session_id,
@@ -152,4 +144,6 @@ def handle(payload: dict, cfg: Config) -> dict:
         return {"hookSpecificOutput": {"hookEventName": "UserPromptSubmit",
                                        "additionalContext": text}}
     finally:
+        if project_id:
+            _run_shadow_pool(db, prompt, project_id)
         db.close()

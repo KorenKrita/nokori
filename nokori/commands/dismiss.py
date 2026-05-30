@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import argparse
-from datetime import datetime, timezone
 
 from ..config import Config
 from ..db import archive_rule, fetch_rule_by_short_id, open_db
 from ..errors import NokoriError
+from ..utils.time import now_iso
 
 
 def run(args: argparse.Namespace, cfg: Config) -> int:
@@ -17,7 +17,7 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
         if rule.status == "archived":
             print(f"{rule.short_id} already archived")
             return 0
-        now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+        now = now_iso()
         archive_rule(db, rule.id, "user_dismissed_cli", now)
     finally:
         db.close()

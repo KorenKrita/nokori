@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 
 from ..db import Db
 from ..utils.logging import get_logger
-from ..utils.time import parse_iso
+from ..utils.time import now_iso, parse_iso
 
 log = get_logger("nokori.lifecycle.maintenance")
 
@@ -33,7 +33,7 @@ def _last_run(db: Db, key: str) -> str | None:
 
 
 def _set_last_run(db: Db, key: str) -> None:
-    now = _now().isoformat(timespec="seconds").replace("+00:00", "Z")
+    now = now_iso()
     with db.transaction() as tx:
         tx.execute(
             "INSERT INTO maintenance_meta (key, last_run) VALUES (?, ?) "
@@ -55,7 +55,7 @@ def run_dormant_scan(db: Db) -> int:
     )
     cutoff_days = DORMANT_AFTER_DAYS
     moved = 0
-    now_iso = _now().isoformat(timespec="seconds").replace("+00:00", "Z")
+    ts = now_iso()
     for r in rows:
         last_seen = r["last_hit"] or r["created_at"]
         age = _days_since_iso(last_seen)
@@ -63,7 +63,7 @@ def run_dormant_scan(db: Db) -> int:
             with db.transaction() as tx:
                 tx.execute(
                     "UPDATE rules SET status = 'dormant', updated_at = ? WHERE id = ?",
-                    (now_iso, r["id"]),
+                    (ts, r["id"]),
                 )
             moved += 1
     _set_last_run(db, "dormant_scan")
@@ -101,7 +101,7 @@ def run_unmerge_check(db: Db) -> int:
         "SELECT id, merged_into FROM rules WHERE status = 'merged' AND merged_into IS NOT NULL"
     )
     restored = 0
-    now_iso = _now().isoformat(timespec="seconds").replace("+00:00", "Z")
+    ts = now_iso()
     for r in rows:
         target = db.fetchone("SELECT status FROM rules WHERE id = ?", (r["merged_into"],))
         if target is None:
@@ -111,7 +111,7 @@ def run_unmerge_check(db: Db) -> int:
                 tx.execute(
                     "UPDATE rules SET status = 'dormant', merged_into = NULL, "
                     "updated_at = ? WHERE id = ?",
-                    (now_iso, r["id"]),
+                    (ts, r["id"]),
                 )
             restored += 1
     _set_last_run(db, "unmerge_check")
@@ -121,12 +121,12 @@ def run_unmerge_check(db: Db) -> int:
 
 
 def reactivate_dormant_on_retrieval_hot(db: Db, rule_id: str) -> None:
-    now_iso = _now().isoformat(timespec="seconds").replace("+00:00", "Z")
+    ts = now_iso()
     with db.transaction() as tx:
         tx.execute(
             "UPDATE rules SET status = 'active', updated_at = ? "
             "WHERE id = ? AND status = 'dormant'",
-            (now_iso, rule_id),
+            (ts, rule_id),
         )
 
 

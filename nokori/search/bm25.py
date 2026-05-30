@@ -22,6 +22,13 @@ def _rule_doc_tokens(rule: Rule) -> list[str]:
     return pieces
 
 
+def _variant_tokens(rule: Rule) -> set[str]:
+    tokens: set[str] = set()
+    for v in rule.trigger_variants:
+        tokens.update(tokenize(v))
+    return tokens
+
+
 def search(
     query: str, rules: Iterable[Rule], top_k: int = 5
 ) -> list[ScoredResult]:
@@ -33,12 +40,12 @@ def search(
     if not query_tokens:
         return []
 
-    docs = [(rule, _rule_doc_tokens(rule)) for rule in rules_list]
+    docs = [(rule, _rule_doc_tokens(rule), _variant_tokens(rule)) for rule in rules_list]
     n_docs = len(docs)
-    avgdl = sum(len(d) for _, d in docs) / max(n_docs, 1)
+    avgdl = sum(len(d) for _, d, _ in docs) / max(n_docs, 1)
 
     df: Counter[str] = Counter()
-    for _, doc in docs:
+    for _, doc, _ in docs:
         df.update(set(doc))
 
     idf: Mapping[str, float] = {
@@ -48,7 +55,7 @@ def search(
 
     qset = set(query_tokens)
     scored: list[ScoredResult] = []
-    for rule, doc in docs:
+    for rule, doc, var_tokens in docs:
         if not doc:
             continue
         tf = Counter(doc)
@@ -64,11 +71,7 @@ def search(
         if score <= 0:
             continue
         matched = qset & set(doc)
-        variant_match = any(
-            t in matched
-            for v in rule.trigger_variants
-            for t in tokenize(v)
-        )
+        variant_match = bool(qset & var_tokens)
         scored.append(
             ScoredResult(
                 rule=rule,

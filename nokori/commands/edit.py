@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import argparse
-from datetime import datetime, timezone
 
 from ..config import Config
 from ..db import fetch_rule_by_short_id, open_db
 from ..errors import NokoriError
 from ..search.embedding import index_rule_if_enabled
+from ..utils.time import now_iso
 
 
 def run(args: argparse.Namespace, cfg: Config) -> int:
@@ -30,7 +30,7 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
             print("nothing to update")
             return 0
 
-        now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+        now = now_iso()
         sets = ", ".join(f"{col} = ?" for col, _ in updates)
         params: list = [val for _, val in updates]
         params.extend([now, rule.id])
