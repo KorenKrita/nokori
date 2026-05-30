@@ -8,10 +8,7 @@ from ..lifecycle.evidence import add_evidence, should_activate_pure_ai
 from ..llm.adapter import LLMAdapter
 from ..llm.prompts import MERGE_PROMPT
 from ..models import Rule
-from ..search.embedding import (
-    EmbeddingClient, LocalEmbeddingClient, auto_enabled,
-    store_rule_embedding, store_rule_embedding_local, use_local,
-)
+from ..search.embedding import index_rule_if_enabled
 from ..utils.ids import new_uuid, short_id_for
 from ..utils.logging import get_logger
 from ..utils.time import now_iso
@@ -42,21 +39,12 @@ def _initial_status(cand: Candidate) -> str:
     return "candidate"
 
 
-def _index_embedding_if_enabled(db: Db, rule: Rule, cfg=None) -> None:
-    """Best-effort embedding index after rule creation."""
+def _index_embedding_if_enabled(db: Db, rule: Rule) -> None:
     try:
         from ..config import Config
-        if cfg is None:
-            cfg = Config.from_env()
-        rule_count = db.fetchone("SELECT COUNT(*) AS n FROM rules")["n"]
-        if not auto_enabled(cfg, rule_count):
-            return
-        if use_local(cfg):
-            store_rule_embedding_local(db, rule, LocalEmbeddingClient(cfg))
-        else:
-            store_rule_embedding(db, rule, EmbeddingClient(cfg))
+        index_rule_if_enabled(db, rule, Config.from_env())
     except Exception:
-        pass
+        log.warning("embed index failed rule=%s", rule.id, exc_info=True)
 
 
 def _persist_new(db: Db, cand: Candidate, project_id: str | None) -> Rule:
@@ -177,15 +165,6 @@ def _supersede(db: Db, old_id: str, new_id: str) -> None:
     with db.transaction() as tx:
         tx.execute(
             "UPDATE rules SET superseded_by = ?, status = 'merged', updated_at = ? "
-            "WHERE id = ?",
-            (new_id, now_iso(), old_id),
-        )
-
-
-def _link_merge(db: Db, old_id: str, new_id: str) -> None:
-    with db.transaction() as tx:
-        tx.execute(
-            "UPDATE rules SET merged_into = ?, status = 'merged', updated_at = ? "
             "WHERE id = ?",
             (new_id, now_iso(), old_id),
         )

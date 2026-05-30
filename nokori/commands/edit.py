@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from ..config import Config
 from ..db import fetch_rule_by_short_id, open_db
 from ..errors import NokoriError
+from ..search.embedding import index_rule_if_enabled
 
 
 def run(args: argparse.Namespace, cfg: Config) -> int:
@@ -39,6 +40,11 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
                 tuple(params),
             )
         print(f"updated {rule.short_id}: {', '.join(c for c, _ in updates)}")
+        embedding_fields = {"action", "rationale"}
+        if embedding_fields & {col for col, _ in updates}:
+            updated_rule = fetch_rule_by_short_id(db, args.short_id)
+            if updated_rule:
+                index_rule_if_enabled(db, updated_rule, cfg)
     finally:
         db.close()
     return 0

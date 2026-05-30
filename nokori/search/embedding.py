@@ -286,3 +286,17 @@ def use_local(cfg: Config) -> bool:
     if cfg.embed_base_url and cfg.embed_model:
         return False
     return _sentence_transformers_available()
+
+
+def index_rule_if_enabled(db: Db, rule: Rule, cfg: Config) -> None:
+    """Index a rule's embedding if embedding is enabled. Best-effort, logs on failure."""
+    try:
+        rule_count = db.fetchone("SELECT COUNT(*) AS n FROM rules")["n"]
+        if not auto_enabled(cfg, rule_count):
+            return
+        if use_local(cfg):
+            store_rule_embedding_local(db, rule, LocalEmbeddingClient(cfg))
+        else:
+            store_rule_embedding(db, rule, EmbeddingClient(cfg))
+    except Exception:
+        log.warning("embed index failed rule=%s", rule.id, exc_info=True)

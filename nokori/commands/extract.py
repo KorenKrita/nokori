@@ -19,6 +19,12 @@ def _process_path(path: Path, project_id: str | None, cfg: Config,
     turns = read_transcript(path)
     text = compress(turns)
     if not text.strip():
+        if not dry_run:
+            db = open_db(cfg.db_path)
+            try:
+                mark_extracted(db, path, path.stat().st_mtime)
+            finally:
+                db.close()
         return (0, 0)
     llm = LLMAdapter(cfg)
     candidates = extract_candidates(text, llm)
