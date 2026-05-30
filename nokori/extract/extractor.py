@@ -42,7 +42,7 @@ def extract(transcript: str, llm: LLMAdapter) -> list[Candidate]:
 def _parse_candidates(raw: str) -> list[Candidate]:
     text = raw.strip()
     if text.startswith("```"):
-        text = _strip_fence(text)
+        text = strip_fence(text)
     try:
         data = json.loads(text)
     except json.JSONDecodeError:
@@ -67,7 +67,7 @@ def _parse_candidates(raw: str) -> list[Candidate]:
     return out
 
 
-def _strip_fence(text: str) -> str:
+def strip_fence(text: str) -> str:
     lines = text.splitlines()
     if lines and lines[0].startswith("```"):
         lines = lines[1:]

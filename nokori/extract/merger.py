@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 
-from ..db import Db, _RULE_COLUMNS, dumps_json, fetch_short_ids, row_to_rule
+from ..db import Db, RULE_COLUMNS, dumps_json, fetch_short_ids, row_to_rule
 from ..lifecycle.evidence import add_evidence, should_activate_pure_ai
 from ..llm.adapter import LLMAdapter
 from ..llm.prompts import MERGE_PROMPT
@@ -12,7 +12,7 @@ from ..search.embedding import index_rule_if_enabled
 from ..utils.ids import new_uuid, short_id_for
 from ..utils.logging import get_logger
 from ..utils.time import now_iso
-from .extractor import Candidate, _strip_fence
+from .extractor import Candidate, strip_fence
 
 log = get_logger("nokori.extract.merger")
 
@@ -71,7 +71,7 @@ def _persist_new(db: Db, cand: Candidate, project_id: str | None, cfg=None) -> R
                     "INSERT INTO rule_terms (rule_id, lang, term, term_type) VALUES (?,?,?,?)",
                     (rid, lang, term, "search"),
                 )
-    row = db.fetchone(f"SELECT {_RULE_COLUMNS} FROM rules WHERE id = ?", (rid,))
+    row = db.fetchone(f"SELECT {RULE_COLUMNS} FROM rules WHERE id = ?", (rid,))
     rule = row_to_rule(row)
     if cfg:
         index_rule_if_enabled(db, rule, cfg)
@@ -83,7 +83,7 @@ def _candidate_neighbors(db: Db, cand: Candidate, limit: int = 5,
     """Pre-filter by status and project scope, leave semantic match to LLM."""
     if project_id:
         rows = db.fetchall(
-            f"SELECT {_RULE_COLUMNS} FROM rules "
+            f"SELECT {RULE_COLUMNS} FROM rules "
             "WHERE status IN ('candidate','active','dormant') "
             "AND (project_scope = 'global' OR project_id = ? OR project_id IS NULL) "
             "ORDER BY updated_at DESC LIMIT ?",
@@ -91,7 +91,7 @@ def _candidate_neighbors(db: Db, cand: Candidate, limit: int = 5,
         )
     else:
         rows = db.fetchall(
-            f"SELECT {_RULE_COLUMNS} FROM rules "
+            f"SELECT {RULE_COLUMNS} FROM rules "
             "WHERE status IN ('candidate','active','dormant') "
             "ORDER BY updated_at DESC LIMIT ?",
             (limit,),
@@ -127,7 +127,7 @@ def _ask_llm(cand: Candidate, neighbors: list[Rule], llm: LLMAdapter) -> dict:
         return {"relationships": []}
     text = raw.strip()
     if text.startswith("```"):
-        text = _strip_fence(text)
+        text = strip_fence(text)
     try:
         return json.loads(text)
     except json.JSONDecodeError:
@@ -142,7 +142,7 @@ def _activate(db: Db, rule_id: str, confidence: str, cfg=None) -> None:
             (confidence, now_iso(), rule_id),
         )
     if cfg:
-        row = db.fetchone(f"SELECT {_RULE_COLUMNS} FROM rules WHERE id = ?", (rule_id,))
+        row = db.fetchone(f"SELECT {RULE_COLUMNS} FROM rules WHERE id = ?", (rule_id,))
         if row:
             index_rule_if_enabled(db, row_to_rule(row), cfg)
 

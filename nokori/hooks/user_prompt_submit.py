@@ -144,6 +144,10 @@ def handle(payload: dict, cfg: Config) -> dict:
         return {"hookSpecificOutput": {"hookEventName": "UserPromptSubmit",
                                        "additionalContext": text}}
     finally:
-        if project_id:
-            _run_shadow_pool(db, prompt, project_id)
-        db.close()
+        try:
+            if project_id:
+                _run_shadow_pool(db, prompt, project_id)
+        except Exception:
+            log.warning("shadow pool failed", exc_info=True)
+        finally:
+            db.close()

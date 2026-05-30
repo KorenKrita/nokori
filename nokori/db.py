@@ -235,7 +235,7 @@ def row_to_rule(row):
     )
 
 
-_RULE_COLUMNS = (
+RULE_COLUMNS = (
     "id, short_id, trigger_text, trigger_variants, search_terms, behavior, action, "
     "rationale, source_type, confidence, status, evidence_score, evidence_log, "
     "hit_count, last_hit, cross_project_hits, promotion_evidence, project_scope, "
@@ -255,7 +255,7 @@ def fetch_rules(db: "Db", *, statuses: tuple[str, ...] | None = None,
     if project_id is not None:
         where.append("(project_scope = 'global' OR project_id = ? OR project_id IS NULL)")
         params.append(project_id)
-    sql = f"SELECT {_RULE_COLUMNS} FROM rules"
+    sql = f"SELECT {RULE_COLUMNS} FROM rules"
     if where:
         sql += " WHERE " + " AND ".join(where)
     sql += " ORDER BY updated_at DESC"
@@ -264,7 +264,7 @@ def fetch_rules(db: "Db", *, statuses: tuple[str, ...] | None = None,
 
 def fetch_rule_by_short_id(db: "Db", short_id: str):
     row = db.fetchone(
-        f"SELECT {_RULE_COLUMNS} FROM rules WHERE short_id = ?", (short_id,)
+        f"SELECT {RULE_COLUMNS} FROM rules WHERE short_id = ?", (short_id,)
     )
     return row_to_rule(row) if row else None
 
@@ -314,7 +314,7 @@ def fetch_shadow_rules(db: "Db", *, project_id: str | None) -> list:
     if project_id is None:
         return []
     rows = db.fetchall(
-        f"SELECT {_RULE_COLUMNS} FROM rules "
+        f"SELECT {RULE_COLUMNS} FROM rules "
         "WHERE status = 'active' AND confidence = 'high' "
         "AND source_type IN ('correction','anti_pattern','solution') "
         "AND project_scope = 'project' "

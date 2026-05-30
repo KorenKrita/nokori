@@ -82,6 +82,7 @@ def run_import(args: argparse.Namespace, cfg: Config) -> int:
 
     db = open_db(cfg.db_path)
     inserted = skipped = 0
+    inserted_sids: list[str] = []
     try:
         existing_ids = {r["id"] for r in db.fetchall("SELECT id FROM rules")}
         existing_short_ids = fetch_short_ids(db)
@@ -131,13 +132,11 @@ def run_import(args: argparse.Namespace, cfg: Config) -> int:
                     ),
                 )
             inserted += 1
-        for rec in rules_in:
-            rid = rec.get("id")
-            if rid and rid not in existing_ids:
-                sid = rec.get("short_id")
-                rule = fetch_rule_by_short_id(db, sid) if sid else None
-                if rule and rule.status in ("active", "dormant"):
-                    index_rule_if_enabled(db, rule, cfg)
+            inserted_sids.append(sid)
+        for sid in inserted_sids:
+            rule = fetch_rule_by_short_id(db, sid)
+            if rule and rule.status in ("active", "dormant"):
+                index_rule_if_enabled(db, rule, cfg)
     finally:
         db.close()
     print(f"imported {inserted} rules; skipped {skipped} (already present)")
