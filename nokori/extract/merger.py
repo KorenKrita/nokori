@@ -39,15 +39,7 @@ def _initial_status(cand: Candidate) -> str:
     return "candidate"
 
 
-def _index_embedding_if_enabled(db: Db, rule: Rule) -> None:
-    try:
-        from ..config import Config
-        index_rule_if_enabled(db, rule, Config.from_env())
-    except Exception:
-        log.warning("embed index failed rule=%s", rule.id, exc_info=True)
-
-
-def _persist_new(db: Db, cand: Candidate, project_id: str | None) -> Rule:
+def _persist_new(db: Db, cand: Candidate, project_id: str | None, cfg=None) -> Rule:
     now = now_iso()
     rid = new_uuid()
     sid = short_id_for(rid, fetch_short_ids(db))
@@ -89,7 +81,8 @@ def _persist_new(db: Db, cand: Candidate, project_id: str | None) -> Rule:
                 )
     row = db.fetchone(f"SELECT {_RULE_COLUMNS} FROM rules WHERE id = ?", (rid,))
     rule = row_to_rule(row)
-    _index_embedding_if_enabled(db, rule)
+    if cfg:
+        index_rule_if_enabled(db, rule, cfg)
     return rule
 
 
@@ -155,15 +148,16 @@ def _ask_llm(cand: Candidate, neighbors: list[Rule], llm: LLMAdapter) -> dict:
         return {"relationships": []}
 
 
-def _activate(db: Db, rule_id: str, confidence: str) -> None:
+def _activate(db: Db, rule_id: str, confidence: str, cfg=None) -> None:
     with db.transaction() as tx:
         tx.execute(
             "UPDATE rules SET status = 'active', confidence = ?, updated_at = ? WHERE id = ?",
             (confidence, now_iso(), rule_id),
         )
-    row = db.fetchone(f"SELECT {_RULE_COLUMNS} FROM rules WHERE id = ?", (rule_id,))
-    if row:
-        _index_embedding_if_enabled(db, row_to_rule(row))
+    if cfg:
+        row = db.fetchone(f"SELECT {_RULE_COLUMNS} FROM rules WHERE id = ?", (rule_id,))
+        if row:
+            index_rule_if_enabled(db, row_to_rule(row), cfg)
 
 
 def _supersede(db: Db, old_id: str, new_id: str) -> None:
@@ -180,10 +174,11 @@ def merge_candidate(
     db: Db,
     llm: LLMAdapter,
     project_id: str | None = None,
+    cfg=None,
 ) -> MergeOutcome:
     neighbors = _candidate_neighbors(db, cand, project_id=project_id)
     if not neighbors:
-        _persist_new(db, cand, project_id)
+        _persist_new(db, cand, project_id, cfg)
         return MergeOutcome(inserted=1, activated=0, merged=0, superseded=0)
 
     judgment = _ask_llm(cand, neighbors, llm).get("relationships", [])
@@ -204,7 +199,7 @@ def merge_candidate(
             if existing.status == "candidate":
                 if cand.confidence == "high" and cand.source_type == "correction":
                     add_evidence(db, existing.id, "user_correction", 3)
-                    _activate(db, existing.id, "high")
+                    _activate(db, existing.id, "high", cfg)
                     activated += 1
                 else:
                     add_evidence(db, existing.id, "same_extraction", 1)
@@ -221,26 +216,26 @@ def merge_candidate(
                             evidence_log=json.loads(updated["evidence_log"] or "[]"),
                         )
                         if should_activate_pure_ai(check_rule):
-                            _activate(db, existing.id, check_rule.confidence)
+                            _activate(db, existing.id, check_rule.confidence, cfg)
                             activated += 1
         elif verdict == "B":  # BROADER — new supersedes existing
             saw_strong = True
             handled_existing.add(eid)
-            new_rule = _persist_new(db, cand, project_id)
+            new_rule = _persist_new(db, cand, project_id, cfg)
             inserted += 1
             _supersede(db, existing.id, new_rule.id)
             superseded += 1
         elif verdict == "D":  # CONTRADICTS
             saw_strong = True
             handled_existing.add(eid)
-            new_rule = _persist_new(db, cand, project_id)
+            new_rule = _persist_new(db, cand, project_id, cfg)
             inserted += 1
             _supersede(db, existing.id, new_rule.id)
             superseded += 1
         # C (NARROWER) and E (UNRELATED) → coexist; no action.
 
     if not saw_strong:
-        _persist_new(db, cand, project_id)
+        _persist_new(db, cand, project_id, cfg)
         inserted += 1
 
     if "A" in {(r.get("judgment") or "").upper()[:1] for r in judgment}:

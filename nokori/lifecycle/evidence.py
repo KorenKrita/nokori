@@ -1,14 +1,10 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
 
 from ..db import Db, dumps_json
 from ..models import Rule
-
-
-def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+from ..utils.time import now_iso
 
 
 def add_evidence(db: Db, rule_id: str, kind: str, points: int) -> tuple[int, list[dict]]:
@@ -19,12 +15,12 @@ def add_evidence(db: Db, rule_id: str, kind: str, points: int) -> tuple[int, lis
         return (0, [])
     score = (row["evidence_score"] or 0) + points
     log_list = json.loads(row["evidence_log"] or "[]")
-    log_list.append({"kind": kind, "points": points, "at": _now_iso()})
+    log_list.append({"kind": kind, "points": points, "at": now_iso()})
     with db.transaction() as tx:
         tx.execute(
             "UPDATE rules SET evidence_score = ?, evidence_log = ?, updated_at = ? "
             "WHERE id = ?",
-            (score, dumps_json(log_list), _now_iso(), rule_id),
+            (score, dumps_json(log_list), now_iso(), rule_id),
         )
     return (score, log_list)
 

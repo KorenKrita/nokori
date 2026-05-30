@@ -35,7 +35,7 @@ def _process_path(path: Path, project_id: str | None, cfg: Config,
     try:
         merged = 0
         for cand in candidates:
-            outcome = merge_candidate(cand, db, llm, project_id)
+            outcome = merge_candidate(cand, db, llm, project_id, cfg=cfg)
             merged += outcome.inserted + outcome.activated + outcome.superseded
         mark_extracted(db, path, path.stat().st_mtime)
     finally:

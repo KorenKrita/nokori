@@ -82,11 +82,9 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
                         "INSERT INTO rule_terms (rule_id, lang, term, term_type) VALUES (?,?,?,?)",
                         (rid, lang, term, "search"),
                     )
-        rule_count = db.fetchone("SELECT COUNT(*) AS n FROM rules")["n"]
-        if rule_count >= 1:
-            rule = fetch_rule_by_short_id(db, sid)
-            if rule:
-                index_rule_if_enabled(db, rule, cfg)
+        rule = fetch_rule_by_short_id(db, sid)
+        if rule:
+            index_rule_if_enabled(db, rule, cfg)
     finally:
         db.close()
 
