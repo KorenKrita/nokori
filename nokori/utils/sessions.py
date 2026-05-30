@@ -56,21 +56,21 @@ def resolve_project_id_for_session(
     cfg: Config,
     session_id: str,
     cwd: str | None,
-    *,
-    resolve_fn,
 ) -> str | None:
     """Use session cache; refresh when cwd maps to a different project_id."""
-    resolved = resolve_fn(cwd) if cwd else None
+    from .project import resolve_project_id_detailed
+
     cached = get_project_id(cfg, session_id)
+    if not cwd:
+        return cached
+    resolved, used_git = resolve_project_id_detailed(cwd)
     if resolved is None:
         return cached
-    if cached != resolved:
-        update_project_id(cfg, session_id, resolved)
+    if used_git or cached is None:
+        if cached != resolved:
+            update_project_id(cfg, session_id, resolved)
         return resolved
-    if cached is not None:
-        return cached
-    update_project_id(cfg, session_id, resolved)
-    return resolved
+    return cached if cached is not None else resolved
 
 
 def update_project_id(cfg: Config, session_id: str, project_id: str) -> None:

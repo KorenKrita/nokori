@@ -82,7 +82,7 @@ def handle(payload: dict, cfg: Config) -> dict:
     session_id = payload.get("session_id") or "-"
     prompt = payload.get("prompt") or ""
     project_id = sessions.resolve_project_id_for_session(
-        cfg, session_id, payload.get("cwd"), resolve_fn=resolve_project_id,
+        cfg, session_id, payload.get("cwd"),
     )
 
     sessions.touch(cfg, session_id)

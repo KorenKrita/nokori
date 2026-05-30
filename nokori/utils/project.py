@@ -6,22 +6,23 @@ from pathlib import Path
 
 
 def resolve_project_id(cwd: str | None) -> str | None:
-    """Derive a stable project identifier from the working directory.
+    """Derive a stable project identifier from the working directory."""
+    pid, _used_git = resolve_project_id_detailed(cwd)
+    return pid
 
-    Uses git repo root resolved path hashed to 8 chars — stable across
-    symlinks, worktrees, and same-name repos at different paths.
-    Falls back to hashed cwd if not a git repo.
+
+def resolve_project_id_detailed(cwd: str | None) -> tuple[str | None, bool]:
+    """Return (project_id, used_git_root).
+
+    When git root resolution fails, callers can avoid overwriting a session
+    cache that was established via git with a cwd-only hash.
     """
     if not cwd:
-        return None
+        return None, False
     try:
         norm = str(Path(cwd).expanduser().resolve())
     except OSError:
         norm = cwd
-    return _project_id_for_cwd(norm)
-
-
-def _project_id_for_cwd(norm_cwd: str) -> str | None:
     root = None
     try:
         result = subprocess.run(
@@ -29,17 +30,23 @@ def _project_id_for_cwd(norm_cwd: str) -> str | None:
             capture_output=True,
             text=True,
             timeout=2,
-            cwd=norm_cwd,
+            cwd=norm,
         )
         if result.returncode == 0 and result.stdout.strip():
             root = result.stdout.strip()
     except (OSError, subprocess.TimeoutExpired, ValueError, TypeError):
         pass
-    path = root or norm_cwd
+    used_git = root is not None
+    path = root or norm
     try:
         resolved = str(Path(path).resolve())
     except OSError:
         resolved = path
     short_hash = hashlib.sha256(resolved.encode()).hexdigest()[:8]
     name = Path(resolved).name
-    return f"{name}-{short_hash}"
+    return f"{name}-{short_hash}", used_git
+
+
+def _project_id_for_cwd(norm_cwd: str) -> str | None:
+    pid, _ = resolve_project_id_detailed(norm_cwd)
+    return pid

@@ -15,6 +15,14 @@ def transcript_key(path: Path) -> str:
     return str(path.expanduser().resolve())
 
 
+def _legacy_candidate_key(cand: Candidate) -> str:
+    payload = (
+        f"{cand.trigger}\n{cand.action}\n{cand.source_type}\n"
+        f"{cand.confidence}\n{cand.behavior or ''}"
+    )
+    return hashlib.sha256(payload.encode("utf-8", errors="replace")).hexdigest()[:32]
+
+
 def candidate_key(cand: Candidate) -> str:
     payload = (
         f"{cand.trigger}\n{cand.action}\n{cand.source_type}\n"
@@ -22,6 +30,28 @@ def candidate_key(cand: Candidate) -> str:
         f"{dumps_json(cand.trigger_variants)}\n{dumps_json(cand.search_terms)}"
     )
     return hashlib.sha256(payload.encode("utf-8", errors="replace")).hexdigest()[:32]
+
+
+def candidate_keys(cand: Candidate) -> frozenset[str]:
+    return frozenset({candidate_key(cand), _legacy_candidate_key(cand)})
+
+
+def is_candidate_merged(cfg: Config, transcript: Path, cand: Candidate) -> bool:
+    merged = load_merged_keys(cfg, transcript)
+    return bool(candidate_keys(cand) & merged)
+
+
+def record_candidate_merged(cfg: Config, transcript: Path, cand: Candidate) -> None:
+    merged = load_merged_keys(cfg, transcript)
+    merged |= set(candidate_keys(cand))
+    path = _checkpoint_file(cfg, transcript)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps({"merged": sorted(merged)}), encoding="utf-8")
+    os.replace(tmp, path)
+    try:
+        path.chmod(0o600)
+    except OSError:
+        pass
 
 
 def _checkpoint_file(cfg: Config, transcript: Path) -> Path:

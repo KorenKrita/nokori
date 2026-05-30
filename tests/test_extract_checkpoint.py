@@ -75,7 +75,22 @@ def test_partial_extract_retry_skips_checkpointed_candidates(monkeypatch, tmp_pa
 
     _, _, finished = extract_cmd._process_path(path, "proj", cfg, dry_run=False)
     assert finished is False
-    assert len(merge_checkpoint.load_merged_keys(cfg, path)) == 1
+    merged_keys = merge_checkpoint.load_merged_keys(cfg, path)
+    assert len(merged_keys) >= 1
+    assert merge_checkpoint.is_candidate_merged(
+        cfg,
+        path,
+        Candidate(
+            trigger="deploy prisma schema",
+            trigger_variants=[],
+            search_terms={},
+            behavior=None,
+            action="use migrate deploy",
+            rationale=None,
+            source_type="correction",
+            confidence="medium",
+        ),
+    )
 
     db = open_db(cfg.db_path)
     try:

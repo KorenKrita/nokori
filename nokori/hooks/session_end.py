@@ -12,7 +12,6 @@ from ..extract.reader import stat as transcript_stat
 from ..lifecycle import transcript_index
 from ..utils import sessions
 from ..utils.logging import get_logger
-from ..utils.project import resolve_project_id
 from ..utils.transcript import resolve_transcript_path
 
 log = get_logger("nokori.hooks.session_end")
@@ -61,7 +60,7 @@ def handle(payload: dict, cfg: Config) -> dict:
     transcript_index.record_session_transcript(cfg, transcript)
     meta = transcript_stat(transcript)
     project_id = sessions.resolve_project_id_for_session(
-        cfg, session_id, payload.get("cwd"), resolve_fn=resolve_project_id,
+        cfg, session_id, payload.get("cwd"),
     )
     job_io.write_job(cfg, transcript, project_id, meta.mtime)
     log.info("queued extract job session=%s transcript=%s", session_id, transcript.name)
