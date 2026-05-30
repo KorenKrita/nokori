@@ -87,7 +87,7 @@ def run(_args: argparse.Namespace, cfg: Config) -> int:
                 proj_list += ",..."
             print(
                 f"  {row['short_id']}  {n_projects}/{CROSS_PROJECT_PROMOTE_THRESHOLD}  "
-                f"hits={row['cross_project_hits']}  "
+                f"shadow_hits={row['cross_project_hits']}  "
                 f"from={row['project_id']}  "
                 f"projects=[{proj_list}]  "
                 f"{trigger}"

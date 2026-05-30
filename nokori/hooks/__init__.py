@@ -37,6 +37,8 @@ def dispatch(event: str, cfg: Config) -> int:
         from ..utils.logging import get_logger
 
         get_logger("nokori.hooks").exception("hook %s failed; passing through", event)
+        if cfg.strict:
+            raise
         response = {"continue": True}
 
     if response is None:

@@ -21,11 +21,8 @@ def _resolve_transcript_path(payload: dict) -> Path | None:
     return None
 
 
-def _transcript_db_keys(path: Path) -> tuple[str, ...]:
-    """Keys used in extract_state; tolerate absolute vs resolved paths."""
-    resolved = path.expanduser().resolve()
-    keys = (str(path), str(resolved))
-    return tuple(dict.fromkeys(keys))
+def _transcript_db_key(path: Path) -> str:
+    return str(path.expanduser().resolve())
 
 
 def find_previous_transcript(current: Path) -> Path | None:
@@ -64,15 +61,11 @@ def find_previous_transcript(current: Path) -> Path | None:
 
 
 def _fetch_extract_state(db: Db, path: Path):
-    for key in _transcript_db_keys(path):
-        row = db.fetchone(
-            "SELECT extracted_at, transcript_mtime, status "
-            "FROM extract_state WHERE transcript_path = ?",
-            (key,),
-        )
-        if row is not None:
-            return row
-    return None
+    return db.fetchone(
+        "SELECT extracted_at, transcript_mtime, status "
+        "FROM extract_state WHERE transcript_path = ?",
+        (_transcript_db_key(path),),
+    )
 
 
 def _was_extracted(db: Db, path: Path) -> bool:
@@ -146,7 +139,7 @@ def maybe_inject(payload: dict, cfg: Config, db: Db) -> str | None:
 
 def mark_extracted(db: Db, path: Path, mtime: float) -> None:
     now = now_iso()
-    key = str(path.expanduser().resolve())
+    key = _transcript_db_key(path)
     with db.transaction() as tx:
         tx.execute(
             "INSERT INTO extract_state (transcript_path, transcript_mtime, "

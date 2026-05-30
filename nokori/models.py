@@ -14,6 +14,13 @@ TurnRole = Literal["human", "assistant", "tool_use", "tool_result"]
 
 @dataclass(frozen=True)
 class Rule:
+    """Persistent rule row.
+
+    cross_project_hits counts shadow HOT events (per project:day deduped in
+    promotion_evidence). Global promotion threshold uses distinct project_ids
+    in promotion_evidence, not this counter alone.
+    """
+
     id: str
     short_id: str
     trigger_text: str

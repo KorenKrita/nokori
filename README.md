@@ -363,7 +363,15 @@ export NOKORI_EMBED_MODEL="nomic-embed-text"
 pip install nokori[local-embed]
 ```
 
-安装 `sentence-transformers` 后，当可检索规则 ≥ 20 且未配置远程 embed endpoint 时，使用本地 **`paraphrase-multilingual-MiniLM-L12-v2`**（118MB，384 维）。模型由 **embed 共享进程**加载到 `~/.nokori/models/`，hook 默认会通过 `NOKORI_EMBED_SERVER_AUTO_START=1` 自动拉起该进程（`nokori embed start` 亦可手动启动）。
+安装 `sentence-transformers` 后，当可检索规则 ≥ 20 且未配置远程 embed endpoint 时，使用本地 **`paraphrase-multilingual-MiniLM-L12-v2`**（118MB，384 维）。模型由 **embed 共享进程**加载到 `~/.nokori/models/`。
+
+Hook 行为（`NOKORI_EMBED_SERVER_AUTO_START=1`，默认开）：
+
+- **SessionStart**：非阻塞 `spawn` embed server（若尚未运行）
+- **UserPromptSubmit**：若 server 尚未 `ping` 通 → 后台 spawn、**当轮纯 BM25**；下一轮起通常有 RRF
+- 不在 hook 内等待最多 45s 模型加载（避免超过 Claude 10s hook 超时）
+
+`nokori embed start` 可提前拉起；`NOKORI_EMBED_ENABLED=1` 会强制尝试 embed（即使规则 <20），小库首条仍可能 BM25-only。
 
 优先级：远程 API（配了 base_url）> 本地 embed server（装了 `[local-embed]`）> 纯 BM25。server 未就绪时回退 BM25，不在每个 hook 子进程里再加载一遍模型。
 
@@ -457,6 +465,7 @@ nokori install [--dry-run | --uninstall | --disable | --enable]
 | `NOKORI_EMBED_DIMENSIONS` | `0`（不传，用模型默认） | 向量维度（仅支持该参数的模型需要设） |
 | `NOKORI_EMBED_CHUNK_SIZE` | `512` | 文本分块字符数 |
 | `NOKORI_EMBED_CHUNK_COUNT` | `3` | 每规则最多分块数 |
+| `NOKORI_STRICT` | `0` | `1` 时 hook 异常向上抛出（调试；默认 fail-open） |
 | `NOKORI_DISABLED` | `0` | 完全禁用 |
 | `NOKORI_DISMISS_PHRASE` | `dismiss` | 对话里退役规则的动词（`动词 + short_id`）；见 [Dismiss](#4-规则过时了dismiss) |
 | `NOKORI_LOG_LEVEL` | `warn` | 日志级别 |

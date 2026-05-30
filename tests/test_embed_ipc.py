@@ -63,6 +63,68 @@ def test_embed_ipc_ping_and_shutdown(monkeypatch, tmp_path):
     stop.wait(timeout=2.0)
 
 
+def test_kickstart_spawns_without_blocking(monkeypatch, tmp_path):
+    monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+    cfg = Config.from_env()
+    spawned: list[int] = []
+    monkeypatch.setattr(embed_ipc, "ping", lambda c, **kw: False)
+    monkeypatch.setattr(embed_ipc, "spawn_server", lambda c: spawned.append(1))
+    assert embed_ipc.kickstart_server(cfg) is False
+    assert spawned == [1]
+
+
+def test_hook_search_skips_embed_when_server_not_ready(monkeypatch, tmp_path):
+    monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+    cfg = Config.from_env()
+    from nokori.db import open_db
+    from nokori.models import Rule
+    from nokori.search import embedding
+
+    rule = Rule(
+        id="r1",
+        short_id="r1abcd",
+        trigger_text="git push force",
+        trigger_variants=[],
+        search_terms={},
+        behavior=None,
+        action="do not",
+        rationale=None,
+        source_type="correction",
+        confidence="high",
+        status="active",
+        evidence_score=0,
+        evidence_log=[],
+        hit_count=0,
+        last_hit=None,
+        cross_project_hits=0,
+        promotion_evidence=[],
+        project_scope="project",
+        project_id="p1",
+        superseded_by=None,
+        archived_reason=None,
+        created_at="2026-01-01T00:00:00Z",
+        updated_at="2026-01-01T00:00:00Z",
+    )
+    db = open_db(cfg.db_path)
+    try:
+        waited: list[float] = []
+
+        def fake_ensure(*a, **kw):
+            waited.append(kw.get("max_wait", 0))
+            return True
+
+        monkeypatch.setattr(embedding, "_sentence_transformers_available", lambda: True)
+        monkeypatch.setattr(embed_ipc, "kickstart_server", lambda c: False)
+        monkeypatch.setattr(embed_ipc, "ensure_running", fake_ensure)
+        results, mode = embedding.search_local_shared(
+            "git push", [rule], db, cfg, interaction="hook"
+        )
+        assert results == [] and mode == "off"
+        assert not waited
+    finally:
+        db.close()
+
+
 def test_sessions_active_idle(monkeypatch, tmp_path):
     monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
     monkeypatch.setenv("NOKORI_SESSION_IDLE_SECONDS", "60")

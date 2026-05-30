@@ -26,20 +26,23 @@ from ..utils.time import now_iso
 
 log = get_logger("nokori.hooks.user_prompt_submit")
 
-_DISMISS_RE = re.compile(r"\b(?P<phrase>\w+)\s+(?P<sid>[a-f0-9]{6,32})\b")
+def _dismiss_re(phrase: str) -> re.Pattern[str]:
+    escaped = re.escape(phrase.lower())
+    return re.compile(
+        rf"(?i)(?P<phrase>{escaped})[\s,，、;:：]+(?P<sid>[a-f0-9]{{6,32}})\b"
+    )
 
 
 def _run_dismiss(db: Db, prompt: str, session_id: str, cfg: Config) -> int:
     """Returns number of rules archived via inline dismiss in this prompt."""
     phrase = (cfg.dismiss_phrase or "dismiss").lower()
+    pattern = _dismiss_re(phrase)
     count = 0
     now = now_iso()
     from datetime import timedelta
     cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
     cutoff_iso = cutoff.isoformat(timespec="seconds").replace("+00:00", "Z")
-    for m in _DISMISS_RE.finditer(prompt or ""):
-        if m.group("phrase").lower() != phrase:
-            continue
+    for m in pattern.finditer(prompt or ""):
         sid = m.group("sid")
         rid = find_rule_id_by_recent_injection(db, session_id, sid, cutoff_iso)
         if rid is None:

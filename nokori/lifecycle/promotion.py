@@ -70,6 +70,7 @@ def record_shadow_hit(db: Db, rule_id: str, current_project_id: str | None) -> b
     with db.transaction() as tx:
         tx.execute(
             "UPDATE rules SET promotion_evidence = ?, "
+            # cross_project_hits: total shadow HOT events (deduped per project:day in evidence)
             "cross_project_hits = cross_project_hits + 1, "
             "evidence_score = ?, evidence_log = ?, updated_at = ? "
             "WHERE id = ?",

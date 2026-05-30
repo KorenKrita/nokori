@@ -239,17 +239,6 @@ class LocalEmbeddingClient:
         return [v.tolist() for v in vectors]
 
 
-def store_rule_embedding_local(db: Db, rule: Rule, client: LocalEmbeddingClient) -> int:
-    if not client.available():
-        return 0
-    try:
-        vectors = client.embed(_rule_text(rule))
-    except Exception as e:
-        log.warning("local embed store failed rule=%s err=%s", rule.id, e)
-        return 0
-    return _store_impl(db, rule.id, vectors, LOCAL_MODEL_NAME)
-
-
 def search_local_shared(
     query: str,
     rules: Sequence[Rule],
@@ -266,8 +255,11 @@ def search_local_shared(
     if not rules or not _sentence_transformers_available():
         return [], "off"
 
-    max_wait = embed_ipc._STARTUP_WAIT_SECONDS if interaction == "hook" else 15.0
-    if not embed_ipc.ensure_running(cfg, max_wait=max_wait):
+    if interaction == "hook":
+        if not embed_ipc.kickstart_server(cfg):
+            log.info("embed skipped on hook (server not ready; BM25-only this turn)")
+            return [], "off"
+    elif not embed_ipc.ensure_running(cfg, max_wait=15.0):
         return [], "off"
 
     qvecs = embed_ipc.embed_text(cfg, query, timeout=timeout, auto_start=False)

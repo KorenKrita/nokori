@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Sequence
+from dataclasses import replace
 
 from ..models import ScoredResult
 
@@ -25,7 +26,7 @@ def rrf_fuse(
         if r.rule.id not in rule_map:
             rule_map[r.rule.id] = r
         elif r.cosine is not None:
-            rule_map[r.rule.id].cosine = r.cosine
+            rule_map[r.rule.id] = replace(rule_map[r.rule.id], cosine=r.cosine)
 
     fused: list[ScoredResult] = []
     for rule_id, score in sorted(scores.items(), key=lambda kv: -kv[1]):

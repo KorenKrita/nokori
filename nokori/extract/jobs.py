@@ -14,12 +14,17 @@ def transcript_hash(path: Path, mtime: float) -> str:
     return hashlib.sha256(raw).hexdigest()[:16]
 
 
+def _job_transcript_path(transcript_path: Path) -> str:
+    return str(transcript_path.expanduser().resolve())
+
+
 def write_job(cfg: Config, transcript_path: Path, project_id: str | None,
               mtime: float) -> Path:
     cfg.ensure_dirs()
     h = transcript_hash(transcript_path, mtime)
+    path_str = _job_transcript_path(transcript_path)
     payload = {
-        "transcript_path": str(transcript_path),
+        "transcript_path": path_str,
         "transcript_hash": h,
         "transcript_mtime": mtime,
         "project_id": project_id,
@@ -33,7 +38,7 @@ def write_job(cfg: Config, transcript_path: Path, project_id: str | None,
         except (OSError, json.JSONDecodeError):
             existing = {}
         existing.update({
-            "transcript_path": str(transcript_path),
+            "transcript_path": path_str,
             "transcript_hash": h,
             "transcript_mtime": mtime,
             "project_id": project_id,

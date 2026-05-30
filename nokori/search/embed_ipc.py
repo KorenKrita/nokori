@@ -137,8 +137,22 @@ def spawn_server(cfg: Config) -> None:
             pass
 
 
+def kickstart_server(cfg: Config) -> bool:
+    """Return True if embed server is up now.
+
+    On hook path: spawn detached server when auto_start is enabled but do not
+    block waiting for model load — caller falls back to BM25 for this turn.
+    """
+    if ping(cfg):
+        return True
+    if cfg.embed_server_auto_start:
+        spawn_server(cfg)
+        log.info("embed server spawn requested (not waiting on hook path)")
+    return False
+
+
 def ensure_running(cfg: Config, *, max_wait: float | None = None) -> bool:
-    """Ping or auto-start the embed server; wait until ready or timeout."""
+    """Ping or auto-start the embed server; wait until ready or timeout (CLI/index)."""
     if not cfg.embed_server_auto_start:
         return ping(cfg)
     if ping(cfg):

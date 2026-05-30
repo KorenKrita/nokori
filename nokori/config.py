@@ -47,6 +47,7 @@ _TOML_TO_ENV = {
     ("hot_cache", "enabled"): "NOKORI_HOT_CACHE",
     ("session", "idle_seconds"): "NOKORI_SESSION_IDLE_SECONDS",
     ("promotion", "enabled"): "NOKORI_PROMOTION_ENABLED",
+    ("strict",): "NOKORI_STRICT",
     ("disabled",): "NOKORI_DISABLED",
     ("dismiss_phrase",): "NOKORI_DISMISS_PHRASE",
     ("log_level",): "NOKORI_LOG_LEVEL",
@@ -173,6 +174,7 @@ class Config:
     hot_cache_enabled: bool
     session_idle_seconds: int
     promotion_enabled: bool
+    strict: bool
     disabled: bool
     dismiss_phrase: str
     log_level: str
@@ -218,6 +220,7 @@ class Config:
                 "NOKORI_SESSION_IDLE_SECONDS", 1800, file_values, min_value=60
             ),
             promotion_enabled=_bool_val("NOKORI_PROMOTION_ENABLED", True, file_values),
+            strict=_bool_val("NOKORI_STRICT", False, file_values),
             disabled=_bool_val("NOKORI_DISABLED", False, file_values),
             dismiss_phrase=_str_val("NOKORI_DISMISS_PHRASE", "dismiss", file_values),
             log_level=_str_val("NOKORI_LOG_LEVEL", "warn", file_values),
