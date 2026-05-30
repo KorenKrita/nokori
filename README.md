@@ -47,6 +47,7 @@ nokori install
 # 验证
 nokori health
 nokori status
+nokori logs          # hook / pipeline / async-extract 日志
 ```
 
 `nokori install` 会合并 hooks 到 `~/.claude/settings.json`，不覆盖你已有的其他 hooks。

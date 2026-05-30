@@ -17,9 +17,14 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
 
     db = open_db(cfg.db_path)
     try:
-        rules = fetch_rules(
-            db, statuses=("active", "dormant"), project_id=project_id
-        )
+        if project_id is None:
+            rules = fetch_rules(
+                db, statuses=("active", "dormant"), global_only=True
+            )
+        else:
+            rules = fetch_rules(
+                db, statuses=("active", "dormant"), project_id=project_id
+            )
 
         result = retrieve_and_tier(args.prompt, rules, db, cfg, top_k=10)
         hot, warm = result.hot, result.warm

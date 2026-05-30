@@ -76,7 +76,11 @@ def delete(cfg: Config, session_id: str) -> None:
 
 
 def resolve_current_prompt_hash(
-    payload: dict, db: Db, session_id: str,
+    payload: dict,
+    db: Db,
+    session_id: str,
+    *,
+    marker: Marker | None = None,
 ) -> str | None:
     """Best-effort hash for the active user turn (PreToolUse has no prompt field)."""
     for key in ("prompt", "user_prompt"):
@@ -90,6 +94,8 @@ def resolve_current_prompt_hash(
     )
     if row and row["prompt_hash"]:
         return str(row["prompt_hash"])
+    if marker and marker.prompt_hash:
+        return marker.prompt_hash
     return None
 
 

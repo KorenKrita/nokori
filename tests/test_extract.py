@@ -232,6 +232,73 @@ def test_extract_llm_failure_does_not_mark_extracted(monkeypatch, tmp_path):
         db.close()
 
 
+def test_batch_extract_keeps_job_on_merge_llm_failure(monkeypatch, tmp_path):
+    monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+    cfg = Config.from_env()
+    cfg.ensure_dirs()
+    path = tmp_path / "merge-fail.jsonl"
+    path.write_text('{"type":"user","message":{"content":"fix bug"}}\n', encoding="utf-8")
+    from nokori.extract import jobs as job_io
+
+    job_io.write_job(cfg, path, "proj", path.stat().st_mtime)
+
+    extract_response = json.dumps([{
+        "trigger": "brand new trigger xyz",
+        "action": "do the new thing",
+        "source_type": "solution",
+        "confidence": "medium",
+    }])
+    from nokori.commands import extract as extract_cmd
+    from nokori.db import open_db
+    from nokori.extract.extractor import Candidate
+    from nokori.extract.merger import merge_candidate
+    import argparse
+
+    class SeqLLM:
+        def __init__(self):
+            self.n = 0
+
+        def complete(self, prompt, *, max_tokens=2000, timeout=30):
+            self.n += 1
+            if self.n == 1:
+                return extract_response
+            raise RuntimeError("merge down")
+
+    monkeypatch.setattr(extract_cmd, "LLMAdapter", lambda cfg: SeqLLM())
+    db = open_db(cfg.db_path)
+    try:
+        merge_candidate(
+            Candidate(
+                trigger="existing rule seed",
+                trigger_variants=[],
+                search_terms={},
+                behavior=None,
+                action="seed action",
+                rationale=None,
+                source_type="correction",
+                confidence="high",
+            ),
+            db,
+            FakeLLM("[]"),
+            project_id="proj",
+        )
+    finally:
+        db.close()
+
+    args = argparse.Namespace(session=None, dry_run=False)
+    assert extract_cmd.run(args, cfg) == 0
+    assert len(job_io.list_pending(cfg)) == 1
+    db = open_db(cfg.db_path)
+    try:
+        row = db.fetchone(
+            "SELECT 1 FROM extract_state WHERE transcript_path = ?",
+            (str(path.resolve()),),
+        )
+        assert row is None
+    finally:
+        db.close()
+
+
 def test_batch_extract_keeps_job_on_llm_failure(monkeypatch, tmp_path):
     monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
     cfg = Config.from_env()

@@ -158,6 +158,55 @@ def test_disabled_short_circuits_user_prompt(tmp_path):
     assert json.loads(r.stdout.strip()) == {"continue": True}
 
 
+def test_hook_without_cwd_injects_global_rules_only(tmp_path):
+    """No cwd → project_id unresolved; must not inject other projects' rules."""
+    env = {"NOKORI_DATA_DIR": str(tmp_path), "NOKORI_GATE_ENABLED": "0"}
+    proj_short = _run(
+        "add",
+        "--trigger",
+        "project only force push branch",
+        "--action",
+        "use lease in this repo",
+        "--source-type",
+        "correction",
+        "--confidence",
+        "high",
+        "--variants",
+        "git push --force proj",
+        "--project-id",
+        "proj-isolated",
+        env_extra=env,
+    ).stdout.split()[1]
+    global_short = _run(
+        "add",
+        "--trigger",
+        "global never force push shared branch",
+        "--action",
+        "use --force-with-lease globally",
+        "--source-type",
+        "correction",
+        "--confidence",
+        "high",
+        "--variants",
+        "git push --force",
+        env_extra=env,
+    ).stdout.split()[1]
+
+    r = _run(
+        "hook",
+        "user-prompt-submit",
+        env_extra=env,
+        stdin=json.dumps({
+            "session_id": "s-no-cwd",
+            "prompt": "ok let me git push --force to remote",
+        }),
+    )
+    assert r.returncode == 0, r.stderr
+    text = json.loads(r.stdout).get("hookSpecificOutput", {}).get("additionalContext", "")
+    assert global_short in text
+    assert proj_short not in text
+
+
 def test_pre_tool_use_skips_non_matching_tool(tmp_path):
     """PreToolUse should not block tools not in gate_matcher."""
     _add_high_active(tmp_path, "force push", "lease", variants=["git push --force"])

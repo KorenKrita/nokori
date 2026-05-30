@@ -29,6 +29,7 @@ class MergeOutcome:
     activated: int
     merged: int
     superseded: int
+    merge_ok: bool = True
 
 
 def _initial_status(cand: Candidate) -> str:
@@ -232,10 +233,12 @@ def merge_candidate(
     judgment_payload = _ask_llm(cand, neighbors, llm)
     if judgment_payload is None:
         log.warning(
-            "merge llm failed, skipping insert (neighbors exist): %s",
+            "merge llm failed, keeping extract pending (neighbors exist): %s",
             cand.trigger[:60],
         )
-        return MergeOutcome(inserted=0, activated=0, merged=0, superseded=0)
+        return MergeOutcome(
+            inserted=0, activated=0, merged=0, superseded=0, merge_ok=False,
+        )
     judgment = judgment_payload.get("relationships", [])
     by_id = {r.id: r for r in neighbors}
     inserted = activated = merged = superseded = 0
@@ -284,5 +287,10 @@ def merge_candidate(
     if "A" in {(r.get("judgment") or "").upper()[:1] for r in judgment}:
         merged = sum(1 for eid in handled_existing if by_id[eid].status == "candidate")
 
-    return MergeOutcome(inserted=inserted, activated=activated, merged=merged,
-                        superseded=superseded)
+    return MergeOutcome(
+        inserted=inserted,
+        activated=activated,
+        merged=merged,
+        superseded=superseded,
+        merge_ok=True,
+    )

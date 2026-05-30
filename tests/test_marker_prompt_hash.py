@@ -27,6 +27,27 @@ def test_prompt_hash_matches():
     assert marker_io.prompt_hash_matches(m, None) is False
 
 
+def test_pre_tool_use_blocks_when_marker_only_no_injection(monkeypatch, tmp_path):
+    """Gate uses marker.prompt_hash when injections row is missing."""
+    monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+    cfg = Config.from_env()
+    sess = "s-marker-only"
+    ph = prompt_hash("git push --force the branch")
+    marker_io.write(
+        cfg,
+        sess,
+        "git push --force the branch",
+        [MarkerRule("rule01", "use lease", "correction", "rationale")],
+        ph=ph,
+    )
+    from nokori.hooks.pre_tool_use import handle
+
+    out = handle({"session_id": sess, "tool_name": "Bash"}, cfg)
+    hso = out.get("hookSpecificOutput") or {}
+    assert hso.get("permissionDecision") == "deny"
+    assert not cfg.marker_path(sess).exists()
+
+
 def test_pre_tool_use_skips_block_on_stale_prompt_hash(monkeypatch, tmp_path):
     monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
     cfg = Config.from_env()

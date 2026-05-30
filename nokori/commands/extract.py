@@ -43,13 +43,19 @@ def _process_path(path: Path, project_id: str | None, cfg: Config,
     db = open_db(cfg.db_path)
     try:
         merged = 0
+        merge_ok = True
         for cand in candidates:
             outcome = merge_candidate(cand, db, llm, project_id, cfg=cfg)
+            if not outcome.merge_ok:
+                merge_ok = False
             merged += outcome.inserted + outcome.activated + outcome.superseded
-        mark_extracted(db, path, path.stat().st_mtime)
+        if merge_ok:
+            mark_extracted(db, path, path.stat().st_mtime)
+        else:
+            log.warning("extract merge incomplete, transcript not marked extracted: %s", path)
     finally:
         db.close()
-    return (len(candidates), merged, True)
+    return (len(candidates), merged, merge_ok)
 
 
 def run(args: argparse.Namespace, cfg: Config) -> int:

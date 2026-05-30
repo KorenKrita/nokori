@@ -231,15 +231,22 @@ def total_rule_count(db: "Db") -> int:
     return int(row["n"]) if row else 0
 
 
-def fetch_rules(db: "Db", *, statuses: tuple[str, ...] | None = None,
-                project_id: str | None = None) -> list:
+def fetch_rules(
+    db: "Db",
+    *,
+    statuses: tuple[str, ...] | None = None,
+    project_id: str | None = None,
+    global_only: bool = False,
+) -> list:
     where = []
     params: list = []
     if statuses:
         placeholders = ",".join("?" * len(statuses))
         where.append(f"status IN ({placeholders})")
         params.extend(statuses)
-    if project_id is not None:
+    if global_only:
+        where.append("project_scope = 'global'")
+    elif project_id is not None:
         where.append("(project_scope = 'global' OR project_id = ?)")
         params.append(project_id)
     sql = f"SELECT {RULE_COLUMNS} FROM rules"

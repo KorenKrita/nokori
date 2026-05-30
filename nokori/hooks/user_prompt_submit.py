@@ -105,9 +105,14 @@ def handle(payload: dict, cfg: Config) -> dict:
     try:
         _run_dismiss(db, prompt, session_id, cfg)
 
-        rules = fetch_rules(
-            db, statuses=("active", "dormant"), project_id=project_id
-        )
+        if project_id is None:
+            rules = fetch_rules(
+                db, statuses=("active", "dormant"), global_only=True
+            )
+        else:
+            rules = fetch_rules(
+                db, statuses=("active", "dormant"), project_id=project_id
+            )
         pool_size = total_rule_count(db)
         if not rules:
             if cfg.gate_enabled:

@@ -250,25 +250,6 @@ def store_rule_embedding_local(db: Db, rule: Rule, client: LocalEmbeddingClient)
     return _store_impl(db, rule.id, vectors, LOCAL_MODEL_NAME)
 
 
-def search_local(
-    query: str,
-    rules: Sequence[Rule],
-    db: Db,
-    client: LocalEmbeddingClient,
-    *,
-    top_k: int = 10,
-) -> list[ScoredResult]:
-    if not client.available() or not rules:
-        return []
-    try:
-        qvecs = client.embed(query)
-    except Exception:
-        return []
-    if not qvecs:
-        return []
-    return _search_impl(qvecs[0], rules, db, top_k)
-
-
 def search_local_shared(
     query: str,
     rules: Sequence[Rule],

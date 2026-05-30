@@ -52,7 +52,9 @@ def handle(payload: dict, cfg: Config) -> dict:
 
     db = open_db(cfg.db_path)
     try:
-        current_ph = marker_io.resolve_current_prompt_hash(payload, db, session_id)
+        current_ph = marker_io.resolve_current_prompt_hash(
+            payload, db, session_id, marker=marker,
+        )
         if not marker_io.prompt_hash_matches(marker, current_ph):
             log.info(
                 "gate marker stale (prompt_hash mismatch), clearing session=%s",
