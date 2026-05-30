@@ -287,6 +287,9 @@ def log_injections_batch(
     prompt_hash: str,
     entries: list[tuple[str, str]],
     now: str,
+    *,
+    cfg=None,
+    defer_rule_updates: bool = False,
 ) -> None:
     if not entries:
         return
@@ -297,12 +300,22 @@ def log_injections_batch(
                 "VALUES (?,?,?,?,?)",
                 (rule_id, session_id, prompt_hash, level, now),
             )
-            if level == "hot":
-                tx.execute(
-                    "UPDATE rules SET hit_count = hit_count + 1, last_hit = ?, "
-                    "updated_at = ? WHERE id = ?",
-                    (now, now, rule_id),
-                )
+    hot_ids = [rule_id for rule_id, level in entries if level == "hot"]
+    if not hot_ids:
+        return
+    if defer_rule_updates and cfg is not None:
+        from nokori.lifecycle import deferred
+
+        for rule_id in hot_ids:
+            deferred.enqueue_rule_hit(cfg, rule_id, now)
+        return
+    with db.transaction() as tx:
+        for rule_id in hot_ids:
+            tx.execute(
+                "UPDATE rules SET hit_count = hit_count + 1, last_hit = ?, "
+                "updated_at = ? WHERE id = ?",
+                (now, now, rule_id),
+            )
 
 
 def find_rule_id_by_recent_injection(

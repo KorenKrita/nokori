@@ -10,7 +10,7 @@ from ..lifecycle import maintenance
 def run(_args: argparse.Namespace, cfg: Config) -> int:
     db = open_db(cfg.db_path)
     try:
-        summary = maintenance.run_due_jobs(db)
+        summary = maintenance.run_due_jobs(db, cfg)
     finally:
         db.close()
     print(f"dormant_scan      moved={summary['dormant_scan']}")

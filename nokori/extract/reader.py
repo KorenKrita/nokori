@@ -55,6 +55,58 @@ def read(path: Path) -> list[Turn]:
     return out
 
 
+def read_tail_user_turns(path: Path, limit: int = 3) -> list[Turn]:
+    """Last N user turns without loading the full transcript into memory."""
+    if limit <= 0 or not path.exists():
+        return []
+    try:
+        size = path.stat().st_size
+    except OSError:
+        return []
+    if size > MAX_TRANSCRIPT_BYTES:
+        raise NokoriError(
+            f"transcript too large ({size} bytes; max {MAX_TRANSCRIPT_BYTES})"
+        )
+
+    human: list[Turn] = []
+    block = 65536
+    leftover = b""
+    with open(path, "rb") as f:
+        pos = f.seek(0, 2)
+        while pos > 0 and len(human) < limit:
+            step = min(block, pos)
+            pos -= step
+            f.seek(pos)
+            chunk = f.read(step) + leftover
+            parts = chunk.split(b"\n")
+            leftover = parts[0]
+            for raw in reversed(parts[1:]):
+                raw = raw.strip()
+                if not raw:
+                    continue
+                try:
+                    entry = json.loads(raw.decode("utf-8", errors="replace"))
+                except json.JSONDecodeError:
+                    continue
+                turn = _parse(entry)
+                if turn and turn.role == "human":
+                    human.append(turn)
+                    if len(human) >= limit:
+                        break
+        if len(human) < limit and leftover.strip():
+            try:
+                entry = json.loads(leftover.decode("utf-8", errors="replace"))
+            except json.JSONDecodeError:
+                pass
+            else:
+                turn = _parse(entry)
+                if turn and turn.role == "human":
+                    human.append(turn)
+
+    human.reverse()
+    return human[-limit:]
+
+
 def _parse(entry: dict) -> Turn | None:
     t = entry.get("type") or entry.get("role")
     if t == "user" or t == "human":

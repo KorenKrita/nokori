@@ -6,7 +6,8 @@ from pathlib import Path
 from ..config import Config
 from ..constants import TRANSCRIPT_MTIME_EPSILON_SEC
 from ..db import Db
-from ..extract.reader import read as read_transcript
+from ..extract.reader import read_tail_user_turns
+from . import transcript_index
 from ..utils.time import now_iso
 from ..utils.transcript import is_path_allowed, resolve_transcript_path
 
@@ -18,7 +19,16 @@ def _transcript_db_key(path: Path) -> str:
     return str(path.expanduser().resolve())
 
 
-def find_previous_transcript(current: Path) -> Path | None:
+def find_previous_transcript(current: Path, cfg: Config | None = None) -> Path | None:
+    """Previous session transcript: O(1) index when available, else directory scan."""
+    if cfg is not None:
+        indexed = transcript_index.lookup_previous(cfg, current)
+        if indexed is not None:
+            return indexed
+    return _find_previous_transcript_glob(current)
+
+
+def _find_previous_transcript_glob(current: Path) -> Path | None:
     """Pick the newest *.jsonl in the same directory with mtime strictly before *current*."""
     current = current.expanduser().resolve()
     if not current.is_file():
@@ -103,18 +113,16 @@ def maybe_inject(payload: dict, cfg: Config, db: Db) -> str | None:
     if current is None:
         return None
 
-    previous = find_previous_transcript(current)
+    previous = find_previous_transcript(current, cfg)
     if previous is None:
         return None
 
     if _was_extracted(db, previous):
         return None
 
-    turns = read_transcript(previous)
-    user_turns = [t for t in turns if t.role == "human"]
-    if not user_turns:
+    tail = read_tail_user_turns(previous, HOT_CACHE_RECENT_TURNS)
+    if not tail:
         return None
-    tail = user_turns[-HOT_CACHE_RECENT_TURNS:]
 
     parts = ["[Nokori hot-cache] last messages from the previous session:"]
     used = len(parts[0]) + 1

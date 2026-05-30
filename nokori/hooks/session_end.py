@@ -9,6 +9,7 @@ from ..config import Config
 from ..extract import jobs as job_io
 from ..extract.lock import is_locked
 from ..extract.reader import stat as transcript_stat
+from ..lifecycle import transcript_index
 from ..utils import sessions
 from ..utils.logging import get_logger
 from ..utils.project import resolve_project_id
@@ -57,6 +58,7 @@ def handle(payload: dict, cfg: Config) -> dict:
     if transcript is None:
         return {"continue": True}
 
+    transcript_index.record_session_transcript(cfg, transcript)
     meta = transcript_stat(transcript)
     project_id = resolve_project_id(payload.get("cwd"))
     job_io.write_job(cfg, transcript, project_id, meta.mtime)

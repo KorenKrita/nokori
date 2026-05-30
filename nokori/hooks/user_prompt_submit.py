@@ -16,7 +16,7 @@ from ..db import (
 from ..gate import marker as marker_io
 from ..gate.blocker import format_injection, select_gate_rules
 from ..gate.marker import MarkerRule, prompt_hash
-from ..lifecycle import maintenance, promotion
+from ..lifecycle import deferred
 from ..search.retrieve import retrieve_formal_and_shadow
 from ..utils import sessions
 from ..utils.logging import get_logger
@@ -118,12 +118,7 @@ def handle(payload: dict, cfg: Config) -> dict:
 
         if project_id:
             for r in shadow_hot:
-                try:
-                    promotion.record_shadow_hit(db, r.rule.id, project_id)
-                except Exception as e:
-                    log.info(
-                        "shadow promotion skipped rule=%s: %s", r.rule.id, e,
-                    )
+                deferred.enqueue_shadow_hit(cfg, r.rule.id, project_id)
 
         if not hot and not warm:
             if cfg.gate_enabled:
@@ -139,11 +134,12 @@ def handle(payload: dict, cfg: Config) -> dict:
         if text:
             entries = [(r.rule.id, "hot") for r in hot]
             entries.extend((r.rule.id, "warm") for r in warm)
-            log_injections_batch(db, session_id, ph, entries, now)
+            log_injections_batch(
+                db, session_id, ph, entries, now, cfg=cfg, defer_rule_updates=True,
+            )
         for r in warm:
             if r.retrieval_hot and r.rule.status == "dormant":
-                # Dormant reactivation: this turn stays WARM (no gate); next turn may HOT.
-                maintenance.reactivate_dormant_on_retrieval_hot(db, r.rule.id)
+                deferred.enqueue_dormant_reactivate(cfg, r.rule.id)
 
         _update_gate_marker(cfg, session_id, prompt, hot, ph)
 

@@ -165,6 +165,9 @@ class TestShadowPoolHotTier:
                 "prompt": "git push force remote branch",
                 "cwd": str(proj),
             }, cfg)
+            from nokori.lifecycle import deferred
+
+            deferred.flush_deferred_writes(db, cfg)
             row = db.fetchone(
                 "SELECT shadow_hit_count, evidence_score FROM rules WHERE id = ?",
                 ("rule-strong",),
