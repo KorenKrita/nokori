@@ -19,6 +19,10 @@ class FakeLLM:
         self.calls += 1
         return self.response
 
+    def complete_messages(self, system, user, *, max_tokens=2000, timeout=30):
+        self.calls += 1
+        return self.response
+
 
 def test_extractor_parses_array(tmp_path):
     response = json.dumps([
@@ -57,9 +61,9 @@ def test_extractor_handles_fenced_json():
     assert ok and cands == []
 
 
-def test_extractor_skips_invalid_json():
+def test_extractor_non_json_is_llm_failure():
     cands, ok = extract("nonempty", FakeLLM("this is not json {"))
-    assert ok and cands == []
+    assert cands == [] and ok is False
 
 
 def test_extractor_llm_failure_not_ok():
@@ -215,6 +219,9 @@ def test_extract_llm_failure_does_not_mark_extracted(monkeypatch, tmp_path):
         def complete(self, *a, **k):
             raise RuntimeError("llm down")
 
+        def complete_messages(self, *a, **k):
+            raise RuntimeError("llm down")
+
     from nokori.commands import extract as extract_cmd
     from nokori.db import open_db
 
@@ -264,6 +271,9 @@ def test_batch_extract_keeps_job_on_merge_llm_failure(monkeypatch, tmp_path):
                 return extract_response
             raise RuntimeError("merge down")
 
+        def complete_messages(self, system, user, *, max_tokens=2000, timeout=30):
+            return self.complete(user, max_tokens=max_tokens, timeout=timeout)
+
     monkeypatch.setattr(extract_cmd, "LLMAdapter", lambda cfg: SeqLLM())
     db = open_db(cfg.db_path)
     try:
@@ -287,7 +297,7 @@ def test_batch_extract_keeps_job_on_merge_llm_failure(monkeypatch, tmp_path):
 
     args = argparse.Namespace(session=None, dry_run=False)
     assert extract_cmd.run(args, cfg) == 0
-    assert len(job_io.list_pending(cfg)) == 1
+    assert len(job_io.list_jobs(cfg)) == 1
     db = open_db(cfg.db_path)
     try:
         row = db.fetchone(
@@ -329,13 +339,16 @@ def test_batch_extract_keeps_job_on_llm_failure(monkeypatch, tmp_path):
         def complete(self, *a, **k):
             raise RuntimeError("llm down")
 
+        def complete_messages(self, *a, **k):
+            raise RuntimeError("llm down")
+
     from nokori.commands import extract as extract_cmd
     import argparse
 
     monkeypatch.setattr(extract_cmd, "LLMAdapter", lambda cfg: FailLLM())
     args = argparse.Namespace(session=None, dry_run=False)
     assert extract_cmd.run(args, cfg) == 0
-    assert len(job_io.list_pending(cfg)) == 1
+    assert len(job_io.list_jobs(cfg)) == 1
 
 
 def test_extract_refreshes_job_when_transcript_mtime_changes(monkeypatch, tmp_path):
@@ -360,7 +373,7 @@ def test_extract_refreshes_job_when_transcript_mtime_changes(monkeypatch, tmp_pa
 
     args = argparse.Namespace(session=None, dry_run=True)
     assert run(args, cfg) == 0
-    pending = job_io.list_pending(cfg)
+    pending = job_io.list_jobs(cfg)
     assert len(pending) == 1
     job = job_io.read_job(pending[0])
     assert job is not None

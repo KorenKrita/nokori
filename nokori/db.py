@@ -317,6 +317,19 @@ def find_rule_id_by_recent_injection(
     return row["id"] if row else None
 
 
+def find_rule_id_injected_since(
+    db: "Db", short_id: str, since_iso: str,
+) -> str | None:
+    """Any session: rule short_id injected since cutoff (CLI dismiss 24h window)."""
+    row = db.fetchone(
+        "SELECT r.id AS id FROM injections i JOIN rules r ON r.id = i.rule_id "
+        "WHERE r.short_id = ? AND i.created_at >= ? "
+        "ORDER BY i.created_at DESC LIMIT 1",
+        (short_id, since_iso),
+    )
+    return row["id"] if row else None
+
+
 def fetch_shadow_rules(db: "Db", *, project_id: str | None) -> list:
     """Fetch shadow pool rules: other projects' high-confidence active rules
     with source_type in (correction, anti_pattern, solution)."""

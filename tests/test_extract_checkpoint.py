@@ -58,10 +58,10 @@ def test_partial_extract_retry_skips_checkpointed_candidates(monkeypatch, tmp_pa
             self.extract_calls = 0
             self.merge_calls = 0
 
-        def complete(self, prompt, *, max_tokens=3000, timeout=60):
-            if "NEW rule candidate" in prompt:
+        def complete_messages(self, system, user, *, max_tokens=3000, timeout=60):
+            if "NEW CANDIDATE" in user or "EXISTING RULES" in user:
                 self.merge_calls += 1
-                if "deploy prisma schema" in prompt:
+                if "deploy prisma schema" in user:
                     return json.dumps({
                         "relationships": [
                             {"existing_id": rule.id, "judgment": "A", "reasoning": "same"},

@@ -75,34 +75,20 @@ def _load_marker_file(path: Path, session_id: str) -> Marker | None:
         except OSError:
             pass
         return None
-    rules = [MarkerRule(**r) for r in data.get("rules", [])]
+    rules: list[MarkerRule] = []
+    for r in data.get("rules", []):
+        if not isinstance(r, dict):
+            continue
+        try:
+            rules.append(MarkerRule(**r))
+        except TypeError as e:
+            log.warning("skip malformed marker rule in %s: %s", path, e)
     return Marker(
         session_id=data.get("session_id", session_id),
         prompt_hash=data.get("prompt_hash", ""),
         created_at=data.get("created_at", ""),
         rules=rules,
     )
-
-
-def read_latest(cfg: Config, session_id: str) -> Marker | None:
-    """Newest per-hash marker, else legacy single-file marker (PreToolUse has no prompt)."""
-    mdir = cfg.marker_dir(session_id)
-    best_path: Path | None = None
-    best_mtime = -1.0
-    if mdir.is_dir():
-        for path in mdir.glob("*.json"):
-            try:
-                mtime = path.stat().st_mtime
-            except OSError:
-                continue
-            if mtime > best_mtime:
-                best_mtime = mtime
-                best_path = path
-    if best_path is not None:
-        marker = _load_marker_file(best_path, session_id)
-        if marker is not None:
-            return marker
-    return _load_marker_file(cfg.legacy_marker_path(session_id), session_id)
 
 
 def prune_stale_markers(cfg: Config, session_id: str, current_ph: str) -> None:

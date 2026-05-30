@@ -27,8 +27,8 @@ def test_prompt_hash_matches():
     assert marker_io.prompt_hash_matches(m, None) is False
 
 
-def test_pre_tool_use_blocks_when_marker_only_no_injection(monkeypatch, tmp_path):
-    """Gate uses marker.prompt_hash when injections row is missing."""
+def test_pre_tool_use_fail_open_when_marker_only_no_injection(monkeypatch, tmp_path):
+    """Orphan marker without injections hash anchor must not block (fail-open)."""
     monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
     cfg = Config.from_env()
     sess = "s-marker-only"
@@ -44,7 +44,7 @@ def test_pre_tool_use_blocks_when_marker_only_no_injection(monkeypatch, tmp_path
 
     out = handle({"session_id": sess, "tool_name": "Bash"}, cfg)
     hso = out.get("hookSpecificOutput") or {}
-    assert hso.get("permissionDecision") == "deny"
+    assert hso.get("permissionDecision") != "deny"
     assert not cfg.marker_path(sess, ph).exists()
 
 

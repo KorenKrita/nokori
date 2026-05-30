@@ -10,13 +10,14 @@ import sys
 from pathlib import Path
 
 from ..config import Config
+from ..constants import DEFAULT_GATE_MATCHER
 
 NOKORI_MARKER = "nokori"
 
 _HOOK_SPECS = (
     ("SessionStart",   "*",                                              "session-start",     5),
     ("UserPromptSubmit", "*",                                            "user-prompt-submit", 10),
-    ("PreToolUse",     "Edit|Write|MultiEdit|Bash|NotebookEdit",         "pre-tool-use",      5),
+    ("PreToolUse",     DEFAULT_GATE_MATCHER,                             "pre-tool-use",      5),
     ("SessionEnd",     "*",                                              "session-end",       5),
 )
 
@@ -94,9 +95,16 @@ def _read_settings(path: Path) -> dict:
     if not path.exists():
         return {}
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
-        return {}
+        raw = path.read_text(encoding="utf-8")
+    except OSError as e:
+        raise ValueError(f"cannot read {path}: {e}") from e
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"{path} is not valid JSON: {e}") from e
+    if not isinstance(data, dict):
+        raise ValueError(f"{path} must contain a JSON object at the top level")
+    return data
 
 
 def _write_settings(path: Path, data: dict) -> None:
@@ -126,7 +134,11 @@ def _set_env_flag(data: dict, key: str, value: str | None) -> None:
 
 def run(args: argparse.Namespace, cfg: Config) -> int:
     path = _settings_path()
-    before = _read_settings(path)
+    try:
+        before = _read_settings(path)
+    except ValueError as e:
+        print(f"nokori: {e}", file=sys.stderr)
+        return 1
     command = _build_command()
 
     if args.uninstall:

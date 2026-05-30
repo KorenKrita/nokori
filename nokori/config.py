@@ -5,6 +5,7 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
+from .constants import DEFAULT_GATE_MATCHER
 from .errors import ConfigError
 
 
@@ -150,7 +151,7 @@ _GATE_MATCHER_MAX_LEN = 512
 
 def _gate_matcher_val(file_values: dict[str, str]) -> str:
     raw = _str_val(
-        "NOKORI_GATE_MATCHER", "Edit|Write|MultiEdit|Bash|NotebookEdit", file_values
+        "NOKORI_GATE_MATCHER", DEFAULT_GATE_MATCHER, file_values
     )
     if len(raw) > _GATE_MATCHER_MAX_LEN:
         raise ConfigError(
@@ -273,5 +274,11 @@ class Config:
             p.mkdir(parents=True, exist_ok=True, mode=0o700)
             try:
                 p.chmod(0o700)
+            except OSError:
+                pass
+        config_path = self.data_dir / _CONFIG_FILE_NAME
+        if config_path.exists():
+            try:
+                config_path.chmod(0o600)
             except OSError:
                 pass

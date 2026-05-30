@@ -26,21 +26,41 @@ class LLMAdapter:
 
     def complete(self, prompt: str, *, max_tokens: int = 2000,
                  timeout: int = 30) -> str | None:
-        # Set only on `claude -p` fallback subprocess to avoid hook recursion.
-        # Must not be set on `nokori extract` (including async SessionEnd spawn).
+        """Single user message (legacy). Prefer complete_messages for extract/merge."""
+        return self.complete_messages(None, prompt, max_tokens=max_tokens, timeout=timeout)
+
+    def complete_messages(
+        self,
+        system: str | None,
+        user: str,
+        *,
+        max_tokens: int = 2000,
+        timeout: int = 30,
+    ) -> str | None:
         if os.environ.get("NOKORI_EXTRACTING") == "1":
             log.warning("recursion guard tripped; skipping LLM call")
             return None
 
         if self.configured():
-            return self._call_openai_compatible(prompt, max_tokens, timeout)
-        return self._fallback_claude_cli(prompt, timeout)
+            return self._call_openai_compatible(
+                system, user, max_tokens, timeout,
+            )
+        return self._fallback_claude_cli(system, user, timeout)
 
-    def _call_openai_compatible(self, prompt: str, max_tokens: int,
-                                timeout: int) -> str | None:
+    def _call_openai_compatible(
+        self,
+        system: str | None,
+        user: str,
+        max_tokens: int,
+        timeout: int,
+    ) -> str | None:
+        messages: list[dict[str, str]] = []
+        if system:
+            messages.append({"role": "system", "content": system})
+        messages.append({"role": "user", "content": user})
         payload = {
             "model": self.cfg.llm_model,
-            "messages": [{"role": "user", "content": prompt}],
+            "messages": messages,
             "max_tokens": max_tokens,
             "temperature": 0.1,
         }
@@ -72,11 +92,13 @@ class LLMAdapter:
             log.warning("LLM response unparseable: %s", type(e).__name__)
             raise LlmError(f"bad response shape: {e}") from e
 
-    def _fallback_claude_cli(self, prompt: str, timeout: int) -> str | None:
+    def _fallback_claude_cli(
+        self, system: str | None, user: str, timeout: int,
+    ) -> str | None:
         env = os.environ.copy()
         env["NOKORI_EXTRACTING"] = "1"
         env["CLAUDECODE"] = ""
-        system_prompt = (
+        system_prompt = system or (
             "You are a JSON extraction engine. Output only valid JSON. "
             "No explanations."
         )
@@ -90,7 +112,7 @@ class LLMAdapter:
                     "--no-session-persistence",
                     "--no-chrome",
                 ],
-                input=prompt,
+                input=user,
                 capture_output=True,
                 text=True,
                 timeout=min(timeout, 30),

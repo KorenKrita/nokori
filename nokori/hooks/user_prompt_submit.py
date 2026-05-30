@@ -86,9 +86,7 @@ def handle(payload: dict, cfg: Config) -> dict:
 
     db = open_db(cfg.db_path)
     try:
-        dismiss_phrase = (cfg.dismiss_phrase or "dismiss").lower()
-        if dismiss_phrase in (prompt or "").lower():
-            _run_dismiss(db, prompt, session_id, cfg)
+        _run_dismiss(db, prompt, session_id, cfg)
 
         if project_id is None:
             formal_rules = fetch_rules(
@@ -118,9 +116,14 @@ def handle(payload: dict, cfg: Config) -> dict:
         )
         hot, warm = result.hot, result.warm
 
-        for r in shadow_hot:
-            if project_id:
-                promotion.record_shadow_hit(db, r.rule.id, project_id)
+        if project_id:
+            for r in shadow_hot:
+                try:
+                    promotion.record_shadow_hit(db, r.rule.id, project_id)
+                except Exception as e:
+                    log.warning(
+                        "shadow hit skipped rule=%s: %s", r.rule.id, e,
+                    )
 
         if not hot and not warm:
             if cfg.gate_enabled:
@@ -133,9 +136,10 @@ def handle(payload: dict, cfg: Config) -> dict:
 
         ph = prompt_hash(prompt)
         now = now_iso()
-        entries = [(r.rule.id, "hot") for r in hot]
-        entries.extend((r.rule.id, "warm") for r in warm)
-        log_injections_batch(db, session_id, ph, entries, now)
+        if text:
+            entries = [(r.rule.id, "hot") for r in hot]
+            entries.extend((r.rule.id, "warm") for r in warm)
+            log_injections_batch(db, session_id, ph, entries, now)
         for r in warm:
             if r.retrieval_hot and r.rule.status == "dormant":
                 # Dormant reactivation: this turn stays WARM (no gate); next turn may HOT.

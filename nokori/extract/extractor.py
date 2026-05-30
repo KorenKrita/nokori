@@ -4,7 +4,7 @@ import json
 from dataclasses import dataclass
 
 from ..llm.adapter import LLMAdapter
-from ..llm.prompts import EXTRACT_PROMPT
+from ..llm.prompts import EXTRACT_SYSTEM, wrap_untrusted
 from ..utils.logging import get_logger
 
 log = get_logger("nokori.extract.extractor")
@@ -29,18 +29,23 @@ def extract(transcript: str, llm: LLMAdapter) -> tuple[list[Candidate], bool]:
     """Returns (candidates, llm_ok). llm_ok=False when the LLM call failed (not empty parse)."""
     if not transcript.strip():
         return [], True
-    prompt = EXTRACT_PROMPT.replace("{transcript}", transcript)
+    user_content = wrap_untrusted(transcript)
     try:
-        raw = llm.complete(prompt, max_tokens=3000, timeout=60)
+        raw = llm.complete_messages(
+            EXTRACT_SYSTEM, user_content, max_tokens=3000, timeout=60,
+        )
     except Exception as e:
         log.warning("extract LLM call failed: %s", type(e).__name__)
         return [], False
     if raw is None:
         return [], False
-    return _parse_candidates(raw), True
+    candidates, parse_ok = _parse_candidates(raw)
+    if not parse_ok:
+        return [], False
+    return candidates, True
 
 
-def _parse_candidates(raw: str) -> list[Candidate]:
+def _parse_candidates(raw: str) -> tuple[list[Candidate], bool]:
     text = raw.strip()
     if text.startswith("```"):
         text = strip_fence(text)
@@ -48,14 +53,14 @@ def _parse_candidates(raw: str) -> list[Candidate]:
         data = json.loads(text)
     except json.JSONDecodeError:
         log.warning("extract LLM returned non-JSON; first 60 chars=%r", text[:60])
-        return []
+        return [], False
 
     if isinstance(data, dict):
         items = [data]
     elif isinstance(data, list):
         items = data
     else:
-        return []
+        return [], True
 
     out: list[Candidate] = []
     for item in items:
@@ -65,7 +70,7 @@ def _parse_candidates(raw: str) -> list[Candidate]:
             log.warning("extract candidate skipped: %s", e)
             continue
         out.append(cand)
-    return out
+    return out, True
 
 
 def strip_fence(text: str) -> str:

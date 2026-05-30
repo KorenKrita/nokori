@@ -7,7 +7,7 @@ from ..config import Config
 from ..db import Db
 from ..extract.reader import read as read_transcript
 from ..utils.time import now_iso
-from ..utils.transcript import resolve_transcript_path
+from ..utils.transcript import is_path_allowed, resolve_transcript_path
 
 HOT_CACHE_BUDGET_CHARS = 500
 HOT_CACHE_RECENT_TURNS = 3
@@ -37,6 +37,8 @@ def find_previous_transcript(current: Path) -> Path | None:
         try:
             resolved = candidate.resolve()
         except OSError:
+            continue
+        if not is_path_allowed(resolved):
             continue
         if resolved == current:
             continue

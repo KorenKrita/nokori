@@ -23,6 +23,11 @@ def _allowed_roots() -> list[Path]:
     return roots
 
 
+def is_path_allowed(path: Path) -> bool:
+    """True when path resolves under ~/.claude, NOKORI_DATA_DIR, or extra roots."""
+    return _is_under_allowed_root(path)
+
+
 def _is_under_allowed_root(path: Path) -> bool:
     try:
         resolved = path.resolve()

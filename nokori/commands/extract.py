@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 
 from ..config import Config
+from ..constants import TRANSCRIPT_MTIME_EPSILON_SEC
 from ..db import open_db
 from ..extract import jobs as job_io
 from ..extract.lock import acquire as extract_lock
@@ -62,7 +63,8 @@ def _process_path(path: Path, project_id: str | None, cfg: Config,
             done_keys.add(ck)
             merged += outcome.inserted + outcome.activated + outcome.superseded
         if merge_ok:
-            mark_extracted(db, path, path.stat().st_mtime)
+            final_mtime = path.stat().st_mtime
+            mark_extracted(db, path, final_mtime)
             merge_checkpoint.clear(cfg, path)
         else:
             log.warning("extract merge incomplete, transcript not marked extracted: %s", path)
@@ -75,7 +77,7 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
     with extract_lock(cfg) as locked:
         if not locked:
             print("(extract already running)")
-            return 0
+            return 2
 
         if args.session:
             path = Path(args.session).expanduser().resolve()
@@ -107,7 +109,7 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
         for job_path in pending:
             job = job_io.read_job(job_path)
             if not job:
-                job_io.delete_job(job_path)
+                log.warning("skipping corrupt extract job (not deleted): %s", job_path.name)
                 continue
             path = Path(job["transcript_path"])
             if not path.exists():
@@ -115,7 +117,11 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
                 continue
             job_mtime = job.get("transcript_mtime")
             current_mtime = path.stat().st_mtime
-            if job_mtime is not None and float(job_mtime) != float(current_mtime):
+            if (
+                job_mtime is not None
+                and abs(float(job_mtime) - float(current_mtime))
+                > TRANSCRIPT_MTIME_EPSILON_SEC
+            ):
                 job_path = job_io.refresh_job_mtime(
                     cfg, job_path, path, job.get("project_id"), current_mtime,
                 )

@@ -52,10 +52,7 @@ def handle(payload: dict, cfg: Config) -> dict:
             payload, db, session_id,
         )
         if not current_ph:
-            latest = marker_io.read_latest(cfg, session_id)
-            if latest is not None:
-                current_ph = latest.prompt_hash
-        if not current_ph:
+            marker_io.delete_session(cfg, session_id)
             return {"continue": True}
 
         marker = marker_io.read(cfg, session_id, prompt_hash_value=current_ph)

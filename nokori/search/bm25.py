@@ -15,6 +15,11 @@ _INDEX_CACHE: OrderedDict[tuple[tuple[str, str], ...], tuple] = OrderedDict()
 _INDEX_CACHE_MAX = 64
 
 
+def clear_index_cache() -> None:
+    """Clear the module-level BM25 index cache (for tests)."""
+    _INDEX_CACHE.clear()
+
+
 def _rule_doc_tokens(rule: Rule) -> list[str]:
     pieces: list[str] = []
     pieces.extend(tokenize(rule.trigger_text))

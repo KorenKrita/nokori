@@ -71,11 +71,6 @@ def list_jobs(cfg: Config, *, status: str | None = "pending") -> list[Path]:
     return out
 
 
-def list_pending(cfg: Config) -> list[Path]:
-    """Alias for list_jobs(status='pending')."""
-    return list_jobs(cfg, status="pending")
-
-
 def find_project_id_for_transcript(cfg: Config, transcript_path: Path) -> str | None:
     """Best-effort project_id from any extract job pointing at this transcript."""
     resolved = _job_transcript_path(transcript_path)

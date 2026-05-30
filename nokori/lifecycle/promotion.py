@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-import json
 from datetime import datetime, timezone
 
-from ..db import Db, dumps_json
+from ..db import Db, dumps_json, loads_json
 from ..lifecycle.evidence import compute_evidence_append
 from ..utils.logging import get_logger
 from ..utils.time import now_iso
@@ -18,7 +17,7 @@ def unique_promotion_project_ids(promotion_evidence: str | list | None) -> list[
     if promotion_evidence is None:
         raw: list = []
     elif isinstance(promotion_evidence, str):
-        raw = json.loads(promotion_evidence or "[]")
+        raw = loads_json(promotion_evidence, [])
     else:
         raw = promotion_evidence
     seen: set[str] = set()
@@ -53,7 +52,7 @@ def record_shadow_hit(db: Db, rule_id: str, current_project_id: str | None) -> b
             pass
         else:
             today = datetime.now(timezone.utc).date().isoformat()
-            evidence = json.loads(row["promotion_evidence"] or "[]")
+            evidence = loads_json(row["promotion_evidence"], [])
             key = f"{current_project_id}:{today}"
             if not any(e.get("key") == key for e in evidence):
                 evidence.append({

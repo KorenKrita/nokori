@@ -36,7 +36,7 @@ def _check_endpoint(label: str, base_url: str | None, model: str | None,
         with urllib.request.urlopen(req, timeout=5) as resp:
             return ("ok", f"{resp.status} {url}")
     except urllib.error.HTTPError as e:
-        if 200 <= e.code < 500:
+        if 200 <= e.code < 300:
             return ("ok", f"{e.code} {url}")
         return ("fail", f"{e.code} {url}")
     except Exception as e:

@@ -160,7 +160,8 @@ def search(
         return []
     if not qvecs:
         return []
-    return _search_impl(qvecs[0], rules, db, top_k)
+    model = client.cfg.embed_model or ""
+    return _search_impl(qvecs[0], rules, db, top_k, model)
 
 
 def _search_impl(
@@ -168,14 +169,15 @@ def _search_impl(
     rules: Sequence[Rule],
     db: Db,
     top_k: int,
+    model_version: str,
 ) -> list[ScoredResult]:
-    if not rules:
+    if not rules or not model_version:
         return []
     placeholders = ",".join(["?"] * len(rules))
     rows = db.fetchall(
         f"SELECT rule_id, chunk_index, embedding FROM rule_embeddings "
-        f"WHERE rule_id IN ({placeholders})",
-        tuple(r.id for r in rules),
+        f"WHERE rule_id IN ({placeholders}) AND model_version = ?",
+        (*tuple(r.id for r in rules), model_version),
     )
     by_rule: dict[str, list[list[float]]] = {}
     for row in rows:
@@ -266,7 +268,7 @@ def search_local_shared(
     if not qvecs:
         return [], "off"
 
-    return _search_impl(qvecs[0], rules, db, top_k), "local"
+    return _search_impl(qvecs[0], rules, db, top_k, LOCAL_MODEL_NAME), "local"
 
 
 def auto_enabled(cfg: Config, rule_count: int) -> bool:

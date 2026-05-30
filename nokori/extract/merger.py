@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from ..db import Db, RULE_COLUMNS, dumps_json, fetch_short_ids, row_to_rule
 from ..lifecycle.evidence import add_evidence, should_activate_pure_ai
 from ..llm.adapter import LLMAdapter
-from ..llm.prompts import MERGE_PROMPT
+from ..llm.prompts import MERGE_SYSTEM, format_merge_user
 from ..models import Rule
 from ..search import bm25
 from ..search.embedding import index_rule_if_enabled
@@ -169,14 +169,17 @@ def _format_existing(rules: list[Rule]) -> str:
 
 
 def _ask_llm(cand: Candidate, neighbors: list[Rule], llm: LLMAdapter) -> dict | None:
-    prompt = (MERGE_PROMPT
-              .replace("{trigger}", cand.trigger)
-              .replace("{action}", cand.action)
-              .replace("{source_type}", cand.source_type)
-              .replace("{confidence}", cand.confidence)
-              .replace("{existing_formatted}", _format_existing(neighbors)))
+    user_content = format_merge_user(
+        trigger=cand.trigger,
+        action=cand.action,
+        source_type=cand.source_type,
+        confidence=cand.confidence,
+        existing_formatted=_format_existing(neighbors),
+    )
     try:
-        raw = llm.complete(prompt, max_tokens=1500, timeout=45)
+        raw = llm.complete_messages(
+            MERGE_SYSTEM, user_content, max_tokens=1500, timeout=45,
+        )
     except Exception as e:
         log.warning("merge LLM failed: %s", type(e).__name__)
         return None

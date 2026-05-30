@@ -4,6 +4,8 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
+from ..constants import MAX_TRANSCRIPT_BYTES
+from ..errors import NokoriError
 from ..models import Turn
 from ..utils.logging import get_logger
 
@@ -31,6 +33,11 @@ def read(path: Path) -> list[Turn]:
     """
     if not path.exists():
         return []
+    size = path.stat().st_size
+    if size > MAX_TRANSCRIPT_BYTES:
+        raise NokoriError(
+            f"transcript too large ({size} bytes; max {MAX_TRANSCRIPT_BYTES})"
+        )
     out: list[Turn] = []
     text = path.read_text(encoding="utf-8", errors="replace")
     for lineno, line in enumerate(text.splitlines(), 1):

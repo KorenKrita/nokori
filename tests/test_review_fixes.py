@@ -1,0 +1,196 @@
+"""Regression tests for review-round hook/extract/health fixes."""
+import json
+import subprocess
+import sys
+from pathlib import Path
+from unittest.mock import patch
+
+import pytest
+
+from nokori.config import Config
+from nokori.db import open_db
+from nokori.gate import marker as marker_io
+from nokori.models import Rule
+from nokori.search import embedding
+
+
+def _run(*args, env_extra=None, stdin: str = ""):
+    env = {"PATH": "/usr/bin:/bin"}
+    if env_extra:
+        env.update(env_extra)
+    return subprocess.run(
+        [sys.executable, "-m", "nokori", *args],
+        input=stdin,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+
+
+def _gate_denied(out: dict) -> bool:
+    hso = out.get("hookSpecificOutput") or {}
+    return hso.get("permissionDecision") == "deny"
+
+
+def test_pre_tool_use_fail_open_without_injection_hash(tmp_path, monkeypatch):
+    """No read_latest fallback: marker on disk but no injections → must not block."""
+    monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+    env = {"NOKORI_DATA_DIR": str(tmp_path)}
+    r = _run(
+        "add",
+        "--trigger",
+        "never force push",
+        "--action",
+        "use lease",
+        "--source-type",
+        "correction",
+        "--confidence",
+        "high",
+        "--variants",
+        "git push --force",
+        env_extra=env,
+    )
+    assert r.returncode == 0, r.stderr
+    sess = "no-hash-anchor"
+    _run(
+        "hook",
+        "user-prompt-submit",
+        env_extra=env,
+        stdin=json.dumps({
+            "session_id": sess,
+            "cwd": str(tmp_path),
+            "prompt": "git push --force",
+        }),
+    )
+    cfg = Config.from_env()
+    db = open_db(cfg.db_path)
+    try:
+        with db.transaction() as tx:
+            tx.execute("DELETE FROM injections")
+    finally:
+        db.close()
+    r = _run(
+        "hook",
+        "pre-tool-use",
+        env_extra=env,
+        stdin=json.dumps({"session_id": sess, "tool_name": "Bash"}),
+    )
+    out = json.loads(r.stdout)
+    assert not _gate_denied(out)
+
+
+def test_install_rejects_corrupt_settings(tmp_path):
+    home = tmp_path / "claude"
+    home.mkdir()
+    settings = home / "settings.json"
+    settings.write_text("{not json", encoding="utf-8")
+    r = _run(
+        "install",
+        env_extra={
+            "NOKORI_DATA_DIR": str(tmp_path / "data"),
+            "NOKORI_CLAUDE_HOME": str(home),
+        },
+    )
+    assert r.returncode == 1
+    assert "not valid JSON" in r.stderr
+
+
+def test_extract_lock_busy_exit_code(tmp_path, monkeypatch):
+    monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+    cfg = Config.from_env()
+    cfg.ensure_dirs()
+    from nokori.extract import lock as extract_lock
+
+    with extract_lock.acquire(cfg) as held:
+        assert held
+        r = _run("extract", env_extra={"NOKORI_DATA_DIR": str(tmp_path)})
+    assert r.returncode == 2
+    assert "already running" in r.stdout
+
+
+def test_embedding_search_filters_model_version(monkeypatch, tmp_path):
+    monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+    cfg = Config.from_env()
+    db = open_db(cfg.db_path)
+    try:
+        now = "2026-01-01T00:00:00Z"
+        with db.transaction() as tx:
+            tx.execute(
+                "INSERT INTO rules (id, short_id, trigger_text, action, "
+                "source_type, confidence, status, project_scope, created_at, updated_at) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (
+                    "r1", "abc123", "t", "a", "correction", "high", "active",
+                    "global", now, now,
+                ),
+            )
+        rule = Rule(
+            id="r1",
+            short_id="abc123",
+            trigger_text="t",
+            trigger_variants=[],
+            search_terms={},
+            action="a",
+            rationale=None,
+            behavior=None,
+            source_type="correction",
+            confidence="high",
+            status="active",
+            project_scope="global",
+            project_id=None,
+            evidence_score=0,
+            evidence_log=[],
+            hit_count=0,
+            last_hit=None,
+            shadow_hit_count=0,
+            promotion_evidence=[],
+            superseded_by=None,
+            archived_reason=None,
+            created_at=now,
+            updated_at=now,
+        )
+        embedding._store_impl(db, "r1", [[1.0, 0.0]], "old-model")
+        hits = embedding._search_impl([1.0, 0.0], [rule], db, 5, "new-model")
+        assert hits == []
+        hits = embedding._search_impl([1.0, 0.0], [rule], db, 5, "old-model")
+        assert len(hits) == 1
+    finally:
+        db.close()
+
+
+def test_health_http_401_is_fail(monkeypatch, tmp_path):
+    import urllib.error
+
+    from nokori.commands import health
+
+    def fake_open(req, timeout=5):
+        raise urllib.error.HTTPError(
+            req.full_url, 401, "Unauthorized", {}, None,
+        )
+
+    with patch("urllib.request.urlopen", side_effect=fake_open):
+        status, _ = health._check_endpoint(
+            "embed", "http://fake", "m", "k", "/embeddings",
+        )
+    assert status == "fail"
+
+
+def test_malformed_marker_rule_skipped(tmp_path, monkeypatch):
+    monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+    cfg = Config.from_env()
+    cfg.ensure_dirs()
+    sess = "bad-rules"
+    path = cfg.marker_path(sess, "deadbeef")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps({
+            "session_id": sess,
+            "prompt_hash": "deadbeef",
+            "created_at": "2026-01-01T00:00:00Z",
+            "rules": [{"short_id": "x"}],  # missing action, source_type
+        }),
+        encoding="utf-8",
+    )
+    m = marker_io.read(cfg, sess, prompt_hash_value="deadbeef")
+    assert m is not None
+    assert m.rules == []

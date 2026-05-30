@@ -138,9 +138,31 @@ def test_marker_expires(tmp_path):
     assert not _gate_denied(json.loads(r.stdout))
 
 
-def test_dismiss_cli(tmp_path):
+def test_dismiss_cli(tmp_path, monkeypatch):
+    from datetime import datetime, timezone
+
+    from nokori.config import Config
+    from nokori.db import open_db
+
+    monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
     short = _add_high_active(tmp_path, "rule x", "do y")
-    r = _run("dismiss", short, env_extra={"NOKORI_DATA_DIR": str(tmp_path)})
+    env = {"NOKORI_DATA_DIR": str(tmp_path)}
+    cfg = Config.from_env()
+    db = open_db(cfg.db_path)
+    try:
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace(
+            "+00:00", "Z",
+        )
+        row = db.fetchone("SELECT id FROM rules WHERE short_id = ?", (short,))
+        with db.transaction() as tx:
+            tx.execute(
+                "INSERT INTO injections (rule_id, session_id, prompt_hash, level, created_at) "
+                "VALUES (?,?,?,?,?)",
+                (row["id"], "sess-dismiss-cli", "ph1", "hot", now),
+            )
+    finally:
+        db.close()
+    r = _run("dismiss", short, env_extra=env)
     assert r.returncode == 0, r.stderr
     show = _run("show", short, env_extra={"NOKORI_DATA_DIR": str(tmp_path)})
     assert "archived" in show.stdout

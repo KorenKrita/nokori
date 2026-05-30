@@ -642,7 +642,7 @@ enabled = true
 ├── rules.db              # SQLite (WAL mode): 规则 + 索引 + 元数据
 ├── jobs/                 # Extract job 队列
 ├── active_sessions/      # Session registry
-├── pending-ack-*.marker  # Gate markers (短生命周期)
+├── gate_markers/         # Gate markers（按 session + prompt_hash）
 ├── logs/
 │   ├── hook.log          # Hook 进程日志
 │   ├── pipeline.log      # 提取/合并日志

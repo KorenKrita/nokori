@@ -15,6 +15,9 @@ class FakeMergeLLM:
     def complete(self, prompt, *, max_tokens=2000, timeout=30):
         return self.response
 
+    def complete_messages(self, system, user, *, max_tokens=2000, timeout=30):
+        return self.complete(user, max_tokens=max_tokens, timeout=timeout)
+
 
 def _cand(
     trigger="rule x",
@@ -320,6 +323,9 @@ def test_merge_llm_failure_keeps_pending_when_neighbors(monkeypatch, tmp_path):
 
         class BadLLM:
             def complete(self, *a, **k):
+                raise RuntimeError("boom")
+
+            def complete_messages(self, *a, **k):
                 raise RuntimeError("boom")
 
         outcome = merge_candidate(_cand("rule b", "act b"), db, BadLLM())

@@ -6,13 +6,8 @@ from ..config import Config
 from ..db import dumps_json, fetch_rule_by_short_id, open_db
 from ..errors import NokoriError
 from ..search.embedding import index_rule_if_enabled
+from ..utils.text import split_csv
 from ..utils.time import now_iso
-
-
-def _split_csv(raw: str | None) -> list[str]:
-    if not raw:
-        return []
-    return [piece.strip() for piece in raw.split(",") if piece.strip()]
 
 
 def run(args: argparse.Namespace, cfg: Config) -> int:
@@ -34,13 +29,13 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
         if args.status is not None:
             updates.append(("status", args.status))
         if args.variants is not None:
-            updates.append(("trigger_variants", dumps_json(_split_csv(args.variants))))
+            updates.append(("trigger_variants", dumps_json(split_csv(args.variants))))
         if args.terms_en is not None or args.terms_zh is not None:
             terms = dict(rule.search_terms)
             if args.terms_en is not None:
-                terms["en"] = _split_csv(args.terms_en)
+                terms["en"] = split_csv(args.terms_en)
             if args.terms_zh is not None:
-                terms["zh"] = _split_csv(args.terms_zh)
+                terms["zh"] = split_csv(args.terms_zh)
             updates.append(("search_terms", dumps_json(terms)))
 
         if not updates:

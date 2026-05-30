@@ -267,7 +267,8 @@ def test_unmerge_check_restores_when_superseded_target_dormant(monkeypatch, tmp_
         db.close()
 
 
-def test_find_previous_transcript_picks_newest_older_sibling(tmp_path):
+def test_find_previous_transcript_picks_newest_older_sibling(tmp_path, monkeypatch):
+    monkeypatch.setenv("NOKORI_TRANSCRIPT_EXTRA_ROOTS", str(tmp_path))
     older = tmp_path / "older.jsonl"
     older.write_text('{"type":"user","message":"old"}\n')
     current = tmp_path / "current.jsonl"
@@ -280,6 +281,7 @@ def test_find_previous_transcript_picks_newest_older_sibling(tmp_path):
 
 def test_hot_cache_injects_from_previous_session(monkeypatch, tmp_path):
     monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("NOKORI_TRANSCRIPT_EXTRA_ROOTS", str(tmp_path))
     cfg = Config.from_env()
     previous = tmp_path / "previous.jsonl"
     previous.write_text("\n".join([

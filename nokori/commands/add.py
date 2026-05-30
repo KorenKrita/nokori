@@ -7,25 +7,20 @@ from ..db import dumps_json, fetch_rule_by_short_id, fetch_short_ids, open_db
 from ..errors import NokoriError
 from ..search.embedding import index_rule_if_enabled
 from ..utils.ids import new_uuid, short_id_for
+from ..utils.text import split_csv
 from ..utils.time import now_iso
-
-
-def _split_csv(raw: str | None) -> list[str]:
-    if not raw:
-        return []
-    return [piece.strip() for piece in raw.split(",") if piece.strip()]
 
 
 def run(args: argparse.Namespace, cfg: Config) -> int:
     now = now_iso()
     rid = new_uuid()
 
-    variants = _split_csv(args.variants)
+    variants = split_csv(args.variants)
     terms: dict[str, list[str]] = {}
     if args.terms_en:
-        terms["en"] = _split_csv(args.terms_en)
+        terms["en"] = split_csv(args.terms_en)
     if args.terms_zh:
-        terms["zh"] = _split_csv(args.terms_zh)
+        terms["zh"] = split_csv(args.terms_zh)
 
     status = "active" if (args.confidence == "high" and args.source_type == "correction") else "candidate"
     project_id = args.project_id
