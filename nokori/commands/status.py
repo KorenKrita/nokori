@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from datetime import datetime, timedelta, timezone
 
 from ..config import Config
 from ..db import open_db
@@ -11,9 +12,12 @@ def run(_args: argparse.Namespace, cfg: Config) -> int:
     try:
         version = db.schema_version()
         rules = db.fetchall("SELECT status, COUNT(*) AS n FROM rules GROUP BY status")
+        cutoff = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat(
+            timespec="seconds"
+        ).replace("+00:00", "Z")
         injected_24h = db.fetchone(
-            "SELECT COUNT(*) AS n FROM injections "
-            "WHERE created_at >= datetime('now', '-1 day')"
+            "SELECT COUNT(*) AS n FROM injections WHERE created_at >= ?",
+            (cutoff,),
         )
     finally:
         db.close()

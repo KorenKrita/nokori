@@ -8,11 +8,13 @@ from pathlib import Path
 from ..config import Config
 from ..db import (
     dumps_json,
+    fetch_rule_by_short_id,
     fetch_rules,
     fetch_short_ids,
     open_db,
 )
 from ..errors import NokoriError
+from ..search.embedding import index_rule_if_enabled
 from ..utils.ids import new_uuid, short_id_for
 from ..utils.time import now_iso
 
@@ -129,6 +131,13 @@ def run_import(args: argparse.Namespace, cfg: Config) -> int:
                     ),
                 )
             inserted += 1
+        for rec in rules_in:
+            rid = rec.get("id")
+            if rid and rid not in existing_ids:
+                sid = rec.get("short_id")
+                rule = fetch_rule_by_short_id(db, sid) if sid else None
+                if rule and rule.status in ("active", "dormant"):
+                    index_rule_if_enabled(db, rule, cfg)
     finally:
         db.close()
     print(f"imported {inserted} rules; skipped {skipped} (already present)")

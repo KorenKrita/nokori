@@ -31,6 +31,7 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
         terms["zh"] = _split_csv(args.terms_zh)
 
     status = "active" if (args.confidence == "high" and args.source_type == "correction") else "candidate"
+    project_id = args.project_id
     evidence_score = 3 if (args.confidence == "high" and args.source_type == "correction") else 0
     evidence_log = dumps_json(
         [{"kind": "user_correction", "points": 3, "at": now}]
@@ -62,7 +63,7 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
                     evidence_score,
                     evidence_log,
                     "project",
-                    args.project_id,
+                    project_id,
                     now,
                     now,
                 ),

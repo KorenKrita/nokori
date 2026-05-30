@@ -103,6 +103,8 @@ def handle(payload: dict, cfg: Config) -> dict:
         hot, warm = ranker.tier_results(fused)
 
         if not hot and not warm:
+            if project_id:
+                _run_shadow_pool(db, prompt, project_id)
             return {"continue": True}
 
         text = format_injection(
