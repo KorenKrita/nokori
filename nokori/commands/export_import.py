@@ -47,7 +47,7 @@ def run_export(args: argparse.Namespace, cfg: Config) -> int:
                 "evidence_log": r.evidence_log,
                 "hit_count": r.hit_count,
                 "last_hit": r.last_hit,
-                "cross_project_hits": r.cross_project_hits,
+                "shadow_hit_count": r.shadow_hit_count,
                 "promotion_evidence": r.promotion_evidence,
                 "project_scope": r.project_scope,
                 "project_id": r.project_id,
@@ -97,7 +97,7 @@ def run_import(args: argparse.Namespace, cfg: Config) -> int:
                     "INSERT INTO rules (id, short_id, trigger_text, trigger_variants, "
                     "search_terms, behavior, action, rationale, source_type, confidence, "
                     "status, evidence_score, evidence_log, hit_count, last_hit, "
-                    "cross_project_hits, promotion_evidence, project_scope, project_id, "
+                    "shadow_hit_count, promotion_evidence, project_scope, project_id, "
                     "superseded_by, archived_reason, "
                     "created_at, updated_at) "
                     "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
@@ -116,7 +116,10 @@ def run_import(args: argparse.Namespace, cfg: Config) -> int:
                         dumps_json(rec.get("evidence_log") or []),
                         rec.get("hit_count", 0),
                         rec.get("last_hit"),
-                        rec.get("cross_project_hits", 0),
+                        rec.get(
+                            "shadow_hit_count",
+                            rec.get("cross_project_hits", 0),
+                        ),
                         dumps_json(rec.get("promotion_evidence") or []),
                         rec.get("project_scope", "project"),
                         rec.get("project_id"),

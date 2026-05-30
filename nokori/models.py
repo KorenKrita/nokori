@@ -16,7 +16,7 @@ TurnRole = Literal["human", "assistant", "tool_use", "tool_result"]
 class Rule:
     """Persistent rule row.
 
-    cross_project_hits counts shadow HOT events (per project:day deduped in
+    shadow_hit_count: total shadow HOT events (per project:day deduped in
     promotion_evidence). Global promotion threshold uses distinct project_ids
     in promotion_evidence, not this counter alone.
     """
@@ -36,7 +36,7 @@ class Rule:
     evidence_log: list[dict]
     hit_count: int
     last_hit: str | None
-    cross_project_hits: int
+    shadow_hit_count: int
     promotion_evidence: list[dict]
     project_scope: ProjectScope
     project_id: str | None

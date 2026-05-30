@@ -23,7 +23,7 @@ def _rule(short, trigger, *, variants=(), terms_zh=(), action="do x", status="ac
         evidence_log=[],
         hit_count=0,
         last_hit=None,
-        cross_project_hits=0,
+        shadow_hit_count=0,
         promotion_evidence=[],
         project_scope="project",
         project_id=None,

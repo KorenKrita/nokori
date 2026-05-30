@@ -209,9 +209,9 @@ def test_promotion_skips_preference(monkeypatch, tmp_path):
         promotion.record_shadow_hit(db, "pref-1", "proj-B")
         promotion.record_shadow_hit(db, "pref-1", "proj-C")
         promotion.record_shadow_hit(db, "pref-1", "proj-D")
-        row = db.fetchone("SELECT project_scope, cross_project_hits FROM rules WHERE id='pref-1'")
+        row = db.fetchone("SELECT project_scope, shadow_hit_count FROM rules WHERE id='pref-1'")
         assert row["project_scope"] == "project"
-        assert row["cross_project_hits"] == 0
+        assert row["shadow_hit_count"] == 0
     finally:
         db.close()
 

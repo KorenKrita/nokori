@@ -43,8 +43,11 @@ def retrieve_and_tier(
     embed_results: list[ScoredResult] = []
     embed_mode = "off"
 
+    # Embed auto-enable uses the retrieval pool size (this query's rules), not
+    # the whole DB — avoids turning on embedding for small projects when the
+    # global library is large.
     if pool_size is None:
-        pool_size = total_rule_count(db)
+        pool_size = len(rules)
     if embedding_search.auto_enabled(cfg, pool_size):
         if embedding_search.use_local(cfg):
             timeout = float(
@@ -83,7 +86,7 @@ def retrieve_formal_and_shadow(
     db: Db,
     cfg: Config,
     *,
-    pool_size: int,
+    pool_size: int | None = None,
     interaction: InteractionKind = "hook",
 ) -> tuple[RetrievalResult, list[ScoredResult]]:
     """One BM25/RRF pass over formal∪shadow; split tiers by pool membership."""
@@ -95,6 +98,7 @@ def retrieve_formal_and_shadow(
         return empty, []
 
     shadow_ids = {r.id for r in shadow_rules}
+    effective_pool = pool_size if pool_size is not None else len(combined)
     result = retrieve_and_tier(
         prompt,
         combined,
@@ -102,7 +106,7 @@ def retrieve_formal_and_shadow(
         cfg,
         top_k=10,
         interaction=interaction,
-        pool_size=pool_size,
+        pool_size=effective_pool,
     )
     formal_hot = [r for r in result.hot if r.rule.id in formal_ids]
     formal_warm = [r for r in result.warm if r.rule.id in formal_ids]

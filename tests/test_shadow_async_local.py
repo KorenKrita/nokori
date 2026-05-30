@@ -130,9 +130,9 @@ class TestShadowPoolHotTier:
             }, cfg)
             for rid in ("rule-a", "rule-b"):
                 row = db.fetchone(
-                    "SELECT cross_project_hits FROM rules WHERE id = ?", (rid,)
+                    "SELECT shadow_hit_count FROM rules WHERE id = ?", (rid,)
                 )
-                assert row["cross_project_hits"] == 0
+                assert row["shadow_hit_count"] == 0
         finally:
             db.close()
 
@@ -166,10 +166,10 @@ class TestShadowPoolHotTier:
                 "cwd": str(proj),
             }, cfg)
             row = db.fetchone(
-                "SELECT cross_project_hits, evidence_score FROM rules WHERE id = ?",
+                "SELECT shadow_hit_count, evidence_score FROM rules WHERE id = ?",
                 ("rule-strong",),
             )
-            assert row["cross_project_hits"] == 1
+            assert row["shadow_hit_count"] == 1
             assert row["evidence_score"] == 1
         finally:
             db.close()

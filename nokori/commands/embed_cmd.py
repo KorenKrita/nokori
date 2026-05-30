@@ -4,12 +4,13 @@ import argparse
 
 from ..config import Config
 from ..search import embed_ipc
+from ..search.embedding_server import run_server as run_embed_server
 
 
 def run(args: argparse.Namespace, cfg: Config) -> int:
     action = args.embed_action
     if action == "serve":
-        return embed_ipc.run_server(cfg)
+        return run_embed_server(cfg)
     if action == "stop":
         stopped = embed_ipc.stop_server(cfg)
         if stopped:

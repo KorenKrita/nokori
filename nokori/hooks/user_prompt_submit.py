@@ -12,7 +12,6 @@ from ..db import (
     open_db,
     archive_rule,
     find_rule_id_by_recent_injection,
-    total_rule_count,
 )
 from ..gate import marker as marker_io
 from ..gate.blocker import format_injection, select_gate_rules
@@ -103,8 +102,6 @@ def handle(payload: dict, cfg: Config) -> dict:
             if project_id and cfg.promotion_enabled
             else []
         )
-        pool_size = total_rule_count(db)
-
         if not formal_rules and not shadow_rules:
             if cfg.gate_enabled:
                 marker_io.delete(cfg, session_id)
@@ -116,7 +113,6 @@ def handle(payload: dict, cfg: Config) -> dict:
             shadow_rules,
             db,
             cfg,
-            pool_size=pool_size,
             interaction="hook",
         )
         hot, warm = result.hot, result.warm

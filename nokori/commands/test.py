@@ -4,7 +4,7 @@ import argparse
 import os
 
 from ..config import Config
-from ..db import fetch_rules, fetch_shadow_rules, open_db, total_rule_count
+from ..db import fetch_rules, fetch_shadow_rules, open_db
 from ..gate.blocker import select_gate_rules
 from ..search.retrieve import retrieve_formal_and_shadow
 from ..utils.project import resolve_project_id
@@ -30,15 +30,12 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
             if project_id and cfg.promotion_enabled
             else []
         )
-        pool_size = total_rule_count(db)
-
         result, shadow_hot = retrieve_formal_and_shadow(
             args.prompt,
             formal_rules,
             shadow_rules,
             db,
             cfg,
-            pool_size=pool_size,
             interaction="cli",
         )
         hot, warm = result.hot, result.warm

@@ -69,7 +69,6 @@ def test_retrieve_formal_and_shadow_splits_pools(monkeypatch, tmp_path):
             shadow_rules,
             db,
             cfg,
-            pool_size=total_rule_count(db),
         )
         formal_ids = {r.id for r in formal_rules}
         assert all(r.rule.id in formal_ids for r in result.hot + result.warm)
@@ -106,8 +105,8 @@ def test_hook_uses_shared_local_embed(monkeypatch, tmp_path):
         db.close()
 
 
-def test_auto_enabled_uses_searchable_db_count(monkeypatch, tmp_path):
-    """Embedding threshold uses active+dormant count, not len(project pool)."""
+def test_auto_enabled_uses_retrieval_pool_size(monkeypatch, tmp_path):
+    """Embedding threshold uses len(rules) for this query, not global DB count."""
     monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
     cfg = Config.from_env()
     db = open_db(cfg.db_path)
@@ -154,6 +153,53 @@ def test_auto_enabled_uses_searchable_db_count(monkeypatch, tmp_path):
 
         monkeypatch.setattr(embedding_search, "auto_enabled", fake_auto)
         retrieve_and_tier("global rule", pool, db, cfg, interaction="cli")
-        assert checked == [21]
+        assert checked == [1]
+    finally:
+        db.close()
+
+
+def test_formal_shadow_pool_size_for_embed(monkeypatch, tmp_path):
+    """Combined formal+shadow len gates embed, not global DB size."""
+    monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+    cfg = Config.from_env()
+    db = open_db(cfg.db_path)
+    try:
+        for i in range(25):
+            _insert_rule(
+                db,
+                id_=f"other-{i:02d}",
+                trigger=f"other project rule {i}",
+                project_id="other-proj",
+                short_id=f"oth{i:04x}",
+            )
+        _insert_rule(
+            db,
+            id_="local-01",
+            trigger="only local rule here",
+            project_id="my-proj",
+            short_id="loc001",
+        )
+        formal = fetch_rules(db, statuses=("active", "dormant"), project_id="my-proj")
+        shadow = fetch_shadow_rules(db, project_id="my-proj")
+        checked: list[int] = []
+
+        def fake_auto(c, n):
+            checked.append(n)
+            return False
+
+        monkeypatch.setattr(embedding_search, "auto_enabled", fake_auto)
+        monkeypatch.setattr(
+            "nokori.search.retrieve.total_rule_count", lambda _db: 999
+        )
+        retrieve_formal_and_shadow(
+            "only local",
+            formal,
+            shadow,
+            db,
+            cfg,
+            interaction="hook",
+        )
+        assert checked == [len(formal) + len(shadow)]
+        assert checked[0] < 999
     finally:
         db.close()

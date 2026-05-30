@@ -32,7 +32,7 @@ def run(_args: argparse.Namespace, cfg: Config) -> int:
         if cfg.promotion_enabled:
             promotion_rows = db.fetchall(
                 "SELECT short_id, project_id, trigger_text, promotion_evidence, "
-                "cross_project_hits FROM rules "
+                "shadow_hit_count FROM rules "
                 "WHERE status = 'active' AND confidence = 'high' "
                 "AND source_type IN ('correction','anti_pattern','solution') "
                 "AND project_scope = 'project' AND project_id IS NOT NULL "
@@ -87,7 +87,7 @@ def run(_args: argparse.Namespace, cfg: Config) -> int:
                 proj_list += ",..."
             print(
                 f"  {row['short_id']}  {n_projects}/{CROSS_PROJECT_PROMOTE_THRESHOLD}  "
-                f"shadow_hits={row['cross_project_hits']}  "
+                f"shadow_hits={row['shadow_hit_count']}  "
                 f"from={row['project_id']}  "
                 f"projects=[{proj_list}]  "
                 f"{trigger}"

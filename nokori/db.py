@@ -9,9 +9,9 @@ from pathlib import Path
 
 from .errors import DbError
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
-_DDL_V1 = """
+_DDL_V2 = """
 CREATE TABLE IF NOT EXISTS rules (
     id TEXT PRIMARY KEY,
     short_id TEXT UNIQUE NOT NULL,
@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS rules (
     evidence_log TEXT NOT NULL DEFAULT '[]',
     hit_count INTEGER NOT NULL DEFAULT 0,
     last_hit TEXT,
-    cross_project_hits INTEGER NOT NULL DEFAULT 0,
+    shadow_hit_count INTEGER NOT NULL DEFAULT 0,
     promotion_evidence TEXT NOT NULL DEFAULT '[]',
     project_scope TEXT NOT NULL DEFAULT 'project' CHECK(project_scope IN ('project','global')),
     project_id TEXT,
@@ -149,18 +149,29 @@ def open_db(path: Path) -> Db:
 
 def _migrate(conn: sqlite3.Connection) -> None:
     current = _read_version(conn)
+    if current > SCHEMA_VERSION:
+        raise DbError(
+            f"database schema version {current} is newer than this nokori build "
+            f"(supported {SCHEMA_VERSION}); upgrade nokori"
+        )
     if current >= SCHEMA_VERSION:
         return
-    if current != 0:
+    if current == 0:
+        script = (
+            "BEGIN;\n"
+            f"{_DDL_V2}\n"
+            f"PRAGMA user_version = {int(SCHEMA_VERSION)};\n"
+            "COMMIT;\n"
+        )
+    elif current == 1:
+        script = (
+            "BEGIN;\n"
+            "ALTER TABLE rules RENAME COLUMN cross_project_hits TO shadow_hit_count;\n"
+            f"PRAGMA user_version = {int(SCHEMA_VERSION)};\n"
+            "COMMIT;\n"
+        )
+    else:
         raise DbError(f"unsupported schema version {current}")
-    # executescript() issues an implicit COMMIT before running; wrap DDL+version
-    # in one script so schema and user_version stay atomic.
-    script = (
-        "BEGIN;\n"
-        f"{_DDL_V1}\n"
-        f"PRAGMA user_version = {int(SCHEMA_VERSION)};\n"
-        "COMMIT;\n"
-    )
     try:
         conn.executescript(script)
     except Exception as e:
@@ -207,7 +218,7 @@ def row_to_rule(row):
         evidence_log=loads_json(row["evidence_log"], []),
         hit_count=row["hit_count"],
         last_hit=row["last_hit"],
-        cross_project_hits=row["cross_project_hits"],
+        shadow_hit_count=row["shadow_hit_count"],
         promotion_evidence=loads_json(row["promotion_evidence"], []),
         project_scope=row["project_scope"],
         project_id=row["project_id"],
@@ -221,7 +232,7 @@ def row_to_rule(row):
 RULE_COLUMNS = (
     "id, short_id, trigger_text, trigger_variants, search_terms, behavior, action, "
     "rationale, source_type, confidence, status, evidence_score, evidence_log, "
-    "hit_count, last_hit, cross_project_hits, promotion_evidence, project_scope, "
+    "hit_count, last_hit, shadow_hit_count, promotion_evidence, project_scope, "
     "project_id, superseded_by, archived_reason, "
     "created_at, updated_at"
 )

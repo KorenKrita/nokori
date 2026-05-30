@@ -96,7 +96,7 @@ def test_hook_search_skips_embed_when_server_not_ready(monkeypatch, tmp_path):
         evidence_log=[],
         hit_count=0,
         last_hit=None,
-        cross_project_hits=0,
+        shadow_hit_count=0,
         promotion_evidence=[],
         project_scope="project",
         project_id="p1",

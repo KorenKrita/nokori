@@ -37,9 +37,9 @@ def test_shadow_pool_noop_when_promotion_disabled(monkeypatch, tmp_path):
             "cwd": str(proj),
         }, cfg)
         row = db.fetchone(
-            "SELECT cross_project_hits FROM rules WHERE id = 'rule-x'"
+            "SELECT shadow_hit_count FROM rules WHERE id = 'rule-x'"
         )
-        assert row["cross_project_hits"] == 0
+        assert row["shadow_hit_count"] == 0
     finally:
         db.close()
 
@@ -73,9 +73,9 @@ def test_handle_runs_shadow_when_formal_pool_empty(monkeypatch, tmp_path):
         result = handle(payload, cfg)
         assert result == {"continue": True}
         row = db.fetchone(
-            "SELECT cross_project_hits FROM rules WHERE id = 'rule-other'"
+            "SELECT shadow_hit_count FROM rules WHERE id = 'rule-other'"
         )
-        assert row["cross_project_hits"] == 1
+        assert row["shadow_hit_count"] == 1
         assert pid_a is not None
         assert pid_a != "other-proj"
     finally:
