@@ -21,3 +21,4 @@ docs/
 .trellis/
 CLAUDE.md
 AGENTS.md
+.ace-tool/

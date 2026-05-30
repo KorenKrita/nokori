@@ -123,8 +123,6 @@ def _resolve_file_values(data_dir_hint: str) -> dict[str, str]:
 
 # --- Env + file resolution helpers ---
 
-_file_cache: dict[str, str] | None = None
-
 
 def _get(name: str, file_values: dict[str, str]) -> str | None:
     """Env var takes priority over config file value."""

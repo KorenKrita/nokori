@@ -60,6 +60,8 @@ def _run_shadow_pool(db: Db, prompt: str, project_id: str) -> None:
     for r in shadow_fused:
         if r.rrf_score < ranker.MIN_ABSOLUTE_SCORE:
             continue
+        if not ranker._meets_min_evidence(r):
+            continue
         promotion.record_shadow_hit(db, r.rule.id, project_id)
 
 
@@ -78,6 +80,8 @@ def handle(payload: dict, cfg: Config) -> dict:
             db, statuses=("active", "dormant"), project_id=project_id
         )
         if not rules:
+            if project_id:
+                _run_shadow_pool(db, prompt, project_id)
             return {"continue": True}
 
         bm25_results = bm25.search(prompt, rules, top_k=10)

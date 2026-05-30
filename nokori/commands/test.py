@@ -66,13 +66,16 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
         for r in gateable:
             print(f"  {r.rule.short_id}: {r.rule.action[:80]}")
 
-        # Shadow pool preview
+        # Shadow pool preview (same threshold as hook)
         if args.project:
             shadow_rules = fetch_shadow_rules(db, project_id=args.project)
             if shadow_rules:
                 shadow_bm25 = bm25.search(args.prompt, shadow_rules, top_k=5)
+                shadow_fused = ranker.rrf_fuse(shadow_bm25, [])
                 shadow_hits = [
-                    r for r in shadow_bm25 if r.bm25_score > 0
+                    r for r in shadow_fused
+                    if r.rrf_score >= ranker.MIN_ABSOLUTE_SCORE
+                    and ranker._meets_min_evidence(r)
                 ]
                 if shadow_hits:
                     print()
