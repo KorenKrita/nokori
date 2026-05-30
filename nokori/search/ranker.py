@@ -35,7 +35,7 @@ def rrf_fuse(
     return fused
 
 
-def _meets_min_evidence(r: ScoredResult) -> bool:
+def meets_min_evidence(r: ScoredResult) -> bool:
     if len(r.matched_tokens) >= 2:
         return True
     if len(r.matched_tokens) >= 1 and r.has_trigger_variant_match:
@@ -64,7 +64,7 @@ def tier_results(
     for i, r in enumerate(top5):
         if r.rrf_score < MIN_ABSOLUTE_SCORE:
             continue
-        if not _meets_min_evidence(r):
+        if not meets_min_evidence(r):
             continue
         if i == 0 and top1_dominant:
             if r.rule.status == "active":

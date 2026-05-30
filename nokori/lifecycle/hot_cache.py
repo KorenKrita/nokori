@@ -21,29 +21,106 @@ def _resolve_transcript_path(payload: dict) -> Path | None:
     return None
 
 
-def maybe_inject(payload: dict, cfg: Config, db: Db) -> str | None:
-    """Return cache text if the previous transcript hasn't been extracted yet."""
-    path = _resolve_transcript_path(payload)
-    if path is None:
+def _transcript_db_keys(path: Path) -> tuple[str, ...]:
+    """Keys used in extract_state; tolerate absolute vs resolved paths."""
+    resolved = path.expanduser().resolve()
+    keys = (str(path), str(resolved))
+    return tuple(dict.fromkeys(keys))
+
+
+def find_previous_transcript(current: Path) -> Path | None:
+    """Pick the newest *.jsonl in the same directory with mtime strictly before *current*."""
+    current = current.expanduser().resolve()
+    if not current.is_file():
         return None
     try:
-        mtime = path.stat().st_mtime
+        current_mtime = current.stat().st_mtime
     except OSError:
         return None
 
-    row = db.fetchone(
-        "SELECT extracted_at FROM extract_state WHERE transcript_path = ?",
-        (str(path),),
-    )
-    if row is not None:
-        try:
-            extracted = datetime.fromisoformat(row["extracted_at"].replace("Z", "+00:00"))
-        except (ValueError, AttributeError):
-            extracted = None
-        if extracted and extracted.timestamp() >= mtime:
-            return None
+    parent = current.parent
+    if not parent.is_dir():
+        return None
 
-    turns = read_transcript(path)
+    best: Path | None = None
+    best_mtime = -1.0
+    for candidate in parent.glob("*.jsonl"):
+        try:
+            resolved = candidate.resolve()
+        except OSError:
+            continue
+        if resolved == current:
+            continue
+        try:
+            mtime = candidate.stat().st_mtime
+        except OSError:
+            continue
+        if mtime >= current_mtime:
+            continue
+        if mtime > best_mtime:
+            best_mtime = mtime
+            best = resolved
+    return best
+
+
+def _fetch_extract_state(db: Db, path: Path):
+    for key in _transcript_db_keys(path):
+        row = db.fetchone(
+            "SELECT extracted_at, transcript_mtime, status "
+            "FROM extract_state WHERE transcript_path = ?",
+            (key,),
+        )
+        if row is not None:
+            return row
+    return None
+
+
+def _was_extracted(db: Db, path: Path) -> bool:
+    """True when this transcript was already extracted at its current revision."""
+    try:
+        mtime = path.stat().st_mtime
+    except OSError:
+        return True
+
+    row = _fetch_extract_state(db, path)
+    if row is None:
+        return False
+
+    if row["status"] != "done":
+        return False
+
+    try:
+        stored_mtime = float(row["transcript_mtime"])
+    except (TypeError, ValueError):
+        stored_mtime = 0.0
+    if stored_mtime >= mtime - 1e-3:
+        return True
+
+    extracted_at = row["extracted_at"]
+    if not extracted_at:
+        return False
+    try:
+        extracted = datetime.fromisoformat(str(extracted_at).replace("Z", "+00:00"))
+    except (ValueError, AttributeError):
+        return True
+
+    return extracted.timestamp() >= mtime
+
+
+def maybe_inject(payload: dict, cfg: Config, db: Db) -> str | None:
+    """Inject tail user messages from the previous session if not yet extracted."""
+    current = _resolve_transcript_path(payload)
+    if current is None:
+        return None
+
+    previous = find_previous_transcript(current)
+    if previous is None:
+        return None
+
+    if _was_extracted(db, previous):
+        return None
+
+    turns = read_transcript(previous)
     user_turns = [t for t in turns if t.role == "human"]
     if not user_turns:
         return None
@@ -60,11 +137,14 @@ def maybe_inject(payload: dict, cfg: Config, db: Db) -> str | None:
             break
         parts.append(line)
         used += len(line)
+    if len(parts) == 1:
+        return None
     return "".join(parts)
 
 
 def mark_extracted(db: Db, path: Path, mtime: float) -> None:
     now = now_iso()
+    key = str(path.expanduser().resolve())
     with db.transaction() as tx:
         tx.execute(
             "INSERT INTO extract_state (transcript_path, transcript_mtime, "
@@ -72,5 +152,5 @@ def mark_extracted(db: Db, path: Path, mtime: float) -> None:
             "ON CONFLICT(transcript_path) DO UPDATE SET "
             "transcript_mtime = excluded.transcript_mtime, "
             "extracted_at = excluded.extracted_at, status = excluded.status",
-            (str(path), mtime, now),
+            (key, mtime, now),
         )

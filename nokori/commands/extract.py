@@ -6,6 +6,7 @@ from pathlib import Path
 from ..config import Config
 from ..db import open_db
 from ..extract import jobs as job_io
+from ..extract.lock import acquire as extract_lock
 from ..extract.compressor import compress
 from ..extract.extractor import extract as extract_candidates
 from ..extract.merger import merge_candidate
@@ -56,32 +57,37 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
             print(f"applied:    {applied}")
         return 0
 
-    pending = job_io.list_pending(cfg)
-    if not pending:
-        print("(no pending extract jobs)")
-        return 0
+    with extract_lock(cfg) as locked:
+        if not locked:
+            print("(extract already running)")
+            return 0
 
-    total_cands = 0
-    total_applied = 0
-    for job_path in pending:
-        job = job_io.read_job(job_path)
-        if not job:
-            job_io.delete_job(job_path)
-            continue
-        path = Path(job["transcript_path"])
-        if not path.exists():
-            job_io.delete_job(job_path)
-            continue
-        cands, applied = _process_path(
-            path, job.get("project_id"), cfg, dry_run=args.dry_run
-        )
-        total_cands += cands
-        total_applied += applied
+        pending = job_io.list_pending(cfg)
+        if not pending:
+            print("(no pending extract jobs)")
+            return 0
+
+        total_cands = 0
+        total_applied = 0
+        for job_path in pending:
+            job = job_io.read_job(job_path)
+            if not job:
+                job_io.delete_job(job_path)
+                continue
+            path = Path(job["transcript_path"])
+            if not path.exists():
+                job_io.delete_job(job_path)
+                continue
+            cands, applied = _process_path(
+                path, job.get("project_id"), cfg, dry_run=args.dry_run
+            )
+            total_cands += cands
+            total_applied += applied
+            if not args.dry_run:
+                job_io.delete_job(job_path)
+
+        print(f"jobs:       {len(pending)}")
+        print(f"candidates: {total_cands}")
         if not args.dry_run:
-            job_io.delete_job(job_path)
-
-    print(f"jobs:       {len(pending)}")
-    print(f"candidates: {total_cands}")
-    if not args.dry_run:
-        print(f"applied:    {total_applied}")
-    return 0
+            print(f"applied:    {total_applied}")
+        return 0

@@ -7,6 +7,9 @@ import urllib.request
 
 from ..config import Config
 from ..db import open_db
+from ..search import embedding as embedding_search
+
+RULE_COUNT_EMBED_WARN = 500
 
 
 def _check_db(cfg: Config) -> tuple[str, str]:
@@ -40,6 +43,30 @@ def _check_endpoint(label: str, base_url: str | None, model: str | None,
         return ("fail", f"{type(e).__name__}: {e}")
 
 
+def _check_rule_count(cfg: Config) -> tuple[str, str]:
+    try:
+        db = open_db(cfg.db_path)
+        try:
+            row = db.fetchone(
+                "SELECT COUNT(*) AS n FROM rules "
+                "WHERE status IN ('active', 'dormant', 'candidate')"
+            )
+            count = int(row["n"]) if row else 0
+        finally:
+            db.close()
+    except Exception as e:
+        return ("fail", str(e))
+
+    embed_on = embedding_search.auto_enabled(cfg, count) or embedding_search.use_local(cfg)
+    if embed_on and count >= RULE_COUNT_EMBED_WARN:
+        return (
+            "warn",
+            f"{count} rules — embedding scans all indexed rules per prompt; "
+            f"consider fewer rules or disable embed above ~{RULE_COUNT_EMBED_WARN}",
+        )
+    return ("ok", f"{count} searchable rules")
+
+
 def _check_settings_registered(cfg: Config) -> tuple[str, str]:
     from pathlib import Path
 
@@ -67,6 +94,7 @@ def _check_settings_registered(cfg: Config) -> tuple[str, str]:
 def run(_args: argparse.Namespace, cfg: Config) -> int:
     rows = [
         ("db", *_check_db(cfg)),
+        ("rules", *_check_rule_count(cfg)),
         ("settings.json", *_check_settings_registered(cfg)),
         ("llm",
          *_check_endpoint("llm", cfg.llm_base_url, cfg.llm_model,

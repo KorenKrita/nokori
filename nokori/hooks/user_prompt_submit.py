@@ -57,11 +57,8 @@ def _run_shadow_pool(db: Db, prompt: str, project_id: str) -> None:
         return
     shadow_bm25 = bm25.search(prompt, shadow_rules, top_k=5)
     shadow_fused = ranker.rrf_fuse(shadow_bm25, [])
-    for r in shadow_fused:
-        if r.rrf_score < ranker.MIN_ABSOLUTE_SCORE:
-            continue
-        if not ranker._meets_min_evidence(r):
-            continue
+    shadow_hot, _ = ranker.tier_results(shadow_fused)
+    for r in shadow_hot:
         promotion.record_shadow_hit(db, r.rule.id, project_id)
 
 
@@ -80,6 +77,7 @@ def handle(payload: dict, cfg: Config) -> dict:
             db, statuses=("active", "dormant"), project_id=project_id
         )
         if not rules:
+            # No formal-pool injection; finally still runs shadow pool below.
             return {"continue": True}
 
         bm25_results = bm25.search(prompt, rules, top_k=10)

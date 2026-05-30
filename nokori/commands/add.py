@@ -32,6 +32,7 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
 
     status = "active" if (args.confidence == "high" and args.source_type == "correction") else "candidate"
     project_id = args.project_id
+    project_scope = "project" if project_id else "global"
     evidence_score = 3 if (args.confidence == "high" and args.source_type == "correction") else 0
     evidence_log = dumps_json(
         [{"kind": "user_correction", "points": 3, "at": now}]
@@ -62,7 +63,7 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
                     status,
                     evidence_score,
                     evidence_log,
-                    "project",
+                    project_scope,
                     project_id,
                     now,
                     now,

@@ -6,7 +6,6 @@ from datetime import datetime, timezone
 from ..db import Db, dumps_json
 from ..utils.logging import get_logger
 from ..utils.time import now_iso
-from .evidence import add_evidence
 
 log = get_logger("nokori.lifecycle.promotion")
 
@@ -18,8 +17,8 @@ def record_shadow_hit(db: Db, rule_id: str, current_project_id: str | None) -> b
     if current_project_id is None:
         return False
     row = db.fetchone(
-        "SELECT project_scope, project_id, source_type, promotion_evidence "
-        "FROM rules WHERE id = ?",
+        "SELECT project_scope, project_id, source_type, promotion_evidence, "
+        "evidence_score, evidence_log FROM rules WHERE id = ?",
         (rule_id,),
     )
     if row is None:
@@ -43,22 +42,27 @@ def record_shadow_hit(db: Db, rule_id: str, current_project_id: str | None) -> b
     })
     unique_projects = {e["project_id"] for e in evidence}
 
+    score = (row["evidence_score"] or 0) + 1
+    log_list = json.loads(row["evidence_log"] or "[]")
+    log_list.append({"kind": "shadow_hot", "points": 1, "at": now_iso()})
+    now = now_iso()
+
     promoted = False
     with db.transaction() as tx:
         tx.execute(
             "UPDATE rules SET promotion_evidence = ?, "
-            "cross_project_hits = cross_project_hits + 1, updated_at = ? "
+            "cross_project_hits = cross_project_hits + 1, "
+            "evidence_score = ?, evidence_log = ?, updated_at = ? "
             "WHERE id = ?",
-            (dumps_json(evidence), now_iso(), rule_id),
+            (dumps_json(evidence), score, dumps_json(log_list), now, rule_id),
         )
         if len(unique_projects) >= CROSS_PROJECT_PROMOTE_THRESHOLD:
             tx.execute(
                 "UPDATE rules SET project_scope = 'global', updated_at = ? "
                 "WHERE id = ?",
-                (now_iso(), rule_id),
+                (now, rule_id),
             )
             log.info("rule promoted to global rule=%s", rule_id)
             promoted = True
 
-    add_evidence(db, rule_id, "shadow_hot", 1)
     return promoted

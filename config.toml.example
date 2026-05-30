@@ -1,0 +1,237 @@
+# Nokori 配置文件模板
+#
+# 用法：
+#   cp config.toml.example ~/.nokori/config.toml
+#   # 按需取消注释并修改
+#
+# 生效路径：{data_dir}/config.toml（默认 ~/.nokori/config.toml）
+# 优先级：环境变量 > config.toml > 内置默认值
+#
+# 布尔值（TOML）：true / false
+# 布尔值（环境变量）：1、true、yes、on → 真；0、false、no、off、空 → 假
+
+# -----------------------------------------------------------------------------
+# 数据目录
+# -----------------------------------------------------------------------------
+
+# 所有状态数据根目录（rules.db、jobs、logs、marker、本地模型缓存等）
+# 类型：路径字符串
+# 默认：~/.nokori
+# 环境变量：NOKORI_DATA_DIR
+# data_dir = "~/.nokori"
+
+# 完全禁用 Nokori（hooks 仍被调用但立即 pass-through）
+# 类型：布尔
+# 默认：false
+# 可选：true | false
+# 环境变量：NOKORI_DISABLED
+# 也可通过 `nokori install --disable` 写入 Claude Code settings.json 的 env
+# disabled = false
+
+# 日志级别（写入 ~/.nokori/logs/）
+# 类型：字符串
+# 默认：warn
+# 可选：debug | info | warn | warning | error
+# 环境变量：NOKORI_LOG_LEVEL
+# log_level = "warn"
+
+# 对话里「退役规则」时使用的动词（后面必须跟 short_id）
+#
+# 场景：规则被注入或 Gate 拦住时，文案会提示 Claude/你说「dismiss a3f2b1」归档过时规则。
+# 下一条用户消息里若出现「<本字段> <short_id>」，UserPromptSubmit 会归档该规则。
+#
+# 格式：一个单词 + 空格 + short_id（6–32 位十六进制），不是整句自然语言。
+# 示例（默认）：dismiss a3f2b1
+# 若改为 forget：forget a3f2b1（CLI 仍用 `nokori dismiss`，子命令名不变）
+#
+# 限制：仅当前 session，且该规则在过去 24 小时内被注入过（防误删旧规则）。
+# 随时退役请用：nokori dismiss <short_id>
+#
+# 类型：字符串
+# 默认：dismiss
+# 环境变量：NOKORI_DISMISS_PHRASE
+# dismiss_phrase = "dismiss"
+
+# UserPromptSubmit 注入的规则文本总字符上限（HOT 优先，溢出降为 WARM 一行）
+# 类型：整数，>= 0
+# 默认：1500
+# 环境变量：NOKORI_MAX_INJECTION_CHARS
+# max_injection_chars = 1500
+
+# -----------------------------------------------------------------------------
+# Gate（PreToolUse 阻断）— 仅第二层配置，见 README「Gate 两层匹配」
+# -----------------------------------------------------------------------------
+#
+# PreToolUse 有两层，不要混在一个字段里：
+#
+#   第一层（不在本文件）
+#     文件：~/.claude/settings.json
+#     字段：hooks.PreToolUse[].matcher（nokori 那条 hook）
+#     作用：Claude Code 何时执行 `nokori hook pre-tool-use`
+#     默认（nokori install）：Edit|Write|MultiEdit|Bash|NotebookEdit
+#     任意工具都跑 hook：改为 *（Claude Code 约定）
+#
+#   第二层（本节 [gate]）
+#     作用：hook 已执行后，是否对本次 tool_name 读 marker 并 block
+#     匹配：Python re.fullmatch( matcher, tool_name )
+#     任意已进 hook 的工具都参与 block：matcher = ".*"
+#     勿写字面量 *（正则非法）；空字符串也会视为「全部匹配」
+#
+# 若只把本节 matcher 改成 .* 而不改 settings.json，Read/Grep 仍不会进 hook。
+
+[gate]
+# 是否启用 Gate（HOT + high + active 时写 marker，下次匹配工具调用前 block 一次）
+# 类型：布尔
+# 默认：true
+# 可选：true | false
+# 环境变量：NOKORI_GATE_ENABLED
+enabled = true
+
+# Gate marker 有效期（秒），超时后不再 block
+# 类型：整数，>= 0
+# 默认：600
+# 环境变量：NOKORI_GATE_TTL_SECONDS
+ttl_seconds = 600
+
+# 第二层：对哪些 tool_name 执行 block（整段 tool 名须 fullmatch 此正则）
+# 类型：字符串（Python 正则）
+# 默认：Edit|Write|MultiEdit|Bash|NotebookEdit
+# 任意工具：.*
+# 环境变量：NOKORI_GATE_MATCHER
+matcher = "Edit|Write|MultiEdit|Bash|NotebookEdit"
+
+# -----------------------------------------------------------------------------
+# 规则提取（SessionEnd 写 job，由 nokori extract 消费）
+# -----------------------------------------------------------------------------
+
+[extract]
+# 提取模式
+# 类型：枚举字符串
+# 默认：manual
+# 可选：
+#   manual — SessionEnd 只写入 jobs/，需手动执行 `nokori extract`
+#   async  — SessionEnd 额外 fork 后台 `nokori extract`（需已配置 LLM；失败不影响关 session）
+# 环境变量：NOKORI_EXTRACT_MODE
+mode = "manual"
+
+# -----------------------------------------------------------------------------
+# LLM（提取 transcript、合并规则；冷路径）
+# -----------------------------------------------------------------------------
+
+[llm]
+# OpenAI-compatible Chat Completions 根 URL（须能 POST {base_url}/chat/completions）
+# 类型：字符串或省略
+# 默认：未配置（None）→ 尝试 `claude -p` CLI fallback
+# 环境变量：NOKORI_LLM_BASE_URL
+# 示例：http://localhost:11434/v1  （Ollama）
+# 示例：https://api.openai.com/v1
+# base_url = "http://localhost:11434/v1"
+
+# 模型名
+# 类型：字符串或省略
+# 默认：未配置（None）
+# 环境变量：NOKORI_LLM_MODEL
+# model = "gpt-4o-mini"
+
+# API Key（不需要时可省略）
+# 类型：字符串或省略
+# 默认：未配置（None）
+# 环境变量：NOKORI_LLM_API_KEY
+# api_key = "sk-..."
+
+# -----------------------------------------------------------------------------
+# Embedding（检索增强；冷路径建索引，热路径只读库内向量）
+# -----------------------------------------------------------------------------
+
+[embed]
+# 强制启用 embedding（即使规则数 < 20）
+# 类型：布尔
+# 默认：false
+# 说明：未显式开启时，规则数 >= 20 且（配置了远程 embed 或安装了 pip install -e ".[local-embed]"）会自动启用
+# 环境变量：NOKORI_EMBED_ENABLED
+enabled = false
+
+# OpenAI-compatible Embeddings 根 URL（POST {base_url}/embeddings）
+# 类型：字符串或省略
+# 默认：未配置 → 若已装 local-embed 且规则 >= 20，用本地 paraphrase-multilingual-MiniLM-L12-v2
+# 环境变量：NOKORI_EMBED_BASE_URL
+# base_url = "http://localhost:11434/v1"
+
+# Embedding 模型名
+# 类型：字符串或省略
+# 默认：未配置
+# 环境变量：NOKORI_EMBED_MODEL
+# model = "nomic-embed-text"
+
+# API Key
+# 类型：字符串或省略
+# 默认：未配置
+# 环境变量：NOKORI_EMBED_API_KEY
+# api_key = "sk-..."
+
+# 请求体中的 dimensions 参数
+# 类型：整数，>= 0
+# 默认：0（不向 API 传 dimensions，使用模型默认维度）
+# 说明：OpenAI text-embedding-3 等支持降维的模型可设为 384、1536 等；本地模型固定 384，与此项无关
+# 环境变量：NOKORI_EMBED_DIMENSIONS
+dimensions = 0
+
+# 单条规则文本分块大小（字符）
+# 类型：整数，>= 16
+# 默认：512
+# 环境变量：NOKORI_EMBED_CHUNK_SIZE
+chunk_size = 512
+
+# 每条规则最多保留的分块数（取前 N 块向量，检索取 max cosine）
+# 类型：整数，>= 1
+# 默认：3
+# 环境变量：NOKORI_EMBED_CHUNK_COUNT
+chunk_count = 3
+
+# -----------------------------------------------------------------------------
+# 环境变量速查（与上文 TOML 字段等价）
+# -----------------------------------------------------------------------------
+#
+# | 环境变量 | 默认值 | 说明 |
+# |----------|--------|------|
+# | NOKORI_DATA_DIR | ~/.nokori | 数据根目录 |
+# | NOKORI_DISABLED | 0 | 完全禁用 |
+# | NOKORI_LOG_LEVEL | warn | debug / info / warn / error |
+# | NOKORI_DISMISS_PHRASE | dismiss | 对话退役：「动词 + short_id」里的动词 |
+# | NOKORI_MAX_INJECTION_CHARS | 1500 | 规则注入字符上限 |
+# | NOKORI_GATE_ENABLED | 1 | 启用 Gate |
+# | NOKORI_GATE_TTL_SECONDS | 600 | Marker TTL（秒） |
+# | NOKORI_GATE_MATCHER | Edit\|Write\|... | 第二层 block 用 tool_name 正则；任意 .* |
+# | NOKORI_EXTRACT_MODE | manual | manual / async |
+# | NOKORI_LLM_BASE_URL | — | LLM API 根 URL |
+# | NOKORI_LLM_MODEL | — | LLM 模型 |
+# | NOKORI_LLM_API_KEY | — | LLM Key |
+# | NOKORI_EMBED_ENABLED | 0 | 强制启用 embedding |
+# | NOKORI_EMBED_BASE_URL | — | Embedding API 根 URL |
+# | NOKORI_EMBED_MODEL | — | Embedding 模型 |
+# | NOKORI_EMBED_API_KEY | — | Embedding Key |
+# | NOKORI_EMBED_DIMENSIONS | 0 | 0=不传 dimensions |
+# | NOKORI_EMBED_CHUNK_SIZE | 512 | 分块字符数 |
+# | NOKORI_EMBED_CHUNK_COUNT | 3 | 每规则最大块数 |
+#
+# -----------------------------------------------------------------------------
+# 仅环境变量、不在 config.toml 映射的项
+# -----------------------------------------------------------------------------
+#
+# NOKORI_CLAUDE_HOME
+#   默认：~/.claude
+#   含义：`nokori install` 读写的 settings.json 目录（覆盖默认 Claude 配置路径）
+#
+# NOKORI_EXTRACTING=1
+#   含义：内部递归防护；仅 `claude -p` fallback 子进程设置。勿在 async extract 或
+#   用户 shell 中设置，否则 LLM 提取会被跳过。
+#
+# -----------------------------------------------------------------------------
+# 当前不可通过配置修改的行为（硬编码）
+# -----------------------------------------------------------------------------
+#
+# - SessionStart 热缓存：同目录上一场 *.jsonl（mtime < 当前），未 extract 才注入；
+#   500 字符 / 最近 3 条用户消息（hot_cache.py）
+# - 检索：BM25 默认；embedding 自动启用阈值 rules >= 20
+# - Merger 邻居：BM25 top-20，不足时最近 5 条补齐
+# - RRF 融合常数 K=60；最低证据：lexical>=2 / variant 单 token / cosine>=0.55

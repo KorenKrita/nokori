@@ -193,3 +193,14 @@ def test_mark_extracted_on_empty_text(tmp_path, monkeypatch):
         assert row["status"] == "done"
     finally:
         db.close()
+
+
+def test_extract_lock_exclusive(monkeypatch, tmp_path):
+    monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+    cfg = Config.from_env()
+    from nokori.extract.lock import acquire
+
+    with acquire(cfg) as first:
+        assert first is True
+        with acquire(cfg) as second:
+            assert second is False

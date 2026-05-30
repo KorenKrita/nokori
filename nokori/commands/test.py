@@ -72,15 +72,11 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
             if shadow_rules:
                 shadow_bm25 = bm25.search(args.prompt, shadow_rules, top_k=5)
                 shadow_fused = ranker.rrf_fuse(shadow_bm25, [])
-                shadow_hits = [
-                    r for r in shadow_fused
-                    if r.rrf_score >= ranker.MIN_ABSOLUTE_SCORE
-                    and ranker._meets_min_evidence(r)
-                ]
-                if shadow_hits:
+                shadow_hot, _ = ranker.tier_results(shadow_fused)
+                if shadow_hot:
                     print()
-                    print(f"shadow_pool ({len(shadow_hits)} hits, not injected):")
-                    for r in shadow_hits[:3]:
+                    print(f"shadow_pool HOT ({len(shadow_hot)} would record hit, not injected):")
+                    for r in shadow_hot[:3]:
                         print(
                             f"  {r.rule.short_id}  bm25={r.bm25_score:.4f}  "
                             f"proj={r.rule.project_id}"

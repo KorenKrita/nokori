@@ -179,18 +179,55 @@ def test_unmerge_check_restores_when_superseded_target_dormant(monkeypatch, tmp_
         db.close()
 
 
-def test_hot_cache_injects_user_messages(monkeypatch, tmp_path):
+def test_find_previous_transcript_picks_newest_older_sibling(tmp_path):
+    older = tmp_path / "older.jsonl"
+    older.write_text('{"type":"user","message":"old"}\n')
+    current = tmp_path / "current.jsonl"
+    current.write_text('{"type":"user","message":"new"}\n')
+    import os
+    os.utime(older, (1_700_000_000, 1_700_000_000))
+    os.utime(current, (1_700_000_100, 1_700_000_100))
+    assert hot_cache.find_previous_transcript(current) == older.resolve()
+
+
+def test_hot_cache_injects_from_previous_session(monkeypatch, tmp_path):
     monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
     cfg = Config.from_env()
-    transcript = tmp_path / "session.jsonl"
-    transcript.write_text("\n".join([
+    previous = tmp_path / "previous.jsonl"
+    previous.write_text("\n".join([
         json.dumps({"type": "user", "message": "first prompt"}),
         json.dumps({"type": "assistant", "message": "ok"}),
         json.dumps({"type": "user", "message": "do not force push"}),
     ]) + "\n")
+    current = tmp_path / "current.jsonl"
+    current.write_text('{"type":"user","message":"new session"}\n')
+    import os
+    os.utime(previous, (1_700_000_000, 1_700_000_000))
+    os.utime(current, (1_700_000_100, 1_700_000_100))
     db = open_db(cfg.db_path)
     try:
-        text = hot_cache.maybe_inject({"transcript_path": str(transcript)}, cfg, db)
+        text = hot_cache.maybe_inject({"transcript_path": str(current)}, cfg, db)
         assert text and "do not force push" in text
+        assert "new session" not in text
+    finally:
+        db.close()
+
+
+def test_hot_cache_skips_when_previous_extracted(monkeypatch, tmp_path):
+    monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+    cfg = Config.from_env()
+    previous = tmp_path / "previous.jsonl"
+    previous.write_text(
+        json.dumps({"type": "user", "message": "do not force push"}) + "\n"
+    )
+    current = tmp_path / "current.jsonl"
+    current.write_text('{"type":"user","message":"new session"}\n')
+    import os
+    os.utime(previous, (1_700_000_000, 1_700_000_000))
+    os.utime(current, (1_700_000_100, 1_700_000_100))
+    db = open_db(cfg.db_path)
+    try:
+        hot_cache.mark_extracted(db, previous, previous.stat().st_mtime)
+        assert hot_cache.maybe_inject({"transcript_path": str(current)}, cfg, db) is None
     finally:
         db.close()

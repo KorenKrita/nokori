@@ -87,13 +87,6 @@ def _write_version(conn: sqlite3.Connection, version: int) -> None:
     conn.execute(f"PRAGMA user_version = {int(version)}")
 
 
-def _migrate_to_v1(conn: sqlite3.Connection) -> None:
-    conn.executescript(_DDL_V1)
-
-
-_MIGRATIONS = {1: _migrate_to_v1}
-
-
 class Db:
     def __init__(self, conn: sqlite3.Connection):
         self.conn = conn
@@ -154,18 +147,16 @@ def _migrate(conn: sqlite3.Connection) -> None:
     current = _read_version(conn)
     if current >= SCHEMA_VERSION:
         return
-    for v in range(current + 1, SCHEMA_VERSION + 1):
-        migrator = _MIGRATIONS.get(v)
-        if migrator is None:
-            raise DbError(f"missing migration to v{v}")
-        try:
-            conn.execute("BEGIN")
-            migrator(conn)
-            _write_version(conn, v)
-            conn.commit()
-        except Exception:
-            conn.rollback()
-            raise
+    if current != 0:
+        raise DbError(f"unsupported schema version {current}")
+    try:
+        conn.execute("BEGIN")
+        conn.executescript(_DDL_V1)
+        _write_version(conn, SCHEMA_VERSION)
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
 
 
 def loads_json(value: str | None, default):
