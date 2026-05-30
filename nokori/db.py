@@ -117,9 +117,6 @@ class Db:
     def schema_version(self) -> int:
         return _read_version(self.conn)
 
-    def execute(self, sql: str, params: tuple = ()) -> sqlite3.Cursor:
-        return self.conn.execute(sql, params)
-
     def fetchone(self, sql: str, params: tuple = ()) -> sqlite3.Row | None:
         cur = self.conn.execute(sql, params)
         return cur.fetchone()

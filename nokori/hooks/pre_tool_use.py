@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from functools import lru_cache
 
 from ..config import Config
 from ..db import open_db
@@ -12,14 +13,22 @@ from ..utils.logging import get_logger
 log = get_logger("nokori.hooks.pre_tool_use")
 
 
+@lru_cache(maxsize=8)
+def _compiled_gate_matcher(matcher: str) -> re.Pattern[str] | None:
+    try:
+        return re.compile(matcher)
+    except re.error:
+        return None
+
+
 def _tool_matches_gate(tool_name: str | None, matcher: str) -> bool:
     if not tool_name or not matcher:
         return False
-    try:
-        return bool(re.fullmatch(matcher, tool_name))
-    except re.error:
+    pattern = _compiled_gate_matcher(matcher)
+    if pattern is None:
         log.warning("invalid gate matcher %r; skipping gate for this tool", matcher)
         return False
+    return bool(pattern.fullmatch(tool_name))
 
 
 def handle(payload: dict, cfg: Config) -> dict:

@@ -77,8 +77,3 @@ class _NameStartsWith(logging.Filter):
 
 def get_logger(name: str) -> logging.Logger:
     return logging.getLogger(name)
-
-
-def logger_for_session(name: str, session_id: str) -> logging.LoggerAdapter:
-    base = logging.getLogger(name)
-    return logging.LoggerAdapter(base, {"session_id": session_id or "-"})

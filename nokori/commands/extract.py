@@ -10,6 +10,7 @@ from ..extract import jobs as job_io
 from ..extract.lock import acquire as extract_lock
 from ..extract.compressor import compress
 from ..extract.extractor import extract as extract_candidates
+from ..extract import checkpoint as merge_checkpoint
 from ..extract.merger import merge_candidate
 from ..extract.reader import read as read_transcript
 from ..lifecycle.hot_cache import mark_extracted
@@ -44,13 +45,25 @@ def _process_path(path: Path, project_id: str | None, cfg: Config,
     try:
         merged = 0
         merge_ok = True
+        done_keys = merge_checkpoint.load_merged_keys(cfg, path)
         for cand in candidates:
+            ck = merge_checkpoint.candidate_key(cand)
+            if ck in done_keys:
+                continue
             outcome = merge_candidate(cand, db, llm, project_id, cfg=cfg)
             if not outcome.merge_ok:
                 merge_ok = False
+                log.warning(
+                    "extract merge stopped at candidate, checkpoint preserved: %s",
+                    path,
+                )
+                break
+            merge_checkpoint.record_merged(cfg, path, ck)
+            done_keys.add(ck)
             merged += outcome.inserted + outcome.activated + outcome.superseded
         if merge_ok:
             mark_extracted(db, path, path.stat().st_mtime)
+            merge_checkpoint.clear(cfg, path)
         else:
             log.warning("extract merge incomplete, transcript not marked extracted: %s", path)
     finally:

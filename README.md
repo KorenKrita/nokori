@@ -299,8 +299,8 @@ candidate → active → dormant → (reactivated or archived)
 
 ### 激活条件
 
-- 用户明确纠正（high confidence correction）→ 立即 active
-- 纯 AI evidence：`evidence_score >= 2` 且跨 `>= 2` 个活跃天
+- **手动 `nokori add`** 或 **提取合并时**：`high` + `correction` 候选 → 直接 `active`（含初始 `user_correction` 证据）
+- 纯 AI evidence（含跨项目 `shadow_hot`）：`evidence_score >= 2` 且跨 `>= 2` 个活跃天
 
 **`last_hit` 语义**：用于 dormant 扫描（`last_hit` 缺失时用 `created_at`）。在以下情况更新：**(1)** 正式池 HOT 注入；**(2)** dormant 规则检索达标、当轮再激活。普通 WARM 注入**不**更新 `last_hit`。`hit_count` 仍仅 HOT 注入 +1。
 
@@ -361,8 +361,8 @@ SessionStart 在**当前** `transcript_path` **同目录**下，取 mtime 严格
 
 - **Dormant 扫描**（每 7 天）：30 天未命中的 active → dormant
 - **Candidate 清理**（扫描间隔最多每 30 天跑一次）：删除 **created_at ≥20 日历天** 的普通 candidate、**≥40 天** 的 `anti_pattern` candidate（非「活 30 天」）
+- **Unmerge 检查**（最多每 90 天）：`status=merged` 的规则若 `superseded_by` 指向的规则已删除或 dormant/archived，则恢复为 `dormant`（避免赢家消失后永远卡在 merged）
 - **Injection 清理**（扫描间隔最多每 7 天）：删除 **30 天前** 的 `injections` 行（dismiss 仅查 24h，留缓冲）
-- **解合并检查**（每 90 天）：merged 指向的目标已 dormant/archived → 恢复为 dormant
 
 也可手动触发：
 

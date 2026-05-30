@@ -121,25 +121,28 @@ def spawn_server(cfg: Config) -> None:
 
     cfg.ensure_dirs()
     err_log = cfg.logs_dir / "embed-server.log"
+    err_fh = subprocess.DEVNULL
     try:
         err_fh = open(err_log, "a", encoding="utf-8")
     except OSError:
         err_fh = subprocess.DEVNULL
     env = os.environ.copy()
     env["NOKORI_DATA_DIR"] = str(cfg.data_dir)
-    subprocess.Popen(
-        [sys.executable, "-m", "nokori", "embed", "serve"],
-        env=env,
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.DEVNULL,
-        stderr=err_fh,
-        start_new_session=True,
-    )
-    if err_fh is not subprocess.DEVNULL:
-        try:
-            err_fh.close()
-        except OSError:
-            pass
+    try:
+        subprocess.Popen(
+            [sys.executable, "-m", "nokori", "embed", "serve"],
+            env=env,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=err_fh,
+            start_new_session=True,
+        )
+    finally:
+        if err_fh is not subprocess.DEVNULL:
+            try:
+                err_fh.close()
+            except OSError:
+                pass
 
 
 def kickstart_server(cfg: Config) -> bool:

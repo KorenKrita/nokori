@@ -247,6 +247,7 @@ def merge_candidate(
     pending_new: Rule | None = None
     anchor_id: str | None = None
 
+    parsed: list[tuple[str, str, Rule]] = []
     for rel in judgment:
         eid = rel.get("existing_id")
         verdict = (rel.get("judgment") or "").strip().upper()[:1]
@@ -254,51 +255,54 @@ def merge_candidate(
             continue
         if eid in handled_existing:
             continue
-        existing = by_id[eid]
-        if verdict == "A":  # SAME
-            saw_strong = True
-            handled_existing.add(eid)
-            anchor_id = existing.id
-            if existing.status == "candidate":
-                if cand.confidence == "high" and cand.source_type == "correction":
-                    add_evidence(db, existing.id, "user_correction", 3)
-                    _activate(db, existing.id, "high", cfg)
-                    activated += 1
-                else:
-                    score, log_list = add_evidence(db, existing.id, "same_extraction", 1)
-                    check_rule = dataclasses.replace(
-                        existing, evidence_score=score, evidence_log=log_list,
-                    )
-                    if should_activate_pure_ai(check_rule):
-                        _activate(db, existing.id, check_rule.confidence, cfg)
-                        activated += 1
-            elif existing.status in ("active", "dormant"):
-                add_evidence(db, existing.id, "same_extraction", 1)
-        elif verdict in ("B", "D"):  # BROADER / CONTRADICTS
-            saw_strong = True
-            handled_existing.add(eid)
-            if pending_new is not None:
-                winner_id = pending_new.id
-            elif anchor_id is not None:
-                winner_id = anchor_id
+        parsed.append((eid, verdict, by_id[eid]))
+
+    # Pass 1: SAME (A) — establishes anchor before BROADER/CONTRADICTS (B/D).
+    for eid, verdict, existing in parsed:
+        if verdict != "A":
+            continue
+        saw_strong = True
+        handled_existing.add(eid)
+        anchor_id = existing.id
+        merged += 1
+        if existing.status == "candidate":
+            if cand.confidence == "high" and cand.source_type == "correction":
+                add_evidence(db, existing.id, "user_correction", 3)
+                _activate(db, existing.id, "high", cfg)
+                activated += 1
             else:
-                pending_new = _persist_new(db, cand, project_id, cfg)
-                inserted += 1
-                winner_id = pending_new.id
-            _supersede(db, existing.id, winner_id)
-            superseded += 1
-        # C (NARROWER) and E (UNRELATED) → coexist; no action.
+                score, log_list = add_evidence(db, existing.id, "same_extraction", 1)
+                check_rule = dataclasses.replace(
+                    existing, evidence_score=score, evidence_log=log_list,
+                )
+                if should_activate_pure_ai(check_rule):
+                    _activate(db, existing.id, check_rule.confidence, cfg)
+                    activated += 1
+        elif existing.status in ("active", "dormant"):
+            add_evidence(db, existing.id, "same_extraction", 1)
+
+    # Pass 2: B/D — may supersede onto anchor_id from pass 1 regardless of LLM order.
+    for eid, verdict, existing in parsed:
+        if verdict not in ("B", "D"):
+            continue
+        if eid in handled_existing:
+            continue
+        saw_strong = True
+        handled_existing.add(eid)
+        if pending_new is not None:
+            winner_id = pending_new.id
+        elif anchor_id is not None:
+            winner_id = anchor_id
+        else:
+            pending_new = _persist_new(db, cand, project_id, cfg)
+            inserted += 1
+            winner_id = pending_new.id
+        _supersede(db, existing.id, winner_id)
+        superseded += 1
 
     if not saw_strong:
         _persist_new(db, cand, project_id, cfg)
         inserted += 1
-
-    merged = sum(
-        1
-        for rel in judgment
-        if (rel.get("judgment") or "").strip().upper()[:1] == "A"
-        and rel.get("existing_id") in by_id
-    )
 
     return MergeOutcome(
         inserted=inserted,
