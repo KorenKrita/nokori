@@ -101,14 +101,6 @@ def prune_stale_markers(cfg: Config, session_id: str, current_ph: str) -> None:
                     path.unlink()
                 except OSError:
                     pass
-    legacy = cfg.legacy_marker_path(session_id)
-    if legacy.exists():
-        old = _load_marker_file(legacy, session_id)
-        if old is None or old.prompt_hash != current_ph:
-            try:
-                legacy.unlink()
-            except OSError:
-                pass
 
 
 def read(
@@ -118,18 +110,11 @@ def read(
     prompt_hash_value: str | None = None,
 ) -> Marker | None:
     """Read gate marker for this session and prompt turn (per-hash file)."""
-    if prompt_hash_value:
-        marker = _load_marker_file(
-            cfg.marker_path(session_id, prompt_hash_value), session_id
-        )
-        if marker is not None:
-            return marker
-    legacy = _load_marker_file(cfg.legacy_marker_path(session_id), session_id)
-    if legacy is None:
+    if not prompt_hash_value:
         return None
-    if prompt_hash_value and legacy.prompt_hash != prompt_hash_value:
-        return None
-    return legacy
+    return _load_marker_file(
+        cfg.marker_path(session_id, prompt_hash_value), session_id
+    )
 
 
 def delete(
@@ -149,10 +134,15 @@ def delete(
     delete_session(cfg, session_id)
 
 
+def _orphan_legacy_marker_path(cfg: Config, session_id: str) -> Path:
+    """Pre–per-hash layout; delete only (no read)."""
+    return cfg.data_dir / f"pending-ack-{cfg._safe_session_id(session_id)}.marker"
+
+
 def delete_session(cfg: Config, session_id: str) -> None:
-    """Remove all gate markers for a session (legacy single file + per-hash dir)."""
+    """Remove all gate markers for a session."""
     try:
-        cfg.legacy_marker_path(session_id).unlink()
+        _orphan_legacy_marker_path(cfg, session_id).unlink()
     except FileNotFoundError:
         pass
     except OSError:

@@ -265,10 +265,6 @@ class Config:
     def marker_path(self, session_id: str, prompt_hash: str) -> Path:
         return self.marker_dir(session_id) / f"{prompt_hash}.json"
 
-    def legacy_marker_path(self, session_id: str) -> Path:
-        """Pre–per-hash layout; read-only fallback for migration."""
-        return self.data_dir / f"pending-ack-{self._safe_session_id(session_id)}.marker"
-
     def ensure_dirs(self) -> None:
         for p in (self.data_dir, self.logs_dir, self.jobs_dir, self.sessions_dir):
             p.mkdir(parents=True, exist_ok=True, mode=0o700)
