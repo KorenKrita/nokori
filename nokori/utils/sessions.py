@@ -39,6 +39,34 @@ def register(cfg: Config, session_id: str, project_id: str | None = None) -> Non
     _atomic_write_json(_path_for(cfg, session_id), payload)
 
 
+def get_project_id(cfg: Config, session_id: str) -> str | None:
+    """Cached project_id from SessionStart (avoids git on every UserPromptSubmit)."""
+    p = _path_for(cfg, session_id)
+    if not p.exists():
+        return None
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    pid = data.get("project_id")
+    return str(pid) if pid else None
+
+
+def update_project_id(cfg: Config, session_id: str, project_id: str) -> None:
+    cfg.ensure_dirs()
+    p = _path_for(cfg, session_id)
+    if p.exists():
+        try:
+            data = json.loads(p.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            data = {"session_id": session_id}
+    else:
+        data = {"session_id": session_id, "started_at": now_iso(), "ended_at": None}
+    data["project_id"] = project_id
+    data["last_activity"] = now_iso()
+    _atomic_write_json(p, data)
+
+
 def touch(cfg: Config, session_id: str) -> None:
     p = _path_for(cfg, session_id)
     if not p.exists():

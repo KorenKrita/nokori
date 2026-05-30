@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 
 from ..config import Config
+from ..db import dumps_json
 from .extractor import Candidate
 
 
@@ -17,7 +18,8 @@ def transcript_key(path: Path) -> str:
 def candidate_key(cand: Candidate) -> str:
     payload = (
         f"{cand.trigger}\n{cand.action}\n{cand.source_type}\n"
-        f"{cand.confidence}\n{cand.behavior or ''}"
+        f"{cand.confidence}\n{cand.behavior or ''}\n"
+        f"{dumps_json(cand.trigger_variants)}\n{dumps_json(cand.search_terms)}"
     )
     return hashlib.sha256(payload.encode("utf-8", errors="replace")).hexdigest()[:32]
 

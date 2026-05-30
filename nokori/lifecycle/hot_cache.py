@@ -24,7 +24,12 @@ def find_previous_transcript(current: Path, cfg: Config | None = None) -> Path |
     if cfg is not None:
         indexed = transcript_index.lookup_previous(cfg, current)
         if indexed is not None:
-            return indexed
+            try:
+                resolved = indexed.expanduser().resolve()
+            except OSError:
+                return _find_previous_transcript_glob(current)
+            if is_path_allowed(resolved):
+                return indexed
     return _find_previous_transcript_glob(current)
 
 

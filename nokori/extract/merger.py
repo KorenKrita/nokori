@@ -22,6 +22,31 @@ log = get_logger("nokori.extract.merger")
 MERGE_NEIGHBOR_LIMIT = 20
 MERGE_RECENT_FALLBACK = 5
 
+# LLM may return single letters or full words (CONTRADICTS not C).
+_VERDICT_ALIASES: dict[str, str] = {
+    "A": "A",
+    "SAME": "A",
+    "B": "B",
+    "BROADER": "B",
+    "C": "C",
+    "NARROWER": "C",
+    "D": "D",
+    "CONTRADICTS": "D",
+    "E": "E",
+    "UNRELATED": "E",
+}
+
+
+def _normalize_merge_verdict(raw: str) -> str | None:
+    token = (raw or "").strip().upper()
+    if not token:
+        return None
+    if token in _VERDICT_ALIASES:
+        return _VERDICT_ALIASES[token]
+    if len(token) == 1 and token in "ABCDE":
+        return token
+    return None
+
 
 @dataclass
 class MergeOutcome:
@@ -256,8 +281,8 @@ def merge_candidate(
         if not isinstance(rel, dict):
             continue
         eid = rel.get("existing_id")
-        verdict = (rel.get("judgment") or "").strip().upper()[:1]
-        if not eid or eid not in by_id or verdict not in {"A", "B", "C", "D", "E"}:
+        verdict = _normalize_merge_verdict(rel.get("judgment") or "")
+        if not eid or eid not in by_id or verdict is None:
             continue
         if eid in seen_eids:
             continue

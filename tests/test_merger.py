@@ -353,6 +353,30 @@ def test_merge_multiple_a_uses_first_anchor_for_bd(monkeypatch, tmp_path):
         db.close()
 
 
+def test_merge_verdict_full_word_contradicts(monkeypatch, tmp_path):
+    monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+    db = open_db(Config.from_env().db_path)
+    try:
+        merge_candidate(_cand("git push force", "use lease"), db, FakeMergeLLM("[]"))
+        id_old = fetch_rules(db, statuses=("active",))[0].id
+        response = json.dumps({
+            "relationships": [
+                {"existing_id": id_old, "judgment": "CONTRADICTS", "reasoning": "conflict"},
+            ]
+        })
+        merge_candidate(
+            _cand("never force push", "always use lease"),
+            db,
+            FakeMergeLLM(response),
+        )
+        row = db.fetchone(
+            "SELECT status, superseded_by FROM rules WHERE id = ?", (id_old,)
+        )
+        assert row["status"] == "merged"
+    finally:
+        db.close()
+
+
 def test_merge_llm_failure_keeps_pending_when_neighbors(monkeypatch, tmp_path):
     monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
     cfg = Config.from_env()
