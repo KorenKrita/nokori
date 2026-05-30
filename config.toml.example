@@ -111,6 +111,7 @@ matcher = "Edit|Write|MultiEdit|Bash|NotebookEdit"
 # 可选：
 #   manual — SessionEnd 只写入 jobs/，需手动执行 `nokori extract`
 #   async  — SessionEnd 额外 fork 后台 `nokori extract`（需已配置 LLM；失败不影响关 session）
+# 批处理与 `nokori extract --session` 共用 {data_dir}/extract.lock（Unix fcntl / Windows msvcrt）
 # 环境变量：NOKORI_EXTRACT_MODE
 mode = "manual"
 

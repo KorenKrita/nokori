@@ -299,7 +299,7 @@ export NOKORI_EXTRACT_MODE=async
 
 默认 `manual` 模式下只写 job 文件，需手动 `nokori extract` 消费。
 
-~~SessionStart 会同步消费 jobs。~~ → **实现变更**：仅 CLI / async 子进程消费；`nokori extract` 使用 `{data_dir}/extract.lock`（fcntl）防止并发重复处理。
+~~SessionStart 会同步消费 jobs。~~ → **实现变更**：仅 CLI / async 子进程消费；`nokori extract` 使用 `{data_dir}/extract.lock`（Unix / Windows 均支持）防止并发重复处理。
 
 ### 热缓存
 

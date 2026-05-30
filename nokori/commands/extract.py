@@ -45,21 +45,21 @@ def _process_path(path: Path, project_id: str | None, cfg: Config,
 
 
 def run(args: argparse.Namespace, cfg: Config) -> int:
-    if args.session:
-        path = Path(args.session).expanduser().resolve()
-        if not path.exists():
-            print(f"nokori: transcript not found: {path}")
-            return 1
-        cands, applied = _process_path(path, None, cfg, dry_run=args.dry_run)
-        print(f"transcript: {path}")
-        print(f"candidates: {cands}")
-        if not args.dry_run:
-            print(f"applied:    {applied}")
-        return 0
-
     with extract_lock(cfg) as locked:
         if not locked:
             print("(extract already running)")
+            return 0
+
+        if args.session:
+            path = Path(args.session).expanduser().resolve()
+            if not path.exists():
+                print(f"nokori: transcript not found: {path}")
+                return 1
+            cands, applied = _process_path(path, None, cfg, dry_run=args.dry_run)
+            print(f"transcript: {path}")
+            print(f"candidates: {cands}")
+            if not args.dry_run:
+                print(f"applied:    {applied}")
             return 0
 
         pending = job_io.list_pending(cfg)
