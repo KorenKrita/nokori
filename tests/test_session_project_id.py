@@ -10,7 +10,7 @@ def test_git_fallback_does_not_overwrite_session_cache(monkeypatch, tmp_path):
     git_id = "repo-aaaaaaaa"
     cwd_hash_id = "repo-bbbbbbbb"
 
-    sessions.register(cfg, sid, project_id=git_id)
+    sessions.register(cfg, sid, project_id=git_id, project_id_from_git=True)
 
     def fake_detailed(cwd):
         return cwd_hash_id, False
@@ -46,6 +46,30 @@ def test_git_resolved_id_refreshes_when_repo_changes(monkeypatch, tmp_path):
 
     assert (
         sessions.resolve_project_id_for_session(cfg, sid, "/other/repo")
+        == new_id
+    )
+    assert sessions.get_project_id(cfg, sid) == new_id
+
+
+def test_non_git_cwd_change_refreshes_cache(monkeypatch, tmp_path):
+    monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+    cfg = Config.from_env()
+    sid = "sess-cwd-only"
+    old_id = "dir-a-11111111"
+    new_id = "dir-b-22222222"
+
+    sessions.register(cfg, sid, project_id=old_id, project_id_from_git=False)
+
+    def fake_detailed(cwd):
+        return new_id, False
+
+    monkeypatch.setattr(
+        "nokori.utils.project.resolve_project_id_detailed",
+        fake_detailed,
+    )
+
+    assert (
+        sessions.resolve_project_id_for_session(cfg, sid, "/other/dir")
         == new_id
     )
     assert sessions.get_project_id(cfg, sid) == new_id

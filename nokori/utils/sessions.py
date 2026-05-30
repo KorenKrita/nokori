@@ -27,7 +27,13 @@ def _atomic_write_json(path: Path, payload: dict) -> None:
     os.replace(tmp, path)
 
 
-def register(cfg: Config, session_id: str, project_id: str | None = None) -> None:
+def register(
+    cfg: Config,
+    session_id: str,
+    project_id: str | None = None,
+    *,
+    project_id_from_git: bool | None = None,
+) -> None:
     cfg.ensure_dirs()
     payload = {
         "session_id": session_id,
@@ -36,6 +42,8 @@ def register(cfg: Config, session_id: str, project_id: str | None = None) -> Non
         "last_activity": now_iso(),
         "ended_at": None,
     }
+    if project_id_from_git is not None:
+        payload["project_id_from_git"] = project_id_from_git
     _atomic_write_json(_path_for(cfg, session_id), payload)
 
 
@@ -52,6 +60,17 @@ def get_project_id(cfg: Config, session_id: str) -> str | None:
     return str(pid) if pid else None
 
 
+def get_project_id_from_git(cfg: Config, session_id: str) -> bool:
+    p = _path_for(cfg, session_id)
+    if not p.exists():
+        return False
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    return bool(data.get("project_id_from_git"))
+
+
 def resolve_project_id_for_session(
     cfg: Config,
     session_id: str,
@@ -61,19 +80,34 @@ def resolve_project_id_for_session(
     from .project import resolve_project_id_detailed
 
     cached = get_project_id(cfg, session_id)
+    cached_from_git = get_project_id_from_git(cfg, session_id)
     if not cwd:
         return cached
     resolved, used_git = resolve_project_id_detailed(cwd)
     if resolved is None:
         return cached
-    if used_git or cached is None:
+    if used_git:
         if cached != resolved:
-            update_project_id(cfg, session_id, resolved)
+            update_project_id(cfg, session_id, resolved, project_id_from_git=True)
         return resolved
-    return cached if cached is not None else resolved
+    if cached_from_git:
+        return cached
+    if cached is None:
+        update_project_id(cfg, session_id, resolved, project_id_from_git=False)
+        return resolved
+    if cached != resolved:
+        update_project_id(cfg, session_id, resolved, project_id_from_git=False)
+        return resolved
+    return cached
 
 
-def update_project_id(cfg: Config, session_id: str, project_id: str) -> None:
+def update_project_id(
+    cfg: Config,
+    session_id: str,
+    project_id: str,
+    *,
+    project_id_from_git: bool | None = None,
+) -> None:
     cfg.ensure_dirs()
     p = _path_for(cfg, session_id)
     if p.exists():
@@ -84,6 +118,8 @@ def update_project_id(cfg: Config, session_id: str, project_id: str) -> None:
     else:
         data = {"session_id": session_id, "started_at": now_iso(), "ended_at": None}
     data["project_id"] = project_id
+    if project_id_from_git is not None:
+        data["project_id_from_git"] = project_id_from_git
     data["last_activity"] = now_iso()
     _atomic_write_json(p, data)
 

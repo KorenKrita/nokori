@@ -7,7 +7,7 @@ from ..search import embedding as embedding_search
 from ..search import embed_ipc
 from ..utils import sessions
 from ..utils.logging import get_logger
-from ..utils.project import resolve_project_id
+from ..utils.project import resolve_project_id_detailed
 
 log = get_logger("nokori.hooks.session_start")
 
@@ -23,8 +23,10 @@ def _maybe_kickstart_embed(cfg: Config, db) -> None:
 
 def handle(payload: dict, cfg: Config) -> dict:
     session_id = payload.get("session_id") or "-"
-    project_id = resolve_project_id(payload.get("cwd"))
-    sessions.register(cfg, session_id, project_id)
+    project_id, from_git = resolve_project_id_detailed(payload.get("cwd"))
+    sessions.register(
+        cfg, session_id, project_id, project_id_from_git=from_git,
+    )
 
     cache_text = None
     db = open_db(cfg.db_path)
