@@ -60,7 +60,9 @@ def handle(payload: dict, cfg: Config) -> dict:
 
     transcript_index.record_session_transcript(cfg, transcript)
     meta = transcript_stat(transcript)
-    project_id = resolve_project_id(payload.get("cwd"))
+    project_id = sessions.resolve_project_id_for_session(
+        cfg, session_id, payload.get("cwd"), resolve_fn=resolve_project_id,
+    )
     job_io.write_job(cfg, transcript, project_id, meta.mtime)
     log.info("queued extract job session=%s transcript=%s", session_id, transcript.name)
 

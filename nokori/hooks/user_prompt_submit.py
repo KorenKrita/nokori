@@ -73,6 +73,7 @@ def _update_gate_marker(
             ],
             ph=ph,
         )
+        marker_io.prune_stale_markers(cfg, session_id, ph)
     else:
         marker_io.delete_session(cfg, session_id)
 
@@ -80,11 +81,9 @@ def _update_gate_marker(
 def handle(payload: dict, cfg: Config) -> dict:
     session_id = payload.get("session_id") or "-"
     prompt = payload.get("prompt") or ""
-    project_id = sessions.get_project_id(cfg, session_id)
-    if project_id is None:
-        project_id = resolve_project_id(payload.get("cwd"))
-        if project_id is not None:
-            sessions.update_project_id(cfg, session_id, project_id)
+    project_id = sessions.resolve_project_id_for_session(
+        cfg, session_id, payload.get("cwd"), resolve_fn=resolve_project_id,
+    )
 
     sessions.touch(cfg, session_id)
 

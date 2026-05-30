@@ -52,6 +52,27 @@ def get_project_id(cfg: Config, session_id: str) -> str | None:
     return str(pid) if pid else None
 
 
+def resolve_project_id_for_session(
+    cfg: Config,
+    session_id: str,
+    cwd: str | None,
+    *,
+    resolve_fn,
+) -> str | None:
+    """Use session cache; refresh when cwd maps to a different project_id."""
+    resolved = resolve_fn(cwd) if cwd else None
+    cached = get_project_id(cfg, session_id)
+    if resolved is None:
+        return cached
+    if cached != resolved:
+        update_project_id(cfg, session_id, resolved)
+        return resolved
+    if cached is not None:
+        return cached
+    update_project_id(cfg, session_id, resolved)
+    return resolved
+
+
 def update_project_id(cfg: Config, session_id: str, project_id: str) -> None:
     cfg.ensure_dirs()
     p = _path_for(cfg, session_id)
