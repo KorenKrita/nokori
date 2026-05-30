@@ -16,10 +16,17 @@ class FakeMergeLLM:
         return self.response
 
 
-def _cand(trigger="rule x", action="do y", source="correction", conf="high"):
+def _cand(
+    trigger="rule x",
+    action="do y",
+    source="correction",
+    conf="high",
+    *,
+    variants=(),
+):
     return Candidate(
         trigger=trigger,
-        trigger_variants=[],
+        trigger_variants=list(variants),
         search_terms={},
         behavior=None,
         action=action,
@@ -111,6 +118,56 @@ def test_merge_contradicts_supersedes(monkeypatch, tmp_path):
         # And there's a new active rule
         actives = [r for r in all_rules if r.status == "active"]
         assert any(r.action == "do B" for r in actives)
+    finally:
+        db.close()
+
+
+def test_merge_bm25_prefers_lexical_match_over_recency(monkeypatch, tmp_path):
+    """Older semantically similar rule must reach the LLM even when many newer rules exist."""
+    monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+    cfg = Config.from_env()
+    db = open_db(cfg.db_path)
+    try:
+        merge_candidate(
+            _cand(
+                "Never force push to a shared branch",
+                "use --force-with-lease",
+                variants=["git push --force"],
+            ),
+            db,
+            FakeMergeLLM("[]"),
+            project_id="proj-a",
+        )
+        target = fetch_rules(db, statuses=("active",), project_id="proj-a")[0]
+
+        unrelated_llm = FakeMergeLLM('{"relationships": []}')
+        for i in range(12):
+            merge_candidate(
+                _cand(f"unrelated topic number {i}", f"action {i}"),
+                db,
+                unrelated_llm,
+                project_id="proj-a",
+            )
+
+        response = json.dumps({
+            "relationships": [
+                {"existing_id": target.id, "judgment": "A", "reasoning": "same"},
+            ]
+        })
+        outcome = merge_candidate(
+            _cand(
+                "git push --force to remote",
+                "use --force-with-lease instead",
+                variants=["git push -f"],
+            ),
+            db,
+            FakeMergeLLM(response),
+            project_id="proj-a",
+        )
+        assert outcome.inserted == 0
+        assert outcome.activated == 0
+        rules = fetch_rules(db, statuses=("active",), project_id="proj-a")
+        assert sum(1 for r in rules if "force" in r.trigger_text.lower()) == 1
     finally:
         db.close()
 

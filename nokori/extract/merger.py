@@ -8,6 +8,7 @@ from ..lifecycle.evidence import add_evidence, should_activate_pure_ai
 from ..llm.adapter import LLMAdapter
 from ..llm.prompts import MERGE_PROMPT
 from ..models import Rule
+from ..search import bm25
 from ..search.embedding import index_rule_if_enabled
 from ..utils.ids import new_uuid, short_id_for
 from ..utils.logging import get_logger
@@ -15,6 +16,10 @@ from ..utils.time import now_iso
 from .extractor import Candidate, strip_fence
 
 log = get_logger("nokori.extract.merger")
+
+# Cold-path merge: BM25 pre-filter before LLM relationship judgment.
+MERGE_NEIGHBOR_LIMIT = 20
+MERGE_RECENT_FALLBACK = 5
 
 
 @dataclass
@@ -63,9 +68,38 @@ def _persist_new(db: Db, cand: Candidate, project_id: str | None, cfg=None) -> R
     return rule
 
 
-def _candidate_neighbors(db: Db, cand: Candidate, limit: int = 5,
-                         project_id: str | None = None) -> list[Rule]:
-    """Pre-filter by status and project scope, leave semantic match to LLM."""
+def _candidate_query(cand: Candidate) -> str:
+    parts = [cand.trigger, cand.action]
+    if cand.behavior:
+        parts.append(cand.behavior)
+    parts.extend(cand.trigger_variants)
+    for terms in cand.search_terms.values():
+        parts.extend(terms)
+    return " ".join(p for p in parts if p)
+
+
+def _fetch_merge_pool(db: Db, project_id: str | None) -> list[Rule]:
+    """All rules eligible for merge comparison in this project scope."""
+    if project_id:
+        rows = db.fetchall(
+            f"SELECT {RULE_COLUMNS} FROM rules "
+            "WHERE status IN ('candidate','active','dormant') "
+            "AND (project_scope = 'global' OR project_id = ? OR project_id IS NULL) "
+            "ORDER BY updated_at DESC",
+            (project_id,),
+        )
+    else:
+        rows = db.fetchall(
+            f"SELECT {RULE_COLUMNS} FROM rules "
+            "WHERE status IN ('candidate','active','dormant') "
+            "ORDER BY updated_at DESC",
+        )
+    return [row_to_rule(r) for r in rows]
+
+
+def _recent_neighbors(
+    db: Db, project_id: str | None, *, limit: int
+) -> list[Rule]:
     if project_id:
         rows = db.fetchall(
             f"SELECT {RULE_COLUMNS} FROM rules "
@@ -82,6 +116,36 @@ def _candidate_neighbors(db: Db, cand: Candidate, limit: int = 5,
             (limit,),
         )
     return [row_to_rule(r) for r in rows]
+
+
+def _candidate_neighbors(
+    db: Db,
+    cand: Candidate,
+    *,
+    project_id: str | None = None,
+    limit: int = MERGE_NEIGHBOR_LIMIT,
+) -> list[Rule]:
+    """BM25 pre-filter top-N in pool; backfill with recent rules if overlap is thin."""
+    pool = _fetch_merge_pool(db, project_id)
+    if not pool:
+        return []
+
+    query = _candidate_query(cand)
+    ranked = bm25.search(query, pool, top_k=limit)
+    neighbors: list[Rule] = [r.rule for r in ranked]
+
+    if len(neighbors) >= MERGE_RECENT_FALLBACK:
+        return neighbors
+
+    seen = {r.id for r in neighbors}
+    for r in _recent_neighbors(db, project_id, limit=MERGE_RECENT_FALLBACK):
+        if r.id in seen:
+            continue
+        neighbors.append(r)
+        seen.add(r.id)
+        if len(neighbors) >= limit:
+            break
+    return neighbors
 
 
 def _format_existing(rules: list[Rule]) -> str:

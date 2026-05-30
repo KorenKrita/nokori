@@ -401,7 +401,7 @@ mode = "manual"
 ```bash
 git clone https://github.com/KorenKrita/nokori.git
 cd nokori
-python3.10+ -m venv .venv
+python3.11+ -m venv .venv
 .venv/bin/pip install -e ".[dev]"
 .venv/bin/pytest
 ```
