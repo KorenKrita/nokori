@@ -64,4 +64,4 @@ def test_hook_disabled_short_circuits(tmp_path):
         env=env,
     )
     assert proc.returncode == 0
-    assert proc.stdout.strip() == "{}"
+    assert json.loads(proc.stdout.strip()) == {"continue": True}

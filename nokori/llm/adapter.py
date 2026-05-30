@@ -26,6 +26,8 @@ class LLMAdapter:
 
     def complete(self, prompt: str, *, max_tokens: int = 2000,
                  timeout: int = 30) -> str | None:
+        # Set only on `claude -p` fallback subprocess to avoid hook recursion.
+        # Must not be set on `nokori extract` (including async SessionEnd spawn).
         if os.environ.get("NOKORI_EXTRACTING") == "1":
             log.warning("recursion guard tripped; skipping LLM call")
             return None

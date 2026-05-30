@@ -33,8 +33,6 @@ class Rule:
     promotion_evidence: list[dict]
     project_scope: ProjectScope
     project_id: str | None
-    merged_from: list[str]
-    merged_into: str | None
     superseded_by: str | None
     archived_reason: str | None
     created_at: str

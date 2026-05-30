@@ -27,8 +27,6 @@ def _rule(short, trigger, *, variants=(), terms_zh=(), action="do x", status="ac
         promotion_evidence=[],
         project_scope="project",
         project_id=None,
-        merged_from=[],
-        merged_into=None,
         superseded_by=None,
         archived_reason=None,
         created_at=now,

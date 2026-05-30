@@ -147,6 +147,38 @@ def test_hot_cache_returns_none_when_no_path(monkeypatch, tmp_path):
         db.close()
 
 
+def test_unmerge_check_restores_when_superseded_target_dormant(monkeypatch, tmp_path):
+    monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+    cfg = Config.from_env()
+    db = open_db(cfg.db_path)
+    try:
+        now = _utcnow_iso()
+        with db.transaction() as tx:
+            tx.execute(
+                "INSERT INTO rules (id, short_id, trigger_text, action, source_type, "
+                "confidence, status, project_scope, created_at, updated_at) "
+                "VALUES ('new-1', 'new111', 'new trigger', 'new action', 'correction', "
+                "'high', 'dormant', 'project', ?, ?)",
+                (now, now),
+            )
+            tx.execute(
+                "INSERT INTO rules (id, short_id, trigger_text, action, source_type, "
+                "confidence, status, project_scope, superseded_by, created_at, updated_at) "
+                "VALUES ('old-1', 'old111', 'old trigger', 'old action', 'correction', "
+                "'high', 'merged', 'project', 'new-1', ?, ?)",
+                (now, now),
+            )
+        restored = maintenance.run_unmerge_check(db)
+        assert restored == 1
+        row = db.fetchone(
+            "SELECT status, superseded_by FROM rules WHERE id = 'old-1'"
+        )
+        assert row["status"] == "dormant"
+        assert row["superseded_by"] is None
+    finally:
+        db.close()
+
+
 def test_hot_cache_injects_user_messages(monkeypatch, tmp_path):
     monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
     cfg = Config.from_env()

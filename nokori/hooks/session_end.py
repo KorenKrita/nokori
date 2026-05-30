@@ -28,7 +28,9 @@ def _resolve_transcript(payload: dict) -> Path | None:
 def _spawn_async_extract(cfg: Config) -> None:
     """Fork a detached subprocess to run `nokori extract`. Best-effort."""
     env = os.environ.copy()
-    env["NOKORI_EXTRACTING"] = "1"
+    # Do not set NOKORI_EXTRACTING here — that guard is for hook recursion only
+    # (see LLMAdapter); the extract CLI must be able to call the configured LLM.
+    env.pop("NOKORI_EXTRACTING", None)
     env["NOKORI_DATA_DIR"] = str(cfg.data_dir)
     try:
         subprocess.Popen(

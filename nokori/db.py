@@ -32,8 +32,6 @@ CREATE TABLE IF NOT EXISTS rules (
     promotion_evidence TEXT NOT NULL DEFAULT '[]',
     project_scope TEXT NOT NULL DEFAULT 'project' CHECK(project_scope IN ('project','global')),
     project_id TEXT,
-    merged_from TEXT NOT NULL DEFAULT '[]',
-    merged_into TEXT,
     superseded_by TEXT,
     archived_reason TEXT,
     created_at TEXT NOT NULL,
@@ -206,8 +204,6 @@ def row_to_rule(row):
         promotion_evidence=loads_json(row["promotion_evidence"], []),
         project_scope=row["project_scope"],
         project_id=row["project_id"],
-        merged_from=loads_json(row["merged_from"], []),
-        merged_into=row["merged_into"],
         superseded_by=row["superseded_by"],
         archived_reason=row["archived_reason"],
         created_at=row["created_at"],
@@ -219,7 +215,7 @@ RULE_COLUMNS = (
     "id, short_id, trigger_text, trigger_variants, search_terms, behavior, action, "
     "rationale, source_type, confidence, status, evidence_score, evidence_log, "
     "hit_count, last_hit, cross_project_hits, promotion_evidence, project_scope, "
-    "project_id, merged_from, merged_into, superseded_by, archived_reason, "
+    "project_id, superseded_by, archived_reason, "
     "created_at, updated_at"
 )
 

@@ -144,7 +144,7 @@ class TestAsyncExtract:
         call_args = mock_popen.call_args
         assert call_args[0][0] == [sys.executable, "-m", "nokori", "extract"]
         env = call_args[1]["env"]
-        assert env["NOKORI_EXTRACTING"] == "1"
+        assert env.get("NOKORI_EXTRACTING") != "1"
         assert env["NOKORI_DATA_DIR"] == str(tmp_path)
 
     def test_manual_mode_does_not_spawn(self, monkeypatch, tmp_path):

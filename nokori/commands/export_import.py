@@ -52,8 +52,6 @@ def run_export(args: argparse.Namespace, cfg: Config) -> int:
                 "promotion_evidence": r.promotion_evidence,
                 "project_scope": r.project_scope,
                 "project_id": r.project_id,
-                "merged_from": r.merged_from,
-                "merged_into": r.merged_into,
                 "superseded_by": r.superseded_by,
                 "archived_reason": r.archived_reason,
                 "created_at": r.created_at,
@@ -101,9 +99,9 @@ def run_import(args: argparse.Namespace, cfg: Config) -> int:
                     "search_terms, behavior, action, rationale, source_type, confidence, "
                     "status, evidence_score, evidence_log, hit_count, last_hit, "
                     "cross_project_hits, promotion_evidence, project_scope, project_id, "
-                    "merged_from, merged_into, superseded_by, archived_reason, "
+                    "superseded_by, archived_reason, "
                     "created_at, updated_at) "
-                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (
                         rid, sid,
                         rec.get("trigger_text", ""),
@@ -123,8 +121,6 @@ def run_import(args: argparse.Namespace, cfg: Config) -> int:
                         dumps_json(rec.get("promotion_evidence") or []),
                         rec.get("project_scope", "project"),
                         rec.get("project_id"),
-                        dumps_json(rec.get("merged_from") or []),
-                        rec.get("merged_into"),
                         rec.get("superseded_by"),
                         rec.get("archived_reason"),
                         rec.get("created_at") or now_iso(),

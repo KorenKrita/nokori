@@ -97,18 +97,21 @@ def run_unmerge_check(db: Db) -> int:
     if not _due(db, "unmerge_check", UNMERGE_INTERVAL_DAYS):
         return 0
     rows = db.fetchall(
-        "SELECT id, merged_into FROM rules WHERE status = 'merged' AND merged_into IS NOT NULL"
+        "SELECT id, superseded_by FROM rules WHERE status = 'merged' "
+        "AND superseded_by IS NOT NULL"
     )
     restored = 0
     ts = now_iso()
     for r in rows:
-        target = db.fetchone("SELECT status FROM rules WHERE id = ?", (r["merged_into"],))
+        target = db.fetchone(
+            "SELECT status FROM rules WHERE id = ?", (r["superseded_by"],)
+        )
         if target is None:
             continue
         if target["status"] in ("dormant", "archived"):
             with db.transaction() as tx:
                 tx.execute(
-                    "UPDATE rules SET status = 'dormant', merged_into = NULL, "
+                    "UPDATE rules SET status = 'dormant', superseded_by = NULL, "
                     "updated_at = ? WHERE id = ?",
                     (ts, r["id"]),
                 )

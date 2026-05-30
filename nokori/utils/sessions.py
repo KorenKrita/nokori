@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
 from pathlib import Path
 
 from ..config import Config
@@ -49,26 +48,3 @@ def end(cfg: Config, session_id: str) -> None:
         return
     data["ended_at"] = now_iso()
     p.write_text(json.dumps(data), encoding="utf-8")
-
-
-def has_recent_activity(cfg: Config, within_seconds: int = 30) -> bool:
-    if not cfg.sessions_dir.exists():
-        return False
-    now = datetime.now(timezone.utc)
-    for entry in cfg.sessions_dir.glob("*.json"):
-        try:
-            data = json.loads(entry.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            continue
-        if data.get("ended_at"):
-            continue
-        last = data.get("last_activity")
-        if not last:
-            continue
-        try:
-            dt = datetime.fromisoformat(last.replace("Z", "+00:00"))
-        except ValueError:
-            continue
-        if (now - dt).total_seconds() <= within_seconds:
-            return True
-    return False

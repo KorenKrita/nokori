@@ -143,7 +143,7 @@ def test_disabled_short_circuits_user_prompt(tmp_path):
     r = _run("hook", "user-prompt-submit",
              env_extra={"NOKORI_DATA_DIR": str(tmp_path), "NOKORI_DISABLED": "1"},
              stdin=json.dumps({"session_id": "x", "prompt": "git push --force"}))
-    assert r.stdout.strip() == "{}"
+    assert json.loads(r.stdout.strip()) == {"continue": True}
 
 
 def test_pre_tool_use_skips_non_matching_tool(tmp_path):

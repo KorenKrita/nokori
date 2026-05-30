@@ -128,6 +128,46 @@ def test_reader_tolerates_malformed_lines(tmp_path):
     assert turns[0].role == "human"
 
 
+def test_llm_adapter_complete_when_not_extracting(monkeypatch):
+    monkeypatch.setenv("NOKORI_LLM_BASE_URL", "http://example/v1")
+    monkeypatch.setenv("NOKORI_LLM_MODEL", "test-model")
+    monkeypatch.delenv("NOKORI_EXTRACTING", raising=False)
+    from nokori.config import Config
+    from nokori.llm.adapter import LLMAdapter
+
+    cfg = Config.from_env()
+
+    def fake_open(req, timeout=30):
+        class Resp:
+            def read(self):
+                return json.dumps({
+                    "choices": [{"message": {"content": '  {"ok": true}  '}}],
+                }).encode("utf-8")
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                pass
+
+        return Resp()
+
+    adapter = LLMAdapter(cfg, http_open=fake_open)
+    assert adapter.complete("prompt") == '{"ok": true}'
+
+
+def test_llm_adapter_skips_when_extracting_env_set(monkeypatch):
+    monkeypatch.setenv("NOKORI_LLM_BASE_URL", "http://example/v1")
+    monkeypatch.setenv("NOKORI_LLM_MODEL", "test-model")
+    monkeypatch.setenv("NOKORI_EXTRACTING", "1")
+    from nokori.config import Config
+    from nokori.llm.adapter import LLMAdapter
+
+    cfg = Config.from_env()
+    adapter = LLMAdapter(cfg, http_open=lambda *a, **k: None)
+    assert adapter.complete("prompt") is None
+
+
 def test_mark_extracted_on_empty_text(tmp_path, monkeypatch):
     """Extract marks transcript as extracted even when compressed text is empty."""
     import os

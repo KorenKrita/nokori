@@ -168,7 +168,7 @@ def main(argv: Sequence[str]) -> int:
         return 1
 
     if cfg.disabled and args.command == "hook":
-        print("{}")
+        print('{"continue": true}')
         return 0
 
     cfg.ensure_dirs()
