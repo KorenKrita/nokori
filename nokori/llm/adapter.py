@@ -45,7 +45,7 @@ class LLMAdapter:
         headers = {"Content-Type": "application/json"}
         if self.cfg.llm_api_key:
             headers["Authorization"] = f"Bearer {self.cfg.llm_api_key}"
-        url = f"{self.cfg.llm_base_url.rstrip('/')}/v1/chat/completions"
+        url = f"{self.cfg.llm_base_url.rstrip('/')}/chat/completions"
         req = urllib.request.Request(
             url,
             data=json.dumps(payload).encode("utf-8"),

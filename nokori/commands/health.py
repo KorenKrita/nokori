@@ -70,10 +70,10 @@ def run(_args: argparse.Namespace, cfg: Config) -> int:
         ("settings.json", *_check_settings_registered(cfg)),
         ("llm",
          *_check_endpoint("llm", cfg.llm_base_url, cfg.llm_model,
-                          cfg.llm_api_key, "/v1/chat/completions")),
+                          cfg.llm_api_key, "/chat/completions")),
         ("embed",
          *_check_endpoint("embed", cfg.embed_base_url, cfg.embed_model,
-                          cfg.embed_api_key, "/v1/embeddings")),
+                          cfg.embed_api_key, "/embeddings")),
     ]
     width = max(len(name) for name, *_ in rows)
     bad = False

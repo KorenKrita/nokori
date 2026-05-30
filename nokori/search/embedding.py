@@ -95,7 +95,7 @@ class EmbeddingClient:
         headers = {"Content-Type": "application/json"}
         if self.cfg.embed_api_key:
             headers["Authorization"] = f"Bearer {self.cfg.embed_api_key}"
-        url = f"{self.cfg.embed_base_url.rstrip('/')}/v1/embeddings"
+        url = f"{self.cfg.embed_base_url.rstrip('/')}/embeddings"
         req = urllib.request.Request(
             url,
             data=json.dumps(payload).encode("utf-8"),
