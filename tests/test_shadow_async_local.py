@@ -120,7 +120,7 @@ class TestShadowPoolHotTier:
                         ),
                     )
             from nokori.hooks.user_prompt_submit import _run_shadow_pool
-            _run_shadow_pool(db, "deploy prisma schema", "my-proj", cfg)
+            _run_shadow_pool(db, "deploy prisma schema", "my-proj", cfg, pool_size=0)
             for rid in ("rule-a", "rule-b"):
                 row = db.fetchone(
                     "SELECT cross_project_hits FROM rules WHERE id = ?", (rid,)
@@ -150,7 +150,7 @@ class TestShadowPoolHotTier:
                     ),
                 )
             from nokori.hooks.user_prompt_submit import _run_shadow_pool
-            _run_shadow_pool(db, "git push force remote branch", "my-proj", cfg)
+            _run_shadow_pool(db, "git push force remote branch", "my-proj", cfg, pool_size=0)
             row = db.fetchone(
                 "SELECT cross_project_hits, evidence_score FROM rules WHERE id = ?",
                 ("rule-strong",),

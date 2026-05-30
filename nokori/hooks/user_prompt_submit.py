@@ -12,6 +12,7 @@ from ..db import (
     open_db,
     archive_rule,
     find_rule_id_by_recent_injection,
+    total_rule_count,
 )
 from ..gate import marker as marker_io
 from ..gate.blocker import format_injection, select_gate_rules
@@ -49,7 +50,9 @@ def _run_dismiss(db: Db, prompt: str, session_id: str, cfg: Config) -> int:
     return count
 
 
-def _run_shadow_pool(db: Db, prompt: str, project_id: str, cfg: Config) -> None:
+def _run_shadow_pool(
+    db: Db, prompt: str, project_id: str, cfg: Config, pool_size: int = 0
+) -> None:
     """Check shadow pool rules and record hits. Never injects."""
     if not cfg.promotion_enabled:
         return
@@ -57,7 +60,8 @@ def _run_shadow_pool(db: Db, prompt: str, project_id: str, cfg: Config) -> None:
     if not shadow_rules:
         return
     result = retrieve_and_tier(
-        prompt, shadow_rules, db, cfg, top_k=5, interaction="hook"
+        prompt, shadow_rules, db, cfg, top_k=5, interaction="hook",
+        pool_size=pool_size,
     )
     for r in result.hot:
         promotion.record_shadow_hit(db, r.rule.id, project_id)
@@ -96,6 +100,7 @@ def handle(payload: dict, cfg: Config) -> dict:
 
     sessions.touch(cfg, session_id)
 
+    pool_size = 0
     db = open_db(cfg.db_path)
     try:
         _run_dismiss(db, prompt, session_id, cfg)
@@ -103,13 +108,14 @@ def handle(payload: dict, cfg: Config) -> dict:
         rules = fetch_rules(
             db, statuses=("active", "dormant"), project_id=project_id
         )
+        pool_size = total_rule_count(db)
         if not rules:
             if cfg.gate_enabled:
                 marker_io.delete(cfg, session_id)
             return {"continue": True}
-
         result = retrieve_and_tier(
-            prompt, rules, db, cfg, top_k=10, interaction="hook"
+            prompt, rules, db, cfg, top_k=10, interaction="hook",
+            pool_size=pool_size,
         )
         hot, warm = result.hot, result.warm
 
@@ -144,7 +150,7 @@ def handle(payload: dict, cfg: Config) -> dict:
     finally:
         try:
             if project_id:
-                _run_shadow_pool(db, prompt, project_id, cfg)
+                _run_shadow_pool(db, prompt, project_id, cfg, pool_size)
         except Exception:
             log.warning("shadow pool failed", exc_info=True)
         db.close()

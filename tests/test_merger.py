@@ -229,7 +229,7 @@ def test_merge_multiple_bd_inserts_once(monkeypatch, tmp_path):
         db.close()
 
 
-def test_merge_llm_failure_falls_back_to_insert(monkeypatch, tmp_path):
+def test_merge_llm_failure_skips_insert_when_neighbors(monkeypatch, tmp_path):
     monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
     cfg = Config.from_env()
     db = open_db(cfg.db_path)
@@ -241,8 +241,7 @@ def test_merge_llm_failure_falls_back_to_insert(monkeypatch, tmp_path):
                 raise RuntimeError("boom")
 
         outcome = merge_candidate(_cand("rule b", "act b"), db, BadLLM())
-        # When merge LLM fails, default is UNRELATED → still insert
-        assert outcome.inserted == 1
-        assert len(fetch_rules(db, statuses=("active",))) == 2
+        assert outcome.inserted == 0
+        assert len(fetch_rules(db, statuses=("active",))) == 1
     finally:
         db.close()

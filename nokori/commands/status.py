@@ -5,6 +5,10 @@ from datetime import datetime, timedelta, timezone
 
 from ..config import Config
 from ..db import open_db
+from ..lifecycle.promotion import (
+    CROSS_PROJECT_PROMOTE_THRESHOLD,
+    unique_promotion_project_ids,
+)
 from ..search import embed_ipc
 from ..utils import sessions
 
@@ -21,6 +25,19 @@ def run(_args: argparse.Namespace, cfg: Config) -> int:
             "SELECT COUNT(*) AS n FROM injections WHERE created_at >= ?",
             (cutoff,),
         )
+        global_rules = db.fetchone(
+            "SELECT COUNT(*) AS n FROM rules WHERE project_scope = 'global'"
+        )
+        promotion_rows = []
+        if cfg.promotion_enabled:
+            promotion_rows = db.fetchall(
+                "SELECT short_id, project_id, trigger_text, promotion_evidence, "
+                "cross_project_hits FROM rules "
+                "WHERE status = 'active' AND confidence = 'high' "
+                "AND source_type IN ('correction','anti_pattern','solution') "
+                "AND project_scope = 'project' AND project_id IS NOT NULL "
+                "ORDER BY updated_at DESC"
+            )
     finally:
         db.close()
 
@@ -48,7 +65,40 @@ def run(_args: argparse.Namespace, cfg: Config) -> int:
     print(f"embed.server_pid  {est['pid']}")
     print(f"embed.server_idle {est['idle_seconds']}s")
     print(f"session.idle_s    {cfg.session_idle_seconds}")
-    print(f"promotion.enabled {cfg.promotion_enabled}")
+    print(f"promotion.enabled   {cfg.promotion_enabled}")
+    print(f"promotion.threshold   {CROSS_PROJECT_PROMOTE_THRESHOLD}")
+    print(f"rules.global          {global_rules['n'] if global_rules else 0}")
+
+    if cfg.promotion_enabled:
+        candidates: list[tuple[int, list[str], dict]] = []
+        for row in promotion_rows:
+            projects = unique_promotion_project_ids(row["promotion_evidence"])
+            if not projects:
+                continue
+            candidates.append((len(projects), projects, row))
+        candidates.sort(key=lambda x: (-x[0], x[2]["short_id"]))
+        print(f"promotion.in_progress {len(candidates)}")
+        for n_projects, projects, row in candidates[:10]:
+            trigger = (row["trigger_text"] or "").strip()
+            if len(trigger) > 48:
+                trigger = trigger[:45] + "..."
+            proj_list = ",".join(projects[:5])
+            if len(projects) > 5:
+                proj_list += ",..."
+            print(
+                f"  {row['short_id']}  {n_projects}/{CROSS_PROJECT_PROMOTE_THRESHOLD}  "
+                f"hits={row['cross_project_hits']}  "
+                f"from={row['project_id']}  "
+                f"projects=[{proj_list}]  "
+                f"{trigger}"
+            )
+        if not candidates:
+            print(
+                "  (no shadow promotion progress yet — need other projects to HOT-hit "
+                "project-scoped rules)"
+            )
+    else:
+        print("promotion.in_progress (disabled)")
 
     open_sess = [d for d in sessions.list_session_records(cfg) if sessions.is_session_open(d)]
     active = sessions.list_active_sessions(cfg)

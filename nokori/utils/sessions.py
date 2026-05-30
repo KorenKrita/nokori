@@ -1,3 +1,10 @@
+"""Session registry under {data_dir}/active_sessions/.
+
+| API | Meaning |
+|-----|---------|
+| `count_open_sessions` | `ended_at` unset — used by SessionEnd extract defer |
+| `count_active_sessions` / `list_active_sessions` | open + activity within `session_idle_seconds` — status UI |
+"""
 from __future__ import annotations
 
 import json

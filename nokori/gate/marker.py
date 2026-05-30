@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from ..config import Config
+from ..db import Db
 from ..errors import GateMarkerError
 from ..utils.time import now_iso, parse_iso
 
@@ -72,6 +73,31 @@ def delete(cfg: Config, session_id: str) -> None:
         return
     except OSError:
         return
+
+
+def resolve_current_prompt_hash(
+    payload: dict, db: Db, session_id: str,
+) -> str | None:
+    """Best-effort hash for the active user turn (PreToolUse has no prompt field)."""
+    for key in ("prompt", "user_prompt"):
+        text = payload.get(key)
+        if isinstance(text, str) and text:
+            return prompt_hash(text)
+    row = db.fetchone(
+        "SELECT prompt_hash FROM injections WHERE session_id = ? "
+        "ORDER BY created_at DESC LIMIT 1",
+        (session_id,),
+    )
+    if row and row["prompt_hash"]:
+        return str(row["prompt_hash"])
+    return None
+
+
+def prompt_hash_matches(marker: Marker, current_ph: str | None) -> bool:
+    """False when unknown or stale — caller should fail-open (no block)."""
+    if not current_ph or not marker.prompt_hash:
+        return False
+    return marker.prompt_hash == current_ph
 
 
 def is_expired(marker: Marker, ttl_seconds: int) -> bool:

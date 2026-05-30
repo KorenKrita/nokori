@@ -167,7 +167,7 @@ def _format_existing(rules: list[Rule]) -> str:
     return "\n".join(parts)
 
 
-def _ask_llm(cand: Candidate, neighbors: list[Rule], llm: LLMAdapter) -> dict:
+def _ask_llm(cand: Candidate, neighbors: list[Rule], llm: LLMAdapter) -> dict | None:
     prompt = (MERGE_PROMPT
               .replace("{trigger}", cand.trigger)
               .replace("{action}", cand.action)
@@ -178,9 +178,9 @@ def _ask_llm(cand: Candidate, neighbors: list[Rule], llm: LLMAdapter) -> dict:
         raw = llm.complete(prompt, max_tokens=1500, timeout=45)
     except Exception as e:
         log.warning("merge LLM failed: %s", type(e).__name__)
-        return {"relationships": []}
+        return None
     if raw is None:
-        return {"relationships": []}
+        return None
     text = raw.strip()
     if text.startswith("```"):
         text = strip_fence(text)
@@ -188,12 +188,12 @@ def _ask_llm(cand: Candidate, neighbors: list[Rule], llm: LLMAdapter) -> dict:
         data = json.loads(text)
     except json.JSONDecodeError:
         log.warning("merge LLM returned non-JSON")
-        return {"relationships": []}
+        return None
     if isinstance(data, list):
         return {"relationships": data}
     if isinstance(data, dict):
         return data
-    return {"relationships": []}
+    return None
 
 
 def _activate(db: Db, rule_id: str, confidence: str, cfg=None) -> None:
@@ -229,7 +229,14 @@ def merge_candidate(
         _persist_new(db, cand, project_id, cfg)
         return MergeOutcome(inserted=1, activated=0, merged=0, superseded=0)
 
-    judgment = _ask_llm(cand, neighbors, llm).get("relationships", [])
+    judgment_payload = _ask_llm(cand, neighbors, llm)
+    if judgment_payload is None:
+        log.warning(
+            "merge llm failed, skipping insert (neighbors exist): %s",
+            cand.trigger[:60],
+        )
+        return MergeOutcome(inserted=0, activated=0, merged=0, superseded=0)
+    judgment = judgment_payload.get("relationships", [])
     by_id = {r.id: r for r in neighbors}
     inserted = activated = merged = superseded = 0
     handled_existing: set[str] = set()

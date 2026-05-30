@@ -20,6 +20,16 @@ def _run(*args, env_extra=None, stdin: str = ""):
     )
 
 
+def _gate_denied(out: dict) -> bool:
+    hso = out.get("hookSpecificOutput") or {}
+    return hso.get("permissionDecision") == "deny"
+
+
+def _gate_deny_reason(out: dict) -> str:
+    hso = out.get("hookSpecificOutput") or {}
+    return hso.get("permissionDecisionReason") or ""
+
+
 def _add_high_active(tmp_path, trigger, action, variants=None):
     args = [
         "--trigger", trigger,
@@ -67,8 +77,9 @@ def test_pre_tool_use_blocks_when_marker_present(tmp_path):
              env_extra={"NOKORI_DATA_DIR": str(tmp_path)},
              stdin=json.dumps({"session_id": sess, "tool_name": "Bash"}))
     out = json.loads(r.stdout)
-    assert out.get("decision") == "block"
-    assert short in out.get("reason", "")
+    assert _gate_denied(out)
+    assert short in _gate_deny_reason(out)
+    assert "decision" not in out
 
 
 def test_pre_tool_use_passes_when_no_marker(tmp_path):
@@ -76,7 +87,7 @@ def test_pre_tool_use_passes_when_no_marker(tmp_path):
              env_extra={"NOKORI_DATA_DIR": str(tmp_path)},
              stdin=json.dumps({"session_id": "no-marker", "tool_name": "Bash"}))
     out = json.loads(r.stdout)
-    assert "decision" not in out
+    assert not _gate_denied(out)
     assert out.get("continue") is True
 
 
@@ -91,11 +102,11 @@ def test_marker_consumed_once(tmp_path):
     r1 = _run("hook", "pre-tool-use",
               env_extra={"NOKORI_DATA_DIR": str(tmp_path)},
               stdin=json.dumps({"session_id": sess, "tool_name": "Bash"}))
-    assert json.loads(r1.stdout).get("decision") == "block"
+    assert _gate_denied(json.loads(r1.stdout))
     r2 = _run("hook", "pre-tool-use",
               env_extra={"NOKORI_DATA_DIR": str(tmp_path)},
               stdin=json.dumps({"session_id": sess, "tool_name": "Bash"}))
-    assert "decision" not in json.loads(r2.stdout)
+    assert not _gate_denied(json.loads(r2.stdout))
 
 
 def test_marker_expires(tmp_path):
@@ -112,7 +123,7 @@ def test_marker_expires(tmp_path):
              env_extra={"NOKORI_DATA_DIR": str(tmp_path),
                         "NOKORI_GATE_TTL_SECONDS": "0"},
              stdin=json.dumps({"session_id": sess, "tool_name": "Bash"}))
-    assert "decision" not in json.loads(r.stdout)
+    assert not _gate_denied(json.loads(r.stdout))
 
 
 def test_dismiss_cli(tmp_path):
@@ -160,4 +171,4 @@ def test_pre_tool_use_skips_non_matching_tool(tmp_path):
              env_extra={"NOKORI_DATA_DIR": str(tmp_path)},
              stdin=json.dumps({"session_id": sess, "tool_name": "Read"}))
     out = json.loads(r.stdout)
-    assert "decision" not in out
+    assert not _gate_denied(out)

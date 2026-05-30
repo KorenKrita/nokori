@@ -3,7 +3,6 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 
 from ..config import Config
@@ -77,9 +76,8 @@ def handle(payload: dict, cfg: Config) -> dict:
             )
             if others > 0:
                 log.info(
-                    "defer async extract: %d other active session(s); "
-                    "job queued — run `nokori extract` when idle "
-                    "(enable extract.defer_when_active to defer)",
+                    "deferred async extract: %d other open session(s); "
+                    "job queued — run `nokori extract` when idle",
                     others,
                 )
             else:

@@ -127,6 +127,17 @@ def test_unmerge_restores_when_superseder_deleted(monkeypatch, tmp_path):
         db.close()
 
 
+def test_unique_promotion_project_ids_dedupes():
+    from nokori.lifecycle.promotion import unique_promotion_project_ids
+
+    raw = [
+        {"key": "b:2026-01-01", "project_id": "proj-b", "date": "2026-01-01"},
+        {"key": "b:2026-01-02", "project_id": "proj-b", "date": "2026-01-02"},
+        {"key": "c:2026-01-01", "project_id": "proj-c", "date": "2026-01-01"},
+    ]
+    assert unique_promotion_project_ids(raw) == ["proj-b", "proj-c"]
+
+
 def test_promotion_after_three_projects(monkeypatch, tmp_path):
     monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
     monkeypatch.setenv("NOKORI_PROMOTION_ENABLED", "1")

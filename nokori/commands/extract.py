@@ -14,11 +14,14 @@ from ..extract.merger import merge_candidate
 from ..extract.reader import read as read_transcript
 from ..lifecycle.hot_cache import mark_extracted
 from ..llm.adapter import LLMAdapter
+from ..utils.logging import get_logger
 from ..utils.project import resolve_project_id
+
+log = get_logger("nokori.commands.extract")
 
 
 def _process_path(path: Path, project_id: str | None, cfg: Config,
-                  *, dry_run: bool) -> tuple[int, int]:
+                  *, dry_run: bool) -> tuple[int, int, bool]:
     turns = read_transcript(path)
     text = compress(turns)
     if not text.strip():
@@ -28,13 +31,14 @@ def _process_path(path: Path, project_id: str | None, cfg: Config,
                 mark_extracted(db, path, path.stat().st_mtime)
             finally:
                 db.close()
-        return (0, 0)
+        return (0, 0, True)
     llm = LLMAdapter(cfg)
     candidates, llm_ok = extract_candidates(text, llm)
     if not llm_ok:
-        return (0, 0)
+        log.warning("extract failed (llm): %s", path)
+        return (0, 0, False)
     if dry_run:
-        return (len(candidates), 0)
+        return (len(candidates), 0, False)
 
     db = open_db(cfg.db_path)
     try:
@@ -45,7 +49,7 @@ def _process_path(path: Path, project_id: str | None, cfg: Config,
         mark_extracted(db, path, path.stat().st_mtime)
     finally:
         db.close()
-    return (len(candidates), merged)
+    return (len(candidates), merged, True)
 
 
 def run(args: argparse.Namespace, cfg: Config) -> int:
@@ -60,7 +64,7 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
                 print(f"nokori: transcript not found: {path}")
                 return 1
             project_id = resolve_project_id(os.getcwd())
-            cands, applied = _process_path(
+            cands, applied, _finished = _process_path(
                 path, project_id, cfg, dry_run=args.dry_run
             )
             print(f"transcript: {path}")
@@ -94,13 +98,18 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
                 job = job_io.read_job(job_path)
                 if not job:
                     continue
-            cands, applied = _process_path(
+            cands, applied, finished = _process_path(
                 path, job.get("project_id"), cfg, dry_run=args.dry_run
             )
             total_cands += cands
             total_applied += applied
             if not args.dry_run:
-                job_io.delete_job(job_path)
+                if finished:
+                    job_io.delete_job(job_path)
+                else:
+                    log.warning(
+                        "extract job kept pending (not finished): %s", job_path.name
+                    )
 
         print(f"jobs:       {len(pending)}")
         print(f"candidates: {total_cands}")

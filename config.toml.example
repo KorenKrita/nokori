@@ -123,6 +123,7 @@ matcher = "Edit|Write|MultiEdit|Bash|NotebookEdit"
 #   manual — SessionEnd 只写入 jobs/，需手动执行 `nokori extract`
 #   async  — SessionEnd 额外 fork 后台 `nokori extract`（需已配置 LLM；失败不影响关 session）
 # 批处理与 `nokori extract --session` 共用 {data_dir}/extract.lock（Unix fcntl / Windows msvcrt）
+# 若 SessionEnd 后 transcript 仍被追加（mtime 变化），extract 会刷新 job 的 mtime 并重排队，不删 job
 # 环境变量：NOKORI_EXTRACT_MODE
 mode = "manual"
 
@@ -166,7 +167,7 @@ mode = "manual"
 # 强制启用 embedding（即使规则数 < 20）
 # 类型：布尔
 # 默认：false
-# 说明：未显式开启时，规则数 >= 20 且（配置了远程 embed 或安装了 pip install -e ".[local-embed]"）会自动启用
+# 说明：未显式开启时，库内 active+dormant 规则数 >= 20 且（远程 embed 或 local-embed）会自动启用
 # 环境变量：NOKORI_EMBED_ENABLED
 enabled = false
 
@@ -240,6 +241,7 @@ chunk_count = 3
 
 [promotion]
 # 是否启用影子池检索与 cross_project_hits / 升 global
+# 正式池为空时仍会跑影子池（场景 C：新项目从他项目 HOT 累积）
 # 类型：布尔
 # 默认：true
 # 环境变量：NOKORI_PROMOTION_ENABLED
@@ -261,6 +263,7 @@ chunk_count = 3
 # | NOKORI_EMBED_SERVER_IDLE | 3600 | embed server 空闲自动退出（秒） |
 # | NOKORI_EMBED_SERVER_AUTO_START | 1 | hook 自动拉起 embed server |
 # | NOKORI_SESSION_IDLE_SECONDS | 1800 | session 活跃判定窗口（秒） |
+# | NOKORI_EXTRACT_DEFER_ACTIVE | 0 | async 时有活跃 session 则推迟 fork extract |
 # | NOKORI_PROMOTION_ENABLED | 1 | 影子池 / 跨项目 promotion |
 # | NOKORI_GATE_ENABLED | 1 | 启用 Gate |
 # | NOKORI_GATE_TTL_SECONDS | 600 | Marker TTL（秒） |
@@ -294,6 +297,8 @@ chunk_count = 3
 # -----------------------------------------------------------------------------
 #
 # - 热缓存：见 [hot_cache]；同目录上一场 *.jsonl，未 extract 才注入（500 字 / 3 条用户消息）
-# - embed server 空闲 1h 自退出（[embed] server_idle_seconds）；检索经共享 server 做本地向量
+# - embed server：Unix socket {data_dir}/embed.sock；空闲自退出见 server_idle_seconds；hook 启动等待硬编码约 45s
+# - 本地模型文件缓存在 {data_dir}/models/（非 cache/）；cache/ 目录仅预留
+# - rules.db schema v1：版本不匹配时报错，见 README「数据存储」
 # - Merger 邻居：BM25 top-20，不足时最近 5 条补齐
 # - RRF 融合常数 K=60；最低证据：lexical>=2 / variant 单 token / cosine>=0.55

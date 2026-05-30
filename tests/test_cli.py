@@ -34,6 +34,43 @@ def test_status_on_empty_db(tmp_path, monkeypatch):
     assert r.returncode == 0, r.stderr
     assert "rules.total    0" in r.stdout
     assert "rules.active   0" in r.stdout
+    assert "promotion.threshold   3" in r.stdout
+    assert "promotion.in_progress 0" in r.stdout
+
+
+def test_status_shows_promotion_progress(tmp_path, monkeypatch):
+    from datetime import datetime, timezone
+
+    monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+    from nokori.config import Config
+    from nokori.db import open_db
+    from nokori.lifecycle import promotion
+
+    cfg = Config.from_env()
+    db = open_db(cfg.db_path)
+    try:
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+        with db.transaction() as tx:
+            tx.execute(
+                "INSERT INTO rules (id, short_id, trigger_text, action, "
+                "source_type, confidence, status, project_scope, project_id, "
+                "created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                (
+                    "rule-A", "rulea1", "git push force remote",
+                    "use lease", "correction", "high", "active", "project",
+                    "proj-A", now, now,
+                ),
+            )
+        promotion.record_shadow_hit(db, "rule-A", "proj-B")
+        promotion.record_shadow_hit(db, "rule-A", "proj-C")
+    finally:
+        db.close()
+
+    r = _nokori(monkeypatch, tmp_path, "status")
+    assert r.returncode == 0, r.stderr
+    assert "promotion.in_progress 1" in r.stdout
+    assert "rulea1  2/3" in r.stdout
+    assert "proj-B" in r.stdout or "proj-b" in r.stdout.lower()
 
 
 def test_hook_session_start_smoke(tmp_path, monkeypatch):

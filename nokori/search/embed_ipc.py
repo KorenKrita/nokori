@@ -227,6 +227,7 @@ def run_server(cfg: Config) -> int:
     client = LocalEmbeddingClient(cfg)
     if not client.available():
         log.error("sentence-transformers not available; embed server exiting")
+        sock.close()
         _clear_pid(cfg)
         try:
             sock_path.unlink()
@@ -234,7 +235,17 @@ def run_server(cfg: Config) -> int:
             pass
         return 1
 
-    model = client._load_model()
+    try:
+        model = client._load_model()
+    except Exception:
+        log.exception("embed server model load failed")
+        sock.close()
+        _clear_pid(cfg)
+        try:
+            sock_path.unlink()
+        except FileNotFoundError:
+            pass
+        return 1
     last_activity = time.monotonic()
     idle_limit = float(cfg.embed_server_idle_seconds)
 

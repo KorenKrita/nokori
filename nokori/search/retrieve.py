@@ -29,11 +29,12 @@ def retrieve_and_tier(
     *,
     top_k: int = 10,
     interaction: InteractionKind = "cli",
+    pool_size: int | None = None,
 ) -> RetrievalResult:
     """BM25 + optional embedding RRF, then HOT/WARM tiering (formal + shadow pools).
 
     Local embedding uses a shared embed server (one loaded model for all hooks).
-  Remote embed uses a shorter timeout on hook path (cfg.embed_hook_timeout_seconds).
+    Remote embed uses a shorter timeout on hook path (cfg.embed_hook_timeout_seconds).
     """
     if not rules:
         return RetrievalResult([], [], 0, "off")
@@ -42,7 +43,8 @@ def retrieve_and_tier(
     embed_results: list[ScoredResult] = []
     embed_mode = "off"
 
-    pool_size = total_rule_count(db)
+    if pool_size is None:
+        pool_size = total_rule_count(db)
     if embedding_search.auto_enabled(cfg, pool_size):
         if embedding_search.use_local(cfg):
             timeout = float(

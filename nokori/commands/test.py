@@ -5,6 +5,7 @@ import os
 
 from ..config import Config
 from ..db import fetch_rules, fetch_shadow_rules, open_db
+from ..gate.blocker import select_gate_rules
 from ..search.retrieve import retrieve_and_tier
 from ..utils.project import resolve_project_id
 
@@ -45,9 +46,7 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
                 f"{cos_str}"
             )
 
-        gateable = [
-            r for r in hot if r.rule.confidence == "high" and r.rule.status == "active"
-        ]
+        gateable = select_gate_rules(hot)
         print()
         print(f"gate.would_block  {bool(gateable) and cfg.gate_enabled}")
         for r in gateable:

@@ -65,6 +65,10 @@ CREATE TABLE IF NOT EXISTS injections (
 CREATE INDEX IF NOT EXISTS idx_injections_session ON injections(session_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_injections_rule ON injections(rule_id);
 
+CREATE INDEX IF NOT EXISTS idx_rules_status ON rules(status);
+CREATE INDEX IF NOT EXISTS idx_rules_project ON rules(project_scope, project_id);
+CREATE INDEX IF NOT EXISTS idx_rules_shadow ON rules(status, confidence, source_type, project_scope);
+
 CREATE TABLE IF NOT EXISTS maintenance_meta (
     key TEXT PRIMARY KEY,
     last_run TEXT NOT NULL

@@ -76,7 +76,7 @@ def test_shadow_pool_calls_embedding_path(monkeypatch, tmp_path):
         monkeypatch.setattr(embedding_search, "use_local", fake_use_local)
         monkeypatch.setattr(embedding_search, "search", fake_search)
 
-        _run_shadow_pool(db, "git push force remote", "my-proj", cfg)
+        _run_shadow_pool(db, "git push force remote", "my-proj", cfg, pool_size=30)
         assert embed_calls, "shadow pool should use remote embedding when auto_enabled"
         row = db.fetchone(
             "SELECT cross_project_hits FROM rules WHERE id = 'rule-shadow'"

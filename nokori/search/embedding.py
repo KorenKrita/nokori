@@ -287,17 +287,11 @@ def search_local_shared(
 
     max_wait = embed_ipc._STARTUP_WAIT_SECONDS if interaction == "hook" else 15.0
     if not embed_ipc.ensure_running(cfg, max_wait=max_wait):
-        if interaction == "hook":
-            return [], "off"
-        client = LocalEmbeddingClient(cfg)
-        return search_local(query, rules, db, client, top_k=top_k), "local"
+        return [], "off"
 
     qvecs = embed_ipc.embed_text(cfg, query, timeout=timeout)
     if not qvecs:
-        if interaction == "hook":
-            return [], "off"
-        client = LocalEmbeddingClient(cfg)
-        return search_local(query, rules, db, client, top_k=top_k), "local"
+        return [], "off"
 
     return _search_impl(qvecs[0], rules, db, top_k), "local"
 
@@ -335,12 +329,11 @@ def index_rule_if_enabled(db: Db, rule: Rule, cfg: Config) -> None:
             from . import embed_ipc
 
             text = _rule_text(rule)
-            if embed_ipc.ensure_running(cfg, max_wait=15.0):
-                vectors = embed_ipc.embed_text(cfg, text, timeout=60.0)
-                if vectors:
-                    _store_impl(db, rule.id, vectors, LOCAL_MODEL_NAME)
-                    return
-            store_rule_embedding_local(db, rule, LocalEmbeddingClient(cfg))
+            if not embed_ipc.ensure_running(cfg, max_wait=15.0):
+                return
+            vectors = embed_ipc.embed_text(cfg, text, timeout=60.0)
+            if vectors:
+                _store_impl(db, rule.id, vectors, LOCAL_MODEL_NAME)
         else:
             store_rule_embedding(db, rule, EmbeddingClient(cfg))
     except Exception:

@@ -188,9 +188,10 @@ def test_mark_extracted_on_empty_text(tmp_path, monkeypatch):
     path.write_text("")  # empty transcript
 
     from nokori.commands.extract import _process_path
-    cands, applied = _process_path(path, None, cfg, dry_run=False)
+    cands, applied, finished = _process_path(path, None, cfg, dry_run=False)
     assert cands == 0
     assert applied == 0
+    assert finished is True
 
     db = open_db(cfg.db_path)
     try:
@@ -218,8 +219,8 @@ def test_extract_llm_failure_does_not_mark_extracted(monkeypatch, tmp_path):
     from nokori.db import open_db
 
     monkeypatch.setattr(extract_cmd, "LLMAdapter", lambda cfg: FailLLM())
-    cands, applied = extract_cmd._process_path(path, None, cfg, dry_run=False)
-    assert cands == 0 and applied == 0
+    cands, applied, finished = extract_cmd._process_path(path, None, cfg, dry_run=False)
+    assert cands == 0 and applied == 0 and finished is False
     db = open_db(cfg.db_path)
     try:
         row = db.fetchone(
@@ -229,6 +230,29 @@ def test_extract_llm_failure_does_not_mark_extracted(monkeypatch, tmp_path):
         assert row is None
     finally:
         db.close()
+
+
+def test_batch_extract_keeps_job_on_llm_failure(monkeypatch, tmp_path):
+    monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+    cfg = Config.from_env()
+    cfg.ensure_dirs()
+    path = tmp_path / "job-fail.jsonl"
+    path.write_text('{"type":"user","message":{"content":"fix bug"}}\n', encoding="utf-8")
+    from nokori.extract import jobs as job_io
+
+    job_io.write_job(cfg, path, "proj", path.stat().st_mtime)
+
+    class FailLLM:
+        def complete(self, *a, **k):
+            raise RuntimeError("llm down")
+
+    from nokori.commands import extract as extract_cmd
+    import argparse
+
+    monkeypatch.setattr(extract_cmd, "LLMAdapter", lambda cfg: FailLLM())
+    args = argparse.Namespace(session=None, dry_run=False)
+    assert extract_cmd.run(args, cfg) == 0
+    assert len(job_io.list_pending(cfg)) == 1
 
 
 def test_extract_refreshes_job_when_transcript_mtime_changes(monkeypatch, tmp_path):

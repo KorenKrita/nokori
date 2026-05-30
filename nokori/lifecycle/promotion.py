@@ -13,6 +13,24 @@ log = get_logger("nokori.lifecycle.promotion")
 CROSS_PROJECT_PROMOTE_THRESHOLD = 3
 
 
+def unique_promotion_project_ids(promotion_evidence: str | list | None) -> list[str]:
+    """Distinct other-project ids recorded for global promotion (stable append order)."""
+    if promotion_evidence is None:
+        raw: list = []
+    elif isinstance(promotion_evidence, str):
+        raw = json.loads(promotion_evidence or "[]")
+    else:
+        raw = promotion_evidence
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for entry in raw:
+        pid = entry.get("project_id")
+        if pid and pid not in seen:
+            seen.add(pid)
+            ordered.append(pid)
+    return ordered
+
+
 def record_shadow_hit(db: Db, rule_id: str, current_project_id: str | None) -> bool:
     """Returns True if this hit promoted the rule to global."""
     if current_project_id is None:
@@ -41,7 +59,7 @@ def record_shadow_hit(db: Db, rule_id: str, current_project_id: str | None) -> b
         "project_id": current_project_id,
         "date": today,
     })
-    unique_projects = {e["project_id"] for e in evidence}
+    unique_projects = set(unique_promotion_project_ids(evidence))
 
     score, ev_log = compute_evidence_append(
         row["evidence_score"], row["evidence_log"], "shadow_hot", 1

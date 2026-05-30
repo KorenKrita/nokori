@@ -66,4 +66,5 @@ def test_stale_marker_cleared_when_no_gate_rules(tmp_path):
         stdin=json.dumps({"session_id": sess, "tool_name": "Bash"}),
     )
     out = json.loads(r.stdout)
-    assert "decision" not in out
+    hso = out.get("hookSpecificOutput") or {}
+    assert hso.get("permissionDecision") != "deny"

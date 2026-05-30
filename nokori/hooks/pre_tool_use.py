@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 
 from ..config import Config
+from ..db import open_db
 from ..errors import GateMarkerError
 from ..gate import marker as marker_io
 from ..gate.blocker import format_block_reason
@@ -45,16 +46,32 @@ def handle(payload: dict, cfg: Config) -> dict:
         marker_io.delete(cfg, session_id)
         return {"continue": True}
 
-    marker_io.delete(cfg, session_id)
-
     if not marker.rules:
+        marker_io.delete(cfg, session_id)
         return {"continue": True}
+
+    db = open_db(cfg.db_path)
+    try:
+        current_ph = marker_io.resolve_current_prompt_hash(payload, db, session_id)
+        if not marker_io.prompt_hash_matches(marker, current_ph):
+            log.info(
+                "gate marker stale (prompt_hash mismatch), clearing session=%s",
+                session_id,
+            )
+            marker_io.delete(cfg, session_id)
+            return {"continue": True}
+    finally:
+        db.close()
+
+    marker_io.delete(cfg, session_id)
 
     reason = format_block_reason(marker.rules, dismiss_phrase=cfg.dismiss_phrase)
     log.info(
         "gate blocked tool session=%s rules=%s",
         session_id, ",".join(r.short_id for r in marker.rules),
     )
+    # PreToolUse: use hookSpecificOutput only (top-level decision/reason are deprecated).
+    # https://code.claude.com/docs/en/hooks — PreToolUse decision control
     return {
         "continue": True,
         "hookSpecificOutput": {
@@ -62,6 +79,4 @@ def handle(payload: dict, cfg: Config) -> dict:
             "permissionDecision": "deny",
             "permissionDecisionReason": reason,
         },
-        "decision": "block",
-        "reason": reason,
     }
