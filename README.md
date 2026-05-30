@@ -80,6 +80,8 @@ nokori add \
   --terms-zh "强推,覆盖代码"
 ```
 
+不传 `--project-id` 时规则对所有项目可见（project_id=NULL）。传了则限定为该项目的规则。
+
 ### 2. 模拟检索
 
 ```bash
@@ -167,6 +169,10 @@ candidate → active → dormant → (reactivated or archived)
 - 用户明确纠正（high confidence correction）→ 立即 active
 - 纯 AI evidence：`evidence_score >= 2` 且跨 `>= 2` 个活跃天
 
+### Project ID
+
+Nokori 通过 `git rev-parse --show-toplevel` 解析项目根目录，生成 `<目录名>-<路径hash前8位>` 作为 project_id。不同路径的同名仓库不会冲突。非 git 目录 fallback 为 cwd 路径 hash。
+
 ### Global Promotion
 
 当一条 project 规则在 3 个不同项目中被 HOT 命中（`unique(project_id, date) >= 3`），自动升级为 global 规则，所有项目受益。`preference` 类型不参与升级。
@@ -221,7 +227,7 @@ nokori maintain
 ```bash
 export NOKORI_EMBED_BASE_URL="http://localhost:11434/v1"
 export NOKORI_EMBED_MODEL="nomic-embed-text"
-export NOKORI_EMBED_DIMENSIONS=384
+# NOKORI_EMBED_DIMENSIONS 默认不传（用模型自身维度），仅 OpenAI text-embedding-3 等支持该参数时设置
 ```
 
 本地模型模式（无需配置 URL）：
@@ -330,7 +336,7 @@ api_key = "sk-xxx"
 base_url = "https://api.example.com/v1"
 model = "text-embedding-v4"
 api_key = "sk-xxx"
-# dimensions = 768  # 可选，不填则不传给 API（用模型默认维度）
+# dimensions = 0  # 不填或 0 = 不传给 API（用模型默认维度）；仅支持该参数的模型设具体值
 chunk_size = 512
 chunk_count = 3
 enabled = true
