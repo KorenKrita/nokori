@@ -312,7 +312,7 @@ Extract jobs 仅由 `nokori extract`（手动或 async 子进程）消费，Sess
 
 ### 热缓存
 
-SessionStart 在**当前** `transcript_path` **同目录**下，取 mtime 严格早于当前文件的最新 `*.jsonl` 作为上一场；若该文件在 `extract_state` 中尚未以当前 mtime extract 过，则注入最后 3 条 user 消息（500 chars，独立预算）。详见 `docs/product-spec.md` §3.5。
+SessionStart 在**当前** `transcript_path` **同目录**下，取 mtime 严格早于当前文件的最新 `*.jsonl` 作为上一场；若该文件在 `extract_state` 中尚未以当前 mtime extract 过，则注入最后 3 条 user 消息（500 chars，独立预算）。
 
 ### 维护
 
@@ -542,7 +542,7 @@ enabled = true
 - 规则不包含源代码，只含行为描述
 - LLM 调用发送压缩后的 transcript 片段（非源代码）
 - 可指向本地 Ollama 实现完全离线
-- **Schema**：当前仅支持空库初始化到 v1；`rules.db` 版本不匹配时会报错。升级前请 `nokori export` 备份，或换新 `NOKORI_DATA_DIR` / `nokori reset`（见 `docs/design-decisions.md`）。
+- **Schema**：当前仅支持空库初始化到 v1；`rules.db` 版本不匹配时会报错。升级前请 `nokori export` 备份，或换新 `NOKORI_DATA_DIR` / `nokori reset`。
 
 ---
 
@@ -553,12 +553,6 @@ enabled = true
 | CLAUDE.md | 互补。Nokori 不修改 CLAUDE.md，规则是动态的行为约束 |
 | Claude Code auto-memory | 不冲突。memory 存事实，Nokori 存行为规则 |
 | 其他 memory 插件 | hooks 不覆盖，但建议不同时运行多个 memory 类插件 |
-
----
-
-## 设计说明
-
-实现取舍与 code review 共识见 [docs/design-decisions.md](docs/design-decisions.md)（产品形态、性能边界、有意 fail-open 等）。功能规格见 [docs/product-spec.md](docs/product-spec.md)。
 
 ---
 
