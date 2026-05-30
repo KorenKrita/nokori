@@ -102,7 +102,10 @@ def _resolve_file_values(data_dir_hint: str) -> dict[str, str]:
     data_dir = Path(data_dir_hint).expanduser().resolve()
     config_path = data_dir / _CONFIG_FILE_NAME
     if not config_path.exists():
-        config_path = Path("~/.nokori").expanduser() / _CONFIG_FILE_NAME
+        default_dir = Path("~/.nokori").expanduser().resolve()
+        if data_dir != default_dir:
+            return {}
+        config_path = default_dir / _CONFIG_FILE_NAME
     toml = _load_toml(config_path)
     if not toml:
         return {}

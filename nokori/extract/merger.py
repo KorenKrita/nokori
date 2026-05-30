@@ -2,14 +2,15 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import datetime, timezone
 
 from ..db import Db, dumps_json, fetch_short_ids, row_to_rule
+from ..lifecycle.evidence import add_evidence, should_activate_pure_ai
 from ..llm.adapter import LLMAdapter
 from ..llm.prompts import MERGE_PROMPT
 from ..models import Rule
 from ..utils.ids import new_uuid, short_id_for
 from ..utils.logging import get_logger
+from ..utils.time import now_iso
 from .extractor import Candidate
 
 log = get_logger("nokori.extract.merger")
@@ -31,10 +32,6 @@ class MergeOutcome:
     superseded: int
 
 
-def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
-
-
 def _initial_status(cand: Candidate) -> str:
     if cand.confidence == "high" and cand.source_type == "correction":
         return "active"
@@ -42,7 +39,7 @@ def _initial_status(cand: Candidate) -> str:
 
 
 def _persist_new(db: Db, cand: Candidate, project_id: str | None) -> Rule:
-    now = _now_iso()
+    now = now_iso()
     rid = new_uuid()
     sid = short_id_for(rid, fetch_short_ids(db))
     status = _initial_status(cand)
@@ -136,7 +133,7 @@ def _activate(db: Db, rule_id: str, confidence: str) -> None:
     with db.transaction() as tx:
         tx.execute(
             "UPDATE rules SET status = 'active', confidence = ?, updated_at = ? WHERE id = ?",
-            (confidence, _now_iso(), rule_id),
+            (confidence, now_iso(), rule_id),
         )
 
 
@@ -148,12 +145,12 @@ def _add_evidence(db: Db, rule_id: str, kind: str, points: int) -> None:
         return
     score = (row["evidence_score"] or 0) + points
     log_list = json.loads(row["evidence_log"] or "[]")
-    log_list.append({"kind": kind, "points": points, "at": _now_iso()})
+    log_list.append({"kind": kind, "points": points, "at": now_iso()})
     with db.transaction() as tx:
         tx.execute(
             "UPDATE rules SET evidence_score = ?, evidence_log = ?, updated_at = ? "
             "WHERE id = ?",
-            (score, dumps_json(log_list), _now_iso(), rule_id),
+            (score, dumps_json(log_list), now_iso(), rule_id),
         )
 
 
@@ -162,7 +159,7 @@ def _supersede(db: Db, old_id: str, new_id: str) -> None:
         tx.execute(
             "UPDATE rules SET superseded_by = ?, status = 'merged', updated_at = ? "
             "WHERE id = ?",
-            (new_id, _now_iso(), old_id),
+            (new_id, now_iso(), old_id),
         )
 
 
@@ -171,7 +168,7 @@ def _link_merge(db: Db, old_id: str, new_id: str) -> None:
         tx.execute(
             "UPDATE rules SET merged_into = ?, status = 'merged', updated_at = ? "
             "WHERE id = ?",
-            (new_id, _now_iso(), old_id),
+            (new_id, now_iso(), old_id),
         )
 
 
@@ -207,6 +204,21 @@ def merge_candidate(
                     activated += 1
                 else:
                     _add_evidence(db, existing.id, "same_extraction", 1)
+                    updated = db.fetchone(
+                        "SELECT evidence_score, evidence_log FROM rules WHERE id = ?",
+                        (existing.id,),
+                    )
+                    if updated:
+                        from ..models import Rule as _R
+                        import dataclasses
+                        check_rule = dataclasses.replace(
+                            existing,
+                            evidence_score=updated["evidence_score"],
+                            evidence_log=json.loads(updated["evidence_log"] or "[]"),
+                        )
+                        if should_activate_pure_ai(check_rule):
+                            _activate(db, existing.id, check_rule.confidence)
+                            activated += 1
         elif verdict == "B":  # BROADER — new supersedes existing
             saw_strong = True
             handled_existing.add(eid)

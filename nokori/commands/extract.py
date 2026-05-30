@@ -10,6 +10,7 @@ from ..extract.compressor import compress
 from ..extract.extractor import extract as extract_candidates
 from ..extract.merger import merge_candidate
 from ..extract.reader import read as read_transcript
+from ..lifecycle.hot_cache import mark_extracted
 from ..llm.adapter import LLMAdapter
 
 
@@ -32,6 +33,7 @@ def _process_path(path: Path, project_id: str | None, cfg: Config,
         for cand in candidates:
             outcome = merge_candidate(cand, db, llm, project_id)
             merged += outcome.inserted + outcome.activated + outcome.superseded
+        mark_extracted(db, path, path.stat().st_mtime)
     finally:
         db.close()
     return (len(candidates), merged)

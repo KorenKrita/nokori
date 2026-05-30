@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import array
 import json
-import struct
 import urllib.error
 import urllib.request
 from collections.abc import Sequence
+from datetime import datetime, timezone
 
 from ..config import Config
 from ..db import Db
@@ -124,17 +124,20 @@ def store_rule_embedding(db: Db, rule: Rule, client: EmbeddingClient) -> int:
     except EmbeddingError as e:
         log.warning("embed store failed rule=%s err=%s", rule.id, e)
         return 0
+    return _store_impl(db, rule.id, vectors, client.cfg.embed_model)
+
+
+def _store_impl(db: Db, rule_id: str, vectors: list[list[float]], model_name: str) -> int:
     if not vectors:
         return 0
-    from datetime import datetime, timezone
     now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
     with db.transaction() as tx:
-        tx.execute("DELETE FROM rule_embeddings WHERE rule_id = ?", (rule.id,))
+        tx.execute("DELETE FROM rule_embeddings WHERE rule_id = ?", (rule_id,))
         for idx, vec in enumerate(vectors):
             tx.execute(
                 "INSERT INTO rule_embeddings (rule_id, chunk_index, embedding, "
                 "model_version, created_at) VALUES (?,?,?,?,?)",
-                (rule.id, idx, _serialize(vec), client.cfg.embed_model, now),
+                (rule_id, idx, _serialize(vec), model_name, now),
             )
     return len(vectors)
 
@@ -155,8 +158,17 @@ def search(
         return []
     if not qvecs:
         return []
-    qvec = qvecs[0]
+    return _search_impl(qvecs[0], rules, db, top_k)
 
+
+def _search_impl(
+    qvec: list[float],
+    rules: Sequence[Rule],
+    db: Db,
+    top_k: int,
+) -> list[ScoredResult]:
+    if not rules:
+        return []
     placeholders = ",".join(["?"] * len(rules))
     rows = db.fetchall(
         f"SELECT rule_id, chunk_index, embedding FROM rule_embeddings "
@@ -232,19 +244,7 @@ def store_rule_embedding_local(db: Db, rule: Rule, client: LocalEmbeddingClient)
     except Exception as e:
         log.warning("local embed store failed rule=%s err=%s", rule.id, e)
         return 0
-    if not vectors:
-        return 0
-    from datetime import datetime, timezone
-    now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
-    with db.transaction() as tx:
-        tx.execute("DELETE FROM rule_embeddings WHERE rule_id = ?", (rule.id,))
-        for idx, vec in enumerate(vectors):
-            tx.execute(
-                "INSERT INTO rule_embeddings (rule_id, chunk_index, embedding, "
-                "model_version, created_at) VALUES (?,?,?,?,?)",
-                (rule.id, idx, _serialize(vec), LOCAL_MODEL_NAME, now),
-            )
-    return len(vectors)
+    return _store_impl(db, rule.id, vectors, LOCAL_MODEL_NAME)
 
 
 def search_local(
@@ -263,27 +263,7 @@ def search_local(
         return []
     if not qvecs:
         return []
-    qvec = qvecs[0]
-
-    placeholders = ",".join(["?"] * len(rules))
-    rows = db.fetchall(
-        f"SELECT rule_id, chunk_index, embedding FROM rule_embeddings "
-        f"WHERE rule_id IN ({placeholders})",
-        tuple(r.id for r in rules),
-    )
-    by_rule: dict[str, list[list[float]]] = {}
-    for row in rows:
-        by_rule.setdefault(row["rule_id"], []).append(_deserialize(row["embedding"]))
-
-    results: list[ScoredResult] = []
-    for rule in rules:
-        embeddings = by_rule.get(rule.id) or []
-        if not embeddings:
-            continue
-        best = max(_cosine(qvec, emb) for emb in embeddings)
-        results.append(ScoredResult(rule=rule, cosine=best))
-    results.sort(key=lambda r: r.cosine or 0.0, reverse=True)
-    return results[:top_k]
+    return _search_impl(qvecs[0], rules, db, top_k)
 
 
 def auto_enabled(cfg: Config, rule_count: int) -> bool:

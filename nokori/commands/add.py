@@ -4,8 +4,12 @@ import argparse
 from datetime import datetime, timezone
 
 from ..config import Config
-from ..db import dumps_json, fetch_short_ids, open_db
+from ..db import dumps_json, fetch_rule_by_short_id, fetch_short_ids, open_db
 from ..errors import NokoriError
+from ..search.embedding import (
+    EmbeddingClient, LocalEmbeddingClient, auto_enabled,
+    store_rule_embedding, store_rule_embedding_local, use_local,
+)
 from ..utils.ids import new_uuid, short_id_for
 
 
@@ -74,6 +78,14 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
                         "INSERT INTO rule_terms (rule_id, lang, term, term_type) VALUES (?,?,?,?)",
                         (rid, lang, term, "search"),
                     )
+        rule_count = db.fetchone("SELECT COUNT(*) AS n FROM rules")["n"]
+        if auto_enabled(cfg, rule_count):
+            rule = fetch_rule_by_short_id(db, sid)
+            if rule:
+                if use_local(cfg):
+                    store_rule_embedding_local(db, rule, LocalEmbeddingClient(cfg))
+                else:
+                    store_rule_embedding(db, rule, EmbeddingClient(cfg))
     finally:
         db.close()
 

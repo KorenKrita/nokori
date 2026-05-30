@@ -114,6 +114,16 @@ def _diff(before: dict, after: dict, path: Path) -> str:
     )
 
 
+def _set_env_flag(data: dict, key: str, value: str | None) -> None:
+    env = data.setdefault("env", {})
+    if value is None:
+        env.pop(key, None)
+        if not env:
+            data.pop("env", None)
+    else:
+        env[key] = value
+
+
 def run(args: argparse.Namespace, cfg: Config) -> int:
     path = _settings_path()
     before = _read_settings(path)
@@ -123,19 +133,12 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
         after = _remove_nokori_settings(before)
         verb = "uninstall"
     elif args.disable:
-        # `disable` is intentionally lightweight: keep hooks installed but set
-        # NOKORI_DISABLED=1 in env block (Claude Code merges env into hook env).
         after = copy.deepcopy(before) or {}
-        after.setdefault("env", {})["NOKORI_DISABLED"] = "1"
+        _set_env_flag(after, "NOKORI_DISABLED", "1")
         verb = "disable"
     elif args.enable:
         after = copy.deepcopy(before) or {}
-        env = after.get("env", {})
-        env.pop("NOKORI_DISABLED", None)
-        if env:
-            after["env"] = env
-        else:
-            after.pop("env", None)
+        _set_env_flag(after, "NOKORI_DISABLED", None)
         verb = "enable"
     else:
         after = _merge_settings(before, command)

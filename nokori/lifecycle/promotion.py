@@ -5,15 +5,12 @@ from datetime import datetime, timezone
 
 from ..db import Db, dumps_json
 from ..utils.logging import get_logger
+from ..utils.time import now_iso
 from .evidence import add_evidence
 
 log = get_logger("nokori.lifecycle.promotion")
 
 CROSS_PROJECT_PROMOTE_THRESHOLD = 3
-
-
-def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
 def record_shadow_hit(db: Db, rule_id: str, current_project_id: str | None) -> bool:
@@ -52,13 +49,13 @@ def record_shadow_hit(db: Db, rule_id: str, current_project_id: str | None) -> b
             "UPDATE rules SET promotion_evidence = ?, "
             "cross_project_hits = cross_project_hits + 1, updated_at = ? "
             "WHERE id = ?",
-            (dumps_json(evidence), _now_iso(), rule_id),
+            (dumps_json(evidence), now_iso(), rule_id),
         )
         if len(unique_projects) >= CROSS_PROJECT_PROMOTE_THRESHOLD:
             tx.execute(
                 "UPDATE rules SET project_scope = 'global', updated_at = ? "
                 "WHERE id = ?",
-                (_now_iso(), rule_id),
+                (now_iso(), rule_id),
             )
             log.info("rule promoted to global rule=%s", rule_id)
             promoted = True

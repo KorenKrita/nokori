@@ -5,10 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from ..config import Config
-
-
-def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+from .time import now_iso
 
 
 def _path_for(cfg: Config, session_id: str) -> Path:
@@ -21,8 +18,8 @@ def register(cfg: Config, session_id: str, project_id: str | None = None) -> Non
     payload = {
         "session_id": session_id,
         "project_id": project_id,
-        "started_at": _now_iso(),
-        "last_activity": _now_iso(),
+        "started_at": now_iso(),
+        "last_activity": now_iso(),
         "ended_at": None,
     }
     _path_for(cfg, session_id).write_text(json.dumps(payload), encoding="utf-8")
@@ -38,7 +35,7 @@ def touch(cfg: Config, session_id: str) -> None:
     except (OSError, json.JSONDecodeError):
         register(cfg, session_id)
         return
-    data["last_activity"] = _now_iso()
+    data["last_activity"] = now_iso()
     p.write_text(json.dumps(data), encoding="utf-8")
 
 
@@ -50,7 +47,7 @@ def end(cfg: Config, session_id: str) -> None:
         data = json.loads(p.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return
-    data["ended_at"] = _now_iso()
+    data["ended_at"] = now_iso()
     p.write_text(json.dumps(data), encoding="utf-8")
 
 

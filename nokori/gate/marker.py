@@ -9,6 +9,7 @@ from pathlib import Path
 
 from ..config import Config
 from ..errors import GateMarkerError
+from ..utils.time import now_iso, parse_iso
 
 
 def prompt_hash(prompt: str) -> str:
@@ -31,16 +32,12 @@ class Marker:
     rules: list[MarkerRule]
 
 
-def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
-
-
-def write(cfg: Config, session_id: str, prompt: str, rules: list[MarkerRule]) -> Path:
+def write(cfg: Config, session_id: str, prompt: str, rules: list[MarkerRule], *, ph: str | None = None) -> Path:
     cfg.ensure_dirs()
     payload = {
         "session_id": session_id,
-        "prompt_hash": prompt_hash(prompt),
-        "created_at": _now_iso(),
+        "prompt_hash": ph if ph is not None else prompt_hash(prompt),
+        "created_at": now_iso(),
         "rules": [asdict(r) for r in rules],
     }
     path = cfg.marker_path(session_id)
@@ -80,9 +77,8 @@ def delete(cfg: Config, session_id: str) -> None:
 def is_expired(marker: Marker, ttl_seconds: int) -> bool:
     if not marker.created_at:
         return True
-    try:
-        created = datetime.fromisoformat(marker.created_at.replace("Z", "+00:00"))
-    except ValueError:
+    created = parse_iso(marker.created_at)
+    if created is None:
         return True
     age = (datetime.now(timezone.utc) - created).total_seconds()
     return age > ttl_seconds

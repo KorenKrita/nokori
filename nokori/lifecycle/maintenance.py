@@ -4,6 +4,7 @@ from datetime import datetime, timezone, timedelta
 
 from ..db import Db
 from ..utils.logging import get_logger
+from ..utils.time import parse_iso
 
 log = get_logger("nokori.lifecycle.maintenance")
 
@@ -20,11 +21,8 @@ def _now() -> datetime:
 
 
 def _days_since_iso(iso: str | None) -> int | None:
-    if not iso:
-        return None
-    try:
-        dt = datetime.fromisoformat(iso.replace("Z", "+00:00"))
-    except ValueError:
+    dt = parse_iso(iso)
+    if dt is None:
         return None
     return (_now() - dt).days
 
