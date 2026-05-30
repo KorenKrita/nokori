@@ -236,7 +236,7 @@ class Config:
             strict=_bool_val("NOKORI_STRICT", False, file_values),
             disabled=_bool_val("NOKORI_DISABLED", False, file_values),
             dismiss_phrase=_str_val("NOKORI_DISMISS_PHRASE", "dismiss", file_values),
-            log_level=_str_val("NOKORI_LOG_LEVEL", "warn", file_values),
+            log_level=_enum_val("NOKORI_LOG_LEVEL", "warning", ("debug", "info", "warning", "error"), file_values),
         )
 
     @property

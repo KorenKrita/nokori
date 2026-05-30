@@ -64,6 +64,14 @@ def test_invalid_extract_mode(monkeypatch, tmp_path):
         Config.from_env()
 
 
+def test_invalid_log_level(monkeypatch, tmp_path):
+    _clear_env(monkeypatch)
+    monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("NOKORI_LOG_LEVEL", "verbose")
+    with pytest.raises(ConfigError):
+        Config.from_env()
+
+
 def test_paths(monkeypatch, tmp_path):
     _clear_env(monkeypatch)
     monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
