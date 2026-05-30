@@ -96,7 +96,7 @@ nokori status
 nokori logs          # hook / pipeline / async-extract 日志
 ```
 
-`nokori install` 会把上述 hook 写进 `~/.claude/settings.json`，**合并**进去，不会盖掉你已有的别的插件。
+`nokori install` 会把上述 hook 写进 `~/.claude/settings.json`，**合并**进去，不会盖掉你已有的别的插件。若 `settings.json` 已损坏（非合法 JSON），install **拒绝写入**并退出（与 `nokori health` 对 settings 的校验一致）。
 
 ```bash
 # 预览将要写入的变更
@@ -185,7 +185,7 @@ dismiss a3f2b1
 
 | 对比 | CLI `nokori dismiss` | 对话里 `dismiss <short_id>` |
 |------|----------------------|-----------------------------|
-| 时间限制 | 无 | 仅 **当前 session** 且 **过去 24 小时内** 注入过的规则 |
+| 时间限制 | **过去 24 小时内** 曾被注入过（任意 session） | 仅 **当前 session** 且 **过去 24 小时内** 注入过的规则 |
 | 动词 | 固定子命令 | 可配置，见 `dismiss_phrase`（默认 `dismiss`） |
 
 若把 `dismiss_phrase` 改成 `forget`，对话里应写 `forget a3f2b1`（`nokori dismiss` 子命令名不变）。格式固定为：**一个单词 + 空格 + short_id**，不是整段自然语言。
@@ -285,7 +285,7 @@ matcher = ".*"
 | `[gate] enabled` / `NOKORI_GATE_ENABLED` | 总开关；关则只注入、不 block |
 | `[gate] ttl_seconds` / `NOKORI_GATE_TTL_SECONDS` | marker 有效期（默认 600s），过期不再 block |
 
-**Prompt-hash 不匹配（fail-open）**：`UserPromptSubmit` 写入 marker 时记录当前 prompt 的 hash；`PreToolUse` 用 injections 表或 payload 解析当前 hash。若无法解析或与 marker 不一致（用户已发下一条消息），**删除 marker 并放行工具**，不 block。
+**Prompt-hash 不匹配（fail-open）**：`UserPromptSubmit` 写入 marker 时记录当前 prompt 的 hash；`PreToolUse` 用 payload 或本 session 最近一条 `injections.prompt_hash` 解析当前 hash（**不会**用磁盘上「最新 marker 文件」冒充当前轮）。若无法解析或与 marker 不一致（用户已发下一条消息），**删除 marker 并放行工具**，不 block。
 
 ---
 
@@ -309,7 +309,9 @@ nokori extract --session ~/.claude/projects/.../session.jsonl --dry-run
 nokori extract
 ```
 
-提取流程：读 transcript → 压缩（保留用户消息，截断 AI 响应）→ LLM 提取候选规则 → 与已有规则合并（SAME/BROADER/CONTRADICTS/UNRELATED）。
+提取流程：读 transcript（单文件 ≤ 50MB）→ 压缩（保留用户消息，截断 AI 响应）→ LLM 提取候选规则 → 与已有规则合并（SAME/BROADER/CONTRADICTS/UNRELATED）。
+
+**LLM 调用方式**：提取与 merge 使用 **system**（固定指令）+ **user**（不可信正文）两条消息；transcript / 候选 / 已有规则正文包在 `--- BEGIN UNTRUSTED DATA ---` 分隔块内，降低工具输出里夹带的对抗指令影响。远程端点为 OpenAI-compatible `/v1/chat/completions`；未配置时 fallback 为 `claude -p`（system 进 `--system-prompt`，正文进 stdin）。
 
 **Merge 判定（实现）** — LLM 关系字母 `A`–`E` 对应 SAME / BROADER / NARROWER / CONTRADICTS / UNRELATED：
 
@@ -321,7 +323,7 @@ nokori extract
 | **NARROWER / UNRELATED (C/E)** | 共存，无操作 |
 | 无强关系 | 插入新 `candidate` |
 
-**Merge LLM 失败**：若已有邻近规则但关系判断 LLM 调用失败，**不会插入**该候选；`nokori extract` **不**标记 transcript 已提取，extract job **保持 pending** 以便重试。
+**Merge / 提取 LLM 失败**：若已有邻近规则但 merge 关系判断失败，或提取阶段 LLM 调用失败、返回**非 JSON**，**不会插入**该候选；`nokori extract` **不**标记 transcript 已提取，extract job **保持 pending** 以便重试。
 
 **邻居回填（v0.1 故意保留）**：BM25 预筛不足 5 条时，会再塞入按 `updated_at` 最近的规则再送 LLM，可能多耗 token、出现大量 UNRELATED——用于减少「零词重叠」漏合并；无开关。取舍见本地 `docs/design-decisions.md`（`docs/` 默认不进 Git）。
 
@@ -398,7 +400,7 @@ export NOKORI_EXTRACT_MODE=async
 
 `NOKORI_SESSION_IDLE_SECONDS`（`[session] idle_seconds`）**不参与** defer，仅用于 `nokori status` 的「active」展示（open + 近期有 `touch` 心跳）。
 
-Extract jobs 仅由 `nokori extract`（手动或 async 子进程）消费，SessionStart 不处理 jobs。`nokori extract` 使用 `{data_dir}/extract.lock`（Unix / Windows 均支持）防止并发重复处理。
+Extract jobs 仅由 `nokori extract`（手动或 async 子进程）消费，SessionStart 不处理 jobs。`nokori extract` 使用 `{data_dir}/extract.lock`（Unix / Windows 均支持）防止并发重复处理；若已有实例在跑则 **exit 2** 并打印 `(extract already running)`（与「无 pending job」的 exit 0 区分）。
 
 ### 热缓存
 
@@ -445,7 +447,7 @@ nokori maintain
 | **SessionStart** `embed` kickstart | 全库 `active+dormant` 条数 | 是否后台拉起 embed server（≥20 即可能 spawn，与你当前项目只有几条规则无关） |
 | **UserPromptSubmit** 检索 | 当次 formal∪shadow 池大小 | 本条 prompt 是否走 embedding RRF |
 
-**半索引**：启用 embed 后，**没有** `rule_embeddings` 行的规则在 RRF 里只靠 BM25（刚 activate、import 后未索引、索引失败时会出现）。`nokori health` 的 `embed.index` 会 warn 缺失条数。
+**半索引**：启用 embed 后，**没有** `rule_embeddings` 行的规则在 RRF 里只靠 BM25（刚 activate、import 后未索引、索引失败时会出现）。语义检索只使用与**当前配置的 embed 模型名**一致的 `rule_embeddings` 行；换模型或维度后请 `reindex` / 重新 `add` 或 `import` 触发索引。`nokori health` 的 `embed.index` 会 warn 缺失条数；远端点探测仅 **HTTP 2xx** 记为 ok（401/404 不算健康）。
 
 远程 API 模式：
 
@@ -684,7 +686,7 @@ git clone https://github.com/KorenKrita/nokori.git
 cd nokori
 python3.11+ -m venv .venv
 .venv/bin/pip install -e ".[dev]"
-.venv/bin/pytest
+.venv/bin/python -m pytest tests/   # 勿用系统 python -m pytest（可能 0 collected）
 ```
 
 项目约束：
