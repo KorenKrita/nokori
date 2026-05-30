@@ -45,8 +45,3 @@ def resolve_project_id_detailed(cwd: str | None) -> tuple[str | None, bool]:
     short_hash = hashlib.sha256(resolved.encode()).hexdigest()[:8]
     name = Path(resolved).name
     return f"{name}-{short_hash}", used_git
-
-
-def _project_id_for_cwd(norm_cwd: str) -> str | None:
-    pid, _ = resolve_project_id_detailed(norm_cwd)
-    return pid

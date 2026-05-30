@@ -48,7 +48,7 @@ def _process_path(path: Path, project_id: str | None, cfg: Config,
         merge_ok = True
         done_keys = merge_checkpoint.load_merged_keys(cfg, path)
         for cand in candidates:
-            if merge_checkpoint.is_candidate_merged(cfg, path, cand):
+            if merge_checkpoint.candidate_keys(cand) & done_keys:
                 continue
             outcome = merge_candidate(cand, db, llm, project_id, cfg=cfg)
             if not outcome.merge_ok:

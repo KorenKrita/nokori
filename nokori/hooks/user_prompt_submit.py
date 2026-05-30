@@ -20,7 +20,6 @@ from ..lifecycle import maintenance, promotion
 from ..search.retrieve import retrieve_formal_and_shadow
 from ..utils import sessions
 from ..utils.logging import get_logger
-from ..utils.project import resolve_project_id
 from ..utils.time import now_iso
 
 log = get_logger("nokori.hooks.user_prompt_submit")

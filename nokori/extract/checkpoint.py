@@ -79,19 +79,6 @@ def load_merged_keys(cfg: Config, transcript: Path) -> set[str]:
     return {str(x) for x in merged}
 
 
-def record_merged(cfg: Config, transcript: Path, key: str) -> None:
-    merged = load_merged_keys(cfg, transcript)
-    merged.add(key)
-    path = _checkpoint_file(cfg, transcript)
-    tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps({"merged": sorted(merged)}), encoding="utf-8")
-    os.replace(tmp, path)
-    try:
-        path.chmod(0o600)
-    except OSError:
-        pass
-
-
 def clear(cfg: Config, transcript: Path) -> None:
     path = _checkpoint_file(cfg, transcript)
     try:
