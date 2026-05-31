@@ -39,9 +39,8 @@ def handle(payload: dict, cfg: Config) -> dict:
 
     session_id = payload.get("session_id") or "-"
 
-    text_ph = marker_io.resolve_current_prompt_hash(payload, cfg, session_id)
     on_disk = marker_io.read_latest_marker(cfg, session_id)
-    current_ph = text_ph
+    current_ph: str | None = None
     if not current_ph:
         try:
             db = open_db(cfg.db_path)
