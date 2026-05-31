@@ -328,7 +328,7 @@ nokori extract
 
 **提取 LLM 失败**（或非 JSON）：**不会插入**候选；job **保持 pending**。
 
-**邻居回填（v0.1 故意保留）**：BM25 预筛不足 5 条时，会再塞入按 `updated_at` 最近的规则再送 LLM，可能多耗 token、出现大量 UNRELATED——用于减少「零词重叠」漏合并；无开关。取舍见本地 `docs/design-decisions.md`（`docs/` 默认不进 Git）。
+**邻居回填（v0.1 故意保留）**：BM25 预筛不足 5 条时，会再塞入按 `updated_at` 最近的规则再送 LLM，可能多耗 token、出现大量 UNRELATED——用于减少「零词重叠」漏合并；无开关。取舍：宁可多调 LLM，也不漏掉应合并的 SAME/B/D。
 
 没有配置 LLM 时，Nokori 会尝试 `claude -p --model haiku` 作为 fallback（prompt 经 stdin，不进 argv）。
 
@@ -416,7 +416,7 @@ SessionStart 找「上一场 transcript」：
 1. **优先**读 `{data_dir}/transcript_index/`（SessionEnd 写入的 previous/current 指针）——表示**上一个在该目录正常结束的 session** 的文件，不一定是 mtime 最大的更早 `*.jsonl`。
 2. **回退**：同目录下 mtime 严格早于当前文件的最新 `*.jsonl`（启发式，最多扫描 50 个文件）。
 
-若上一场尚未 extract 过，从文件**尾部**读取最后 3 条 user 消息注入（500 chars，独立预算）。**Dormant 伪 HOT、shadow 计数、HOT 的 `hit_count`** 均在 **UserPromptSubmit 当轮** 写库（与 product-spec 一致），不等到下次 SessionStart。
+若上一场尚未 extract 过，从文件**尾部**读取最后 3 条 user 消息注入（500 chars，独立预算）。**Dormant 伪 HOT、shadow 计数、HOT 的 `hit_count`** 均在 **UserPromptSubmit 当轮** 写库，不等到下次 SessionStart。
 
 **Shadow 与 candidate 激活**：跨项目 shadow HOT 会 `add_evidence(..., shadow_hot, 1)`。若其它项目的规则仍是 `candidate`，多次（不同天）shadow 命中可能凑够纯 AI 激活条件（score≥2 且 2 个活跃日）——**与「只服务 promotion」的直觉不同，v0.1 有意允许**跨项目检索证据参与激活。
 
@@ -692,12 +692,6 @@ enabled = true
 | CLAUDE.md | 互补。Nokori 不改你的 CLAUDE.md；规矩是动态的「遇到 X 就做 Y」 |
 | Claude Code auto-memory | 不冲突。memory 偏事实，Nokori 偏行为规矩 |
 | 其他 memory 插件 | hook 可共存，但建议别叠太多「往上下文塞字」的插件 |
-
----
-
-## 进阶说明
-
-实现取舍、审查共识、与规格书的差异，见仓库内 `docs/design-decisions.md`、`docs/product-spec.md`（`docs/` 默认不进 Git，克隆后本地可读）。
 
 ---
 
