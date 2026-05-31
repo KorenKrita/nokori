@@ -100,3 +100,51 @@ def test_dismiss_strips_gate_marker(tmp_path, monkeypatch):
     )
     assert r.returncode == 0, r.stderr
     assert not cfg.marker_path("sess-x", ph).exists()
+
+
+def test_no_gate_marker_when_injection_empty(monkeypatch, tmp_path):
+    """#71: budget overflow → empty injection must not leave a gate marker."""
+    monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+    from nokori.hooks import user_prompt_submit as ups
+    from nokori.hooks.user_prompt_submit import handle
+    from nokori.models import Rule, ScoredResult
+    from nokori.search.retrieve import RetrievalResult
+
+    cfg = Config.from_env()
+    now = "2026-01-01T00:00:00Z"
+    rule = Rule(
+        id="r1",
+        short_id="r1abcd",
+        trigger_text="trigger",
+        trigger_variants=[],
+        search_terms={},
+        behavior=None,
+        action="do something important",
+        rationale=None,
+        source_type="correction",
+        confidence="high",
+        status="active",
+        evidence_score=5,
+        evidence_log=[],
+        hit_count=0,
+        last_hit=None,
+        shadow_hit_count=0,
+        promotion_evidence=[],
+        project_scope="global",
+        project_id=None,
+        superseded_by=None,
+        archived_reason=None,
+        created_at=now,
+        updated_at=now,
+    )
+    hot = ScoredResult(rule=rule, retrieval_hot=True)
+
+    def fake_retrieve(*_a, **_k):
+        return RetrievalResult([hot], [], 1, "off"), []
+
+    monkeypatch.setattr(ups, "retrieve_formal_and_shadow", fake_retrieve)
+    monkeypatch.setattr(ups, "format_injection", lambda *_a, **_k: "")
+
+    out = handle({"session_id": "sess-empty", "prompt": "hello"}, cfg)
+    assert out == {"continue": True}
+    assert marker_io.read_latest_marker(cfg, "sess-empty") is None

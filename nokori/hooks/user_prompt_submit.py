@@ -149,11 +149,12 @@ def handle(payload: dict, cfg: Config) -> dict:
             entries = [(r.rule.id, "hot") for r in hot]
             entries.extend((r.rule.id, "warm") for r in warm)
             log_injections_batch(db, session_id, ph, entries, now)
+            _update_gate_marker(cfg, session_id, prompt, hot, ph)
+        elif cfg.gate_enabled:
+            marker_io.delete_session(cfg, session_id)
         for r in warm:
             if r.retrieval_hot and r.rule.status == "dormant":
                 maintenance.reactivate_dormant_on_retrieval_hot(db, r.rule.id)
-
-        _update_gate_marker(cfg, session_id, prompt, hot, ph)
 
         log.info(
             "injected hot=%d warm=%d shadow_hot=%d session=%s",
