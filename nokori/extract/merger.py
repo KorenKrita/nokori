@@ -38,7 +38,11 @@ _VERDICT_ALIASES: dict[str, str] = {
 
 
 def _normalize_merge_verdict(raw: str) -> str | None:
-    token = (raw or "").strip().upper().split()[0].strip(".,;:\"'") if (raw or "").strip() else ""
+    token = (
+        (raw or "").strip().upper().split()[0].strip(".,;:\"'()[]{}")
+        if (raw or "").strip()
+        else ""
+    )
     if not token:
         return None
     if token in _VERDICT_ALIASES:

@@ -5,7 +5,7 @@ import pytest
 from nokori.config import Config
 from nokori.db import open_db, fetch_rules
 from nokori.extract.extractor import Candidate
-from nokori.extract.merger import merge_candidate
+from nokori.extract.merger import _normalize_merge_verdict, merge_candidate
 
 
 class FakeMergeLLM:
@@ -37,6 +37,13 @@ def _cand(
         source_type=source,
         confidence=conf,
     )
+
+
+def test_normalize_merge_verdict_strips_wrappers():
+    assert _normalize_merge_verdict("(A)") == "A"
+    assert _normalize_merge_verdict("[B]") == "B"
+    assert _normalize_merge_verdict("{C}") == "C"
+    assert _normalize_merge_verdict("CONTRADICTS") == "D"
 
 
 def test_merge_inserts_when_no_neighbors(monkeypatch, tmp_path):
