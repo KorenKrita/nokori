@@ -197,6 +197,7 @@ def list_session_records(cfg: Config) -> list[dict]:
             data = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             continue
+        data["_path"] = str(path)
         rows.append(data)
     return rows
 
@@ -255,10 +256,13 @@ def prune_ended_session_files(cfg: Config, max_age_days: int = SESSION_FILE_RETE
         age_days = (now - ended_dt).days
         if age_days < max_age_days:
             continue
-        sid = data.get("session_id")
-        if not sid:
-            continue
-        path = _path_for(cfg, sid)
+        path_raw = data.get("_path")
+        path = Path(path_raw) if path_raw else None
+        if path is None:
+            sid = data.get("session_id")
+            if not sid:
+                continue
+            path = _path_for(cfg, sid)
         try:
             path.unlink()
             removed += 1
