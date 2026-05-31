@@ -41,5 +41,7 @@ def test_format_injection_includes_footer_within_max_chars():
     assert logged == [(rule.id, "hot")]
 
     tiny, tiny_logged = format_injection(hot, [], max_chars=50, dismiss_phrase="dismiss")
-    assert tiny == ""
-    assert tiny_logged == []
+    # Injection budget floor (500) still renders a small HOT block when max_chars is tiny.
+    assert tiny != ""
+    assert "dismiss" in tiny
+    assert tiny_logged == [(rule.id, "hot")]
