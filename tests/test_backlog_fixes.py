@@ -51,7 +51,7 @@ def test_import_rolls_back_on_failure(tmp_path):
         env=env,
     )
     assert r.returncode != 0
-    db = open_db(Config.from_env().db_path)
+    db = open_db(data / "rules.db")
     try:
         assert db.fetchone("SELECT id FROM rules WHERE short_id='good001'") is None
     finally:
