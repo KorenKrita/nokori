@@ -307,6 +307,11 @@ def log_injections_batch(
                     "updated_at = ? WHERE id = ?",
                     (now, now, rule_id),
                 )
+            elif level == "warm":
+                tx.execute(
+                    "UPDATE rules SET last_hit = ?, updated_at = ? WHERE id = ?",
+                    (now, now, rule_id),
+                )
 
 
 def find_rule_id_by_recent_injection(
