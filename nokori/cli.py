@@ -12,7 +12,10 @@ from .utils.logging import configure as configure_logging
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="nokori", description="Claude Code 反复犯错纠正层")
+    p = argparse.ArgumentParser(
+        prog="nokori",
+        description="Claude Code learning layer — rules from corrections, inject + one-shot Gate",
+    )
     p.add_argument("--version", action="version", version=f"nokori {__version__}")
     p.add_argument(
         "-v", "--verbose",

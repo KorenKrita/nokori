@@ -16,7 +16,7 @@ Output a JSON array of rule candidates. Each item:
 {
   "trigger": "<English canonical scenario, NOT project/file names>",
   "trigger_variants": ["<2-3 alternative phrasings, English>"],
-  "search_terms": {"en": ["<concrete keywords>"], "zh": ["<中文关键词>"]},
+  "search_terms": {"en": ["<concrete keywords>"], "zh": ["<Chinese keywords>"]},
   "behavior": "<the wrong/old approach>",
   "action": "<the correct approach>",
   "rationale": "<one sentence evidence from the transcript>",

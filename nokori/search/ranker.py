@@ -50,7 +50,7 @@ def meets_min_evidence(r: ScoredResult) -> bool:
 def tier_results(
     results: Sequence[ScoredResult],
 ) -> tuple[list[ScoredResult], list[ScoredResult]]:
-    """Split results into HOT and WARM tiers (see README「检索引擎」)."""
+    """Split results into HOT and WARM tiers (see README Search engine section)."""
     if not results:
         return [], []
     top5 = list(results[:5])
