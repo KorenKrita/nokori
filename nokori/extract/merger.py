@@ -280,12 +280,11 @@ def merge_candidate(
     judgment_payload = _ask_llm(cand, neighbors, llm)
     if judgment_payload is None:
         log.warning(
-            "merge llm failed, inserting as unrelated: %s",
+            "merge llm failed, skipping insert: %s",
             cand.trigger[:60],
         )
-        _persist_new(db, cand, project_id, cfg)
         return MergeOutcome(
-            inserted=1, activated=0, merged=0, superseded=0, merge_ok=False,
+            inserted=0, activated=0, merged=0, superseded=0, merge_ok=False,
         )
     judgment = judgment_payload.get("relationships") or []
     by_id = {r.id: r for r in neighbors}
