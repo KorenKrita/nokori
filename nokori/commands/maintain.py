@@ -8,6 +8,9 @@ from ..lifecycle import maintenance
 
 
 def run(_args: argparse.Namespace, cfg: Config) -> int:
+    if cfg.disabled:
+        print("nokori: disabled (NOKORI_DISABLED)")
+        return 0
     db = open_db(cfg.db_path)
     try:
         summary = maintenance.run_due_jobs(db, cfg)

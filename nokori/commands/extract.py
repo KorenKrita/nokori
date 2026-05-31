@@ -76,6 +76,9 @@ def _process_path(path: Path, project_id: str | None, cfg: Config,
 
 
 def run(args: argparse.Namespace, cfg: Config) -> int:
+    if cfg.disabled:
+        print("nokori: disabled (NOKORI_DISABLED)")
+        return 0
     with extract_lock(cfg) as locked:
         if not locked:
             print("(extract already running)")

@@ -52,6 +52,9 @@ def _spawn_async_extract(cfg: Config) -> None:
 
 
 def handle(payload: dict, cfg: Config) -> dict:
+    if cfg.disabled:
+        return {"continue": True}
+
     session_id = payload.get("session_id") or "-"
     sessions.end(cfg, session_id)
 
