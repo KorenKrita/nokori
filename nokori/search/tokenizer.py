@@ -22,7 +22,7 @@ def is_cjk(ch: str) -> bool:
 def _flush_latin(buf: str, out: list[str]) -> None:
     if not buf:
         return
-    w = buf.strip("_-")
+    w = buf.strip("_")
     if len(w) >= 2:
         out.append(w)
 

@@ -8,6 +8,7 @@ import urllib.request
 from typing import Callable
 
 from ..config import Config
+from ..constants import MAX_CLAUDE_CLI_INPUT_CHARS
 from ..errors import LlmError, LlmRateLimitError, LlmTimeoutError
 from ..utils.logging import get_logger
 from ..utils.url_safe import safe_log_url
@@ -103,6 +104,8 @@ class LLMAdapter:
             "You are a JSON extraction engine. Output only valid JSON. "
             "No explanations."
         )
+        if len(user) > MAX_CLAUDE_CLI_INPUT_CHARS:
+            user = user[:MAX_CLAUDE_CLI_INPUT_CHARS]
         try:
             result = self._run(
                 [

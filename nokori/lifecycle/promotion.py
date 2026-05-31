@@ -63,10 +63,14 @@ def record_shadow_hit(db: Db, rule_id: str, current_project_id: str | None) -> b
                     "date": today,
                 })
                 unique_projects = set(unique_promotion_project_ids(evidence))
-                score, ev_log = compute_evidence_append(
-                    row["evidence_score"], row["evidence_log"], "shadow_hot", 1
-                )
                 now = now_iso()
+                score, ev_log = compute_evidence_append(
+                    row["evidence_score"],
+                    row["evidence_log"],
+                    "shadow_hot",
+                    1,
+                    at=now,
+                )
                 tx.execute(
                     "UPDATE rules SET promotion_evidence = ?, "
                     "shadow_hit_count = shadow_hit_count + 1, "

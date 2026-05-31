@@ -6,7 +6,6 @@ from dataclasses import replace
 
 from ..models import ScoredResult
 
-MIN_ABSOLUTE_SCORE = 0.005
 SINGLE_HOT_MIN_RRF = 0.01
 SINGLE_HOT_MIN_MATCHED_TOKENS = 3
 RRF_K = 60
@@ -69,8 +68,6 @@ def tier_results(
         )
 
     for i, r in enumerate(top5):
-        if r.rrf_score < MIN_ABSOLUTE_SCORE:
-            continue
         if not meets_min_evidence(r):
             continue
         if i == 0 and top1_dominant:

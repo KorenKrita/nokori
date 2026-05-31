@@ -4,6 +4,9 @@ from collections.abc import Iterable
 
 from .marker import MarkerRule
 
+# Keep rule text usable when dismiss_phrase is very long (misconfiguration).
+_INJECTION_BUDGET_FLOOR = 500
+
 
 def format_block_reason(rules: Iterable[MarkerRule], dismiss_phrase: str = "dismiss") -> str:
     rules = list(rules)
@@ -41,7 +44,7 @@ def format_injection(
     footer = (
         f"\n(Say `{dismiss_phrase} <short_id>` to retire an outdated rule.)"
     )
-    budget = max(0, max_chars - len(footer))
+    budget = max(_INJECTION_BUDGET_FLOOR, max(0, max_chars - len(footer)))
 
     parts: list[str] = []
     parts.append("[Nokori] past lessons relevant to this prompt:")

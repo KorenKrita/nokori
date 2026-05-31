@@ -309,9 +309,6 @@ class LocalEmbeddingClient:
         )
         return self._model
 
-    def _load_model(self):
-        return self.load_model()
-
     def embed(self, text: str) -> list[list[float]]:
         chunks = _chunk_text(
             text,
@@ -320,7 +317,7 @@ class LocalEmbeddingClient:
         )
         if not chunks:
             return []
-        model = self._load_model()
+        model = self.load_model()
         vectors = model.encode(chunks, show_progress_bar=False)
         return [v.tolist() for v in vectors]
 

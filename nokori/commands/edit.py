@@ -83,7 +83,7 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
         }
         if reindex_cols & {col for col, _ in updates}:
             updated_rule = fetch_rule_by_short_id(db, args.short_id)
-            if updated_rule:
+            if updated_rule and updated_rule.status not in ("archived", "merged"):
                 index_rule_if_enabled(db, updated_rule, cfg)
     finally:
         db.close()

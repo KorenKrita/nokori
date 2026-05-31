@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import re
-from functools import lru_cache
 
 from ..config import Config
 from ..db import open_db
@@ -13,7 +12,6 @@ from ..utils.logging import get_logger
 log = get_logger("nokori.hooks.pre_tool_use")
 
 
-@lru_cache(maxsize=8)
 def _compiled_gate_matcher(matcher: str) -> re.Pattern[str] | None:
     try:
         return re.compile(matcher)
@@ -44,7 +42,7 @@ def handle(payload: dict, cfg: Config) -> dict:
     text_ph = marker_io.resolve_current_prompt_hash(payload, cfg, session_id)
     on_disk = marker_io.read_latest_marker(cfg, session_id)
     current_ph = text_ph
-    if (on_disk and on_disk.rules and not current_ph) or not current_ph:
+    if not current_ph:
         try:
             db = open_db(cfg.db_path)
         except DbError as e:

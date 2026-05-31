@@ -112,7 +112,8 @@ def retrieve_formal_and_shadow(
     formal_warm = [r for r in result.warm if r.rule.id in formal_ids]
     shadow_hot = [r for r in result.hot if r.rule.id in shadow_ids]
     shadow_warm = [r for r in result.warm if r.rule.id in shadow_ids]
+    formal_bm25_matches = len(bm25.search(prompt, list(formal_rules), top_k=10))
     formal_result = RetrievalResult(
-        formal_hot, formal_warm, result.bm25_matches, result.embed_mode
+        formal_hot, formal_warm, formal_bm25_matches, result.embed_mode
     )
     return formal_result, shadow_hot, shadow_warm

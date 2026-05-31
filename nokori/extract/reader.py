@@ -36,13 +36,14 @@ def read(path: Path) -> list[Turn]:
     """
     if not path.exists():
         return []
-    size = path.stat().st_size
-    if size > MAX_TRANSCRIPT_BYTES:
+    with open(path, "rb") as fh:
+        raw = fh.read(MAX_TRANSCRIPT_BYTES + 1)
+    if len(raw) > MAX_TRANSCRIPT_BYTES:
         raise NokoriError(
-            f"transcript too large ({size} bytes; max {MAX_TRANSCRIPT_BYTES})"
+            f"transcript too large ({len(raw)} bytes; max {MAX_TRANSCRIPT_BYTES})"
         )
     out: list[Turn] = []
-    text = path.read_text(encoding="utf-8", errors="replace")
+    text = raw.decode("utf-8", errors="replace")
     for lineno, line in enumerate(text.splitlines(), 1):
         line = line.strip()
         if not line:

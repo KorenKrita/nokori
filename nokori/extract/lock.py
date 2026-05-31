@@ -67,9 +67,11 @@ def acquire(cfg: Config) -> Iterator[bool]:
     cfg.ensure_dirs()
     lock_path = cfg.data_dir / "extract.lock"
     fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR, 0o600)
+    acquired = False
     try:
         try:
             _lock_exclusive_nb(fd)
+            acquired = True
         except BlockingIOError:
             log.info("extract lock busy, skipping (%s)", lock_path)
             yield False
@@ -81,8 +83,9 @@ def acquire(cfg: Config) -> Iterator[bool]:
             pass
         yield True
     finally:
-        try:
-            _unlock(fd)
-        except OSError:
-            pass
+        if acquired:
+            try:
+                _unlock(fd)
+            except OSError:
+                pass
         os.close(fd)

@@ -47,6 +47,7 @@ def _index_key(rules_list: list[Rule]) -> tuple:
         )
         return (
             r.id,
+            r.status,
             r.trigger_text,
             r.action,
             tuple(r.trigger_variants),

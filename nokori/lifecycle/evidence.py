@@ -12,10 +12,13 @@ def compute_evidence_append(
     evidence_log_json: str | None,
     kind: str,
     points: int,
+    *,
+    at: str | None = None,
 ) -> tuple[int, str]:
+    ts = at or now_iso()
     score = (evidence_score or 0) + points
     log_list = loads_json(evidence_log_json, [])
-    log_list.append({"kind": kind, "points": points, "at": now_iso()})
+    log_list.append({"kind": kind, "points": points, "at": ts})
     if len(log_list) > MAX_EVIDENCE_LOG_ENTRIES:
         log_list = log_list[-MAX_EVIDENCE_LOG_ENTRIES:]
     return score, dumps_json(log_list)
@@ -28,13 +31,14 @@ def add_evidence(db: Db, rule_id: str, kind: str, points: int) -> tuple[int, lis
         ).fetchone()
         if row is None:
             return (0, [])
+        now = now_iso()
         score, log_json = compute_evidence_append(
-            row["evidence_score"], row["evidence_log"], kind, points
+            row["evidence_score"], row["evidence_log"], kind, points, at=now,
         )
         tx.execute(
             "UPDATE rules SET evidence_score = ?, evidence_log = ?, updated_at = ? "
             "WHERE id = ?",
-            (score, log_json, now_iso(), rule_id),
+            (score, log_json, now, rule_id),
         )
     return (score, loads_json(log_json, []))
 
