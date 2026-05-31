@@ -71,6 +71,9 @@ def test_extractor_llm_failure_not_ok():
         def complete(self, *a, **k):
             raise RuntimeError("down")
 
+        def complete_messages(self, *a, **k):
+            raise RuntimeError("down")
+
     cands, ok = extract("nonempty transcript", FailLLM())
     assert cands == [] and ok is False
 
