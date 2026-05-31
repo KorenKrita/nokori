@@ -10,7 +10,7 @@ from ..utils.time import now_iso
 
 
 def transcript_hash(path: Path, mtime: float) -> str:
-    raw = f"{path.resolve()}::{int(mtime)}".encode("utf-8")
+    raw = f"{path.resolve()}::{mtime:.6f}".encode("utf-8")
     return hashlib.sha256(raw).hexdigest()[:16]
 
 
