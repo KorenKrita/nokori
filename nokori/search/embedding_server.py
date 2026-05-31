@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import signal
 import socket
 import time
 from typing import Any
@@ -103,6 +104,11 @@ def run_server(cfg: Config) -> int:
     last_activity = time.monotonic()
     idle_limit = float(cfg.embed_server_idle_seconds)
     log.info("embed server listening on %s (idle=%ss)", sock_path, int(idle_limit))
+
+    def _terminate(_signum, _frame) -> None:
+        raise SystemExit(0)
+
+    signal.signal(signal.SIGTERM, _terminate)
 
     try:
         while True:

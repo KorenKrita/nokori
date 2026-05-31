@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+# Batch-close nokori GitHub issues with triage comments.
+set -euo pipefail
+SHA="8280d356681dec8ce035bab2a864e788799431bf"
+REPO="KorenKrita/nokori"
+
+close_fixed() {
+  local n="$1" msg="$2"
+  gh issue comment "$n" --repo "$REPO" --body "**Fixed in \`${SHA:0:7}\`** ($SHA)
+
+$msg"
+  gh issue close "$n" --repo "$REPO" --reason completed
+}
+
+close_wontfix() {
+  local n="$1" msg="$2"
+  gh issue comment "$n" --repo "$REPO" --body "**Closed — no code change** (triage $(date +%Y-%m-%d))
+
+$msg"
+  gh issue close "$n" --repo "$REPO" --reason "not planned"
+}
+
+close_fixed 1 "Return empty string from \`format_injection\` when no rule body fits budget (avoids bogus hit_count from header/footer only)."
+close_fixed 2 "\`open_db\` now closes the connection if \`_migrate\` fails."
+close_fixed 3 "\`health\` skips non-dict hook spec entries."
+close_fixed 4 "Unexpected JSON types from extract LLM return \`([], False)\` so transcript can retry."
+close_fixed 5 "Pipeline log handler now includes \`nokori.commands.*\` and \`nokori.utils.*\`."
+close_fixed 7 "Guard when \`fetchone\` returns None after insert in merger."
+close_fixed 8 "SessionEnd catches missing transcript on \`stat()\` and passes through."
+close_fixed 9 "Extract marks processed even if transcript file disappears after merge (\`mtime=0\` fallback)."
+close_fixed 10 "UserPromptSubmit catches \`OSError\` from retrieve path and fail-opens."
+close_fixed 11 "Import validation rejects empty \`trigger_text\` / \`action\`."
+close_fixed 12 "\`_was_extracted\` returns False on \`stat\` OSError (try hot-cache path)."
+close_fixed 13 "Candidate cleanup deletes only rows still \`status='candidate'\` inside the transaction."
+close_fixed 14 "\`candidate_key\` no longer hashes \`confidence\` (legacy keys still honored)."
+close_fixed 15 "Previous transcript selection uses \`mtime > current\` (equal mtime no longer dropped)."
+close_fixed 16 "\`reactivate_dormant_on_retrieval_hot\` increments \`hit_count\`."
+close_fixed 17 "CJK punctuation U+3000–303F excluded from bigram tokenization."
+close_fixed 19 "Corrupt embedding blobs are skipped with a warning."
+close_fixed 20 "Compressor shrinks kept text until within token budget."
+close_fixed 21 "Shadow promotion skipped when rule \`project_id\` is NULL."
+close_fixed 22 "HOT spillover rules are listed before ordinary warm rules."
+close_fixed 23 "\`nokori add\` requires trigger length ≥ 3."
+close_fixed 24 "Missing \`session_id\` gets a random UUID instead of shared \`-\`."
+close_fixed 28 "Malformed \`config.toml\` is ignored (fail-open); hook path also guarded in CLI."
+close_fixed 46 "\`strict\` documented at top level in \`config.toml.example\` (matches \`_TOML_TO_ENV\`)."
+close_fixed 47 "\`log_level\` validated; invalid values raise \`ConfigError\`."
+close_fixed 48 "Dismiss error message matches 24h-any-session behavior."
+close_fixed 62 "\`short_id_for\` checks prefix collisions in both directions."
+close_fixed 64 "Invalid hook stdin JSON logs a warning."
+close_fixed 65 "\`nokori logs\` tails via deque (no full-file read)."
+close_fixed 67 "Reactivating to \`active\` clears \`archived_reason\` / \`superseded_by\`."
+close_fixed 68 "\`nokori maintain\` prints \`injection_cleanup\` count."
+
+close_wontfix 18 "Multi-chunk query embedding (max-pool / multi-search) is a feature change; filed for a follow-up."
+close_wontfix 25 "Gate matcher is user-local config; document dangerous patterns in README rather than bundling re2."
+close_wontfix 26 "PID file hardening (atomic write + cmdline check) deferred; low incidence on macOS/Linux."
+close_wontfix 27 "Job file TOCTOU: rare concurrent SessionEnd; acceptable with current try/except."
+close_wontfix 29 "Default 2s embed hook timeout kept; disabling embed or local server is the supported fast path."
+close_wontfix 30 "PreToolUse still opens DB when gate may apply; marker-only path needs API payload support from host."
+close_wontfix 31 "Config TOML parsed per process; hook processes are short-lived — caching adds little vs complexity."
+close_wontfix 32 "Addressed by session \`project_id\` cache + \`project_id_from_git\` (see commits on main before this batch)."
+close_wontfix 33 "Session touch debounce: low impact; open if latency becomes measurable."
+close_wontfix 34 "BM25 cache key optimization deferred (correctness first)."
+close_wontfix 35 "Marker file already stores prompt_hash; DB fallback kept for legacy markers."
+close_wontfix 36 "PreToolUse marker read is cheap vs DB; in-memory sentinel not worth cross-process state."
+close_wontfix 37 "Lazy \`row_to_rule\` is a larger refactor; retrieval path already bounded by rule count."
+close_wontfix 38 "Config surface reduction is a breaking change — track for v0.2."
+close_wontfix 39 "Windows lock branch removed in a prior pass / platform scope is macOS+Linux only."
+close_wontfix 40 "\`strict\` flag retained for hook debugging."
+close_wontfix 41 "Retrieve layering kept for test seams; inline when we drop dual entry points."
+close_wontfix 42 "File markers work without DB migration; SQLite markers are v0.2."
+close_wontfix 43 "LLMAdapter DI kept for tests."
+close_wontfix 44 "Extract mode flags kept for manual vs async product modes."
+close_wontfix 45 "RRF path used when embed enabled; default BM25-only path already skips cosine."
+close_wontfix 50 "Install hook timeouts left at 5s — host kills hung hooks; tightening caused false positives in testing."
+close_wontfix 51 "Transcript index flock deferred (SQLite index is v0.2)."
+close_wontfix 52 "Prompt hash race needs host payload field; marker+DB contract unchanged."
+close_wontfix 53 "\`nokori test --simulate-hook\` is a nice CLI addition — not blocking."
+close_wontfix 54 "Stale marker after dismiss is edge-case (same turn); clearing all session markers on dismiss is follow-up."
+close_wontfix 55 "BM25 query term dedup via set is standard Okapi BM25 behavior — not a bug."
+close_wontfix 56 "SIGTERM handler for embed server deferred."
+close_wontfix 57 "Evidence log cap deferred (needs migration policy)."
+close_wontfix 58 "Frozen Rule dataclass: documented; full immutability is v0.2."
+close_wontfix 59 "Import all-or-nothing transaction is desirable; current per-rule tx kept for large imports memory."
+close_wontfix 60 "Use \`delete_rule_cascade\` for deletes; ON DELETE CASCADE requires schema migration."
+close_wontfix 61 "Session file cleanup on SessionEnd deferred."
+close_wontfix 63 "Status double-read deferred."
+close_wontfix 66 "Embed server spawn lock deferred."
+close_wontfix 49 "Hook-path transcript tail limit: hot_cache uses \`read_tail_user_turns\`; 50MiB cap is extract-only."
+
+echo "Done closing issues 1-68."

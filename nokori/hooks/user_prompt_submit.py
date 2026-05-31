@@ -45,6 +45,7 @@ def _run_dismiss(db: Db, prompt: str, session_id: str, cfg: Config) -> int:
         if rid is None:
             continue
         archive_rule(db, rid, "user_dismissed_prompt", now)
+        marker_io.strip_short_id_from_all_markers(cfg, sid)
         log.info("rule dismissed via prompt short=%s session=%s", sid, session_id)
         count += 1
     return count

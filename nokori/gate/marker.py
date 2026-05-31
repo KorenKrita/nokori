@@ -134,6 +134,68 @@ def delete(
     delete_session(cfg, session_id)
 
 
+def latest_marker_prompt_hash(cfg: Config, session_id: str) -> str | None:
+    """Most recent prompt_hash from on-disk markers for this session."""
+    mdir = cfg.marker_dir(session_id)
+    if not mdir.is_dir():
+        return None
+    best_ph: str | None = None
+    best_at = ""
+    for path in mdir.glob("*.json"):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        ph = data.get("prompt_hash")
+        if not ph:
+            continue
+        created = str(data.get("created_at") or "")
+        if created >= best_at:
+            best_at = created
+            best_ph = str(ph)
+    if best_ph:
+        return best_ph
+    try:
+        newest = max(mdir.glob("*.json"), key=lambda p: p.stat().st_mtime)
+    except ValueError:
+        return None
+    return newest.stem
+
+
+def strip_short_id_from_all_markers(cfg: Config, short_id: str) -> int:
+    """Remove a dismissed rule from gate markers (all sessions). Returns files touched."""
+    root = cfg.data_dir / "gate_markers"
+    if not root.is_dir():
+        return 0
+    needle = short_id.lower()
+    touched = 0
+    for session_dir in root.iterdir():
+        if not session_dir.is_dir():
+            continue
+        for path in list(session_dir.glob("*.json")):
+            marker = _load_marker_file(path, session_dir.name)
+            if marker is None:
+                continue
+            kept = [r for r in marker.rules if r.short_id.lower() != needle]
+            if len(kept) == len(marker.rules):
+                continue
+            touched += 1
+            if not kept:
+                try:
+                    path.unlink()
+                except OSError:
+                    pass
+                continue
+            payload = {
+                "session_id": marker.session_id,
+                "prompt_hash": marker.prompt_hash,
+                "created_at": marker.created_at,
+                "rules": [asdict(r) for r in kept],
+            }
+            _atomic_write_json(path, payload)
+    return touched
+
+
 def delete_session(cfg: Config, session_id: str) -> None:
     """Remove all gate markers for a session."""
     mdir = cfg.marker_dir(session_id)
@@ -150,15 +212,37 @@ def delete_session(cfg: Config, session_id: str) -> None:
         pass
 
 
+def read_latest_marker(cfg: Config, session_id: str) -> Marker | None:
+    ph = latest_marker_prompt_hash(cfg, session_id)
+    if not ph:
+        return None
+    return read(cfg, session_id, prompt_hash_value=ph)
+
+
+def injection_exists(db: Db, session_id: str, ph: str) -> bool:
+    row = db.fetchone(
+        "SELECT 1 FROM injections WHERE session_id = ? AND prompt_hash = ? LIMIT 1",
+        (session_id, ph),
+    )
+    return row is not None
+
+
 def resolve_current_prompt_hash(
     payload: dict,
-    db: Db,
+    cfg: Config,
     session_id: str,
+    *,
+    db: Db | None = None,
 ) -> str | None:
     """Best-effort hash for the active user turn (PreToolUse has no prompt field)."""
     text = payload.get("prompt")
     if isinstance(text, str) and text:
         return prompt_hash(text)
+    ph = latest_marker_prompt_hash(cfg, session_id)
+    if ph and db is not None and injection_exists(db, session_id, ph):
+        return ph
+    if db is None:
+        return None
     row = db.fetchone(
         "SELECT prompt_hash FROM injections WHERE session_id = ? "
         "ORDER BY created_at DESC LIMIT 1",

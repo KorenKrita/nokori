@@ -224,12 +224,14 @@ def list_active_sessions(
     cfg: Config,
     *,
     idle_seconds: int | None = None,
+    records: list[dict] | None = None,
 ) -> list[dict]:
     idle = idle_seconds if idle_seconds is not None else cfg.session_idle_seconds
     now = datetime.now(timezone.utc)
+    rows = records if records is not None else list_session_records(cfg)
     active = [
         d
-        for d in list_session_records(cfg)
+        for d in rows
         if is_active_record(d, idle_seconds=idle, now=now)
     ]
     active.sort(key=lambda r: r.get("last_activity") or "", reverse=True)

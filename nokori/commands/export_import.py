@@ -192,6 +192,7 @@ def run_import(args: argparse.Namespace, cfg: Config) -> int:
     try:
         existing_ids = {r["id"] for r in db.fetchall("SELECT id FROM rules")}
         existing_short_ids = fetch_short_ids(db)
+        pending: list[tuple] = []
         for rec in rules_in:
             if not isinstance(rec, dict):
                 raise NokoriError("each rule must be an object")
@@ -206,42 +207,46 @@ def run_import(args: argparse.Namespace, cfg: Config) -> int:
             if sid in existing_short_ids:
                 sid = short_id_for(new_uuid(), existing_short_ids)
             existing_short_ids.add(sid)
-            with db.transaction() as tx:
-                tx.execute(
-                    "INSERT INTO rules (id, short_id, trigger_text, trigger_variants, "
-                    "search_terms, behavior, action, rationale, source_type, confidence, "
-                    "status, evidence_score, evidence_log, hit_count, last_hit, "
-                    "shadow_hit_count, promotion_evidence, project_scope, project_id, "
-                    "superseded_by, archived_reason, "
-                    "created_at, updated_at) "
-                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                    (
-                        rid, sid,
-                        rec.get("trigger_text", ""),
-                        dumps_json(rec.get("trigger_variants") or []),
-                        dumps_json(rec.get("search_terms") or {}),
-                        rec.get("behavior"),
-                        rec.get("action", ""),
-                        rec.get("rationale"),
-                        rec.get("source_type", "correction"),
-                        rec.get("confidence", "medium"),
-                        rec.get("status", "candidate"),
-                        rec.get("evidence_score", 0),
-                        dumps_json(rec.get("evidence_log") or []),
-                        rec.get("hit_count", 0),
-                        rec.get("last_hit"),
-                        rec.get("shadow_hit_count", 0),
-                        dumps_json(rec.get("promotion_evidence") or []),
-                        rec.get("project_scope", "project"),
-                        rec.get("project_id"),
-                        rec.get("superseded_by"),
-                        rec.get("archived_reason"),
-                        rec.get("created_at") or now_iso(),
-                        rec.get("updated_at") or now_iso(),
-                    ),
-                )
-            inserted += 1
+            existing_ids.add(rid)
+            pending.append((
+                rid, sid,
+                rec.get("trigger_text", ""),
+                dumps_json(rec.get("trigger_variants") or []),
+                dumps_json(rec.get("search_terms") or {}),
+                rec.get("behavior"),
+                rec.get("action", ""),
+                rec.get("rationale"),
+                rec.get("source_type", "correction"),
+                rec.get("confidence", "medium"),
+                rec.get("status", "candidate"),
+                rec.get("evidence_score", 0),
+                dumps_json(rec.get("evidence_log") or []),
+                rec.get("hit_count", 0),
+                rec.get("last_hit"),
+                rec.get("shadow_hit_count", 0),
+                dumps_json(rec.get("promotion_evidence") or []),
+                rec.get("project_scope", "project"),
+                rec.get("project_id"),
+                rec.get("superseded_by"),
+                rec.get("archived_reason"),
+                rec.get("created_at") or now_iso(),
+                rec.get("updated_at") or now_iso(),
+            ))
             inserted_sids.append(sid)
+        if pending:
+            with db.transaction() as tx:
+                for row in pending:
+                    tx.execute(
+                        "INSERT INTO rules (id, short_id, trigger_text, trigger_variants, "
+                        "search_terms, behavior, action, rationale, source_type, confidence, "
+                        "status, evidence_score, evidence_log, hit_count, last_hit, "
+                        "shadow_hit_count, promotion_evidence, project_scope, project_id, "
+                        "superseded_by, archived_reason, "
+                        "created_at, updated_at) "
+                        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                        row,
+                    )
+            inserted = len(pending)
         for sid in inserted_sids:
             rule = fetch_rule_by_short_id(db, sid)
             if rule and rule.status in ("active", "dormant"):

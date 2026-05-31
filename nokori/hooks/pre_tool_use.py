@@ -41,38 +41,55 @@ def handle(payload: dict, cfg: Config) -> dict:
 
     session_id = payload.get("session_id") or "-"
 
-    try:
-        db = open_db(cfg.db_path)
-    except DbError as e:
-        log.warning("gate db open failed, fail-open session=%s: %s", session_id, e)
+    text_ph = marker_io.resolve_current_prompt_hash(payload, cfg, session_id)
+    on_disk = marker_io.read_latest_marker(cfg, session_id)
+    current_ph = text_ph
+    db = None
+    if on_disk and on_disk.rules and not current_ph:
+        try:
+            db = open_db(cfg.db_path)
+        except DbError as e:
+            log.warning("gate db open failed, fail-open session=%s: %s", session_id, e)
+            return {"continue": True}
+        try:
+            if marker_io.injection_exists(db, session_id, on_disk.prompt_hash):
+                current_ph = on_disk.prompt_hash
+            else:
+                marker_io.delete(cfg, session_id, prompt_hash_value=on_disk.prompt_hash)
+        finally:
+            db.close()
+    if not current_ph:
+        try:
+            db = open_db(cfg.db_path)
+        except DbError as e:
+            log.warning("gate db open failed, fail-open session=%s: %s", session_id, e)
+            return {"continue": True}
+        try:
+            current_ph = marker_io.resolve_current_prompt_hash(
+                payload, cfg, session_id, db=db,
+            )
+        finally:
+            db.close()
+    if not current_ph:
+        marker_io.delete_session(cfg, session_id)
         return {"continue": True}
 
-    try:
-        current_ph = marker_io.resolve_current_prompt_hash(
-            payload, db, session_id,
-        )
-        if not current_ph:
-            marker_io.delete_session(cfg, session_id)
-            return {"continue": True}
+    marker = marker_io.read(cfg, session_id, prompt_hash_value=current_ph)
+    if marker is None:
+        marker_io.prune_stale_markers(cfg, session_id, current_ph)
+        return {"continue": True}
 
-        marker = marker_io.read(cfg, session_id, prompt_hash_value=current_ph)
-        if marker is None:
-            marker_io.prune_stale_markers(cfg, session_id, current_ph)
-            return {"continue": True}
+    if marker_io.is_expired(marker, cfg.gate_ttl_seconds):
+        marker_io.delete(cfg, session_id, prompt_hash_value=current_ph)
+        return {"continue": True}
 
-        if marker_io.is_expired(marker, cfg.gate_ttl_seconds):
-            marker_io.delete(cfg, session_id, prompt_hash_value=current_ph)
-            return {"continue": True}
+    if not marker.rules:
+        marker_io.delete(cfg, session_id, prompt_hash_value=current_ph)
+        return {"continue": True}
 
-        if not marker.rules:
-            marker_io.delete(cfg, session_id, prompt_hash_value=current_ph)
-            return {"continue": True}
-
-        if not marker_io.prompt_hash_matches(marker, current_ph, session_id=session_id):
-            marker_io.delete(cfg, session_id, prompt_hash_value=current_ph)
-            return {"continue": True}
-    finally:
-        db.close()
+    if not marker_io.prompt_hash_matches(marker, current_ph, session_id=session_id):
+        marker_io.delete(cfg, session_id, prompt_hash_value=current_ph)
+        return {"continue": True}
 
     marker_io.delete(cfg, session_id, prompt_hash_value=current_ph)
 

@@ -101,8 +101,11 @@ def run(_args: argparse.Namespace, cfg: Config) -> int:
     else:
         print("promotion.in_progress (disabled)")
 
-    open_sess = [d for d in sessions.list_session_records(cfg) if sessions.is_session_open(d)]
-    active = sessions.list_active_sessions(cfg)
+    session_records = sessions.list_session_records(cfg)
+    open_sess = [
+        d for d in session_records if sessions.is_session_open(d)
+    ]
+    active = sessions.list_active_sessions(cfg, records=session_records)
     print(f"sessions.open     {len(open_sess)} (no SessionEnd)")
     print(f"sessions.active   {len(active)} (open + idle window)")
     for row in active[:5]:

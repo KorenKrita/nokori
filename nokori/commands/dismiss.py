@@ -11,6 +11,7 @@ from ..db import (
     open_db,
 )
 from ..errors import NokoriError
+from ..gate import marker as marker_io
 from ..utils.time import now_iso
 
 
@@ -32,7 +33,10 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
             )
         now = now_iso()
         archive_rule(db, rule.id, "user_dismissed_cli", now)
+        cleared = marker_io.strip_short_id_from_all_markers(cfg, rule.short_id)
     finally:
         db.close()
     print(f"dismissed {args.short_id}")
+    if cleared:
+        print(f"cleared gate markers referencing {args.short_id} ({cleared} file(s))")
     return 0

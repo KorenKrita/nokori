@@ -4,6 +4,8 @@ from ..db import Db, dumps_json, loads_json
 from ..models import Rule
 from ..utils.time import now_iso
 
+MAX_EVIDENCE_LOG_ENTRIES = 50
+
 
 def compute_evidence_append(
     evidence_score: int | None,
@@ -14,6 +16,8 @@ def compute_evidence_append(
     score = (evidence_score or 0) + points
     log_list = loads_json(evidence_log_json, [])
     log_list.append({"kind": kind, "points": points, "at": now_iso()})
+    if len(log_list) > MAX_EVIDENCE_LOG_ENTRIES:
+        log_list = log_list[-MAX_EVIDENCE_LOG_ENTRIES:]
     return score, dumps_json(log_list)
 
 
