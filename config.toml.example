@@ -48,7 +48,8 @@
 # 示例（默认）：dismiss a3f2b1
 # 若改为 forget：forget a3f2b1（CLI 仍用 `nokori dismiss`，子命令名不变）
 #
-# 限制：仅当前 session，且该规则在过去 24 小时内被注入过（防误删旧规则）。
+# 限制：该规则在过去 24 小时内须曾被注入；正常 session 限当前 session，
+# session_id 为 `-` 时与 CLI 相同（任意 session）。防误删旧规则。
 # 随时退役请用：nokori dismiss <short_id>
 #
 # 类型：字符串
@@ -90,7 +91,7 @@
 #     作用：hook 已执行后，是否对本次 tool_name 读 marker 并 block
 #     匹配：Python re.fullmatch( matcher, tool_name )
 #     任意已进 hook 的工具都参与 block：matcher = ".*"
-#     勿写字面量 *（正则非法）；空字符串也会视为「全部匹配」
+#     勿写字面量 *（正则非法）；空字符串表示不对任何 tool 做 block 判断（等同全放行）
 #
 # 若只把本节 matcher 改成 .* 而不改 settings.json，Read/Grep 仍不会进 hook。
 
@@ -102,7 +103,7 @@
 # 环境变量：NOKORI_GATE_ENABLED
 enabled = true
 
-# Gate marker 有效期（秒），超时后不再 block
+# Gate marker 有效期（秒），超时后不再 block；设为 0 表示永不过期
 # 类型：整数，>= 0
 # 默认：600
 # 环境变量：NOKORI_GATE_TTL_SECONDS
@@ -125,7 +126,7 @@ matcher = "Edit|Write|MultiEdit|Bash|NotebookEdit"
 # 默认：manual
 # 可选：
 #   manual — SessionEnd 只写入 jobs/，需手动执行 `nokori extract`
-#   async  — SessionEnd 额外 fork 后台 `nokori extract`（需已配置 LLM；失败不影响关 session）
+#   async  — SessionEnd fork 后台 `nokori extract`；SessionStart 发现 pending job 且锁空闲时也会重试 spawn
 # 批处理与 `nokori extract --session` 共用 {data_dir}/extract.lock（Unix fcntl / Windows msvcrt）
 # 若 SessionEnd 后 transcript 仍被追加（mtime 变化），extract 会刷新 job 的 mtime 并重排队，不删 job
 # 环境变量：NOKORI_EXTRACT_MODE
@@ -230,11 +231,12 @@ chunk_count = 3
 # server_auto_start = true
 
 # -----------------------------------------------------------------------------
-# Session 活跃判定（async extract 是否推迟）
+# Session 活跃判定（仅 nokori status 展示；与 extract 推迟无关）
 # -----------------------------------------------------------------------------
 
 [session]
-# 无 ended_at 且 last_activity 距今不超过此秒数 → 视为「仍活跃」
+# 无 ended_at 且 last_activity 距今不超过此秒数 → `nokori status` 计为 active
+# 不参与 async extract 的 defer_when_active（见 [extract] defer_when_active）
 # 默认：1800（30 分钟）
 # 环境变量：NOKORI_SESSION_IDLE_SECONDS
 # idle_seconds = 1800
@@ -245,15 +247,12 @@ chunk_count = 3
 
 [promotion]
 # 是否启用影子池检索与 shadow_hit_count / 升 global
-# 正式池为空时仍会跑影子池（场景 C：新项目从他项目 HOT 累积）
+# 影子池 HOT/WARM 命中均计 promotion 证据（不注入当前对话）
+# 正式池为空时仍会跑影子池（场景 C：新项目从他项目规则累积）
 # 类型：布尔
 # 默认：true
 # 环境变量：NOKORI_PROMOTION_ENABLED
 # enabled = true
-
-# Hook 调试：1 时异常不吞掉（默认 fail-open）
-# 环境变量：NOKORI_STRICT（顶层字段，勿放在 [promotion] 下）
-# strict = false
 
 # -----------------------------------------------------------------------------
 # 环境变量速查（与上文 TOML 字段等价）
@@ -263,6 +262,7 @@ chunk_count = 3
 # |----------|--------|------|
 # | NOKORI_DATA_DIR | ~/.nokori | 数据根目录 |
 # | NOKORI_DISABLED | 0 | 完全禁用 |
+# | NOKORI_STRICT | 0 | 1=hook 异常向上抛（默认 fail-open） |
 # | NOKORI_LOG_LEVEL | warn | debug / info / warn / error |
 # | NOKORI_DISMISS_PHRASE | dismiss | 对话退役：「动词 + short_id」里的动词 |
 # | NOKORI_MAX_INJECTION_CHARS | 1500 | 规则注入字符上限 |
@@ -274,7 +274,7 @@ chunk_count = 3
 # | NOKORI_EXTRACT_DEFER_ACTIVE | 0 | async 时有活跃 session 则推迟 fork extract |
 # | NOKORI_PROMOTION_ENABLED | 1 | 影子池 / 跨项目 promotion |
 # | NOKORI_GATE_ENABLED | 1 | 启用 Gate |
-# | NOKORI_GATE_TTL_SECONDS | 600 | Marker TTL（秒） |
+# | NOKORI_GATE_TTL_SECONDS | 600 | Marker TTL（秒）；0=永不过期 |
 # | NOKORI_GATE_MATCHER | Edit\|Write\|... | 第二层 block 用 tool_name 正则；任意 .* |
 # | NOKORI_EXTRACT_MODE | manual | manual / async |
 # | NOKORI_LLM_BASE_URL | — | LLM API 根 URL |
@@ -296,6 +296,11 @@ chunk_count = 3
 #   默认：~/.claude
 #   含义：`nokori install` 读写的 settings.json 目录（覆盖默认 Claude 配置路径）
 #
+# NOKORI_TRANSCRIPT_EXTRA_ROOTS
+#   默认：（无）
+#   含义：额外允许读取 transcript 的根目录，os.pathsep 分隔（热路径安全校验）
+#   示例：/path/to/claude-projects
+#
 # NOKORI_EXTRACTING=1
 #   含义：内部递归防护；仅 `claude -p` fallback 子进程设置。勿在 async extract 或
 #   用户 shell 中设置，否则 LLM 提取会被跳过。
@@ -304,7 +309,9 @@ chunk_count = 3
 # 当前不可通过配置修改的行为（硬编码）
 # -----------------------------------------------------------------------------
 #
-# - 热缓存：见 [hot_cache]；同目录上一场 *.jsonl，未 extract 才注入（500 字 / 3 条用户消息）
+# - 热缓存：见 [hot_cache]；同目录上一场 *.jsonl，未 extract 才注入（500 字 / 3 条用户消息）；glob 回退最多扫 50 个文件
+# - 注入日志：仅实际写入上下文的规则记入 injections / last_hit（预算截断的不记）
+# - active_sessions/：ended 超过 60 天的 registry 由维护任务清理
 # - embed server：Unix socket {data_dir}/embed.sock；空闲自退出见 server_idle_seconds；hook 启动等待硬编码约 45s
 # - 本地模型文件缓存在 {data_dir}/models/（非 cache/）；cache/ 目录仅预留
 # - rules.db：与当前 nokori 版本绑定；不兼容时报错，见 README「数据存储」

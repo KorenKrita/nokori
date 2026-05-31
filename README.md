@@ -586,6 +586,14 @@ nokori install [--dry-run | --uninstall | --disable | --enable]
 | `NOKORI_DISMISS_PHRASE` | `dismiss` | 对话里退役规则的动词（`动词 + short_id`）；见 [Dismiss](#4-规则过时了dismiss) |
 | `NOKORI_LOG_LEVEL` | `warn` | 日志级别 |
 
+**仅环境变量**（无 `config.toml` 字段，见 [config.toml.example](config.toml.example)）：
+
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `NOKORI_CLAUDE_HOME` | `~/.claude` | `nokori install` 读写的 `settings.json` 目录 |
+| `NOKORI_TRANSCRIPT_EXTRA_ROOTS` | — | 额外允许读取 transcript 的根目录，`os.pathsep` 分隔（路径安全校验） |
+| `NOKORI_EXTRACTING` | — | 内部：`claude -p` fallback 子进程防递归；勿在用户 shell 或 async extract 中设置 |
+
 所有 LLM/Embedding 端点兼容：Ollama、LMStudio、vLLM、OpenRouter、OpenAI、任何 `/v1/chat/completions` + `/v1/embeddings` 端点。
 
 ---
