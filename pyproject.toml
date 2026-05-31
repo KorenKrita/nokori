@@ -50,8 +50,8 @@ nokori = "nokori.__main__:main"
 include = ["nokori*"]
 
 [tool.setuptools.cmdclass]
-install = "nokori._packaging:InstallWithPrefetch"
-develop = "nokori._packaging:DevelopWithPrefetch"
+install = "nokori._packaging.InstallWithPrefetch"
+develop = "nokori._packaging.DevelopWithPrefetch"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
