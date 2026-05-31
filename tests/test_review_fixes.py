@@ -169,10 +169,47 @@ def test_health_http_401_is_fail(monkeypatch, tmp_path):
         )
 
     with patch("urllib.request.urlopen", side_effect=fake_open):
-        status, _ = health._check_endpoint(
-            "embed", "http://fake", "m", "k", "/embeddings",
+        status, _ = health._probe_openai_post(
+            "http://fake",
+            "m",
+            "k",
+            path_suffix="/embeddings",
+            payload={"model": "m", "input": "ping"},
         )
     assert status == "fail"
+
+
+def test_health_llm_probe_uses_post():
+    import io
+    from unittest.mock import MagicMock
+
+    from nokori.commands import health
+
+    seen: list[str] = []
+
+    def fake_open(req, timeout=15):
+        seen.append(req.method)
+        resp = MagicMock()
+        resp.status = 200
+        resp.read.return_value = b"{}"
+        resp.__enter__ = lambda s: s
+        resp.__exit__ = MagicMock(return_value=False)
+        return resp
+
+    with patch("urllib.request.urlopen", side_effect=fake_open):
+        status, _ = health._probe_openai_post(
+            "http://fake/v1",
+            "test-model",
+            "k",
+            path_suffix="/chat/completions",
+            payload={
+                "model": "test-model",
+                "messages": [{"role": "user", "content": "ping"}],
+                "max_tokens": 1,
+            },
+        )
+    assert status == "ok"
+    assert seen == ["POST"]
 
 
 def test_malformed_marker_rule_skipped(tmp_path, monkeypatch):

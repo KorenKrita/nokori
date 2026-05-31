@@ -24,16 +24,30 @@ def _check_db(cfg: Config) -> tuple[str, str]:
         return ("fail", str(e))
 
 
-def _check_endpoint(label: str, base_url: str | None, model: str | None,
-                    api_key: str | None, suffix: str) -> tuple[str, str]:
+def _probe_openai_post(
+    base_url: str | None,
+    model: str | None,
+    api_key: str | None,
+    *,
+    path_suffix: str,
+    payload: dict,
+    timeout: int = 15,
+) -> tuple[str, str]:
+    """Minimal POST probe — matches LLMAdapter / EmbeddingClient (not HEAD)."""
     if not base_url or not model:
         return ("skip", "not configured")
-    url = f"{base_url.rstrip('/')}{suffix}"
-    req = urllib.request.Request(url, method="HEAD")
+    url = f"{base_url.rstrip('/')}{path_suffix}"
+    headers = {"Content-Type": "application/json"}
     if api_key:
-        req.add_header("Authorization", f"Bearer {api_key}")
+        headers["Authorization"] = f"Bearer {api_key}"
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers=headers,
+        method="POST",
+    )
     try:
-        with urllib.request.urlopen(req, timeout=5) as resp:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
             return ("ok", f"{resp.status} {url}")
     except urllib.error.HTTPError as e:
         if 200 <= e.code < 300:
@@ -41,6 +55,34 @@ def _check_endpoint(label: str, base_url: str | None, model: str | None,
         return ("fail", f"{e.code} {url}")
     except Exception as e:
         return ("fail", f"{type(e).__name__}: {e}")
+
+
+def _check_llm_endpoint(cfg: Config) -> tuple[str, str]:
+    return _probe_openai_post(
+        cfg.llm_base_url,
+        cfg.llm_model,
+        cfg.llm_api_key,
+        path_suffix="/chat/completions",
+        payload={
+            "model": cfg.llm_model,
+            "messages": [{"role": "user", "content": "ping"}],
+            "max_tokens": 1,
+        },
+        timeout=30,
+    )
+
+
+def _check_embed_endpoint(cfg: Config) -> tuple[str, str]:
+    payload: dict = {"model": cfg.embed_model, "input": "ping"}
+    if cfg.embed_dimensions and cfg.embed_dimensions > 0:
+        payload["dimensions"] = cfg.embed_dimensions
+    return _probe_openai_post(
+        cfg.embed_base_url,
+        cfg.embed_model,
+        cfg.embed_api_key,
+        path_suffix="/embeddings",
+        payload=payload,
+    )
 
 
 def _check_rule_count(cfg: Config) -> tuple[str, str]:
@@ -126,12 +168,8 @@ def run(_args: argparse.Namespace, cfg: Config) -> int:
         ("rules", *_check_rule_count(cfg)),
         ("embed.index", *_check_embedding_index_gaps(cfg)),
         ("settings.json", *_check_settings_registered(cfg)),
-        ("llm",
-         *_check_endpoint("llm", cfg.llm_base_url, cfg.llm_model,
-                          cfg.llm_api_key, "/chat/completions")),
-        ("embed",
-         *_check_endpoint("embed", cfg.embed_base_url, cfg.embed_model,
-                          cfg.embed_api_key, "/embeddings")),
+        ("llm", *_check_llm_endpoint(cfg)),
+        ("embed", *_check_embed_endpoint(cfg)),
     ]
     width = max(len(name) for name, *_ in rows)
     bad = False
