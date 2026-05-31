@@ -334,7 +334,13 @@ def merge_candidate(
         if pending_new is not None:
             winner_id = pending_new.id
         elif anchor_id is not None:
-            winner_id = anchor_id
+            anchor = by_id.get(anchor_id)
+            if anchor is not None and anchor.status == "candidate":
+                pending_new = _persist_new(db, cand, project_id, cfg)
+                inserted += 1
+                winner_id = pending_new.id
+            else:
+                winner_id = anchor_id
         else:
             pending_new = _persist_new(db, cand, project_id, cfg)
             inserted += 1

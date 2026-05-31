@@ -113,7 +113,33 @@ def run_candidate_cleanup(db: Db) -> int:
     _set_last_run(db, "candidate_cleanup")
     if deleted:
         log.info("candidate_cleanup deleted=%d", deleted)
+        restored = _unmerge_orphan_merged(db)
+        if restored:
+            log.info("candidate_cleanup unmerge_orphans restored=%d", restored)
     return deleted
+
+
+def _unmerge_orphan_merged(db: Db) -> int:
+    """Restore merged rules whose superseded_by target no longer exists."""
+    rows = db.fetchall(
+        "SELECT id, superseded_by FROM rules WHERE status = 'merged' "
+        "AND superseded_by IS NOT NULL"
+    )
+    restored = 0
+    ts = now_iso()
+    for r in rows:
+        target = db.fetchone(
+            "SELECT status FROM rules WHERE id = ?", (r["superseded_by"],)
+        )
+        if target is None:
+            with db.transaction() as tx:
+                tx.execute(
+                    "UPDATE rules SET status = 'dormant', superseded_by = NULL, "
+                    "updated_at = ? WHERE id = ?",
+                    (ts, r["id"]),
+                )
+            restored += 1
+    return restored
 
 
 def run_injection_cleanup(db: Db) -> int:
