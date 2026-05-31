@@ -46,6 +46,8 @@ def record_shadow_hit(db: Db, rule_id: str, current_project_id: str | None) -> b
             pass
         elif row["project_scope"] == "global":
             pass
+        elif row["project_id"] is None:
+            return
         elif row["project_id"] == current_project_id:
             pass
         elif row["source_type"] == "preference":

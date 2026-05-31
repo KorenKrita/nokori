@@ -93,8 +93,23 @@ def run_candidate_cleanup(db: Db) -> int:
         ttl = ANTI_PATTERN_TTL_DAYS if r["source_type"] == "anti_pattern" else CANDIDATE_TTL_DAYS
         age = _days_since_iso(r["created_at"])
         if age is not None and age >= ttl:
-            delete_rule_cascade(db, r["id"])
-            deleted += 1
+            with db.transaction() as tx:
+                still = tx.execute(
+                    "SELECT id FROM rules WHERE id = ? AND status = 'candidate'",
+                    (r["id"],),
+                ).fetchone()
+                if not still:
+                    continue
+                tx.execute("DELETE FROM injections WHERE rule_id = ?", (r["id"],))
+                tx.execute(
+                    "DELETE FROM rule_embeddings WHERE rule_id = ?", (r["id"],)
+                )
+                cur = tx.execute(
+                    "DELETE FROM rules WHERE id = ? AND status = 'candidate'",
+                    (r["id"],),
+                )
+                if cur.rowcount:
+                    deleted += 1
     _set_last_run(db, "candidate_cleanup")
     if deleted:
         log.info("candidate_cleanup deleted=%d", deleted)
@@ -158,7 +173,8 @@ def reactivate_dormant_on_retrieval_hot(db: Db, rule_id: str) -> None:
     ts = now_iso()
     with db.transaction() as tx:
         tx.execute(
-            "UPDATE rules SET status = 'active', last_hit = ?, updated_at = ? "
+            "UPDATE rules SET status = 'active', last_hit = ?, "
+            "hit_count = hit_count + 1, updated_at = ? "
             "WHERE id = ? AND status = 'dormant'",
             (ts, ts, rule_id),
         )

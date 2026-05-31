@@ -56,6 +56,7 @@ def format_injection(
     )
 
     spillover = []
+    rendered = False
     for r in sorted_hot:
         block = (
             f"\n[HOT {r.rule.short_id}] {r.rule.trigger_text}\n"
@@ -68,13 +69,18 @@ def format_injection(
             continue
         parts.append(block)
         used += len(block)
+        rendered = True
 
-    for r in list(warm) + spillover:
+    for r in spillover + list(warm):
         line = f"\n[warm {r.rule.short_id}] {r.rule.trigger_text} — {r.rule.action}"
         if used + len(line) > budget:
             break
         parts.append(line)
         used += len(line)
+        rendered = True
+
+    if not rendered:
+        return ""
 
     parts.append(footer)
     return "".join(parts)

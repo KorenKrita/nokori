@@ -18,8 +18,11 @@ _CONFIG_FILE_NAME = "config.toml"
 def _load_toml(path: Path) -> dict:
     if not path.exists():
         return {}
-    with open(path, "rb") as f:
-        return tomllib.load(f)
+    try:
+        with open(path, "rb") as f:
+            return tomllib.load(f)
+    except tomllib.TOMLDecodeError:
+        return {}
 
 
 # --- Config file → flat dict mapping ---
@@ -132,6 +135,23 @@ def _str_or_none_val(name: str, file_values: dict[str, str]) -> str | None:
     return raw.strip()
 
 
+_LOG_LEVELS = frozenset({"debug", "info", "warning", "warn", "error"})
+
+
+def _log_level_val(name: str, default: str, file_values: dict[str, str]) -> str:
+    raw = _get(name, file_values)
+    if raw is None:
+        return default
+    level = raw.strip().lower()
+    if level == "warn":
+        return "warn"
+    if level not in _LOG_LEVELS:
+        raise ConfigError(
+            f"{name} must be one of debug, info, warn, warning, error (got {raw!r})"
+        )
+    return "warn" if level == "warning" else level
+
+
 def _str_val(name: str, default: str, file_values: dict[str, str]) -> str:
     raw = _get(name, file_values)
     if raw is None or raw.strip() == "":
@@ -236,7 +256,7 @@ class Config:
             strict=_bool_val("NOKORI_STRICT", False, file_values),
             disabled=_bool_val("NOKORI_DISABLED", False, file_values),
             dismiss_phrase=_str_val("NOKORI_DISMISS_PHRASE", "dismiss", file_values),
-            log_level=_str_val("NOKORI_LOG_LEVEL", "warn", file_values),
+            log_level=_log_level_val("NOKORI_LOG_LEVEL", "warn", file_values),
         )
 
     @property

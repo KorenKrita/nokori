@@ -87,7 +87,7 @@ def test_import_rejects_invalid_source_type(tmp_path):
 def test_import_skips_duplicates(tmp_path):
     src = tmp_path / "src"
     out = tmp_path / "rules.json"
-    _run("add", "--trigger", "x", "--action", "y",
+    _run("add", "--trigger", "xxx", "--action", "yyy",
          env_extra={"NOKORI_DATA_DIR": str(src)})
     _run("export", str(out), env_extra={"NOKORI_DATA_DIR": str(src)})
     _run("import", str(out), env_extra={"NOKORI_DATA_DIR": str(src)})

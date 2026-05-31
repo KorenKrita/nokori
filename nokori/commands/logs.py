@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from collections import deque
 
 from ..config import Config
 
@@ -19,13 +20,13 @@ def run(_args: argparse.Namespace, cfg: Config) -> int:
         any_shown = True
         print(f"=== {label} ({path}) ===")
         try:
-            content = path.read_text(encoding="utf-8", errors="replace")
+            with path.open(encoding="utf-8", errors="replace") as fh:
+                tail = deque(fh, maxlen=50)
         except OSError as e:
             print(f"  (read error: {e})")
             continue
-        lines = content.splitlines()
-        for line in lines[-50:]:
-            print(line)
+        for line in tail:
+            print(line.rstrip("\n"))
     if not any_shown:
         print("(no log files yet)")
     return 0

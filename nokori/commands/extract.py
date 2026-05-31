@@ -62,7 +62,10 @@ def _process_path(path: Path, project_id: str | None, cfg: Config,
             done_keys |= merge_checkpoint.candidate_keys(cand)
             merged += outcome.inserted + outcome.activated + outcome.superseded
         if merge_ok:
-            final_mtime = path.stat().st_mtime
+            try:
+                final_mtime = path.stat().st_mtime
+            except OSError:
+                final_mtime = 0.0
             mark_extracted(db, path, final_mtime)
             merge_checkpoint.clear(cfg, path)
         else:

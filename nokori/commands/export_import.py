@@ -47,6 +47,12 @@ def _str_len(value: object, field: str, limit: int) -> str | None:
 
 
 def _validate_import_record(rec: dict) -> str | None:
+    trigger = rec.get("trigger_text")
+    if trigger is not None and not str(trigger).strip():
+        return "trigger_text must not be empty"
+    action = rec.get("action")
+    if action is not None and not str(action).strip():
+        return "action must not be empty"
     for field, limit in (
         ("trigger_text", _MAX_TRIGGER_TEXT),
         ("action", _MAX_ACTION),

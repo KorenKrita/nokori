@@ -24,7 +24,10 @@ def _serialize(vec: Sequence[float]) -> bytes:
 
 def _deserialize(blob: bytes) -> list[float]:
     arr = array.array("f")
-    arr.frombytes(blob)
+    try:
+        arr.frombytes(blob)
+    except ValueError as e:
+        raise ValueError(f"invalid embedding blob length {len(blob)}") from e
     return list(arr)
 
 
@@ -187,7 +190,12 @@ def _search_impl(
         )
     by_rule: dict[str, list[list[float]]] = {}
     for row in rows:
-        by_rule.setdefault(row["rule_id"], []).append(_deserialize(row["embedding"]))
+        try:
+            vec = _deserialize(row["embedding"])
+        except ValueError:
+            log.warning("skipping corrupt embedding for rule %s", row["rule_id"])
+            continue
+        by_rule.setdefault(row["rule_id"], []).append(vec)
 
     results: list[ScoredResult] = []
     for rule in rules:

@@ -211,6 +211,16 @@ def main(argv: Sequence[str]) -> int:
     except NokoriError as e:
         print(f"nokori: {e}", file=sys.stderr)
         return 1
+    except Exception as e:
+        import tomllib
+
+        if isinstance(e, tomllib.TOMLDecodeError):
+            if args.command == "hook":
+                print('{"continue": true}')
+                return 0
+            print(f"nokori: invalid config.toml: {e}", file=sys.stderr)
+            return 1
+        raise
 
     if getattr(args, "verbose", False):
         cfg = replace(cfg, log_level="debug")

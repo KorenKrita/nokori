@@ -107,7 +107,10 @@ def _check_settings_registered(cfg: Config) -> tuple[str, str]:
     for evt in needed:
         spec = hooks.get(evt) or []
         if not any(
-            "nokori" in (h.get("command", "")) for entry in spec for h in entry.get("hooks", [])
+            isinstance(entry, dict)
+            and "nokori" in (h.get("command", ""))
+            for entry in spec
+            for h in entry.get("hooks", [])
         ):
             missing.append(evt)
     if missing:

@@ -142,7 +142,11 @@ def open_db(path: Path) -> Db:
     for attempt in range(2):
         try:
             conn = _connect(path)
-            _migrate(conn)
+            try:
+                _migrate(conn)
+            except Exception:
+                conn.close()
+                raise
             return Db(conn)
         except sqlite3.OperationalError as e:
             last_err = e

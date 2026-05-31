@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import uuid
+
 from ..config import Config
 from ..db import open_db, total_rule_count
 from ..lifecycle import hot_cache, maintenance
@@ -22,7 +24,7 @@ def _maybe_kickstart_embed(cfg: Config, db) -> None:
 
 
 def handle(payload: dict, cfg: Config) -> dict:
-    session_id = payload.get("session_id") or "-"
+    session_id = payload.get("session_id") or str(uuid.uuid4())
     project_id, from_git = resolve_project_id_detailed(payload.get("cwd"))
     sessions.register(
         cfg, session_id, project_id, project_id_from_git=from_git,

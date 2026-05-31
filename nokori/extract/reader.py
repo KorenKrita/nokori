@@ -20,7 +20,10 @@ class TranscriptMeta:
 
 
 def stat(path: Path) -> TranscriptMeta:
-    s = path.stat()
+    try:
+        s = path.stat()
+    except OSError as e:
+        raise NokoriError(f"transcript not readable: {path}") from e
     return TranscriptMeta(path=path, mtime=s.st_mtime, size=s.st_size)
 
 

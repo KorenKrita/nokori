@@ -20,8 +20,17 @@ def short_id_for(full_id: str, taken: Iterable[str]) -> str:
     """
     taken_set = set(taken)
     bare = full_id.replace("-", "")
+
+    def _collides(candidate: str) -> bool:
+        if candidate in taken_set:
+            return True
+        for existing in taken_set:
+            if candidate.startswith(existing) or existing.startswith(candidate):
+                return True
+        return False
+
     for length in range(MIN_SHORT_LEN, min(len(bare), MAX_SHORT_LEN) + 1):
         candidate = bare[:length]
-        if candidate not in taken_set:
+        if not _collides(candidate):
             return candidate
     return bare

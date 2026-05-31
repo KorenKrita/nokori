@@ -12,6 +12,8 @@ from ..utils.time import now_iso
 
 
 def run(args: argparse.Namespace, cfg: Config) -> int:
+    if len(args.trigger.strip()) < 3:
+        raise NokoriError("trigger must be at least 3 non-whitespace characters")
     now = now_iso()
     rid = new_uuid()
 

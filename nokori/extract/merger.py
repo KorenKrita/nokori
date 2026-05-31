@@ -93,6 +93,8 @@ def _persist_new(db: Db, cand: Candidate, project_id: str | None, cfg=None) -> R
             ),
         )
     row = db.fetchone(f"SELECT {RULE_COLUMNS} FROM rules WHERE id = ?", (rid,))
+    if row is None:
+        raise RuntimeError("inserted rule missing after persist")
     rule = row_to_rule(row)
     if cfg:
         index_rule_if_enabled(db, rule, cfg)

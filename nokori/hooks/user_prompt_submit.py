@@ -108,14 +108,20 @@ def handle(payload: dict, cfg: Config) -> dict:
                 marker_io.delete_session(cfg, session_id)
             return {"continue": True}
 
-        result, shadow_hot = retrieve_formal_and_shadow(
-            prompt,
-            formal_rules,
-            shadow_rules,
-            db,
-            cfg,
-            interaction="hook",
-        )
+        try:
+            result, shadow_hot = retrieve_formal_and_shadow(
+                prompt,
+                formal_rules,
+                shadow_rules,
+                db,
+                cfg,
+                interaction="hook",
+            )
+        except OSError as e:
+            log.warning("retrieve failed (%s); continuing without rules", e)
+            if cfg.gate_enabled:
+                marker_io.delete_session(cfg, session_id)
+            return {"continue": True}
         hot, warm = result.hot, result.warm
 
         if project_id:

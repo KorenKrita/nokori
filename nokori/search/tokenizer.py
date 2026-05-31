@@ -5,9 +5,11 @@ import unicodedata
 
 def is_cjk(ch: str) -> bool:
     cp = ord(ch)
+    # CJK symbols/punctuation (U+3000–303F) are separators, not bigram text.
+    if 0x3000 <= cp <= 0x303F:
+        return False
     return (
-        0x3000 <= cp <= 0x303F
-        or 0x3040 <= cp <= 0x309F
+        0x3040 <= cp <= 0x309F
         or 0x30A0 <= cp <= 0x30FF
         or 0x3400 <= cp <= 0x4DBF
         or 0x4E00 <= cp <= 0x9FFF

@@ -60,7 +60,7 @@ def _parse_candidates(raw: str) -> tuple[list[Candidate], bool]:
     elif isinstance(data, list):
         items = data
     else:
-        return [], True
+        return [], False
 
     out: list[Candidate] = []
     for item in items:

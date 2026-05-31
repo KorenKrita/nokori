@@ -27,8 +27,8 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
         cutoff_iso = cutoff.isoformat(timespec="seconds").replace("+00:00", "Z")
         if find_rule_id_injected_since(db, rule.short_id, cutoff_iso) is None:
             raise NokoriError(
-                f"rule {args.short_id!r} was not injected in the last 24 hours; "
-                "dismiss from the session where it was shown, or wait until after injection"
+                f"rule {args.short_id!r} was not injected in the last 24 hours "
+                "(any session); wait until after injection or check short_id"
             )
         now = now_iso()
         archive_rule(db, rule.id, "user_dismissed_cli", now)

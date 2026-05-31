@@ -13,7 +13,8 @@ def run(_args: argparse.Namespace, cfg: Config) -> int:
         summary = maintenance.run_due_jobs(db, cfg)
     finally:
         db.close()
-    print(f"dormant_scan      moved={summary['dormant_scan']}")
-    print(f"candidate_cleanup deleted={summary['candidate_cleanup']}")
-    print(f"unmerge_check     restored={summary['unmerge_check']}")
+    print(f"dormant_scan       moved={summary['dormant_scan']}")
+    print(f"candidate_cleanup  deleted={summary['candidate_cleanup']}")
+    print(f"injection_cleanup  deleted={summary['injection_cleanup']}")
+    print(f"unmerge_check      restored={summary['unmerge_check']}")
     return 0

@@ -12,6 +12,9 @@ def dispatch(event: str, cfg: Config) -> int:
         raw = sys.stdin.read()
         payload = json.loads(raw) if raw.strip() else {}
     except json.JSONDecodeError:
+        from ..utils.logging import get_logger
+
+        get_logger("nokori.hooks").warning("hook stdin JSON invalid; using empty payload")
         payload = {}
 
     try:

@@ -47,7 +47,9 @@ def configure(logs_dir: Path, level: str = "warn") -> None:
         )
         hook_handler.setFormatter(formatter)
         hook_handler.addFilter(sess_filter)
-        hook_handler.addFilter(_NameStartsWith(("nokori.hooks.", "nokori.gate.")))
+        hook_handler.addFilter(_NameStartsWith(
+            ("nokori.hooks.", "nokori.gate.", "nokori.commands.", "nokori.utils."),
+        ))
         root.addHandler(hook_handler)
 
         pipeline_handler = logging.handlers.RotatingFileHandler(

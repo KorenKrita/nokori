@@ -58,7 +58,11 @@ def handle(payload: dict, cfg: Config) -> dict:
         return {"continue": True}
 
     transcript_index.record_session_transcript(cfg, transcript)
-    meta = transcript_stat(transcript)
+    try:
+        meta = transcript_stat(transcript)
+    except Exception:
+        log.warning("transcript vanished before stat: %s", transcript)
+        return {"continue": True}
     project_id = sessions.resolve_project_id_for_session(
         cfg, session_id, payload.get("cwd"),
     )

@@ -45,7 +45,9 @@ def compress(turns: Iterable[Turn], budget_tokens: int = 30000) -> str:
     if _approx_tokens(text) <= budget_tokens:
         return text
 
-    keep_chars = budget_tokens * 2
+    keep_chars = budget_tokens
+    while _approx_tokens(text) > budget_tokens and keep_chars > 200:
+        keep_chars = max(200, keep_chars // 2)
     if len(text) > keep_chars:
         half = keep_chars // 2
         text = (

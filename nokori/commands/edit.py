@@ -28,6 +28,9 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
             updates.append(("confidence", args.confidence))
         if args.status is not None:
             updates.append(("status", args.status))
+            if args.status == "active":
+                updates.append(("archived_reason", None))
+                updates.append(("superseded_by", None))
         if args.variants is not None:
             updates.append(("trigger_variants", dumps_json(split_csv(args.variants))))
         if args.terms_en is not None or args.terms_zh is not None:

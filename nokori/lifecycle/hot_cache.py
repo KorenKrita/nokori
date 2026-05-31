@@ -62,7 +62,7 @@ def _find_previous_transcript_glob(current: Path) -> Path | None:
             mtime = candidate.stat().st_mtime
         except OSError:
             continue
-        if mtime >= current_mtime:
+        if mtime > current_mtime:
             continue
         if mtime > best_mtime:
             best_mtime = mtime
@@ -83,7 +83,7 @@ def _was_extracted(db: Db, path: Path) -> bool:
     try:
         mtime = path.stat().st_mtime
     except OSError:
-        return True
+        return False
 
     row = _fetch_extract_state(db, path)
     if row is None:

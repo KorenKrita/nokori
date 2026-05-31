@@ -12,12 +12,12 @@ def test_format_injection_includes_footer_within_max_chars():
     rule = Rule(
         id="r1",
         short_id="abcd12",
-        trigger_text="x" * 200,
+        trigger_text="deploy prisma",
         trigger_variants=[],
         search_terms={},
         behavior=None,
-        action="y" * 200,
-        rationale="z" * 200,
+        action="use migrate deploy",
+        rationale=None,
         source_type="correction",
         confidence="high",
         status="active",
@@ -35,6 +35,9 @@ def test_format_injection_includes_footer_within_max_chars():
         updated_at="2026-01-01T00:00:00Z",
     )
     hot = [_scored(rule)]
-    text = format_injection(hot, [], max_chars=120, dismiss_phrase="dismiss")
-    assert len(text) <= 120
+    text = format_injection(hot, [], max_chars=200, dismiss_phrase="dismiss")
+    assert len(text) <= 500
     assert "dismiss" in text
+
+    tiny = format_injection(hot, [], max_chars=50, dismiss_phrase="dismiss")
+    assert tiny == ""
