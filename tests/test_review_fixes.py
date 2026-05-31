@@ -179,6 +179,69 @@ def test_health_http_401_is_fail(monkeypatch, tmp_path):
     assert status == "fail"
 
 
+def test_health_embed_skip_when_off(monkeypatch, tmp_path):
+    from nokori.commands import health
+
+    monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+    cfg = Config.from_env()
+    status, detail = health._check_embed(cfg, 0)
+    assert status == "skip"
+    assert detail.startswith("off —")
+    assert "embed.enabled=false" in detail
+
+
+def test_health_embed_local_running(monkeypatch, tmp_path):
+    from nokori.commands import health
+
+    monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+    cfg = Config.from_env()
+    cfg2 = Config(
+        **{
+            **cfg.__dict__,
+            "embed_enabled": True,
+            "embed_base_url": None,
+            "embed_model": None,
+        }
+    )
+    with patch("nokori.search.embedding._sentence_transformers_available", return_value=True):
+        with patch("nokori.commands.health._local_model_cached", return_value=True):
+            with patch(
+                "nokori.search.embed_ipc.server_status",
+                return_value={"running": True, "pid": 99, "socket": "/tmp/s.sock"},
+            ):
+                status, detail = health._check_embed(cfg2, 0)
+    assert status == "ok"
+    assert "mode=local" in detail
+    assert "server=running" in detail
+    assert "weights=cached" in detail
+
+
+def test_health_embed_remote_fail(monkeypatch, tmp_path):
+    import urllib.error
+
+    from nokori.commands import health
+
+    monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+    cfg = Config.from_env()
+    cfg2 = Config(
+        **{
+            **cfg.__dict__,
+            "embed_enabled": True,
+            "embed_base_url": "http://fake/v1",
+            "embed_model": "emb",
+        }
+    )
+
+    def fake_open(req, timeout=15):
+        raise urllib.error.HTTPError(req.full_url, 503, "down", {}, None)
+
+    with patch("urllib.request.urlopen", side_effect=fake_open):
+        status, detail = health._check_embed(cfg2, 0)
+    assert status == "fail"
+    assert "mode=remote" in detail
+    assert "503" in detail
+
+
 def test_health_llm_probe_uses_post():
     import io
     from unittest.mock import MagicMock

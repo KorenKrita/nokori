@@ -72,16 +72,99 @@ def _check_llm_endpoint(cfg: Config) -> tuple[str, str]:
     )
 
 
-def _check_embed_endpoint(cfg: Config) -> tuple[str, str]:
-    payload: dict = {"model": cfg.embed_model, "input": "ping"}
-    if cfg.embed_dimensions and cfg.embed_dimensions > 0:
-        payload["dimensions"] = cfg.embed_dimensions
-    return _probe_openai_post(
-        cfg.embed_base_url,
-        cfg.embed_model,
-        cfg.embed_api_key,
-        path_suffix="/embeddings",
-        payload=payload,
+def _local_model_cached(cfg: Config) -> bool:
+    """True when HuggingFace cache under data_dir/models has loadable weights."""
+    from ..search.embedding import LOCAL_MODEL_NAME
+
+    cache = cfg.data_dir / "models"
+    hub = cache / f"models--sentence-transformers--{LOCAL_MODEL_NAME}"
+    snapshots = hub / "snapshots"
+    if not snapshots.is_dir():
+        return False
+    weight_names = ("model.safetensors", "pytorch_model.bin", "onnx/model.onnx")
+    for snap in snapshots.iterdir():
+        if not snap.is_dir():
+            continue
+        if any((snap / name).is_file() for name in weight_names):
+            return True
+    return False
+
+
+def _embed_off_reason(cfg: Config, rule_count: int) -> str:
+    if cfg.embed_enabled:
+        if cfg.embed_base_url and cfg.embed_model:
+            return ""
+        if embedding_search._sentence_transformers_available():
+            return ""
+        return "embed.enabled=true but nokori[local-embed] not installed"
+    if rule_count >= 20:
+        if cfg.embed_base_url and cfg.embed_model:
+            return ""
+        if embedding_search._sentence_transformers_available():
+            return ""
+        return "rules>=20 but no remote embed.* and no local-embed package"
+    return "embed.enabled=false and searchable rules<20 (auto threshold)"
+
+
+def _check_embed(cfg: Config, rule_count: int) -> tuple[str, str]:
+    """Report remote vs local mode, connectivity, model cache, and embed server."""
+    from ..search import embed_ipc
+
+    if not embedding_search.auto_enabled(cfg, rule_count):
+        reason = _embed_off_reason(cfg, rule_count)
+        return ("skip", f"off — {reason}")
+
+    remote_configured = bool(cfg.embed_base_url and cfg.embed_model)
+    if remote_configured:
+        payload: dict = {"model": cfg.embed_model, "input": "ping"}
+        if cfg.embed_dimensions and cfg.embed_dimensions > 0:
+            payload["dimensions"] = cfg.embed_dimensions
+        probe_status, probe_detail = _probe_openai_post(
+            cfg.embed_base_url,
+            cfg.embed_model,
+            cfg.embed_api_key,
+            path_suffix="/embeddings",
+            payload=payload,
+        )
+        model = cfg.embed_model or "?"
+        detail = (
+            f"mode=remote; model={model}; endpoint={cfg.embed_base_url.rstrip('/')}/embeddings; "
+            f"probe={probe_detail}"
+        )
+        return (probe_status, detail)
+
+    # Local mode (enabled, no remote base_url+model)
+    model_name = embedding_search.LOCAL_MODEL_NAME
+    if not embedding_search._sentence_transformers_available():
+        return (
+            "fail",
+            f"mode=local; model={model_name}; package=missing "
+            "(pip install -e '.[local-embed]')",
+        )
+
+    cached = _local_model_cached(cfg)
+    st = embed_ipc.server_status(cfg)
+    cache_dir = cfg.data_dir / "models"
+    parts = [
+        "mode=local",
+        f"model={model_name}",
+        f"weights={'cached' if cached else 'not cached'} ({cache_dir})",
+    ]
+    if st["running"]:
+        parts.append(f"server=running pid={st['pid']} socket={st['socket']}")
+        return ("ok", "; ".join(parts))
+
+    parts.append("server=stopped")
+    if cached:
+        return (
+            "warn",
+            "; ".join(parts)
+            + " — run `nokori embed start` or open a new session (server_auto_start)",
+        )
+    return (
+        "warn",
+        "; ".join(parts)
+        + " — first start downloads weights via `nokori embed start` or session-start",
     )
 
 
@@ -163,13 +246,22 @@ def _check_settings_registered(cfg: Config) -> tuple[str, str]:
 
 
 def run(_args: argparse.Namespace, cfg: Config) -> int:
+    try:
+        db = open_db(cfg.db_path)
+        try:
+            rule_count = total_rule_count(db)
+        finally:
+            db.close()
+    except Exception:
+        rule_count = 0
+
     rows = [
         ("db", *_check_db(cfg)),
         ("rules", *_check_rule_count(cfg)),
         ("embed.index", *_check_embedding_index_gaps(cfg)),
         ("settings.json", *_check_settings_registered(cfg)),
         ("llm", *_check_llm_endpoint(cfg)),
-        ("embed", *_check_embed_endpoint(cfg)),
+        ("embed", *_check_embed(cfg, rule_count)),
     ]
     width = max(len(name) for name, *_ in rows)
     bad = False
