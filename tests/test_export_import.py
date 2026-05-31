@@ -84,6 +84,48 @@ def test_import_rejects_invalid_source_type(tmp_path):
     assert "source_type" in (r.stderr + r.stdout)
 
 
+def test_import_rejects_non_integer_evidence_score(tmp_path):
+    data = tmp_path / "data"
+    out = tmp_path / "bad_score.json"
+    payload = {
+        "format": "nokori-export",
+        "version": 2,
+        "rules": [
+            {
+                "id": "00000000-0000-4000-8000-000000000003",
+                "short_id": "abc123",
+                "trigger_text": "t",
+                "action": "a",
+                "evidence_score": "high",
+            }
+        ],
+    }
+    out.write_text(json.dumps(payload), encoding="utf-8")
+    r = _run("import", str(out), env_extra={"NOKORI_DATA_DIR": str(data)})
+    assert r.returncode != 0
+    assert "evidence_score" in (r.stderr + r.stdout)
+
+
+def test_import_rejects_non_uuid_id(tmp_path):
+    data = tmp_path / "data"
+    out = tmp_path / "bad_id.json"
+    payload = {
+        "format": "nokori-export",
+        "version": 2,
+        "rules": [
+            {
+                "id": "my-rule-1",
+                "trigger_text": "t",
+                "action": "a",
+            }
+        ],
+    }
+    out.write_text(json.dumps(payload), encoding="utf-8")
+    r = _run("import", str(out), env_extra={"NOKORI_DATA_DIR": str(data)})
+    assert r.returncode != 0
+    assert "UUID" in (r.stderr + r.stdout) or "uuid" in (r.stderr + r.stdout).lower()
+
+
 def test_import_skips_duplicates(tmp_path):
     src = tmp_path / "src"
     out = tmp_path / "rules.json"

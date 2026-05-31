@@ -3,6 +3,8 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
+import uuid
 from pathlib import Path
 
 from ..config import Config
@@ -34,6 +36,7 @@ _SOURCE_TYPES = frozenset({"correction", "preference", "solution", "anti_pattern
 _CONFIDENCE = frozenset({"high", "medium"})
 _STATUSES = frozenset({"candidate", "active", "merged", "archived", "dormant"})
 _PROJECT_SCOPES = frozenset({"project", "global"})
+_HEX_SHORT_ID = re.compile(r"^[a-f0-9]{6,32}$", re.IGNORECASE)
 
 
 def _str_len(value: object, field: str, limit: int) -> str | None:
@@ -100,6 +103,21 @@ def _validate_import_record(rec: dict) -> str | None:
     scope = rec.get("project_scope", "project")
     if scope not in _PROJECT_SCOPES:
         return f"project_scope must be one of {sorted(_PROJECT_SCOPES)}"
+    rid = rec.get("id")
+    if rid is not None:
+        try:
+            uuid.UUID(str(rid))
+        except ValueError:
+            return "id must be a valid UUID"
+    sid = rec.get("short_id")
+    if sid is not None and not _HEX_SHORT_ID.match(str(sid)):
+        return "short_id must be 6-32 hexadecimal characters"
+    for field in ("evidence_score", "hit_count", "shadow_hit_count"):
+        val = rec.get(field, 0)
+        if val is None:
+            continue
+        if not isinstance(val, int) or isinstance(val, bool):
+            return f"{field} must be an integer"
     return None
 
 
