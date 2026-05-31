@@ -279,6 +279,7 @@ def merge_candidate(
 
     parsed: list[tuple[str, str, Rule]] = []
     seen_eids: set[str] = set()
+    has_narrower = False
     for rel in judgment:
         if not isinstance(rel, dict):
             continue
@@ -286,6 +287,8 @@ def merge_candidate(
         verdict = _normalize_merge_verdict(rel.get("judgment") or "")
         if not eid or eid not in by_id or verdict is None:
             continue
+        if verdict == "C":
+            has_narrower = True
         if eid in seen_eids:
             continue
         seen_eids.add(eid)
@@ -336,6 +339,10 @@ def merge_candidate(
         superseded += 1
 
     if not saw_strong:
+        _persist_new(db, cand, project_id, cfg)
+        inserted += 1
+    elif has_narrower and pending_new is None:
+        # NARROWER (C): keep both — do not drop the candidate when SAME (A) also matched.
         _persist_new(db, cand, project_id, cfg)
         inserted += 1
 

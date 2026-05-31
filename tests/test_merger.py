@@ -125,6 +125,31 @@ def test_merge_same_activates_candidate(monkeypatch, tmp_path):
         db.close()
 
 
+def test_merge_narrower_with_same_inserts_new(monkeypatch, tmp_path):
+    """NARROWER (C) + SAME (A): merge evidence on existing and still insert candidate."""
+    monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+    cfg = Config.from_env()
+    db = open_db(cfg.db_path)
+    try:
+        merge_candidate(_cand("shared trigger", "do X"), db, FakeMergeLLM("[]"))
+        existing = fetch_rules(db, statuses=("active",))[0]
+        response = json.dumps({
+            "relationships": [
+                {"existing_id": existing.id, "judgment": "A", "reasoning": "same"},
+                {"existing_id": existing.id, "judgment": "C", "reasoning": "narrower scope"},
+            ]
+        })
+        before = len(fetch_rules(db, statuses=("active", "candidate")))
+        outcome = merge_candidate(
+            _cand("shared trigger", "narrower action"), db, FakeMergeLLM(response),
+        )
+        after = fetch_rules(db, statuses=("active", "candidate"))
+        assert outcome.inserted == 1
+        assert len(after) == before + 1
+    finally:
+        db.close()
+
+
 def test_merge_contradicts_supersedes(monkeypatch, tmp_path):
     monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
     cfg = Config.from_env()
