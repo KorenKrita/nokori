@@ -7,6 +7,8 @@ from dataclasses import replace
 from ..models import ScoredResult
 
 MIN_ABSOLUTE_SCORE = 0.005
+SINGLE_HOT_MIN_RRF = 0.01
+SINGLE_HOT_MIN_MATCHED_TOKENS = 3
 RRF_K = 60
 
 
@@ -56,10 +58,15 @@ def tier_results(
     warm: list[ScoredResult] = []
 
     top1 = top5[0]
-    top1_dominant = (
-        len(top5) == 1
-        or top1.rrf_score - top5[1].rrf_score > top5[1].rrf_score * 0.3
-    )
+    if len(top5) == 1:
+        top1_dominant = (
+            top1.rrf_score > SINGLE_HOT_MIN_RRF
+            and len(top1.matched_tokens) >= SINGLE_HOT_MIN_MATCHED_TOKENS
+        )
+    else:
+        top1_dominant = (
+            top1.rrf_score - top5[1].rrf_score > top5[1].rrf_score * 0.3
+        )
 
     for i, r in enumerate(top5):
         if r.rrf_score < MIN_ABSOLUTE_SCORE:
