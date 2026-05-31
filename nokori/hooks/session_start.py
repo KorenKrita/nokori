@@ -17,12 +17,28 @@ log = get_logger("nokori.hooks.session_start")
 
 
 def _maybe_kickstart_embed(cfg: Config, db) -> None:
-    if not embedding_search.use_local(cfg):
+    rule_count = total_rule_count(db)
+    if not embedding_search.embedding_active(cfg, rule_count):
         return
-    if not embedding_search.auto_enabled(cfg, total_rule_count(db)):
+    if not embedding_search.use_local_config(cfg):
         return
-    if cfg.embed_server_auto_start:
-        embed_ipc.kickstart_server(cfg)
+    if not embedding_search.local_model_cached(cfg):
+        log.warning(
+            "local embed weights missing under %s; run: nokori embed prefetch",
+            embedding_search.local_model_cache_dir(cfg),
+        )
+        return
+    if not embedding_search.local_embed_package_available():
+        log.warning(
+            "local embed package missing; run: pip install -e \".[local-embed]\""
+        )
+        return
+    if not cfg.embed_server_auto_start:
+        return
+    if embed_ipc.ping(cfg):
+        log.info("embed server already running (ping ok)")
+        return
+    embed_ipc.kickstart_server(cfg)
 
 
 def handle(payload: dict, cfg: Config) -> dict:

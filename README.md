@@ -84,11 +84,13 @@ git clone https://github.com/KorenKrita/nokori.git
 cd nokori
 pip install -e .
 
-# 可选：安装本地 embedding 支持
+# 可选：本地 embedding（会安装 sentence-transformers，并自动下载模型权重到 ~/.nokori/models/）
 pip install -e ".[local-embed]"
 
-# 注册 hooks 到 Claude Code
+# 注册 hooks 到 Claude Code（已装 [local-embed] 时也会 prefetch，与 hooks 是否变更无关）
 nokori install
+# 跳过权重下载：nokori install --no-prefetch-embed
+# 手动补下/重试：nokori embed prefetch
 
 # 验证
 nokori health
@@ -475,15 +477,24 @@ export NOKORI_EMBED_MODEL="nomic-embed-text"
 
 ```bash
 pip install nokori[local-embed]
+# 或开发安装：pip install -e ".[local-embed]"
 ```
 
-安装 `sentence-transformers` 后，当可检索规则 ≥ 20 且未配置远程 embed endpoint 时，使用本地 **`paraphrase-multilingual-MiniLM-L12-v2`**（118MB，384 维）。模型由 **embed 共享进程**加载到 `~/.nokori/models/`。
+安装 `[local-embed]` 时会拉取 Python 依赖；**模型权重**（`paraphrase-multilingual-MiniLM-L12-v2`，约 118MB、384 维）在以下时机下载到 `~/.nokori/models/`（不在 hook 里下载，避免超时）：
+
+| 时机 | 说明 |
+|------|------|
+| `pip install …[local-embed]` | 装包结束后自动 prefetch（`pip install -e` 同样） |
+| `nokori install` | 已装 `[local-embed]` 即 prefetch，**与 hooks 是否已注册无关** |
+| `nokori embed prefetch` | 手动下载或失败重试 |
+
+未配置远程 embed endpoint 且可检索规则 ≥ 20 时，由 **embed 共享进程**从上述目录加载模型。
 
 Hook 行为（`NOKORI_EMBED_SERVER_AUTO_START=1`，默认开）：
 
-- **SessionStart**：非阻塞 `spawn` embed server（若尚未运行）
+- **SessionStart**：若本地权重已在缓存目录 → 非阻塞 `spawn` embed server；**缺权重只打日志**，不阻塞、不在 hook 里 `import sentence_transformers`
 - **UserPromptSubmit**：若 server 尚未 `ping` 通 → 后台 spawn、**当轮纯 BM25**；下一轮起通常有 RRF
-- 不在 hook 内等待最多 45s 模型加载（避免超过 Claude 10s hook 超时）
+- 不在 hook 内等待模型下载或长时间加载（避免超过 Claude hook 超时）
 
 `nokori embed start` 可提前拉起；`NOKORI_EMBED_ENABLED=1` 会强制尝试 embed（即使规则 <20），小库首条仍可能 BM25-only。
 
@@ -496,6 +507,7 @@ Hook 行为（`NOKORI_EMBED_SERVER_AUTO_START=1`，默认开）：
 本地 embed 管理（Unix）：
 
 ```bash
+nokori embed prefetch # 下载本地模型权重（pip/install 已做过可跳过）
 nokori embed start    # 后台拉起共享 server（hook 也会按需自动 start）
 nokori embed status   # 进程 / socket / idle 配置
 nokori embed stop     # 优雅关闭（SIGTERM + IPC shutdown）
@@ -542,14 +554,14 @@ nokori maintain
 nokori reset [--force]   # 非交互终端须加 --force
 
 # 本地 embed 共享进程（Unix；可选）
-nokori embed start | stop | status
+nokori embed prefetch | start | stop | status
 
 # 导入导出（JSON 的 version 字段 = rules.db schema，当前为 2）
 nokori export <path.json>
 nokori import <path.json>
 
 # 安装
-nokori install [--dry-run | --uninstall | --disable | --enable]
+nokori install [--dry-run | --uninstall | --disable | --enable | --no-prefetch-embed]
 ```
 
 ---
@@ -672,7 +684,7 @@ enabled = true
 │   ├── pipeline.log      # 提取/合并日志
 │   ├── async-extract.log # async 模式子进程 stderr
 │   └── embed-server.log  # 本地 embed server（若启用）
-├── models/               # sentence-transformers 模型缓存（local-embed）
+├── models/               # 本地 embed 权重（pip [local-embed] / install / embed prefetch）
 ├── embed.sock            # 本地 embed IPC（Unix）
 └── extract.lock          # extract 单实例锁
 ```

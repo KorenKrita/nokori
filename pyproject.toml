@@ -35,6 +35,10 @@ nokori = "nokori.__main__:main"
 [tool.setuptools.packages.find]
 include = ["nokori*"]
 
+[tool.setuptools.cmdclass]
+install = "nokori._packaging:InstallWithPrefetch"
+develop = "nokori._packaging:DevelopWithPrefetch"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]

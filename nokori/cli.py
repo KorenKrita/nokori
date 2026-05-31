@@ -103,6 +103,11 @@ def _build_parser() -> argparse.ArgumentParser:
 
     sp_install = sub.add_parser("install", help="install/uninstall hooks")
     sp_install.add_argument("--dry-run", action="store_true")
+    sp_install.add_argument(
+        "--no-prefetch-embed",
+        action="store_true",
+        help="skip local model prefetch after hook install (when local-embed is installed)",
+    )
     install_mode = sp_install.add_mutually_exclusive_group()
     install_mode.add_argument("--uninstall", action="store_true")
     install_mode.add_argument("--disable", action="store_true")
@@ -120,8 +125,8 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     sp_embed.add_argument(
         "embed_action",
-        choices=("serve", "start", "stop", "status"),
-        help="serve=run foreground; start=detach; stop=shutdown; status=probe",
+        choices=("serve", "start", "stop", "status", "prefetch"),
+        help="serve=foreground; start=detach; stop=shutdown; status=probe; prefetch=download local weights",
     )
 
     return p

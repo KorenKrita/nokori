@@ -164,13 +164,17 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
 
     if before == after:
         print(f"({verb}) no changes needed")
-        return 0
+    else:
+        _write_settings(path, after)
+        print(f"({verb}) wrote {path}")
+        if verb == "install":
+            print(
+                "Gate has two layers: settings.json PreToolUse matcher (when hook runs) "
+                "vs config.toml NOKORI_GATE_MATCHER (block inside hook). See README."
+            )
 
-    _write_settings(path, after)
-    print(f"({verb}) wrote {path}")
-    if verb == "install":
-        print(
-            "Gate has two layers: settings.json PreToolUse matcher (when hook runs) "
-            "vs config.toml NOKORI_GATE_MATCHER (block inside hook). See README."
-        )
+    if verb == "install" and not getattr(args, "no_prefetch_embed", False):
+        from ..prefetch import maybe_prefetch_local_embed
+
+        maybe_prefetch_local_embed(cfg)
     return 0

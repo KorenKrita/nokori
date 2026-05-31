@@ -169,7 +169,8 @@ mode = "manual"
 # -----------------------------------------------------------------------------
 
 [embed]
-# 强制启用 embedding（即使规则数 < 20）
+# 强制启用 embedding（即使规则数 < 20）；一般保持 false，交给「>=20 条 + 远程或 local-embed」自动判断
+# 本地权重：pip install nokori[local-embed] 或 nokori install / nokori embed prefetch → ~/.nokori/models/
 # 类型：布尔
 # 默认：false
 # 说明：未显式开启时，库内 active+dormant 规则数 >= 20 且（远程 embed 或 local-embed）会自动启用

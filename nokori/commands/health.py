@@ -72,37 +72,19 @@ def _check_llm_endpoint(cfg: Config) -> tuple[str, str]:
     )
 
 
-def _local_model_cached(cfg: Config) -> bool:
-    """True when HuggingFace cache under data_dir/models has loadable weights."""
-    from ..search.embedding import LOCAL_MODEL_NAME
-
-    cache = cfg.data_dir / "models"
-    hub = cache / f"models--sentence-transformers--{LOCAL_MODEL_NAME}"
-    snapshots = hub / "snapshots"
-    if not snapshots.is_dir():
-        return False
-    weight_names = ("model.safetensors", "pytorch_model.bin", "onnx/model.onnx")
-    for snap in snapshots.iterdir():
-        if not snap.is_dir():
-            continue
-        if any((snap / name).is_file() for name in weight_names):
-            return True
-    return False
-
-
 def _embed_off_reason(cfg: Config, rule_count: int) -> str:
     if cfg.embed_enabled:
-        if cfg.embed_base_url and cfg.embed_model:
+        if embedding_search.remote_embed_configured(cfg):
             return ""
-        if embedding_search._sentence_transformers_available():
+        if embedding_search.local_embed_capable(cfg):
             return ""
-        return "embed.enabled=true but nokori[local-embed] not installed"
+        return "embed.enabled=true but no remote embed.* and no local-embed/weights"
     if rule_count >= 20:
-        if cfg.embed_base_url and cfg.embed_model:
+        if embedding_search.remote_embed_configured(cfg):
             return ""
-        if embedding_search._sentence_transformers_available():
+        if embedding_search.local_embed_capable(cfg):
             return ""
-        return "rules>=20 but no remote embed.* and no local-embed package"
+        return "rules>=20 but no remote embed.* and no local-embed/weights"
     return "embed.enabled=false and searchable rules<20 (auto threshold)"
 
 
@@ -110,12 +92,11 @@ def _check_embed(cfg: Config, rule_count: int) -> tuple[str, str]:
     """Report remote vs local mode, connectivity, model cache, and embed server."""
     from ..search import embed_ipc
 
-    if not embedding_search.auto_enabled(cfg, rule_count):
+    if not embedding_search.embedding_active(cfg, rule_count):
         reason = _embed_off_reason(cfg, rule_count)
         return ("skip", f"off — {reason}")
 
-    remote_configured = bool(cfg.embed_base_url and cfg.embed_model)
-    if remote_configured:
+    if embedding_search.remote_embed_configured(cfg):
         payload: dict = {"model": cfg.embed_model, "input": "ping"}
         if cfg.embed_dimensions and cfg.embed_dimensions > 0:
             payload["dimensions"] = cfg.embed_dimensions
@@ -135,16 +116,16 @@ def _check_embed(cfg: Config, rule_count: int) -> tuple[str, str]:
 
     # Local mode (enabled, no remote base_url+model)
     model_name = embedding_search.LOCAL_MODEL_NAME
-    if not embedding_search._sentence_transformers_available():
+    if not embedding_search.local_embed_package_available():
         return (
             "fail",
             f"mode=local; model={model_name}; package=missing "
             "(pip install -e '.[local-embed]')",
         )
 
-    cached = _local_model_cached(cfg)
+    cached = embedding_search.local_model_cached(cfg)
     st = embed_ipc.server_status(cfg)
-    cache_dir = cfg.data_dir / "models"
+    cache_dir = embedding_search.local_model_cache_dir(cfg)
     parts = [
         "mode=local",
         f"model={model_name}",
@@ -164,7 +145,7 @@ def _check_embed(cfg: Config, rule_count: int) -> tuple[str, str]:
     return (
         "warn",
         "; ".join(parts)
-        + " — first start downloads weights via `nokori embed start` or session-start",
+        + " — run `nokori embed prefetch` then `nokori embed start` or open a session",
     )
 
 

@@ -278,7 +278,7 @@ class TestLocalEmbedding:
         monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
         cfg = Config.from_env()
 
-        with patch("nokori.search.embedding._sentence_transformers_available",
+        with patch("nokori.search.embedding.local_embed_package_available",
                    return_value=True):
             from nokori.search.embedding import auto_enabled
             assert auto_enabled(cfg, 20) is True
@@ -288,10 +288,11 @@ class TestLocalEmbedding:
         monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
         cfg = Config.from_env()
 
-        with patch("nokori.search.embedding._sentence_transformers_available",
+        with patch("nokori.search.embedding.local_embed_package_available",
                    return_value=False):
-            from nokori.search.embedding import auto_enabled
-            assert auto_enabled(cfg, 20) is False
+            with patch("nokori.search.embedding.local_model_cached", return_value=False):
+                from nokori.search.embedding import auto_enabled
+                assert auto_enabled(cfg, 20) is False
 
     def test_auto_enabled_prefers_remote(self, monkeypatch, tmp_path):
         monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))

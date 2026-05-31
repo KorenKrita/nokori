@@ -7,6 +7,15 @@ pip install nokori
 nokori install
 ```
 
+可选本地 embedding（会安装 `sentence-transformers`，并在装包 / `nokori install` 时自动把模型权重下载到 `~/.nokori/models/`）：
+
+```bash
+pip install "nokori[local-embed]"
+nokori install
+# 跳过权重下载：nokori install --no-prefetch-embed
+# 手动补下：nokori embed prefetch
+```
+
 ## 1. 把 API Token 放进 GitHub Secrets（不要写进代码）
 
 1. 打开仓库 **Settings → Secrets and variables → Actions**

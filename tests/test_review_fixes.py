@@ -191,20 +191,16 @@ def test_health_embed_skip_when_off(monkeypatch, tmp_path):
 
 
 def test_health_embed_local_running(monkeypatch, tmp_path):
+    from dataclasses import replace
+
     from nokori.commands import health
 
     monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("NOKORI_EMBED_ENABLED", "1")
     cfg = Config.from_env()
-    cfg2 = Config(
-        **{
-            **cfg.__dict__,
-            "embed_enabled": True,
-            "embed_base_url": None,
-            "embed_model": None,
-        }
-    )
-    with patch("nokori.search.embedding._sentence_transformers_available", return_value=True):
-        with patch("nokori.commands.health._local_model_cached", return_value=True):
+    cfg2 = replace(cfg, embed_enabled=True, embed_base_url=None, embed_model=None)
+    with patch("nokori.search.embedding.local_embed_package_available", return_value=True):
+        with patch("nokori.search.embedding.local_model_cached", return_value=True):
             with patch(
                 "nokori.search.embed_ipc.server_status",
                 return_value={"running": True, "pid": 99, "socket": "/tmp/s.sock"},
@@ -218,18 +214,18 @@ def test_health_embed_local_running(monkeypatch, tmp_path):
 
 def test_health_embed_remote_fail(monkeypatch, tmp_path):
     import urllib.error
+    from dataclasses import replace
 
     from nokori.commands import health
 
     monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("NOKORI_EMBED_ENABLED", "1")
     cfg = Config.from_env()
-    cfg2 = Config(
-        **{
-            **cfg.__dict__,
-            "embed_enabled": True,
-            "embed_base_url": "http://fake/v1",
-            "embed_model": "emb",
-        }
+    cfg2 = replace(
+        cfg,
+        embed_enabled=True,
+        embed_base_url="http://fake/v1",
+        embed_model="emb",
     )
 
     def fake_open(req, timeout=15):

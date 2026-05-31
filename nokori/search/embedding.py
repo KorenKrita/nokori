@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import array
 import functools
+import importlib.util
 import json
 import urllib.error
 import urllib.request
 from collections.abc import Sequence
+from pathlib import Path
 
 from ..config import Config
 from ..db import Db
@@ -211,6 +213,71 @@ def _search_impl(
 LOCAL_MODEL_NAME = "paraphrase-multilingual-MiniLM-L12-v2"
 LOCAL_DIMENSIONS = 384
 
+_LOCAL_WEIGHT_NAMES = ("model.safetensors", "pytorch_model.bin", "onnx/model.onnx")
+
+
+def remote_embed_configured(cfg: Config) -> bool:
+    return bool(cfg.embed_base_url and cfg.embed_model)
+
+
+def local_embed_package_available() -> bool:
+    """True when sentence-transformers is installed (no import of the package)."""
+    return importlib.util.find_spec("sentence_transformers") is not None
+
+
+def local_model_cache_dir(cfg: Config) -> Path:
+    return Path(cfg.data_dir) / "models"
+
+
+def local_model_cached(cfg: Config) -> bool:
+    """True when HuggingFace cache under data_dir/models has loadable weights."""
+    cache = local_model_cache_dir(cfg)
+    hub = cache / f"models--sentence-transformers--{LOCAL_MODEL_NAME}"
+    snapshots = hub / "snapshots"
+    if not snapshots.is_dir():
+        return False
+    for snap in snapshots.iterdir():
+        if not snap.is_dir():
+            continue
+        if any((snap / name).is_file() for name in _LOCAL_WEIGHT_NAMES):
+            return True
+    return False
+
+
+def local_embed_capable(cfg: Config) -> bool:
+    """Local embed can run: package installed and/or weights already on disk."""
+    return local_embed_package_available() or local_model_cached(cfg)
+
+
+def embedding_active(cfg: Config, rule_count: int) -> bool:
+    """Whether retrieval should use embedding at all (no sentence-transformers import)."""
+    if cfg.embed_enabled:
+        if remote_embed_configured(cfg):
+            return True
+        return local_embed_capable(cfg)
+    if rule_count < 20:
+        return False
+    if remote_embed_configured(cfg):
+        return True
+    return local_embed_capable(cfg)
+
+
+def use_local_config(cfg: Config) -> bool:
+    """True when configured to use the local embed server (not remote HTTP API)."""
+    return not remote_embed_configured(cfg)
+
+
+def prefetch_local_model(cfg: Config) -> str:
+    """Download/load local model weights into data_dir/models. Requires local-embed extra."""
+    if not local_embed_package_available():
+        raise EmbeddingError(
+            "sentence-transformers not installed; use: pip install -e '.[local-embed]'"
+        )
+    cfg.ensure_dirs()
+    client = LocalEmbeddingClient(cfg)
+    client.load_model()
+    return str(local_model_cache_dir(cfg))
+
 
 @functools.lru_cache(maxsize=1)
 def _sentence_transformers_available() -> bool:
@@ -271,13 +338,25 @@ def search_local_shared(
     """Local embed via shared embed server. Hook path never falls back to in-process."""
     from . import embed_ipc
 
-    if not rules or not _sentence_transformers_available():
+    if not rules:
         return [], "off"
 
     if interaction == "hook":
+        if not local_model_cached(cfg):
+            log.info(
+                "embed skipped on hook (local weights missing; run `nokori embed prefetch`)"
+            )
+            return [], "off"
+        if not local_embed_package_available():
+            log.info(
+                "embed skipped on hook (install `pip install -e \".[local-embed]\"`)"
+            )
+            return [], "off"
         if not embed_ipc.kickstart_server(cfg):
             log.info("embed skipped on hook (server not ready; BM25-only this turn)")
             return [], "off"
+    elif not _sentence_transformers_available():
+        return [], "off"
     elif not embed_ipc.ensure_running(cfg, max_wait=15.0):
         return [], "off"
 
@@ -289,23 +368,12 @@ def search_local_shared(
 
 
 def auto_enabled(cfg: Config, rule_count: int) -> bool:
-    # Remote embedding configured explicitly
-    if cfg.embed_enabled:
-        if cfg.embed_base_url and cfg.embed_model:
-            return True
-        # Explicit enable but no remote — check local availability
-        return _sentence_transformers_available()
-    # Auto-enable threshold: rules >= 20
-    if rule_count < 20:
-        return False
-    if cfg.embed_base_url and cfg.embed_model:
-        return True
-    return _sentence_transformers_available()
+    return embedding_active(cfg, rule_count)
 
 
 def use_local(cfg: Config) -> bool:
-    """True when local embedding should be used (no remote configured, local available)."""
-    if cfg.embed_base_url and cfg.embed_model:
+    """True when local embed server path applies and runtime can use it."""
+    if remote_embed_configured(cfg):
         return False
     return _sentence_transformers_available()
 
