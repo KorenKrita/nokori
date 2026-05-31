@@ -35,9 +35,11 @@ def test_format_injection_includes_footer_within_max_chars():
         updated_at="2026-01-01T00:00:00Z",
     )
     hot = [_scored(rule)]
-    text = format_injection(hot, [], max_chars=200, dismiss_phrase="dismiss")
+    text, logged = format_injection(hot, [], max_chars=200, dismiss_phrase="dismiss")
     assert len(text) <= 500
     assert "dismiss" in text
+    assert logged == [(rule.id, "hot")]
 
-    tiny = format_injection(hot, [], max_chars=50, dismiss_phrase="dismiss")
+    tiny, tiny_logged = format_injection(hot, [], max_chars=50, dismiss_phrase="dismiss")
     assert tiny == ""
+    assert tiny_logged == []

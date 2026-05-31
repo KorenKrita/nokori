@@ -143,7 +143,7 @@ def test_no_gate_marker_when_injection_empty(monkeypatch, tmp_path):
         return RetrievalResult([hot], [], 1, "off"), []
 
     monkeypatch.setattr(ups, "retrieve_formal_and_shadow", fake_retrieve)
-    monkeypatch.setattr(ups, "format_injection", lambda *_a, **_k: "")
+    monkeypatch.setattr(ups, "format_injection", lambda *_a, **_k: ("", []))
 
     out = handle({"session_id": "sess-empty", "prompt": "hello"}, cfg)
     assert out == {"continue": True}

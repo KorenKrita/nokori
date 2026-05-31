@@ -139,16 +139,14 @@ def handle(payload: dict, cfg: Config) -> dict:
                 marker_io.delete_session(cfg, session_id)
             return {"continue": True}
 
-        text = format_injection(
+        text, rendered_entries = format_injection(
             hot, warm, max_chars=cfg.max_injection_chars, dismiss_phrase=cfg.dismiss_phrase
         )
 
         ph = prompt_hash(prompt)
         now = now_iso()
         if text:
-            entries = [(r.rule.id, "hot") for r in hot]
-            entries.extend((r.rule.id, "warm") for r in warm)
-            log_injections_batch(db, session_id, ph, entries, now)
+            log_injections_batch(db, session_id, ph, rendered_entries, now)
             _update_gate_marker(cfg, session_id, prompt, hot, ph)
         elif cfg.gate_enabled:
             marker_io.delete_session(cfg, session_id)

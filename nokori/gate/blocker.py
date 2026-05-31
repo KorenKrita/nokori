@@ -28,7 +28,7 @@ def format_block_reason(rules: Iterable[MarkerRule], dismiss_phrase: str = "dism
 
 def format_injection(
     hot, warm, max_chars: int = 1500, dismiss_phrase: str = "dismiss"
-) -> str:
+) -> tuple[str, list[tuple[str, str]]]:
     """Build the additionalContext text for UserPromptSubmit.
 
     HOT: trigger + action + rationale (full).
@@ -36,7 +36,7 @@ def format_injection(
     Caps total at max_chars; spillover from HOT becomes WARM.
     """
     if not hot and not warm:
-        return ""
+        return "", []
 
     footer = (
         f"\n(Say `{dismiss_phrase} <short_id>` to retire an outdated rule.)"
@@ -57,6 +57,7 @@ def format_injection(
 
     spillover = []
     rendered = False
+    logged: list[tuple[str, str]] = []
     for r in sorted_hot:
         block = (
             f"\n[HOT {r.rule.short_id}] {r.rule.trigger_text}\n"
@@ -70,6 +71,7 @@ def format_injection(
         parts.append(block)
         used += len(block)
         rendered = True
+        logged.append((r.rule.id, "hot"))
 
     for r in spillover + list(warm):
         line = f"\n[warm {r.rule.short_id}] {r.rule.trigger_text} — {r.rule.action}"
@@ -78,12 +80,13 @@ def format_injection(
         parts.append(line)
         used += len(line)
         rendered = True
+        logged.append((r.rule.id, "warm"))
 
     if not rendered:
-        return ""
+        return "", []
 
     parts.append(footer)
-    return "".join(parts)
+    return "".join(parts), logged
 
 
 def select_gate_rules(hot):
