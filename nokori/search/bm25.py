@@ -23,6 +23,7 @@ def clear_index_cache() -> None:
 def _rule_doc_tokens(rule: Rule) -> list[str]:
     pieces: list[str] = []
     pieces.extend(tokenize(rule.trigger_text))
+    pieces.extend(tokenize(rule.action))
     for v in rule.trigger_variants:
         pieces.extend(tokenize(v))
     for terms in rule.search_terms.values():
@@ -47,6 +48,7 @@ def _index_key(rules_list: list[Rule]) -> tuple:
         return (
             r.id,
             r.trigger_text,
+            r.action,
             tuple(r.trigger_variants),
             terms,
         )
