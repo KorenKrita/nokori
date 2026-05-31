@@ -5,12 +5,26 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "nokori"
 version = "0.1.0"
-description = "经验留下的痕迹。Claude Code learning layer — extracts rules from corrections, enforces them with a gate."
+description = "Claude Code learning layer: extract rules from corrections, inject on match, enforce with a one-shot Gate. 从纠正中提炼规则并强制执行。残り — what experience leaves behind."
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.11"
 authors = [{name = "KorenKrita"}]
-keywords = ["claude-code", "memory", "learning", "hooks", "gate"]
+keywords = [
+    "claude-code",
+    "claude",
+    "ai-coding",
+    "coding-agent",
+    "hooks",
+    "gate",
+    "bm25",
+    "embeddings",
+    "sqlite",
+    "python",
+    "learning",
+    "rules",
+    "memory",
+]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Programming Language :: Python :: 3",
