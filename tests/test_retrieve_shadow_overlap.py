@@ -68,7 +68,7 @@ def test_shadow_hot_excludes_formal_overlap(monkeypatch, tmp_path):
             "nokori.search.retrieve.retrieve_and_tier",
             return_value=mocked,
         ):
-            formal_result, shadow_hot = retrieve_formal_and_shadow(
+            formal_result, shadow_hot, _shadow_warm = retrieve_formal_and_shadow(
                 "git push --force",
                 formal_rules,
                 shadow_rules,

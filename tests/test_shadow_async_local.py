@@ -97,7 +97,7 @@ class TestFetchShadowRules:
 
 
 class TestShadowPoolHotTier:
-    def test_shadow_pool_skips_non_hot_matches(self, monkeypatch, tmp_path):
+    def test_shadow_pool_records_warm_matches(self, monkeypatch, tmp_path):
         monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
         monkeypatch.setenv("NOKORI_PROMOTION_ENABLED", "1")
         cfg = Config.from_env()
@@ -132,7 +132,7 @@ class TestShadowPoolHotTier:
                 row = db.fetchone(
                     "SELECT shadow_hit_count FROM rules WHERE id = ?", (rid,)
                 )
-                assert row["shadow_hit_count"] == 0
+                assert row["shadow_hit_count"] >= 1
         finally:
             db.close()
 

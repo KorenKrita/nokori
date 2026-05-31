@@ -140,7 +140,7 @@ def test_no_gate_marker_when_injection_empty(monkeypatch, tmp_path):
     hot = ScoredResult(rule=rule, retrieval_hot=True)
 
     def fake_retrieve(*_a, **_k):
-        return RetrievalResult([hot], [], 1, "off"), []
+        return RetrievalResult([hot], [], 1, "off"), [], []
 
     monkeypatch.setattr(ups, "retrieve_formal_and_shadow", fake_retrieve)
     monkeypatch.setattr(ups, "format_injection", lambda *_a, **_k: ("", []))

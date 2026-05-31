@@ -63,7 +63,7 @@ def test_retrieve_formal_and_shadow_splits_pools(monkeypatch, tmp_path):
             db, statuses=("active",), project_id="my-proj"
         )
         shadow_rules = fetch_shadow_rules(db, project_id="my-proj")
-        result, shadow_hot = retrieve_formal_and_shadow(
+        result, shadow_hot, _shadow_warm = retrieve_formal_and_shadow(
             "git push --force to remote",
             formal_rules,
             shadow_rules,

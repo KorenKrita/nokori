@@ -110,7 +110,7 @@ def handle(payload: dict, cfg: Config) -> dict:
             return {"continue": True}
 
         try:
-            result, shadow_hot = retrieve_formal_and_shadow(
+            result, shadow_hot, shadow_warm = retrieve_formal_and_shadow(
                 prompt,
                 formal_rules,
                 shadow_rules,
@@ -126,7 +126,7 @@ def handle(payload: dict, cfg: Config) -> dict:
         hot, warm = result.hot, result.warm
 
         if project_id:
-            for r in shadow_hot:
+            for r in shadow_hot + shadow_warm:
                 try:
                     promotion.record_shadow_hit(db, r.rule.id, project_id)
                 except Exception as e:
@@ -155,8 +155,8 @@ def handle(payload: dict, cfg: Config) -> dict:
                 maintenance.reactivate_dormant_on_retrieval_hot(db, r.rule.id)
 
         log.info(
-            "injected hot=%d warm=%d shadow_hot=%d session=%s",
-            len(hot), len(warm), len(shadow_hot), session_id,
+            "injected hot=%d warm=%d shadow_hot=%d shadow_warm=%d session=%s",
+            len(hot), len(warm), len(shadow_hot), len(shadow_warm), session_id,
         )
         if not text:
             return {"continue": True}

@@ -88,14 +88,14 @@ def retrieve_formal_and_shadow(
     *,
     pool_size: int | None = None,
     interaction: InteractionKind = "hook",
-) -> tuple[RetrievalResult, list[ScoredResult]]:
+) -> tuple[RetrievalResult, list[ScoredResult], list[ScoredResult]]:
     """One BM25/RRF pass over formal∪shadow; split tiers by pool membership."""
     formal_ids = {r.id for r in formal_rules}
     shadow_only = [r for r in shadow_rules if r.id not in formal_ids]
     combined = list(formal_rules) + shadow_only
     if not combined:
         empty = RetrievalResult([], [], 0, "off")
-        return empty, []
+        return empty, [], []
 
     shadow_ids = {r.id for r in shadow_only}
     effective_pool = pool_size if pool_size is not None else len(combined)
@@ -111,7 +111,8 @@ def retrieve_formal_and_shadow(
     formal_hot = [r for r in result.hot if r.rule.id in formal_ids]
     formal_warm = [r for r in result.warm if r.rule.id in formal_ids]
     shadow_hot = [r for r in result.hot if r.rule.id in shadow_ids]
+    shadow_warm = [r for r in result.warm if r.rule.id in shadow_ids]
     formal_result = RetrievalResult(
         formal_hot, formal_warm, result.bm25_matches, result.embed_mode
     )
-    return formal_result, shadow_hot
+    return formal_result, shadow_hot, shadow_warm

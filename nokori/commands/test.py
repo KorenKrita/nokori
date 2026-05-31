@@ -30,7 +30,7 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
             if project_id and cfg.promotion_enabled
             else []
         )
-        result, shadow_hot = retrieve_formal_and_shadow(
+        result, shadow_hot, _shadow_warm = retrieve_formal_and_shadow(
             args.prompt,
             formal_rules,
             shadow_rules,
