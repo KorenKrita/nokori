@@ -63,7 +63,7 @@ def configure(logs_dir: Path, level: str = "warn") -> None:
             (
                 "nokori.extract.", "nokori.lifecycle.", "nokori.llm.",
                 "nokori.search.", "nokori.commands.", "nokori.db.",
-                "nokori.config.", "nokori.models.",
+                "nokori.config.", "nokori.models.", "nokori.prefetch.",
             ),
             negate_other=False,
         ))
