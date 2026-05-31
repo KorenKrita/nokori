@@ -236,3 +236,34 @@ def list_active_sessions(
     ]
     active.sort(key=lambda r: r.get("last_activity") or "", reverse=True)
     return active
+
+
+SESSION_FILE_RETENTION_DAYS = 60
+
+
+def prune_ended_session_files(cfg: Config, max_age_days: int = SESSION_FILE_RETENTION_DAYS) -> int:
+    """Remove session registry files ended longer than max_age_days ago."""
+    now = datetime.now(timezone.utc)
+    removed = 0
+    for data in list_session_records(cfg):
+        ended = data.get("ended_at")
+        if not ended:
+            continue
+        ended_dt = parse_iso(ended)
+        if ended_dt is None:
+            continue
+        age_days = (now - ended_dt).days
+        if age_days < max_age_days:
+            continue
+        sid = data.get("session_id")
+        if not sid:
+            continue
+        path = _path_for(cfg, sid)
+        try:
+            path.unlink()
+            removed += 1
+        except FileNotFoundError:
+            pass
+        except OSError:
+            pass
+    return removed

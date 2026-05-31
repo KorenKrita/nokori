@@ -94,7 +94,9 @@ def _check_embedding_index_gaps(cfg: Config) -> tuple[str, str]:
 def _check_settings_registered(cfg: Config) -> tuple[str, str]:
     from pathlib import Path
 
-    settings = Path("~/.claude/settings.json").expanduser()
+    from .install import _settings_path
+
+    settings = _settings_path()
     if not settings.exists():
         return ("skip", f"{settings} missing")
     try:

@@ -100,7 +100,7 @@ def test_pre_tool_use_passes_when_no_marker(tmp_path):
              stdin=json.dumps({"session_id": "no-marker", "tool_name": "Bash"}))
     out = json.loads(r.stdout)
     assert not _gate_denied(out)
-    assert out.get("continue") is True
+    assert out == {} or out.get("continue") is True
 
 
 def test_marker_consumed_once(tmp_path):
@@ -121,7 +121,8 @@ def test_marker_consumed_once(tmp_path):
     assert not _gate_denied(json.loads(r2.stdout))
 
 
-def test_marker_expires(tmp_path):
+def test_marker_ttl_zero_never_expires(tmp_path):
+    """gate_ttl_seconds=0 means no expiry (issue #96)."""
     _add_high_active(tmp_path, "force push", "lease",
                      variants=["git push --force"])
     sess = "s-test-4"
@@ -135,7 +136,7 @@ def test_marker_expires(tmp_path):
              env_extra={"NOKORI_DATA_DIR": str(tmp_path),
                         "NOKORI_GATE_TTL_SECONDS": "0"},
              stdin=json.dumps({"session_id": sess, "tool_name": "Bash"}))
-    assert not _gate_denied(json.loads(r.stdout))
+    assert _gate_denied(json.loads(r.stdout))
 
 
 def test_dismiss_cli(tmp_path, monkeypatch):

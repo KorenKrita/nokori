@@ -9,6 +9,11 @@ from ..search.embedding import index_rule_if_enabled
 from ..utils.text import split_csv
 from ..utils.time import now_iso
 
+_EDITABLE_COLUMNS = frozenset({
+    "trigger_text", "action", "rationale", "confidence", "status",
+    "archived_reason", "superseded_by", "trigger_variants", "search_terms",
+})
+
 
 def run(args: argparse.Namespace, cfg: Config) -> int:
     db = open_db(cfg.db_path)
@@ -27,10 +32,24 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
         if args.confidence is not None:
             updates.append(("confidence", args.confidence))
         if args.status is not None:
-            updates.append(("status", args.status))
-            if args.status == "active":
+            new_status = args.status
+            allowed = {
+                "candidate": {"active", "archived"},
+                "active": {"dormant", "archived"},
+                "dormant": {"active", "archived"},
+                "merged": {"archived"},
+                "archived": set(),
+            }
+            if new_status not in allowed.get(rule.status, set()):
+                raise NokoriError(
+                    f"invalid status transition {rule.status!r} -> {new_status!r}"
+                )
+            updates.append(("status", new_status))
+            if new_status == "active":
                 updates.append(("archived_reason", None))
                 updates.append(("superseded_by", None))
+            elif new_status == "archived":
+                updates.append(("archived_reason", "manual_edit"))
         if args.variants is not None:
             updates.append(("trigger_variants", dumps_json(split_csv(args.variants))))
         if args.terms_en is not None or args.terms_zh is not None:
@@ -46,6 +65,9 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
             return 0
 
         now = now_iso()
+        for col, _ in updates:
+            if col not in _EDITABLE_COLUMNS:
+                raise NokoriError(f"internal error: disallowed column {col!r}")
         sets = ", ".join(f"{col} = ?" for col, _ in updates)
         params: list = [val for _, val in updates]
         params.extend([now, rule.id])

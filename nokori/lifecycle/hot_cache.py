@@ -49,7 +49,14 @@ def _find_previous_transcript_glob(current: Path) -> Path | None:
 
     best: Path | None = None
     best_mtime = -1.0
-    for candidate in parent.glob("*.jsonl"):
+    def _mtime_key(p: Path) -> float:
+        try:
+            return p.stat().st_mtime
+        except OSError:
+            return 0.0
+
+    candidates = sorted(parent.glob("*.jsonl"), key=_mtime_key, reverse=True)
+    for candidate in candidates[:50]:
         try:
             resolved = candidate.resolve()
         except OSError:

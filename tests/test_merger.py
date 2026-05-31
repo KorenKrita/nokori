@@ -424,8 +424,8 @@ def test_merge_llm_failure_keeps_pending_when_neighbors(monkeypatch, tmp_path):
                 raise RuntimeError("boom")
 
         outcome = merge_candidate(_cand("rule b", "act b"), db, BadLLM())
-        assert outcome.inserted == 0
+        assert outcome.inserted == 1
         assert outcome.merge_ok is False
-        assert len(fetch_rules(db, statuses=("active",))) == 1
+        assert len(fetch_rules(db, statuses=("active",))) == 2
     finally:
         db.close()

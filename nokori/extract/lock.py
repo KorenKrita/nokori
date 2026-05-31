@@ -69,16 +69,16 @@ def acquire(cfg: Config) -> Iterator[bool]:
     fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR, 0o600)
     try:
         try:
-            if os.path.getsize(str(lock_path)) == 0:
-                os.write(fd, b"1")
-        except OSError:
-            pass
-        try:
             _lock_exclusive_nb(fd)
         except BlockingIOError:
             log.info("extract lock busy, skipping (%s)", lock_path)
             yield False
             return
+        try:
+            if os.path.getsize(str(lock_path)) == 0:
+                os.write(fd, b"1")
+        except OSError:
+            pass
         yield True
     finally:
         try:

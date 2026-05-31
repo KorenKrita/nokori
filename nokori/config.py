@@ -22,7 +22,7 @@ def _load_toml(path: Path) -> dict:
         with open(path, "rb") as f:
             return tomllib.load(f)
     except tomllib.TOMLDecodeError:
-        return {}
+        raise
 
 
 # --- Config file → flat dict mapping ---

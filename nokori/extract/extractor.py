@@ -63,6 +63,7 @@ def _parse_candidates(raw: str) -> tuple[list[Candidate], bool]:
         return [], False
 
     out: list[Candidate] = []
+    had_items = bool(items)
     for item in items:
         try:
             cand = _coerce(item)
@@ -70,6 +71,8 @@ def _parse_candidates(raw: str) -> tuple[list[Candidate], bool]:
             log.warning("extract candidate skipped: %s", e)
             continue
         out.append(cand)
+    if had_items and not out:
+        return [], False
     return out, True
 
 

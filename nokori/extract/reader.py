@@ -66,11 +66,6 @@ def read_tail_user_turns(path: Path, limit: int = 3) -> list[Turn]:
         size = path.stat().st_size
     except OSError:
         return []
-    if size > MAX_TRANSCRIPT_BYTES:
-        raise NokoriError(
-            f"transcript too large ({size} bytes; max {MAX_TRANSCRIPT_BYTES})"
-        )
-
     human: list[Turn] = []
     block = 65536
     leftover = b""

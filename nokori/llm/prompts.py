@@ -65,12 +65,14 @@ def format_merge_user(
     *,
     trigger: str,
     action: str,
+    behavior: str | None,
     source_type: str,
     confidence: str,
     existing_formatted: str,
 ) -> str:
     new_body = (
         f"trigger: {trigger}\n"
+        f"behavior: {behavior or '-'}\n"
         f"action: {action}\n"
         f"source_type: {source_type}\n"
         f"confidence: {confidence}"

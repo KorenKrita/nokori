@@ -90,7 +90,7 @@ def run_server(cfg: Config) -> int:
         return 1
 
     try:
-        model = client._load_model()
+        model = client.load_model()
     except Exception:
         log.exception("embed server model load failed")
         sock.close()

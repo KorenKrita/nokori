@@ -27,6 +27,8 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
     print(f"last_hit        {rule.last_hit}")
     print(f"project_scope   {rule.project_scope}")
     print(f"project_id      {rule.project_id}")
+    print(f"superseded_by   {rule.superseded_by or '-'}")
+    print(f"archived_reason {rule.archived_reason or '-'}")
     print(f"created_at      {rule.created_at}")
     print(f"updated_at      {rule.updated_at}")
     print()

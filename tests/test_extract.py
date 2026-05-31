@@ -81,7 +81,7 @@ def test_extractor_skips_invalid_source_type():
         "source_type": "WAT", "confidence": "high",
     }])
     cands, ok = extract("nonempty", FakeLLM(response))
-    assert ok and cands == []
+    assert not ok and cands == []
 
 
 def test_extractor_returns_empty_on_empty_transcript():

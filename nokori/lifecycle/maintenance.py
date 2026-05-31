@@ -29,7 +29,7 @@ def _days_since_iso(iso: str | None) -> int | None:
     dt = parse_iso(iso)
     if dt is None:
         return None
-    return (_now() - dt).days
+    return max(0, (_now() - dt).days)
 
 
 def _last_run(db: Db, key: str) -> str | None:
@@ -206,15 +206,24 @@ def reactivate_dormant_on_retrieval_hot(db: Db, rule_id: str) -> None:
         )
 
 
+def run_session_file_cleanup(cfg) -> int:
+    from ..utils import sessions
+
+    return sessions.prune_ended_session_files(cfg)
+
+
 def run_due_jobs(db: Db, cfg=None) -> dict:
+    session_cleanup = 0
     if cfg is not None:
         from ..extract import jobs as job_io
 
         job_io.quarantine_corrupt_jobs(cfg)
+        session_cleanup = run_session_file_cleanup(cfg)
     summary = {
         "dormant_scan": run_dormant_scan(db),
         "candidate_cleanup": run_candidate_cleanup(db),
         "injection_cleanup": run_injection_cleanup(db),
         "unmerge_check": run_unmerge_check(db),
+        "session_cleanup": session_cleanup,
     }
     return summary

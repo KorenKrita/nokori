@@ -64,7 +64,9 @@ def _pid_alive(pid: int) -> bool:
 def cleanup_stale(cfg: Config) -> None:
     pid = _read_pid(cfg)
     if pid is not None and _pid_alive(pid):
-        return
+        if ping(cfg):
+            return
+        _clear_pid(cfg)
     if pid is not None:
         _clear_pid(cfg)
     sock = socket_path(cfg)
@@ -117,7 +119,9 @@ def spawn_server(cfg: Config) -> None:
         return
     pid = _read_pid(cfg)
     if pid is not None and _pid_alive(pid):
-        return
+        if ping(cfg):
+            return
+        _clear_pid(cfg)
 
     cfg.ensure_dirs()
     err_log = cfg.logs_dir / "embed-server.log"

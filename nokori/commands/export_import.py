@@ -223,7 +223,7 @@ def run_import(args: argparse.Namespace, cfg: Config) -> int:
             rid = rec.get("id") or new_uuid()
             sid = rec.get("short_id") or short_id_for(rid, existing_short_ids)
             if sid in existing_short_ids:
-                sid = short_id_for(new_uuid(), existing_short_ids)
+                sid = short_id_for(rid, existing_short_ids)
             existing_short_ids.add(sid)
             existing_ids.add(rid)
             pending.append((

@@ -233,7 +233,7 @@ class LocalEmbeddingClient:
     def available(self) -> bool:
         return _sentence_transformers_available()
 
-    def _load_model(self):
+    def load_model(self):
         if self._model is not None:
             return self._model
         from sentence_transformers import SentenceTransformer
@@ -241,6 +241,9 @@ class LocalEmbeddingClient:
             self._model_name, cache_folder=self._cache_dir
         )
         return self._model
+
+    def _load_model(self):
+        return self.load_model()
 
     def embed(self, text: str) -> list[list[float]]:
         chunks = _chunk_text(

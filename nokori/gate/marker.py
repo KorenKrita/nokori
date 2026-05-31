@@ -279,6 +279,8 @@ def prompt_hash_matches(
 
 
 def is_expired(marker: Marker, ttl_seconds: int) -> bool:
+    if ttl_seconds <= 0:
+        return False
     if not marker.created_at:
         return True
     created = parse_iso(marker.created_at)

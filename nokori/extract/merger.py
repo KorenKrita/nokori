@@ -187,12 +187,24 @@ def _candidate_neighbors(
     return neighbors
 
 
+def _resolve_existing_id(
+    eid: str, by_id: dict[str, Rule], neighbors: list[Rule],
+) -> str | None:
+    if eid in by_id:
+        return eid
+    for r in neighbors:
+        if r.short_id == eid:
+            return r.id
+    return None
+
+
 def _format_existing(rules: list[Rule]) -> str:
     parts = []
     for r in rules:
         parts.append(
-            f"- id={r.id}\n  trigger: {r.trigger_text}\n"
+            f"- id={r.short_id}\n  trigger: {r.trigger_text}\n"
             f"  action: {r.action}\n"
+            f"  behavior: {r.behavior or '-'}\n"
             f"  source_type: {r.source_type}\n  confidence: {r.confidence}\n"
             f"  status: {r.status}"
         )
@@ -203,6 +215,7 @@ def _ask_llm(cand: Candidate, neighbors: list[Rule], llm: LLMAdapter) -> dict | 
     user_content = format_merge_user(
         trigger=cand.trigger,
         action=cand.action,
+        behavior=cand.behavior,
         source_type=cand.source_type,
         confidence=cand.confidence,
         existing_formatted=_format_existing(neighbors),
@@ -267,11 +280,12 @@ def merge_candidate(
     judgment_payload = _ask_llm(cand, neighbors, llm)
     if judgment_payload is None:
         log.warning(
-            "merge llm failed, keeping extract pending (neighbors exist): %s",
+            "merge llm failed, inserting as unrelated: %s",
             cand.trigger[:60],
         )
+        _persist_new(db, cand, project_id, cfg)
         return MergeOutcome(
-            inserted=0, activated=0, merged=0, superseded=0, merge_ok=False,
+            inserted=1, activated=0, merged=0, superseded=0, merge_ok=False,
         )
     judgment = judgment_payload.get("relationships") or []
     by_id = {r.id: r for r in neighbors}
@@ -287,7 +301,8 @@ def merge_candidate(
     for rel in judgment:
         if not isinstance(rel, dict):
             continue
-        eid = rel.get("existing_id")
+        raw_eid = rel.get("existing_id")
+        eid = _resolve_existing_id(str(raw_eid), by_id, neighbors) if raw_eid else None
         verdict = _normalize_merge_verdict(rel.get("judgment") or "")
         if not eid or eid not in by_id or verdict is None:
             continue

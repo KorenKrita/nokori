@@ -11,9 +11,19 @@ from ..utils.text import split_csv
 from ..utils.time import now_iso
 
 
+_MAX_TRIGGER = 16_384
+_MAX_ACTION = 8_192
+
+
 def run(args: argparse.Namespace, cfg: Config) -> int:
     if len(args.trigger.strip()) < 3:
         raise NokoriError("trigger must be at least 3 non-whitespace characters")
+    if len(args.trigger) > _MAX_TRIGGER:
+        raise NokoriError(f"trigger exceeds {_MAX_TRIGGER} characters")
+    if not args.action or not args.action.strip():
+        raise NokoriError("action must not be empty")
+    if len(args.action) > _MAX_ACTION:
+        raise NokoriError(f"action exceeds {_MAX_ACTION} characters")
     now = now_iso()
     rid = new_uuid()
 

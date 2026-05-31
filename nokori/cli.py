@@ -38,7 +38,11 @@ def _build_parser() -> argparse.ArgumentParser:
     sp_add.add_argument("--project-id", default=None, help="restrict to a specific project_id")
 
     sp_list = sub.add_parser("list", help="list rules")
-    sp_list.add_argument("--all", action="store_true", help="include candidate / archived")
+    sp_list.add_argument(
+        "--all",
+        action="store_true",
+        help="include candidate, archived, and merged rules",
+    )
     sp_list.add_argument("--project", default=None)
 
     sp_show = sub.add_parser("show", help="show a rule by short id")

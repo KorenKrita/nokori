@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import logging.handlers
+import time
 from pathlib import Path
 from threading import Lock
 
@@ -40,6 +41,7 @@ def configure(logs_dir: Path, level: str = "warn") -> None:
             root.removeHandler(h)
 
         formatter = logging.Formatter(_FORMAT, datefmt=_DATEFMT)
+        formatter.converter = time.gmtime
         sess_filter = _SessionFilter()
 
         hook_handler = logging.handlers.RotatingFileHandler(
@@ -48,7 +50,7 @@ def configure(logs_dir: Path, level: str = "warn") -> None:
         hook_handler.setFormatter(formatter)
         hook_handler.addFilter(sess_filter)
         hook_handler.addFilter(_NameStartsWith(
-            ("nokori.hooks.", "nokori.gate.", "nokori.commands.", "nokori.utils."),
+            ("nokori.hooks.", "nokori.gate.", "nokori.utils."),
         ))
         root.addHandler(hook_handler)
 
@@ -58,7 +60,11 @@ def configure(logs_dir: Path, level: str = "warn") -> None:
         pipeline_handler.setFormatter(formatter)
         pipeline_handler.addFilter(sess_filter)
         pipeline_handler.addFilter(_NameStartsWith(
-            ("nokori.extract.", "nokori.lifecycle.", "nokori.llm.", "nokori.search."),
+            (
+                "nokori.extract.", "nokori.lifecycle.", "nokori.llm.",
+                "nokori.search.", "nokori.commands.", "nokori.db.",
+                "nokori.config.", "nokori.models.",
+            ),
             negate_other=False,
         ))
         root.addHandler(pipeline_handler)

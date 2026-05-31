@@ -19,10 +19,9 @@ log = get_logger("nokori.hooks.session_end")
 
 def _spawn_async_extract(cfg: Config) -> None:
     """Fork a detached subprocess to run `nokori extract`. Best-effort."""
-    env = os.environ.copy()
-    # Do not set NOKORI_EXTRACTING here — that guard is for hook recursion only
-    # (see LLMAdapter); the extract CLI must be able to call the configured LLM.
-    env.pop("NOKORI_EXTRACTING", None)
+    keep = ("PATH", "HOME", "USER", "LANG", "LC_ALL", "PYTHONPATH", "VIRTUAL_ENV")
+    env = {k: os.environ[k] for k in keep if k in os.environ}
+    # Do not set NOKORI_EXTRACTING here — hook recursion guard only (see LLMAdapter).
     env["NOKORI_DATA_DIR"] = str(cfg.data_dir)
     cfg.ensure_dirs()
     err_log = cfg.logs_dir / "async-extract.log"

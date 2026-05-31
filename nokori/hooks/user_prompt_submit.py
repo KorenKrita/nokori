@@ -12,6 +12,7 @@ from ..db import (
     open_db,
     archive_rule,
     find_rule_id_by_recent_injection,
+    find_rule_id_injected_since,
 )
 from ..gate import marker as marker_io
 from ..gate.blocker import format_injection, select_gate_rules
@@ -27,7 +28,7 @@ log = get_logger("nokori.hooks.user_prompt_submit")
 def _dismiss_re(phrase: str) -> re.Pattern[str]:
     escaped = re.escape(phrase.lower())
     return re.compile(
-        rf"(?i)(?P<phrase>{escaped})[\s,，、;:：]+(?P<sid>[a-f0-9]{{6,32}})\b"
+        rf"(?i)(?<![a-z]){escaped}[\s,，、;:：]+(?P<sid>[a-f0-9]{{6,32}})\b"
     )
 
 
@@ -36,12 +37,19 @@ def _run_dismiss(db: Db, prompt: str, session_id: str, cfg: Config) -> int:
     phrase = (cfg.dismiss_phrase or "dismiss").lower()
     pattern = _dismiss_re(phrase)
     count = 0
+    seen_sids: set[str] = set()
     now = now_iso()
     cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
     cutoff_iso = cutoff.isoformat(timespec="seconds").replace("+00:00", "Z")
     for m in pattern.finditer(prompt or ""):
         sid = m.group("sid").lower()
-        rid = find_rule_id_by_recent_injection(db, session_id, sid, cutoff_iso)
+        if sid in seen_sids:
+            continue
+        seen_sids.add(sid)
+        if session_id in (None, "", "-"):
+            rid = find_rule_id_injected_since(db, sid, cutoff_iso)
+        else:
+            rid = find_rule_id_by_recent_injection(db, session_id, sid, cutoff_iso)
         if rid is None:
             continue
         archive_rule(db, rid, "user_dismissed_prompt", now)

@@ -148,7 +148,9 @@ def open_db(path: Path) -> Db:
                 conn.close()
                 raise
             return Db(conn)
-        except sqlite3.OperationalError as e:
+        except (sqlite3.OperationalError, DbError) as e:
+            if isinstance(e, DbError) and "locked" not in str(e).lower():
+                raise
             last_err = e
             time.sleep(0.05 * (attempt + 1))
     raise DbError(f"failed to open db at {path}: {last_err}")
