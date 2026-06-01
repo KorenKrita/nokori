@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
 """Prompt-tuning eval: run extract models, then Opus judges outputs for prompt fixes.
 
-Goal is improving EXTRACT_SYSTEM — not ranking which extract model wins.
+Transcript pipeline matches production extract:
+  read(path) → compress(budget_tokens=30000) → wrap_untrusted → LLM (max_tokens=3000, timeout=60)
+
+No extra truncation unless you pass --max-chars (eval-only).
 
   python3 -u scripts/eval_extract_prompts.py --quick
   python3 -u scripts/eval_extract_prompts.py --samples 5
 
 Outputs on ~/Desktop/:
-  nokori-extract-eval-latest.json   — full raw outputs + judge JSON
-  nokori-extract-eval-report.md     — human-readable review
+  nokori-extract-eval-{timestamp}.json   — full raw outputs + judge JSON
+  nokori-extract-eval-{timestamp}.md     — human-readable review
 """
 from __future__ import annotations
 
@@ -18,6 +21,7 @@ import random
 import sys
 import time
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -26,6 +30,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from nokori.config import Config
+from nokori.constants import MAX_TRANSCRIPT_BYTES
 from nokori.extract.compressor import compress
 from nokori.extract.extractor import Candidate, _parse_candidates
 from nokori.extract.reader import read
@@ -37,16 +42,19 @@ from nokori.llm.prompts import (
 )
 
 DEFAULT_MODELS = (
-    "deepseek-v4-flash,deepseek-v4-pro,gemini-3.5-flash,glm-5v-turbo,MiniMax-M3,"
+    "deepseek-v4-flash,deepseek-v4-pro,gemini-3.5-flash,glm-5v-turbo,glm-5.1,MiniMax-M3,"
     "claude-sonnet-4-6,claude-opus-4-5"
 )
 QUICK_MODELS = (
     "deepseek-v4-flash,gemini-3.5-flash,claude-sonnet-4-6,claude-opus-4-5"
 )
 DEFAULT_JUDGE = "claude-opus-4-5"
-# jsonl on disk: skip tiny idle sessions and huge multi-hour logs
-DEFAULT_MIN_BYTES = 10_240      # 10 KiB
-DEFAULT_MAX_BYTES = 180_000     # 180 KiB
+DEFAULT_MIN_BYTES = 10_240
+DEFAULT_MAX_BYTES = 180_000
+PROD_COMPRESS_BUDGET_TOKENS = 30_000
+PROD_EXTRACT_MAX_TOKENS = 3_000
+PROD_EXTRACT_TIMEOUT_SEC = 60
+_COMPRESS_TRUNC_MARKER = "[transcript truncated: middle omitted]"
 
 
 def _log(msg: str) -> None:
@@ -62,15 +70,16 @@ def _discover_transcripts(
     base = Path.home() / ".claude" / "projects"
     if not base.exists():
         return []
-    paths: list[Path] = []
+    entries: list[tuple[Path, int, float]] = []
     for p in base.rglob("*.jsonl"):
         if not p.is_file() or "/subagents/" in p.as_posix():
             continue
-        size = p.stat().st_size
-        if min_bytes <= size <= max_bytes:
-            paths.append(p)
+        st = p.stat()
+        if min_bytes <= st.st_size <= max_bytes:
+            entries.append((p, st.st_size, st.st_mtime))
 
-    def _rank(p: Path) -> tuple[int, float]:
+    def _rank(entry: tuple[Path, int, float]) -> tuple[int, float]:
+        p, _, mtime = entry
         name = p.as_posix().lower()
         boost = 0
         if "nokori" in name:
@@ -81,22 +90,32 @@ def _discover_transcripts(
             boost -= 4
         if "ccstatusline" in name:
             boost -= 2
-        return (boost, p.stat().st_mtime)
+        return (boost, mtime)
 
-    paths.sort(key=_rank, reverse=True)
-    return paths[:limit_pool]
+    entries.sort(key=_rank, reverse=True)
+    return [p for p, _, _ in entries[:limit_pool]]
 
 
 def _cap_transcript(text: str, max_chars: int) -> str:
+    """Optional eval-only cap; production extract does not use this."""
+    if max_chars <= 0:
+        return text
     text = text.strip()
     if len(text) <= max_chars:
         return text
     half = max_chars // 2
     return (
         text[:half]
-        + "\n\n[... transcript truncated for eval ...]\n\n"
+        + "\n\n[... eval-only transcript cap ...]\n\n"
         + text[-half:]
     )
+
+
+def _prepare_transcript(path: Path, *, budget_tokens: int) -> tuple[str, bool]:
+    """Same pipeline as production: read(path) → compress(turns, budget_tokens=…)."""
+    text = compress(read(path), budget_tokens=budget_tokens)
+    truncated = _COMPRESS_TRUNC_MARKER in text
+    return text, truncated
 
 
 def _call_chat(
@@ -196,6 +215,40 @@ def _run_extract(
     row["parse_ok"] = ok
     row["candidates"] = [_candidate_dict(c) for c in cands]
     return row
+
+
+def _run_extracts_parallel(
+    *,
+    base_url: str,
+    api_key: str | None,
+    models: list[str],
+    user: str,
+    max_tokens: int,
+    timeout: int,
+    max_workers: int = 6,
+) -> list[dict]:
+    """Run extract calls for all models in parallel."""
+    results: dict[str, dict] = {}
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        futures = {
+            pool.submit(
+                _run_extract,
+                base_url=base_url,
+                api_key=api_key,
+                model=model,
+                user=user,
+                max_tokens=max_tokens,
+                timeout=timeout,
+            ): model
+            for model in models
+        }
+        for future in as_completed(futures):
+            model = futures[future]
+            try:
+                results[model] = future.result()
+            except Exception as e:
+                results[model] = {"model": model, "error": f"{type(e).__name__}: {e}"}
+    return [results[m] for m in models]
 
 
 def _format_extractions_for_judge(extractions: list[dict]) -> str:
@@ -402,6 +455,19 @@ def _synthesize_global(
     return parsed if isinstance(parsed, dict) else {"raw": raw}
 
 
+def _load_resume(out_json: Path) -> dict | None:
+    """Load partial results for resume."""
+    if not out_json.exists():
+        return None
+    try:
+        data = json.loads(out_json.read_text(encoding="utf-8"))
+        if isinstance(data, dict) and data.get("samples"):
+            return data
+    except (json.JSONDecodeError, OSError):
+        pass
+    return None
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Eval extract prompt (judge-driven)")
     parser.add_argument("--quick", action="store_true")
@@ -411,6 +477,7 @@ def main() -> int:
     parser.add_argument("--judge-model", default=DEFAULT_JUDGE)
     parser.add_argument("--no-judge", action="store_true")
     parser.add_argument("--no-synthesize", action="store_true", help="Skip final merge of improvements")
+    parser.add_argument("--resume", action="store_true", help="Resume from partial output file")
     parser.add_argument(
         "--min-bytes",
         type=int,
@@ -423,11 +490,44 @@ def main() -> int:
         default=DEFAULT_MAX_BYTES,
         help=f"Max jsonl file size (default {DEFAULT_MAX_BYTES})",
     )
-    parser.add_argument("--min-compressed", type=int, default=1500)
-    parser.add_argument("--max-chars", type=int, default=0)
-    parser.add_argument("--max-tokens", type=int, default=0)
+    parser.add_argument(
+        "--min-compressed",
+        type=int,
+        default=0,
+        help="Skip if compress output shorter than this (0=only empty)",
+    )
+    parser.add_argument(
+        "--max-chars",
+        type=int,
+        default=0,
+        help="Eval-only extra cap after compress (0=disabled, production uses none)",
+    )
+    parser.add_argument(
+        "--budget-tokens",
+        type=int,
+        default=PROD_COMPRESS_BUDGET_TOKENS,
+        help=f"compress() token budget (production default {PROD_COMPRESS_BUDGET_TOKENS})",
+    )
+    parser.add_argument(
+        "--max-tokens",
+        type=int,
+        default=0,
+        help=f"Extract LLM max_tokens (0 → production {PROD_EXTRACT_MAX_TOKENS})",
+    )
     parser.add_argument("--judge-max-tokens", type=int, default=4000)
-    parser.add_argument("--timeout", type=int, default=120)
+    parser.add_argument(
+        "--timeout",
+        type=int,
+        default=0,
+        help=f"Extract LLM timeout seconds (0 → production {PROD_EXTRACT_TIMEOUT_SEC})",
+    )
+    parser.add_argument(
+        "--judge-timeout",
+        type=int,
+        default=180,
+        help="Judge LLM timeout seconds",
+    )
+    parser.add_argument("--max-workers", type=int, default=6, help="Parallel extract workers")
     parser.add_argument("--out-json", default="")
     parser.add_argument("--out-md", default="")
     args = parser.parse_args()
@@ -435,13 +535,14 @@ def main() -> int:
     if args.quick:
         samples_n = args.samples or 2
         models_s = args.models or QUICK_MODELS
-        max_chars = args.max_chars or 10_000
-        max_tokens = args.max_tokens or 1500
     else:
         samples_n = args.samples or 4
         models_s = args.models or DEFAULT_MODELS
-        max_chars = args.max_chars or 14_000
-        max_tokens = args.max_tokens or 2000
+
+    max_chars = args.max_chars
+    max_tokens = args.max_tokens or PROD_EXTRACT_MAX_TOKENS
+    extract_timeout = args.timeout or PROD_EXTRACT_TIMEOUT_SEC
+    min_compressed = args.min_compressed
 
     cfg = Config.from_env()
     if not cfg.llm_base_url:
@@ -461,24 +562,24 @@ def main() -> int:
         return 1
 
     picked = random.Random(args.seed).sample(pool, min(samples_n, len(pool)))
-    out_json = Path(args.out_json or str(Path.home() / "Desktop" / "nokori-extract-eval-latest.json"))
-    out_md = Path(args.out_md or str(Path.home() / "Desktop" / "nokori-extract-eval-report.md"))
 
-    payload: dict = {
-        "meta": {
-            "ts": datetime.now(timezone.utc).isoformat(),
-            "base_url": cfg.llm_base_url,
-            "models": models,
-            "judge_model": None if args.no_judge else args.judge_model,
-            "extract_prompt": EXTRACT_SYSTEM,
-            "seed": args.seed,
-            "max_chars": max_chars,
-            "min_bytes": args.min_bytes,
-            "max_bytes": args.max_bytes,
-            "pool_size": len(pool),
-        },
-        "samples": [],
-    }
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    out_json = Path(args.out_json or str(Path.home() / "Desktop" / f"nokori-extract-eval-{ts}.json"))
+    out_md = Path(args.out_md or str(Path.home() / "Desktop" / f"nokori-extract-eval-{ts}.md"))
+
+    done_paths: set[str] = set()
+    payload: dict
+
+    if args.resume:
+        existing = _load_resume(out_json)
+        if existing:
+            payload = existing
+            done_paths = {s["path"] for s in payload.get("samples", []) if s.get("path")}
+            _log(f"Resuming: {len(done_paths)} samples already done")
+        else:
+            payload = _make_meta(cfg, models, args, ts, max_chars, max_tokens, extract_timeout, pool)
+    else:
+        payload = _make_meta(cfg, models, args, ts, max_chars, max_tokens, extract_timeout, pool)
 
     def _save() -> None:
         out_json.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -490,49 +591,78 @@ def main() -> int:
         f"jsonl pool: {len(pool)} files in "
         f"[{args.min_bytes // 1024}KiB, {args.max_bytes // 1024}KiB]"
     )
-    _log(f"samples: {len(picked)} seed={args.seed}\n")
+    cap_note = f" + eval cap {max_chars} chars" if max_chars else ""
+    _log(
+        f"transcript: read(≤{MAX_TRANSCRIPT_BYTES // (1024*1024)}MiB) → "
+        f"compress({args.budget_tokens} tokens){cap_note}"
+    )
+    _log(
+        f"extract LLM: max_tokens={max_tokens} timeout={extract_timeout}s "
+        f"(production-aligned)"
+    )
+    _log(f"parallel workers: {args.max_workers}")
+    _log(f"samples: {len(picked)} seed={args.seed}")
+    _log(f"output: {out_json.name}\n")
 
     all_improvements: list[dict] = []
 
     for idx, path in enumerate(picked, 1):
+        if str(path) in done_paths:
+            _log(f"[{idx}] SKIP (already done) {path.name}")
+            continue
         try:
-            text = compress(read(path))
+            text, compress_truncated = _prepare_transcript(
+                path, budget_tokens=args.budget_tokens,
+            )
         except Exception as e:
             _log(f"[{idx}] SKIP {path.name}: {e}")
             continue
-        if len(text.strip()) < args.min_compressed:
-            _log(f"[{idx}] SKIP {path.name}: too short")
+        if not text.strip() or (min_compressed and len(text.strip()) < min_compressed):
+            _log(f"[{idx}] SKIP {path.name}: compressed too short")
             continue
-        text = _cap_transcript(text, max_chars)
+        eval_capped = False
+        if max_chars:
+            before = len(text)
+            text = _cap_transcript(text, max_chars)
+            eval_capped = len(text) < before
         rel = f"{path.parent.name}/{path.name}"
-        _log(f"[{idx}/{len(picked)}] {rel} ({len(text)} chars)")
+        trunc_flags = []
+        if compress_truncated:
+            trunc_flags.append("compress")
+        if eval_capped:
+            trunc_flags.append("eval-cap")
+        trunc_s = f" truncated={','.join(trunc_flags)}" if trunc_flags else ""
+        _log(f"[{idx}/{len(picked)}] {rel} ({len(text)} chars{trunc_s})")
 
         sample: dict = {
             "path": str(path),
             "rel": rel,
             "file_bytes": path.stat().st_size,
-            "transcript_chars": len(text),
+            "compressed_chars": len(text),
+            "compress_truncated": compress_truncated,
+            "eval_capped": eval_capped,
             "extractions": [],
         }
         user = wrap_untrusted(text)
 
-        for model in models:
-            _log(f"  extract {model} ...")
-            ex = _run_extract(
-                base_url=cfg.llm_base_url,
-                api_key=cfg.llm_api_key,
-                model=model,
-                user=user,
-                max_tokens=max_tokens,
-                timeout=args.timeout,
-            )
-            sample["extractions"].append(ex)
+        _log(f"  extracting with {len(models)} models (parallel) ...")
+        extractions = _run_extracts_parallel(
+            base_url=cfg.llm_base_url,
+            api_key=cfg.llm_api_key,
+            models=models,
+            user=user,
+            max_tokens=max_tokens,
+            timeout=extract_timeout,
+            max_workers=args.max_workers,
+        )
+        sample["extractions"] = extractions
+        for ex in extractions:
             n = len(ex.get("candidates") or [])
             if ex.get("error"):
-                _log(f"    -> ERROR {ex['error'][:80]}")
+                _log(f"    {ex['model']}: ERROR {ex['error'][:80]}")
             else:
-                _log(f"    -> {ex.get('elapsed')}s parse_ok={ex.get('parse_ok')} n={n}")
-            _save()
+                _log(f"    {ex['model']}: {ex.get('elapsed')}s parse_ok={ex.get('parse_ok')} n={n}")
+        _save()
 
         if not args.no_judge:
             _log(f"  judge ({args.judge_model}) ...")
@@ -543,7 +673,7 @@ def main() -> int:
                 transcript=text,
                 extractions=sample["extractions"],
                 max_tokens=args.judge_max_tokens,
-                timeout=args.timeout,
+                timeout=args.judge_timeout,
             )
             review = (sample["judge"].get("review") or {})
             for imp in review.get("prompt_improvements") or []:
@@ -556,7 +686,7 @@ def main() -> int:
                 _log(f"    -> judge {sample['judge'].get('elapsed')}s")
                 for imp in (review.get("prompt_improvements") or [])[:2]:
                     if isinstance(imp, dict):
-                        _log(f"       • {imp.get('issue', '')[:70]}")
+                        _log(f"       * {imp.get('issue', '')[:70]}")
 
         payload["samples"].append(sample)
         _save()
@@ -569,12 +699,35 @@ def main() -> int:
             api_key=cfg.llm_api_key,
             judge_model=args.judge_model,
             improvements=all_improvements,
-            timeout=args.timeout,
+            timeout=args.judge_timeout,
         )
         _save()
 
     _log(f"Done.\n  JSON: {out_json}\n  Report: {out_md}")
     return 0
+
+
+def _make_meta(cfg, models, args, ts, max_chars, max_tokens, extract_timeout, pool) -> dict:
+    return {
+        "meta": {
+            "ts": ts,
+            "base_url": cfg.llm_base_url,
+            "models": models,
+            "judge_model": None if args.no_judge else args.judge_model,
+            "extract_prompt": EXTRACT_SYSTEM,
+            "seed": args.seed,
+            "align_production": max_chars == 0,
+            "max_transcript_bytes": MAX_TRANSCRIPT_BYTES,
+            "compress_budget_tokens": args.budget_tokens,
+            "extract_max_tokens": max_tokens,
+            "extract_timeout_sec": extract_timeout,
+            "max_chars_eval_cap": max_chars or None,
+            "min_bytes": args.min_bytes,
+            "max_bytes": args.max_bytes,
+            "pool_size": len(pool),
+        },
+        "samples": [],
+    }
 
 
 if __name__ == "__main__":
