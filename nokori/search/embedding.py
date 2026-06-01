@@ -47,6 +47,17 @@ def _cosine(a: Sequence[float], b: Sequence[float]) -> float:
     return dot / (na * nb)
 
 
+def _cosine_with_norm(a_norm: float, a: Sequence[float], b: Sequence[float]) -> float:
+    """Cosine similarity when caller already knows ||a||."""
+    if a_norm == 0 or not b:
+        return 0.0
+    dot = sum(x * y for x, y in zip(a, b))
+    nb = sum(y * y for y in b) ** 0.5
+    if nb == 0:
+        return 0.0
+    return dot / (a_norm * nb)
+
+
 def _chunk_text(text: str, chunk_size: int, chunk_count: int) -> list[str]:
     if not text:
         return []
@@ -202,12 +213,13 @@ def _search_impl(
             continue
         by_rule.setdefault(row["rule_id"], []).append(vec)
 
+    qnorm = sum(x * x for x in qvec) ** 0.5
     results: list[ScoredResult] = []
     for rule in rules:
         embeddings = by_rule.get(rule.id) or []
         if not embeddings:
             continue
-        best = max(_cosine(qvec, emb) for emb in embeddings)
+        best = max(_cosine_with_norm(qnorm, qvec, emb) for emb in embeddings)
         results.append(ScoredResult(rule=rule, cosine=best))
     results.sort(key=lambda r: r.cosine or 0.0, reverse=True)
     return results[:top_k]

@@ -47,7 +47,6 @@ def _index_key(rules_list: list[Rule]) -> tuple:
         )
         return (
             r.id,
-            r.status,
             r.trigger_text,
             r.action,
             tuple(r.trigger_variants),
@@ -58,12 +57,16 @@ def _index_key(rules_list: list[Rule]) -> tuple:
 
 
 def _build_index(rules_list: list[Rule]):
-    docs = [(rule, _rule_doc_tokens(rule), _variant_tokens(rule)) for rule in rules_list]
-    n_docs = len(docs)
-    avgdl = sum(len(d) for _, d, _ in docs) / max(n_docs, 1)
+    raw_docs = [(rule, _rule_doc_tokens(rule), _variant_tokens(rule)) for rule in rules_list]
+    n_docs = len(raw_docs)
+    avgdl = sum(len(d) for _, d, _ in raw_docs) / max(n_docs, 1)
     df: Counter[str] = Counter()
-    for _, doc, _ in docs:
-        df.update(set(doc))
+    docs = []
+    for rule, doc_tokens, var_tokens in raw_docs:
+        tf = Counter(doc_tokens)
+        token_set = frozenset(tf)
+        df.update(token_set)
+        docs.append((rule, tf, token_set, len(doc_tokens), var_tokens))
     idf: Mapping[str, float] = {
         term: math.log(1 + (n_docs - count + 0.5) / (count + 0.5))
         for term, count in df.items()
@@ -96,13 +99,11 @@ def search(
 
     docs, idf, avgdl = _cached_index(rules_list)
 
-    qset = set(query_tokens)
+    qset = frozenset(query_tokens)
     scored: list[ScoredResult] = []
-    for rule, doc, var_tokens in docs:
-        if not doc:
+    for rule, tf, token_set, dl, var_tokens in docs:
+        if not tf:
             continue
-        tf = Counter(doc)
-        dl = len(doc)
         score = 0.0
         for term in qset:
             f = tf.get(term, 0)
@@ -113,7 +114,7 @@ def search(
             score += idf.get(term, 0.0) * (num / denom)
         if score <= 0:
             continue
-        matched = qset & set(doc)
+        matched = qset & token_set
         variant_match = bool(qset & var_tokens)
         scored.append(
             ScoredResult(

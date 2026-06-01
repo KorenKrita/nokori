@@ -6,7 +6,9 @@ import os
 from pathlib import Path
 
 from ..config import Config
+from ..utils.fs import atomic_write_json
 from ..utils.time import now_iso
+from ..utils.transcript import transcript_key
 
 
 def transcript_hash(path: Path, mtime: float) -> str:
@@ -14,43 +16,22 @@ def transcript_hash(path: Path, mtime: float) -> str:
     return hashlib.sha256(raw).hexdigest()[:16]
 
 
-def _job_transcript_path(transcript_path: Path) -> str:
-    return str(transcript_path.expanduser().resolve())
-
-
 def write_job(cfg: Config, transcript_path: Path, project_id: str | None,
               mtime: float) -> Path:
     cfg.ensure_dirs()
     h = transcript_hash(transcript_path, mtime)
-    path_str = _job_transcript_path(transcript_path)
+    out = cfg.jobs_dir / f"extract-{h}.json"
+    existing = read_job(out) or {}
     payload = {
-        "transcript_path": path_str,
+        **existing,
+        "transcript_path": transcript_key(transcript_path),
         "transcript_hash": h,
         "transcript_mtime": mtime,
         "project_id": project_id,
-        "created_at": now_iso(),
+        "created_at": existing.get("created_at") or now_iso(),
         "status": "pending",
     }
-    out = cfg.jobs_dir / f"extract-{h}.json"
-    if out.exists():
-        try:
-            existing = json.loads(out.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            existing = {}
-        existing.update({
-            "transcript_path": path_str,
-            "transcript_hash": h,
-            "transcript_mtime": mtime,
-            "project_id": project_id,
-            "status": "pending",
-        })
-        tmp = out.with_suffix(out.suffix + ".tmp")
-        tmp.write_text(json.dumps(existing, ensure_ascii=False), encoding="utf-8")
-        os.replace(tmp, out)
-        return out
-    tmp = out.with_suffix(out.suffix + ".tmp")
-    tmp.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
-    os.replace(tmp, out)
+    atomic_write_json(out, payload)
     return out
 
 
@@ -100,7 +81,7 @@ def list_jobs(cfg: Config, *, status: str | None = "pending") -> list[Path]:
 
 def find_project_id_for_transcript(cfg: Config, transcript_path: Path) -> str | None:
     """Best-effort project_id from any extract job pointing at this transcript."""
-    resolved = _job_transcript_path(transcript_path)
+    resolved = transcript_key(transcript_path)
     for job_path in list_jobs(cfg, status=None):
         job = read_job(job_path)
         if job and job.get("transcript_path") == resolved:

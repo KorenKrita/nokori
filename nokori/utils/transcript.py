@@ -9,6 +9,12 @@ from .logging import get_logger
 log = get_logger("nokori.utils.transcript")
 
 
+def transcript_key(path: Path) -> str:
+    """Canonical key for a transcript path: used for extract_state DB rows,
+    extract job files, and checkpoint digests — must stay byte-identical."""
+    return str(path.expanduser().resolve())
+
+
 def _allowed_roots() -> list[Path]:
     roots: list[Path] = [Path.home() / ".claude"]
     for env_name in ("CLAUDE_PROJECT_DIR", "NOKORI_DATA_DIR"):
@@ -25,10 +31,6 @@ def _allowed_roots() -> list[Path]:
 
 def is_path_allowed(path: Path) -> bool:
     """True when path resolves under ~/.claude, NOKORI_DATA_DIR, or extra roots."""
-    return _is_under_allowed_root(path)
-
-
-def _is_under_allowed_root(path: Path) -> bool:
     try:
         resolved = path.resolve()
     except OSError:
@@ -54,7 +56,7 @@ def resolve_transcript_path(payload: dict) -> Path | None:
     if path.suffix.lower() != ".jsonl":
         log.warning("transcript_path is not a .jsonl file: %s", path)
         return None
-    if not _is_under_allowed_root(path):
+    if not is_path_allowed(path):
         log.warning("transcript_path outside allowed roots: %s", path)
         return None
     if path.is_file():

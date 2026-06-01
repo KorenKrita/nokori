@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
 from ..config import Config
 from ..db import Db
+from ..utils.fs import atomic_write_json
 from ..utils.logging import get_logger
 from ..utils.time import now_iso, parse_iso
 
@@ -35,13 +35,6 @@ class Marker:
     rules: list[MarkerRule]
 
 
-def _atomic_write_json(path: Path, payload: dict) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
-    os.replace(tmp, path)
-
-
 def write(
     cfg: Config,
     session_id: str,
@@ -59,7 +52,7 @@ def write(
         "rules": [asdict(r) for r in rules],
     }
     path = cfg.marker_path(session_id, ph)
-    _atomic_write_json(path, payload)
+    atomic_write_json(path, payload, mkdir=True)
     return path
 
 
@@ -135,28 +128,31 @@ def delete(
 
 
 def latest_marker_prompt_hash(cfg: Config, session_id: str) -> str | None:
-    """Most recent prompt_hash from on-disk markers for this session."""
+    """Most recent prompt_hash from on-disk markers for this session.
+
+    Uses path.stem as the authoritative prompt_hash (filename is {ph}.json by
+    construction in marker_path/write). The JSON body's created_at is only used
+    for ordering.
+    """
     mdir = cfg.marker_dir(session_id)
     if not mdir.is_dir():
         return None
+    paths = list(mdir.glob("*.json"))
     best_ph: str | None = None
     best_at = ""
-    for path in mdir.glob("*.json"):
+    for path in paths:
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             continue
-        ph = data.get("prompt_hash")
-        if not ph:
-            continue
         created = str(data.get("created_at") or "")
         if created >= best_at:
             best_at = created
-            best_ph = str(ph)
+            best_ph = path.stem
     if best_ph:
         return best_ph
     try:
-        newest = max(mdir.glob("*.json"), key=lambda p: p.stat().st_mtime)
+        newest = max(paths, key=lambda p: p.stat().st_mtime)
     except ValueError:
         return None
     return newest.stem
@@ -192,7 +188,7 @@ def strip_short_id_from_all_markers(cfg: Config, short_id: str) -> int:
                 "created_at": marker.created_at,
                 "rules": [asdict(r) for r in kept],
             }
-            _atomic_write_json(path, payload)
+            atomic_write_json(path, payload, mkdir=True)
     return touched
 
 

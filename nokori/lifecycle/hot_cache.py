@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from datetime import datetime
 from pathlib import Path
 
 from ..config import Config
@@ -8,15 +7,11 @@ from ..constants import TRANSCRIPT_MTIME_EPSILON_SEC
 from ..db import Db
 from ..extract.reader import read_tail_user_turns
 from . import transcript_index
-from ..utils.time import now_iso
-from ..utils.transcript import is_path_allowed, resolve_transcript_path
+from ..utils.time import now_iso, parse_iso
+from ..utils.transcript import is_path_allowed, resolve_transcript_path, transcript_key
 
 HOT_CACHE_BUDGET_CHARS = 500
 HOT_CACHE_RECENT_TURNS = 3
-
-
-def _transcript_db_key(path: Path) -> str:
-    return str(path.expanduser().resolve())
 
 
 def find_previous_transcript(current: Path, cfg: Config | None = None) -> Path | None:
@@ -81,7 +76,7 @@ def _fetch_extract_state(db: Db, path: Path):
     return db.fetchone(
         "SELECT extracted_at, transcript_mtime, status "
         "FROM extract_state WHERE transcript_path = ?",
-        (_transcript_db_key(path),),
+        (transcript_key(path),),
     )
 
 
@@ -109,9 +104,8 @@ def _was_extracted(db: Db, path: Path) -> bool:
     extracted_at = row["extracted_at"]
     if not extracted_at:
         return False
-    try:
-        extracted = datetime.fromisoformat(str(extracted_at).replace("Z", "+00:00"))
-    except (ValueError, AttributeError):
+    extracted = parse_iso(str(extracted_at))
+    if extracted is None:
         return False
 
     return extracted.timestamp() >= mtime
@@ -154,7 +148,7 @@ def maybe_inject(payload: dict, cfg: Config, db: Db) -> str | None:
 
 def mark_extracted(db: Db, path: Path, mtime: float) -> None:
     now = now_iso()
-    key = _transcript_db_key(path)
+    key = transcript_key(path)
     with db.transaction() as tx:
         tx.execute(
             "INSERT INTO extract_state (transcript_path, transcript_mtime, "

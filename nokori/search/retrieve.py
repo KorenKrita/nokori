@@ -19,6 +19,7 @@ class RetrievalResult:
     warm: list[ScoredResult]
     bm25_matches: int
     embed_mode: str  # off | local | remote
+    bm25_rule_ids: frozenset[str] = frozenset()
 
 
 def retrieve_and_tier(
@@ -76,7 +77,8 @@ def retrieve_and_tier(
 
     fused = ranker.rrf_fuse(bm25_results, embed_results)
     hot, warm = ranker.tier_results(fused)
-    return RetrievalResult(hot, warm, len(bm25_results), embed_mode)
+    bm25_ids = frozenset(r.rule.id for r in bm25_results)
+    return RetrievalResult(hot, warm, len(bm25_results), embed_mode, bm25_ids)
 
 
 def retrieve_formal_and_shadow(
@@ -112,9 +114,9 @@ def retrieve_formal_and_shadow(
     formal_warm = [r for r in result.warm if r.rule.id in formal_ids]
     shadow_hot = [r for r in result.hot if r.rule.id in shadow_ids]
     shadow_warm = [r for r in result.warm if r.rule.id in shadow_ids]
-    combined_bm25 = bm25.search(prompt, combined, top_k=10)
-    formal_bm25_matches = sum(1 for r in combined_bm25 if r.rule.id in formal_ids)
+    formal_bm25_matches = sum(1 for rid in result.bm25_rule_ids if rid in formal_ids)
+    formal_bm25_ids = frozenset(rid for rid in result.bm25_rule_ids if rid in formal_ids)
     formal_result = RetrievalResult(
-        formal_hot, formal_warm, formal_bm25_matches, result.embed_mode
+        formal_hot, formal_warm, formal_bm25_matches, result.embed_mode, formal_bm25_ids
     )
     return formal_result, shadow_hot, shadow_warm

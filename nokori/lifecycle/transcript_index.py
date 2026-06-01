@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 from pathlib import Path
 
 from ..config import Config
+from ..utils.fs import atomic_write_json
 from ..utils.logging import get_logger
 
 log = get_logger("nokori.lifecycle.transcript_index")
@@ -47,10 +47,7 @@ def record_session_transcript(cfg: Config, transcript: Path) -> None:
         data["previous"] = prev
     data["current"] = current
 
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
-    os.replace(tmp, path)
+    atomic_write_json(path, data, mkdir=True)
 
 
 def lookup_previous(cfg: Config, current: Path) -> Path | None:

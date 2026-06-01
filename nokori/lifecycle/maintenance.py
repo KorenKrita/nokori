@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from ..db import Db, delete_rule_cascade
+from ..db import Db, _delete_rule_cascade_tx
 from ..utils.logging import get_logger
 from ..utils.sql_batch import batched
-from ..utils.time import now_iso, parse_iso
+from ..utils.time import iso_of, now_iso, parse_iso
 
 log = get_logger("nokori.lifecycle.maintenance")
 
@@ -100,16 +100,8 @@ def run_candidate_cleanup(db: Db) -> int:
                 ).fetchone()
                 if not still:
                     continue
-                tx.execute("DELETE FROM injections WHERE rule_id = ?", (r["id"],))
-                tx.execute(
-                    "DELETE FROM rule_embeddings WHERE rule_id = ?", (r["id"],)
-                )
-                cur = tx.execute(
-                    "DELETE FROM rules WHERE id = ? AND status = 'candidate'",
-                    (r["id"],),
-                )
-                if cur.rowcount:
-                    deleted += 1
+                _delete_rule_cascade_tx(tx, r["id"])
+                deleted += 1
     _set_last_run(db, "candidate_cleanup")
     if deleted:
         log.info("candidate_cleanup deleted=%d", deleted)
@@ -146,7 +138,7 @@ def run_injection_cleanup(db: Db) -> int:
     if not _due(db, "injection_cleanup", INJECTION_CLEANUP_INTERVAL_DAYS):
         return 0
     cutoff = _now() - timedelta(days=INJECTION_RETENTION_DAYS)
-    cutoff_iso = cutoff.isoformat(timespec="seconds").replace("+00:00", "Z")
+    cutoff_iso = iso_of(cutoff)
     with db.transaction() as tx:
         cur = tx.execute(
             "DELETE FROM injections WHERE created_at < ?",

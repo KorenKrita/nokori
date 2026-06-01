@@ -41,31 +41,36 @@ def handle(payload: dict, cfg: Config) -> dict:
 
     on_disk = marker_io.read_latest_marker(cfg, session_id)
     current_ph: str | None = None
-    if not current_ph:
-        try:
-            db = open_db(cfg.db_path)
-        except DbError as e:
-            log.warning("gate db open failed, fail-open session=%s: %s", session_id, e)
-            return {}
-        try:
-            if on_disk and on_disk.rules and not current_ph:
-                if marker_io.injection_exists(db, session_id, on_disk.prompt_hash):
-                    current_ph = on_disk.prompt_hash
-                else:
-                    marker_io.delete(
-                        cfg, session_id, prompt_hash_value=on_disk.prompt_hash,
-                    )
-            if not current_ph:
-                current_ph = marker_io.resolve_current_prompt_hash(
-                    payload, cfg, session_id, db=db,
+    try:
+        db = open_db(cfg.db_path)
+    except DbError as e:
+        log.warning("gate db open failed, fail-open session=%s: %s", session_id, e)
+        return {}
+    try:
+        prompt_text = payload.get("prompt")
+        if isinstance(prompt_text, str) and prompt_text:
+            current_ph = marker_io.prompt_hash(prompt_text)
+        elif on_disk and on_disk.rules:
+            if marker_io.injection_exists(db, session_id, on_disk.prompt_hash):
+                current_ph = on_disk.prompt_hash
+            else:
+                marker_io.delete(
+                    cfg, session_id, prompt_hash_value=on_disk.prompt_hash,
                 )
-        finally:
-            db.close()
+        if not current_ph:
+            current_ph = marker_io.resolve_current_prompt_hash(
+                payload, cfg, session_id, db=db,
+            )
+    finally:
+        db.close()
     if not current_ph:
         marker_io.delete_session(cfg, session_id)
         return {}
 
-    marker = marker_io.read(cfg, session_id, prompt_hash_value=current_ph)
+    if on_disk and on_disk.prompt_hash == current_ph:
+        marker = on_disk
+    else:
+        marker = marker_io.read(cfg, session_id, prompt_hash_value=current_ph)
     if marker is None:
         marker_io.prune_stale_markers(cfg, session_id, current_ph)
         return {}

@@ -105,6 +105,7 @@ class LLMAdapter:
             "No explanations."
         )
         if len(user) > MAX_CLAUDE_CLI_INPUT_CHARS:
+            log.warning("claude -p input truncated %d -> %d chars", len(user), MAX_CLAUDE_CLI_INPUT_CHARS)
             user = user[:MAX_CLAUDE_CLI_INPUT_CHARS]
         try:
             result = self._run(

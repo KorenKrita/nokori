@@ -7,6 +7,7 @@ from pathlib import Path
 
 from .constants import DEFAULT_GATE_MATCHER
 from .errors import ConfigError
+from .utils.ids import safe_session_id
 
 
 _TRUE = {"1", "true", "yes", "on"}
@@ -18,11 +19,8 @@ _CONFIG_FILE_NAME = "config.toml"
 def _load_toml(path: Path) -> dict:
     if not path.exists():
         return {}
-    try:
-        with open(path, "rb") as f:
-            return tomllib.load(f)
-    except tomllib.TOMLDecodeError:
-        raise
+    with open(path, "rb") as f:
+        return tomllib.load(f)
 
 
 # --- Config file → flat dict mapping ---
@@ -143,8 +141,6 @@ def _log_level_val(name: str, default: str, file_values: dict[str, str]) -> str:
     if raw is None:
         return default
     level = raw.strip().lower()
-    if level == "warn":
-        return "warn"
     if level not in _LOG_LEVELS:
         raise ConfigError(
             f"{name} must be one of debug, info, warn, warning, error (got {raw!r})"
@@ -290,7 +286,7 @@ class Config:
         return self.data_dir / "active_sessions"
 
     def _safe_session_id(self, session_id: str) -> str:
-        return "".join(c if c.isalnum() or c in "-_" else "_" for c in session_id)
+        return safe_session_id(session_id)
 
     def marker_dir(self, session_id: str) -> Path:
         """Per-session gate markers (one file per user prompt_hash)."""

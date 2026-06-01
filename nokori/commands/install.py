@@ -48,7 +48,7 @@ def _build_hook_entry(matcher: str, command: str, event_arg: str, timeout: int) 
 def _is_nokori(entry: dict) -> bool:
     for h in entry.get("hooks", []):
         cmd = h.get("command", "")
-        if NOKORI_MARKER in cmd or "nokori" in cmd:
+        if NOKORI_MARKER in cmd:
             return True
     return False
 

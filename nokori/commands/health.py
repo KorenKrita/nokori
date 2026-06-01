@@ -16,7 +16,7 @@ def _check_db(cfg: Config) -> tuple[str, str]:
     try:
         db = open_db(cfg.db_path)
         try:
-            v = db.schema_version()
+            db.schema_version()
         finally:
             db.close()
         return ("ok", "rules.db readable")

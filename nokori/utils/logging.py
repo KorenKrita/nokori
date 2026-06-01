@@ -65,7 +65,6 @@ def configure(logs_dir: Path, level: str = "warn") -> None:
                 "nokori.search.", "nokori.commands.", "nokori.db.",
                 "nokori.config.", "nokori.models.", "nokori.prefetch.",
             ),
-            negate_other=False,
         ))
         root.addHandler(pipeline_handler)
 
@@ -73,14 +72,12 @@ def configure(logs_dir: Path, level: str = "warn") -> None:
 
 
 class _NameStartsWith(logging.Filter):
-    def __init__(self, prefixes: tuple[str, ...], negate_other: bool = False):
+    def __init__(self, prefixes: tuple[str, ...]):
         super().__init__()
         self.prefixes = prefixes
-        self.negate_other = negate_other
 
     def filter(self, record: logging.LogRecord) -> bool:
-        match = any(record.name.startswith(p) for p in self.prefixes)
-        return match if not self.negate_other else not match
+        return any(record.name.startswith(p) for p in self.prefixes)
 
 
 def get_logger(name: str) -> logging.Logger:

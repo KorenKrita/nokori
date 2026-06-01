@@ -3,16 +3,13 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 from pathlib import Path
 
 from ..config import Config
 from ..db import dumps_json
+from ..utils.fs import atomic_write_json
+from ..utils.transcript import transcript_key
 from .extractor import Candidate
-
-
-def transcript_key(path: Path) -> str:
-    return str(path.expanduser().resolve())
 
 
 def _legacy_candidate_key(cand: Candidate) -> str:
@@ -41,13 +38,13 @@ def is_candidate_merged(cfg: Config, transcript: Path, cand: Candidate) -> bool:
     return bool(candidate_keys(cand) & merged)
 
 
-def record_candidate_merged(cfg: Config, transcript: Path, cand: Candidate) -> None:
-    merged = load_merged_keys(cfg, transcript)
+def record_candidate_merged(
+    cfg: Config, transcript: Path, cand: Candidate, known_keys: set[str] | None = None
+) -> None:
+    merged = set(known_keys) if known_keys is not None else load_merged_keys(cfg, transcript)
     merged |= set(candidate_keys(cand))
     path = _checkpoint_file(cfg, transcript)
-    tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps({"merged": sorted(merged)}), encoding="utf-8")
-    os.replace(tmp, path)
+    atomic_write_json(path, {"merged": sorted(merged)})
     try:
         path.chmod(0o600)
     except OSError:

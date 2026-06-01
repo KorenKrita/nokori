@@ -250,8 +250,3 @@ def embed_text(
     return [list(v) for v in vectors]
 
 
-def run_server(cfg: Config) -> int:
-    """Delegate to ``embedding_server`` (kept for backward-compatible imports)."""
-    from .embedding_server import run_server as _run_blocking_server
-
-    return _run_blocking_server(cfg)
