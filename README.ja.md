@@ -104,6 +104,8 @@ nokori logs          # hook / pipeline / async-extract ログ
 
 `nokori install` は上記 hook を `~/.claude/settings.json` に**マージ**して書き込み、既存の他プラグインは上書きしない。`settings.json` が破損している（不正 JSON）場合、install は**書き込みを拒否して終了**（`nokori health` の settings 検証と同じ）。
 
+登録される hook コマンドは `python -I -m nokori hook`（`-I` は隔離モード：`PYTHONPATH` とカレントディレクトリを無視し、リポジトリ直下の `nokori/` にパッケージが取られないようにする）。通常のインストール（`pip install nokori` または `pip install -e .`）を使い、hook 子プロセス向けに `PYTHONPATH` だけに頼らないでください。
+
 ```bash
 # 書き込み前に変更をプレビュー
 nokori install --dry-run
@@ -473,6 +475,7 @@ SessionStart が「前セッション transcript」を探す：
 - **Unmerge チェック**（最大90日に1回）：`status=merged` で `superseded_by` 先が削除または dormant/archived なら `dormant` に復帰；**candidate クリーンアップでアンカールール削除後**も即 orphan unmerge
 - **Session ファイルクリーンアップ**：`active_sessions/` で終了から60日超の registry ファイルを削除
 - **Hook coalesce クリーンアップ**：`hook_coalesce/` の 24 時間超の claim ファイルを削除（二重登録でメッセージが多いときの蓄積防止）
+- **Prompt ack クリーンアップ**：24 時間超の `prompt_submit_ack/` / `cursor_deferred/` を削除；`SessionEnd` でも当該 session の ack/deferred ディレクトリを削除
 - **Injection クリーンアップ**（スキャン間隔最大7日に1回）：**30日前**の `injections` 行を削除（dismiss は24h のみ参照、バッファ確保）
 
 手動トリガーも可能：

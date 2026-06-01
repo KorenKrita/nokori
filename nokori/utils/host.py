@@ -87,11 +87,6 @@ def detect_host_from_payload(payload: dict) -> Host:
     if os.environ.get("CURSOR_TRACE_ID") or os.environ.get("CURSOR_SESSION_ID"):
         return Host.CURSOR
 
-    if payload.get("conversation_id") and (
-        payload.get("cursor_version") or payload.get("composer_mode") is not None
-    ):
-        return Host.CURSOR
-
     cwd = payload.get("cwd")
     if cwd and payload.get("cursor_version"):
         host = detect_host_from_path(cwd)

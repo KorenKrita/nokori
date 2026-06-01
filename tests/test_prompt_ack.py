@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -205,3 +206,26 @@ def test_deferred_done_without_generation_id(cfg):
     assert prompt_ack.deferred_done(cfg, "sess", "", ph)
     safe_ph = cfg._safe_session_id(ph)
     assert (cfg.data_dir / "cursor_deferred" / "sess" / f"{safe_ph}.json").is_file()
+
+
+def test_cleanup_session_removes_ack_and_deferred(cfg):
+    ph = prompt_hash("hello")
+    prompt_ack.record(cfg, "sess-1", ph)
+    prompt_ack.mark_deferred_done(cfg, "sess-1", "gen", prompt_hash=ph)
+    assert prompt_ack.cleanup_session(cfg, "sess-1") >= 2
+    assert not prompt_ack.exists(cfg, "sess-1", ph)
+    assert not prompt_ack.deferred_done(cfg, "sess-1", "gen", ph)
+
+
+def test_prune_stale_drops_old_ack_files(cfg):
+    ph = prompt_hash("old")
+    prompt_ack.record(cfg, "sess-old", ph)
+    safe_sess = cfg._safe_session_id("sess-old")
+    path = cfg.data_dir / "prompt_submit_ack" / safe_sess / f"{ph}.json"
+    old = (datetime.now(timezone.utc) - timedelta(hours=48)).isoformat().replace("+00:00", "Z")
+    path.write_text(
+        json.dumps({"session_id": "sess-old", "prompt_hash": ph, "recorded_at": old}),
+        encoding="utf-8",
+    )
+    assert prompt_ack.prune_stale(cfg, max_age_hours=24) >= 1
+    assert not path.is_file()

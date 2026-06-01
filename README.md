@@ -104,6 +104,8 @@ nokori logs          # hook / pipeline / async-extract logs
 
 `nokori install` writes the hooks above into `~/.claude/settings.json`, **merging** with your existing plugins rather than overwriting them. If `settings.json` is corrupted (invalid JSON), install **refuses to write** and exits (same validation as `nokori health` for settings).
 
+Hook commands use `python -I -m nokori hook` (`-I` = isolated: ignores `PYTHONPATH` and the current directory so a repo-local `nokori/` folder cannot shadow the installed package). Use a normal install (`pip install nokori` or `pip install -e .`); do not rely on `PYTHONPATH` alone to load Nokori in hooks.
+
 ```bash
 # Preview changes before writing
 nokori install --dry-run
@@ -474,6 +476,7 @@ Maintenance runs automatically on `SessionStart` (interval checks):
 - **Unmerge check** (at most every 90 days): `status=merged` rules whose `superseded_by` target was deleted or is dormant/archived revert to `dormant`; **immediate orphan unmerge** after candidate cleanup deletes anchor rule
 - **Session file cleanup**: delete registry files in `active_sessions/` ended more than 60 days ago
 - **Hook coalesce cleanup**: delete `hook_coalesce/` claim files older than 24 hours (avoids buildup when many prompts run)
+- **Prompt ack cleanup**: delete `prompt_submit_ack/` and `cursor_deferred/` files older than 24 hours; `SessionEnd` also removes that session’s ack/deferred directory
 - **Injection cleanup** (scan interval at most every 7 days): delete `injections` rows **older than 30 days** (dismiss only checks 24h; buffer retained)
 
 Manual trigger:

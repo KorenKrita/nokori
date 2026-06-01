@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 from ..config import Config
+from ..gate import prompt_ack
 from ..extract import jobs as job_io
 from ..extract.lock import is_locked
 from ..extract.reader import stat as transcript_stat
@@ -58,6 +59,9 @@ def handle(payload: dict, cfg: Config, *, host: Host) -> dict:
 
     session_id = effective_session_id(payload)
     sessions.end(cfg, session_id)
+    ack_removed = prompt_ack.cleanup_session(cfg, session_id)
+    if ack_removed:
+        log.info("cleaned prompt ack/deferred session=%s files=%d", session_id, ack_removed)
 
     transcript = resolve_transcript_path(payload)
     if transcript is None:

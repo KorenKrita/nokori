@@ -104,6 +104,8 @@ nokori logs          # hook / pipeline / async-extract 日誌
 
 `nokori install` 會把上述 hook 寫進 `~/.claude/settings.json`，**合併**進去，不會蓋掉你已有的別的插件。若 `settings.json` 已損壞（非合法 JSON），install **拒絕寫入**並退出（與 `nokori health` 對 settings 的校驗一致）。
 
+註冊的 hook 命令為 `python -I -m nokori hook`（`-I` 隔離模式：忽略 `PYTHONPATH` 與當前目錄，避免在倉庫根目錄跑 hook 時被本地 `nokori/` 目錄搶包）。請用常規安裝（`pip install nokori` 或 `pip install -e .`），不要只靠 `PYTHONPATH` 讓 hook 子進程找到 Nokori。
+
 ```bash
 # 預覽將要寫入的變更
 nokori install --dry-run
@@ -473,6 +475,7 @@ SessionStart 找「上一場 transcript」：
 - **Unmerge 檢查**（最多每 90 天）：`status=merged` 的規則若 `superseded_by` 指向的規則已刪除或 dormant/archived，則恢復爲 `dormant`；**candidate 清理刪除錨點規則後**也會立即做一次 orphan unmerge
 - **Session 文件清理**：刪除 `active_sessions/` 裏已結束超過 60 天的 registry 文件
 - **Hook 合併清理**：刪除 `hook_coalesce/` 裏超過 24 小時的 claim 文件（雙端註冊、訊息很多時避免堆積）
+- **Prompt ack 清理**：刪除超過 24 小時的 `prompt_submit_ack/`、`cursor_deferred/` 文件；`SessionEnd` 也會清掉該 session 的 ack/deferred 目錄
 - **Injection 清理**（掃描間隔最多每 7 天）：刪除 **30 天前** 的 `injections` 行（dismiss 僅查 24h，留緩衝）
 
 也可手動觸發：
