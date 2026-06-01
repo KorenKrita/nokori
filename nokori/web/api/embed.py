@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import time
+
 from fastapi import APIRouter, HTTPException
 
 from nokori.search import embed_ipc
@@ -12,12 +14,19 @@ router = APIRouter()
 def embed_status():
     cfg = get_config()
     st = embed_ipc.server_status(cfg)
+    from nokori.search.embedding import (
+        local_embed_package_available,
+        local_model_cached,
+    )
+
     return {
         "data": {
             "running": st["running"],
             "pid": st["pid"],
             "idle_seconds": st["idle_seconds"],
             "socket": st.get("socket"),
+            "package_installed": local_embed_package_available(),
+            "model_cached": local_model_cached(cfg),
         }
     }
 
@@ -29,15 +38,29 @@ def embed_start():
     if st["running"]:
         return {"data": {"action": "already_running", "pid": st["pid"]}}
 
-    from nokori.search.embedding import local_embed_capable
-    if not local_embed_capable(cfg):
-        raise HTTPException(400, detail="local embed not available (missing weights or package)")
+    from nokori.search.embedding import (
+        local_embed_package_available,
+        local_model_cached,
+        prefetch_local_model,
+    )
+
+    if not local_embed_package_available():
+        raise HTTPException(
+            400,
+            detail="sentence-transformers not installed. Run: pip install nokori[local-embed]",
+        )
+
+    if not local_model_cached(cfg):
+        try:
+            prefetch_local_model(cfg)
+        except Exception as e:
+            raise HTTPException(500, detail=f"model download failed: {e}")
 
     from nokori.search.embed_ipc import kickstart_server
+
     kickstart_server(cfg)
 
-    import time
-    for _ in range(10):
+    for _ in range(20):
         time.sleep(0.5)
         st = embed_ipc.server_status(cfg)
         if st["running"]:
@@ -54,5 +77,6 @@ def embed_stop():
         return {"data": {"action": "already_stopped"}}
 
     from nokori.search.embed_ipc import stop_server
+
     stop_server(cfg)
     return {"data": {"action": "stopped"}}
