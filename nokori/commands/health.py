@@ -265,7 +265,7 @@ def _check_hook_host_detection() -> tuple[str, str]:
         return ("fail", f"preToolUse hook_event_name expected cursor, got {minimal}")
 
     conv_only = detect_host_from_payload({"conversation_id": "conv-x"})
-    if conv_only != Host.UNKNOWN:
+    if conv_only == Host.CURSOR:
         return ("fail", "conversation_id alone must not imply cursor")
 
     return ("ok", "host detection")

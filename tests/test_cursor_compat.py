@@ -152,11 +152,13 @@ def test_host_transcript_beats_conversation_id():
     )
 
 
-def test_conversation_id_alone_is_not_cursor():
+def test_conversation_id_alone_is_not_cursor(monkeypatch):
+    monkeypatch.delenv("CLAUDE_CODE_ENTRYPOINT", raising=False)
     assert detect_host_from_payload({"conversation_id": "conv-only"}) == Host.UNKNOWN
 
 
-def test_claude_pascalcase_hook_event_not_cursor():
+def test_claude_pascalcase_hook_event_not_cursor(monkeypatch):
+    monkeypatch.delenv("CLAUDE_CODE_ENTRYPOINT", raising=False)
     assert (
         detect_host_from_payload(
             {
