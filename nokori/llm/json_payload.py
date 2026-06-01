@@ -8,8 +8,9 @@ from typing import Any
 # Reasoning / thinking wrappers (models often emit these before the JSON answer).
 _THINKING_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"<think>.*?</think>", re.DOTALL | re.IGNORECASE),
-    re.compile(r".*?", re.DOTALL | re.IGNORECASE),
+    re.compile(r"`[\s\S]*?`", re.DOTALL),
     re.compile(r"<thinking>.*?</thinking>", re.DOTALL | re.IGNORECASE),
+    re.compile(r"<reasoning>.*?</reasoning>", re.DOTALL | re.IGNORECASE),
 )
 
 _FENCE_BLOCK_RE = re.compile(

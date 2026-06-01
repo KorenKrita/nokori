@@ -13,6 +13,10 @@ _VALID_SOURCE_TYPES = ("correction", "preference", "solution", "anti_pattern")
 _VALID_CONFIDENCE = ("high", "medium")
 
 
+def _has_cjk(text: str) -> bool:
+    return any("\u4e00" <= ch <= "\u9fff" for ch in text)
+
+
 @dataclass
 class Candidate:
     trigger: str
@@ -76,10 +80,14 @@ def _parse_candidates(raw: str) -> tuple[list[Candidate], bool]:
 
 
 def _coerce(item: dict) -> Candidate:
+    if "trigger" not in item or "action" not in item:
+        raise ValueError("missing trigger or action keys")
     trigger = str(item["trigger"]).strip()
     action = str(item["action"]).strip()
     if not trigger or not action:
         raise ValueError("missing trigger or action")
+    if _has_cjk(trigger):
+        raise ValueError("trigger must be English (CJK in trigger)")
     source_type = str(item.get("source_type") or "correction").strip()
     if source_type not in _VALID_SOURCE_TYPES:
         raise ValueError(f"bad source_type {source_type!r}")

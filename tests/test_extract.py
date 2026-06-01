@@ -55,6 +55,26 @@ def test_extractor_parses_single_object():
     assert ok and len(cands) == 1
 
 
+def test_extractor_skips_cjk_trigger():
+    response = json.dumps([
+        {
+            "trigger": "在学城文档中创建锚点",
+            "action": "use block anchors",
+            "source_type": "correction",
+            "confidence": "high",
+        },
+        {
+            "trigger": "Creating anchor links in wiki documents",
+            "action": "use block-level anchors",
+            "source_type": "correction",
+            "confidence": "high",
+        },
+    ])
+    cands, ok = extract("nonempty", FakeLLM(response))
+    assert ok and len(cands) == 1
+    assert cands[0].trigger.startswith("Creating")
+
+
 def test_extractor_handles_fenced_json():
     response = "```json\n[]\n```"
     cands, ok = extract("nonempty", FakeLLM(response))
