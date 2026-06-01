@@ -7,6 +7,7 @@ from nokori.config import Config
 from nokori.db import open_db
 from nokori.gate import marker as marker_io
 from nokori.gate.marker import MarkerRule, prompt_hash
+from nokori.utils.host import Host
 
 
 def _utcnow_iso() -> str:
@@ -42,7 +43,7 @@ def test_pre_tool_use_fail_open_when_marker_only_no_injection(monkeypatch, tmp_p
     )
     from nokori.hooks.pre_tool_use import handle
 
-    out = handle({"session_id": sess, "tool_name": "Bash"}, cfg)
+    out = handle({"session_id": sess, "tool_name": "Bash"}, cfg, host=Host.CLAUDE)
     hso = out.get("hookSpecificOutput") or {}
     assert hso.get("permissionDecision") != "deny"
     assert not cfg.marker_path(sess, ph).exists()
@@ -83,7 +84,7 @@ def test_pre_tool_use_skips_block_on_stale_prompt_hash(monkeypatch, tmp_path):
             )
         from nokori.hooks.pre_tool_use import handle
 
-        out = handle({"session_id": sess, "tool_name": "Bash"}, cfg)
+        out = handle({"session_id": sess, "tool_name": "Bash"}, cfg, host=Host.CLAUDE)
         hso = out.get("hookSpecificOutput") or {}
         assert hso.get("permissionDecision") != "deny"
         assert not cfg.marker_path(sess, ph_old).exists()
@@ -112,6 +113,7 @@ def test_per_prompt_hash_markers_do_not_overwrite(monkeypatch, tmp_path):
     out = handle(
         {"session_id": sess, "tool_name": "Bash", "prompt": "prompt A about deploy"},
         cfg,
+        host=Host.CLAUDE,
     )
     assert (out.get("hookSpecificOutput") or {}).get("permissionDecision") == "deny"
     assert not cfg.marker_path(sess, ph_a).exists()

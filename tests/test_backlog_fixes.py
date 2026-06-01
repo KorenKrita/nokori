@@ -149,6 +149,8 @@ def test_no_gate_marker_when_injection_empty(monkeypatch, tmp_path):
     monkeypatch.setattr(pinject, "retrieve_formal_and_shadow", fake_retrieve)
     monkeypatch.setattr(pinject, "format_injection", lambda *_a, **_k: ("", []))
 
-    out = handle({"session_id": "sess-empty", "prompt": "hello"}, cfg)
+    from nokori.utils.host import Host
+
+    out = handle({"session_id": "sess-empty", "prompt": "hello"}, cfg, host=Host.CLAUDE)
     assert out == {"continue": True}
     assert marker_io.read_latest_marker(cfg, "sess-empty") is None

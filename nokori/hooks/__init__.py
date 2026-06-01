@@ -4,6 +4,7 @@ import json
 import sys
 
 from ..config import Config
+from ..utils.host import detect_host_from_payload
 from ..utils.hook_diag import log_hook_enter, log_hook_exit
 from ..utils.logging import get_logger
 from .coalesce import claim_key_for_event, duplicate_passthrough, try_claim
@@ -20,7 +21,10 @@ def dispatch(event: str, cfg: Config) -> int:
         _log.warning("hook stdin JSON invalid; using empty payload")
         payload = {}
 
-    host = log_hook_enter(_log, cli_event=event, payload=payload, raw_stdin_len=len(raw))
+    host = detect_host_from_payload(payload)
+    log_hook_enter(
+        _log, cli_event=event, payload=payload, raw_stdin_len=len(raw), host=host,
+    )
 
     claim_key = claim_key_for_event(event, payload)
     if claim_key and not try_claim(cfg, claim_key, cli_event=event):

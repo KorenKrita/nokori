@@ -1,6 +1,7 @@
 from nokori.config import Config
 from nokori.db import open_db
 from nokori.hooks.user_prompt_submit import handle
+from nokori.utils.host import Host
 from nokori.utils.project import resolve_project_id
 from nokori.utils.time import now_iso
 
@@ -35,7 +36,7 @@ def test_shadow_pool_noop_when_promotion_disabled(monkeypatch, tmp_path):
             "session_id": "s-no-promo",
             "prompt": "git push force remote",
             "cwd": str(proj),
-        }, cfg)
+        }, cfg, host=Host.CLAUDE)
         row = db.fetchone(
             "SELECT shadow_hit_count FROM rules WHERE id = 'rule-x'"
         )
@@ -70,7 +71,7 @@ def test_handle_runs_shadow_when_formal_pool_empty(monkeypatch, tmp_path):
             "prompt": "git push force remote branch",
             "cwd": str(proj_a),
         }
-        result = handle(payload, cfg)
+        result = handle(payload, cfg, host=Host.CLAUDE)
         assert result == {"continue": True}
         row = db.fetchone(
             "SELECT shadow_hit_count FROM rules WHERE id = 'rule-other'"

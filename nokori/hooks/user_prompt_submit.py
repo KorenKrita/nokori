@@ -18,7 +18,7 @@ from ..gate.marker import MarkerRule, prompt_hash
 from ..utils.prompt_text import normalize_prompt_for_hash
 from ..utils import sessions
 from ..utils.hook_response import user_prompt_submit_response
-from ..utils.host import Host, detect_host_from_payload, effective_session_id
+from ..utils.host import Host, effective_session_id
 from ..utils.logging import get_logger
 from ..utils.time import now_iso
 from .prompt_inject import RetrieveFailed, inject_for_prompt
@@ -87,9 +87,7 @@ def _update_gate_marker(
         marker_io.delete_session(cfg, session_id)
 
 
-def handle(payload: dict, cfg: Config, *, host: Host | None = None) -> dict:
-    if host is None:
-        host = detect_host_from_payload(payload)
+def handle(payload: dict, cfg: Config, *, host: Host) -> dict:
     session_id = effective_session_id(payload)
     prompt = payload.get("prompt") or ""
     normalized_prompt = normalize_prompt_for_hash(prompt)

@@ -11,12 +11,7 @@ from .cursor_deferred import maybe_deferred_pre_tool_use
 from ..utils.hook_diag import log_diag
 from ..utils.hook_response import pre_tool_deny_response
 from ..gate.marker import prompt_hash
-from ..utils.host import (
-    Host,
-    detect_host_from_payload,
-    effective_gate_matcher,
-    effective_session_id,
-)
+from ..utils.host import Host, effective_gate_matcher, effective_session_id
 from ..utils.logging import get_logger
 from ..utils.prompt_text import normalize_prompt_for_hash
 
@@ -135,9 +130,7 @@ def _run_gate(payload: dict, cfg: Config, session_id: str, host) -> dict:
     return pre_tool_deny_response(host, reason)
 
 
-def handle(payload: dict, cfg: Config, *, host: Host | None = None) -> dict:
-    if host is None:
-        host = detect_host_from_payload(payload)
+def handle(payload: dict, cfg: Config, *, host: Host) -> dict:
     session_id = effective_session_id(payload)
     tool_name = payload.get("tool_name") or payload.get("tool")
 

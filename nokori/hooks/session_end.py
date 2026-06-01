@@ -52,7 +52,7 @@ def _spawn_async_extract(cfg: Config) -> None:
                 pass
 
 
-def handle(payload: dict, cfg: Config, *, host: Host | None = None) -> dict:
+def handle(payload: dict, cfg: Config, *, host: Host) -> dict:
     if cfg.disabled:
         return {"continue": True}
 

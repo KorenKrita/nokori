@@ -4,6 +4,7 @@ from unittest.mock import patch
 from nokori.config import Config
 from nokori.hooks import session_end
 from nokori.utils import sessions
+from nokori.utils.host import Host
 
 
 def test_async_extract_deferred_when_other_sessions_active(monkeypatch, tmp_path):
@@ -27,11 +28,11 @@ def test_async_extract_deferred_when_other_sessions_active(monkeypatch, tmp_path
         "transcript_path": str(transcript),
     }
     with patch.object(session_end, "_spawn_async_extract", fake_spawn):
-        session_end.handle(payload, cfg)
+        session_end.handle(payload, cfg, host=Host.CLAUDE)
 
     assert spawned == []
 
     sessions.end(cfg, "other-session")
     with patch.object(session_end, "_spawn_async_extract", fake_spawn):
-        session_end.handle(payload, cfg)
+        session_end.handle(payload, cfg, host=Host.CLAUDE)
     assert spawned == [1]

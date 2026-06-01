@@ -95,8 +95,8 @@ def log_hook_enter(
     cli_event: str,
     payload: dict,
     raw_stdin_len: int,
+    host: Host,
 ) -> Host:
-    host = detect_host_from_payload(payload)
     if hook_diag_enabled():
         tools = _tool_fields(payload)
         log.debug(
