@@ -166,6 +166,18 @@ def _triage_one(
     return None
 
 
+def _cache_pool_counts(cache: dict[str, dict], pool: list[Path]) -> dict[int, int]:
+    """Count how many pool entries are classified into each bucket in cache."""
+    counts: dict[int, int] = {0: 0, 1: 0, 2: 0}
+    for p in pool:
+        entry = cache.get(str(p))
+        if entry is None:
+            continue
+        b = min(2, max(0, entry.get("expected_rules", 0)))
+        counts[b] += 1
+    return counts
+
+
 def _run_triage(
     pool: list[Path],
     *,
@@ -178,18 +190,31 @@ def _run_triage(
     max_workers: int,
     rng: random.Random,
 ) -> tuple[dict[str, dict], set[str]]:
-    """Triage just enough NEW transcripts to fill buckets. Returns (cache, newly_classified).
+    """Triage transcripts. Returns (cache, newly_classified).
 
-    Priority: classify uncached transcripts first. Only fall back to cached
-    entries for bucket-filling when the fresh pool is exhausted.
+    Skip triage entirely if cache already has >= 10x target_samples classified
+    in the current pool. Otherwise classify uncached transcripts in batches
+    until buckets are full enough.
     """
     cache = _load_triage_cache()
+    newly_classified: set[str] = set()
+
+    cached_in_pool = sum(1 for p in pool if str(p) in cache)
+    skip_threshold = target_samples * 10
+
+    if cached_in_pool >= skip_threshold:
+        counts = _cache_pool_counts(cache, pool)
+        _log(
+            f"  triage: cache has {cached_in_pool} entries (>= {skip_threshold}), "
+            f"skipping LLM calls. buckets: 0={counts[0]} 1={counts[1]} 2+={counts[2]}"
+        )
+        return cache, set()
+
     need_per_bucket = {
         0: max(2, round(target_samples * 0.2)) + 2,
         1: max(2, round(target_samples * 0.6)) + 2,
         2: max(2, round(target_samples * 0.2)) + 2,
     }
-    newly_classified: set[str] = set()
 
     def _fresh_bucket_counts() -> dict[int, int]:
         counts: dict[int, int] = {0: 0, 1: 0, 2: 0}
@@ -203,13 +228,13 @@ def _run_triage(
 
     uncached = [p for p in pool if str(p) not in cache]
     if not uncached:
-        _log(f"  triage: no uncached transcripts (pool all cached), using cache")
+        _log(f"  triage: no uncached transcripts, using cache")
         return cache, set()
 
     rng.shuffle(uncached)
     batch_size = min(30, len(uncached))
 
-    _log(f"  triage: {len(uncached)} uncached transcripts to classify (target: fill {target_samples} balanced)")
+    _log(f"  triage: {len(uncached)} uncached, classifying until buckets full ...")
 
     while uncached:
         batch = uncached[:batch_size]
@@ -239,14 +264,33 @@ def _run_triage(
 
         _save_triage_cache(cache)
         counts = _fresh_bucket_counts()
-        _log(f"    fresh classified {len(newly_classified)} → fresh buckets: 0={counts[0]} 1={counts[1]} 2+={counts[2]}")
+        _log(f"    fresh {len(newly_classified)} → buckets: 0={counts[0]} 1={counts[1]} 2+={counts[2]}")
 
-        # Stop once fresh classifications can fill all buckets
         if all(counts[b] >= need_per_bucket[b] for b in (0, 1, 2)):
             break
 
     _log(f"  triage done: {len(newly_classified)} new classifications")
     return cache, newly_classified
+
+
+def _compute_bucket_targets(n: int) -> tuple[int, int, int]:
+    """Compute (target_0, target_1, target_2) with min guarantees.
+
+    n=1: (0, 1, 0)  — at least 1 extractable
+    n=2: (0, 1, 1)  — at least 1 one-rule + 1 two-rule
+    n=3: (1, 1, 1)  — at least 1 of each
+    n>=4: 20% / 60% / 20% with each bucket >= 1
+    """
+    if n <= 1:
+        return (0, 1, 0)
+    if n == 2:
+        return (0, 1, 1)
+    if n == 3:
+        return (1, 1, 1)
+    target_0 = max(1, round(n * 0.2))
+    target_2 = max(1, round(n * 0.2))
+    target_1 = max(1, n - target_0 - target_2)
+    return (target_0, target_1, target_2)
 
 
 def _pick_balanced_samples(
@@ -256,7 +300,7 @@ def _pick_balanced_samples(
     rng: random.Random,
     newly_classified: set[str],
 ) -> list[Path]:
-    """Pick samples with target distribution: 20% zero, 60% one, 20% two+.
+    """Pick samples with min guarantees and 20/60/20 ratio for n>=4.
 
     Prefer newly classified transcripts (from this run) over cached ones.
     Only fall back to cached entries when fresh ones can't fill the buckets.
@@ -275,11 +319,11 @@ def _pick_balanced_samples(
         else:
             cached_buckets[bucket].append(p)
 
-    target_0 = max(1, round(n * 0.2))
-    target_1 = max(1, round(n * 0.6))
-    target_2 = max(1, n - target_0 - target_1)
+    target_0, target_1, target_2 = _compute_bucket_targets(n)
 
     def _pick_from(fresh: list[Path], cached: list[Path], count: int) -> list[Path]:
+        if count <= 0:
+            return []
         rng.shuffle(fresh)
         picked = fresh[:count]
         if len(picked) < count:
