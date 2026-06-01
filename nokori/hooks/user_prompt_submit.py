@@ -94,8 +94,6 @@ def handle(payload: dict, cfg: Config, *, host: Host | None = None) -> dict:
     prompt = payload.get("prompt") or ""
     normalized_prompt = normalize_prompt_for_hash(prompt)
     ph_for_ack = prompt_hash(normalized_prompt) if normalized_prompt else ""
-    if ph_for_ack:
-        prompt_ack.record(cfg, session_id, ph_for_ack)
 
     project_id = sessions.resolve_project_id_for_session(
         cfg, session_id, payload.get("cwd"),
@@ -147,6 +145,9 @@ def handle(payload: dict, cfg: Config, *, host: Host | None = None) -> dict:
             )
         elif cfg.gate_enabled:
             marker_io.delete_session(cfg, session_id)
+
+        if ph_for_ack:
+            prompt_ack.record(cfg, session_id, ph_for_ack)
 
         log.info(
             "injected hot=%d warm=%d shadow_hot=%d shadow_warm=%d session=%s",

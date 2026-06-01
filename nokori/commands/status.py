@@ -11,7 +11,12 @@ from ..lifecycle.promotion import (
 )
 from ..extract import jobs as job_io
 from ..search import embed_ipc
-from ..commands.install import describe_claude_hooks, describe_cursor_hooks
+from ..commands.install import (
+    describe_claude_hooks,
+    describe_cursor_hooks,
+    describe_dual_hook_registration,
+)
+from ..hooks.coalesce import coalesce_enabled
 from ..utils import sessions
 
 
@@ -88,6 +93,11 @@ def run(_args: argparse.Namespace, cfg: Config) -> int:
         describe_cursor_hooks(),
         disable_hint="use: nokori install --uninstall --cursor",
     )
+    dual = describe_dual_hook_registration()
+    print(f"hooks.duplicate_risk  {_yn(bool(dual.get('both_installed')))}")
+    print(f"hooks.coalesce        {'on' if coalesce_enabled() else 'off'}")
+    if dual.get("note"):
+        print(f"hooks.duplicate_note  {dual['note']}")
     print(f"rules.total    {total}")
     print(f"rules.active   {by_status.get('active', 0)}")
     print(f"rules.dormant  {by_status.get('dormant', 0)}")

@@ -251,6 +251,23 @@ def describe_claude_hooks() -> dict[str, object]:
     }
 
 
+def describe_dual_hook_registration() -> dict[str, object]:
+    """True when both Claude settings and native Cursor hooks register nokori."""
+    claude = describe_claude_hooks()
+    cursor = describe_cursor_hooks()
+    both = bool(claude.get("installed")) and bool(cursor.get("installed"))
+    return {
+        "both_installed": both,
+        "note": (
+            "Both ~/.claude/settings.json and ~/.cursor/hooks.json register "
+            "nokori; hook coalesce suppresses duplicate work at runtime. "
+            "Prefer one path: Claude import OR nokori install --cursor."
+            if both
+            else ""
+        ),
+    }
+
+
 def describe_cursor_hooks() -> dict[str, object]:
     """Installed state for ~/.cursor/hooks.json (no --disable; use uninstall)."""
     path = _cursor_hooks_path()

@@ -9,6 +9,11 @@ from .logging import get_logger
 log = get_logger("nokori.utils.transcript")
 
 
+def transcript_key(path: Path) -> str:
+    """Canonical key for a transcript path (extract jobs, coalesce claims)."""
+    return str(path.expanduser().resolve())
+
+
 def _allowed_roots() -> list[Path]:
     roots: list[Path] = [
         Path.home() / ".claude",

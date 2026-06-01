@@ -271,6 +271,19 @@ def _check_hook_host_detection() -> tuple[str, str]:
     return ("ok", "host detection")
 
 
+def _check_dual_hook_registration() -> tuple[str, str]:
+    from .install import describe_dual_hook_registration
+
+    dual = describe_dual_hook_registration()
+    if dual.get("both_installed"):
+        return (
+            "warn",
+            "claude settings + cursor hooks.json both register nokori "
+            "(runtime coalesce active; prefer one path)",
+        )
+    return ("ok", "single or no hook registration")
+
+
 def _check_install_targets(cfg: Config) -> tuple[str, str]:
     from ..install_targets import format_platforms_label, read_platforms, targets_path
 
@@ -304,6 +317,7 @@ def run(_args: argparse.Namespace, cfg: Config) -> int:
     if PLATFORM_CURSOR in platforms:
         rows.append(("hooks.cursor", *_check_cursor_hooks_registered()))
         rows.append(("hooks.host", *_check_hook_host_detection()))
+    rows.append(("hooks.duplicate", *_check_dual_hook_registration()))
     rows.extend([
         ("llm", *_check_llm_endpoint(cfg)),
         ("embed", *_check_embed(cfg, rule_count)),

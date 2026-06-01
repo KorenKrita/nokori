@@ -4,9 +4,9 @@ import json
 import sys
 
 from ..config import Config
-from ..utils.host import Host
 from ..utils.hook_diag import log_hook_enter, log_hook_exit
 from ..utils.logging import get_logger
+from .coalesce import claim_key_for_event, duplicate_passthrough, try_claim
 
 _log = get_logger("nokori.hooks")
 
@@ -21,6 +21,13 @@ def dispatch(event: str, cfg: Config) -> int:
         payload = {}
 
     host = log_hook_enter(_log, cli_event=event, payload=payload, raw_stdin_len=len(raw))
+
+    claim_key = claim_key_for_event(event, payload)
+    if claim_key and not try_claim(cfg, claim_key, cli_event=event):
+        response = duplicate_passthrough(event, host)
+        log_hook_exit(_log, cli_event=event, host=host, response=response)
+        print(json.dumps(response, ensure_ascii=False))
+        return 0
 
     try:
         if event == "session-start":
