@@ -170,7 +170,7 @@ mode = "manual"
 
 [embed]
 # 强制启用 embedding（即使规则数 < 20）；一般保持 false，交给「>=20 条 + 远程或 local-embed」自动判断
-# 本地权重：pip install nokori[local-embed] 或 nokori install / nokori embed prefetch → ~/.nokori/models/
+# 本地权重：pip install nokori[local-embed]（需 sentence-transformers>=3.0）或 nokori install / nokori embed prefetch → ~/.nokori/models/
 # 类型：布尔
 # 默认：false
 # 说明：未显式开启时，库内 active+dormant 规则数 >= 20 且（远程 embed 或 local-embed）会自动启用
@@ -179,7 +179,7 @@ enabled = false
 
 # OpenAI-compatible Embeddings 根 URL（POST {base_url}/embeddings）
 # 类型：字符串或省略
-# 默认：未配置 → 若已装 local-embed 且规则 >= 20，用本地 paraphrase-multilingual-MiniLM-L12-v2
+# 默认：未配置 → 若已装 local-embed 且规则 >= 20，用本地 ibm-granite/granite-embedding-97m-multilingual-r2
 # 环境变量：NOKORI_EMBED_BASE_URL
 # base_url = "http://localhost:11434/v1"
 
@@ -202,17 +202,20 @@ enabled = false
 # 环境变量：NOKORI_EMBED_DIMENSIONS
 dimensions = 0
 
-# 单条规则文本分块大小（字符）
+# 单条规则 / query 分块大小（字符）
 # 类型：整数，>= 16
-# 默认：512
-# 环境变量：NOKORI_EMBED_CHUNK_SIZE
-chunk_size = 512
+# 默认：4000（远程）；本地 Granite 在未显式设置本项时用 24576
+# 环境变量：NOKORI_EMBED_CHUNK_SIZE（空字符串视为未设置）
+# chunk_size = 4000
 
-# 每条规则最多保留的分块数（取前 N 块向量，检索取 max cosine）
+# 每条规则最多保留的分块数（检索时对多块取向量 max cosine）
 # 类型：整数，>= 1
-# 默认：3
-# 环境变量：NOKORI_EMBED_CHUNK_COUNT
-chunk_count = 3
+# 默认：2（远程）；本地 Granite 在未显式设置本项时用 1（整规则一向量）
+# 环境变量：NOKORI_EMBED_CHUNK_COUNT（空字符串视为未设置）
+# chunk_count = 2
+#
+# 本地要「整段单向量」：两项都不要写（或都不要设 env）；只写 chunk_size 不会自动变成 count=1。
+# 远程 API 若需更保守：同时设置 chunk_size = 512，chunk_count = 3
 
 # UserPromptSubmit / 影子池 走远程 embedding 时的 HTTP 超时（秒）
 # hook 路径不加载本地 sentence-transformers，避免每个 hook 子进程冷启动模型
@@ -286,8 +289,8 @@ chunk_count = 3
 # | NOKORI_EMBED_MODEL | — | Embedding 模型 |
 # | NOKORI_EMBED_API_KEY | — | Embedding Key |
 # | NOKORI_EMBED_DIMENSIONS | 0 | 0=不传 dimensions |
-# | NOKORI_EMBED_CHUNK_SIZE | 512 | 分块字符数 |
-# | NOKORI_EMBED_CHUNK_COUNT | 3 | 每规则最大块数 |
+# | NOKORI_EMBED_CHUNK_SIZE | 4000 | 分块字符数 |
+# | NOKORI_EMBED_CHUNK_COUNT | 2 | 每规则最大块数 |
 #
 # -----------------------------------------------------------------------------
 # 仅环境变量、不在 config.toml 映射的项

@@ -40,12 +40,11 @@ def test_hook_diag_host_cursor_path(monkeypatch):
 
     log.addHandler(H())
     log.setLevel(logging.DEBUG)
-    host = log_hook_enter(
+    log_hook_enter(
         log,
         cli_event="pre-tool-use",
         payload={"transcript_path": "/Users/x/.cursor/projects/p/t.jsonl", "tool_name": "Shell"},
         raw_stdin_len=100,
         host=Host.CURSOR,
     )
-    assert host is Host.CURSOR
     assert records and "tool_name=Shell" in records[0]

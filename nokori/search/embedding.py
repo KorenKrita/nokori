@@ -8,6 +8,9 @@ import urllib.error
 import urllib.request
 from collections.abc import Sequence
 from pathlib import Path
+from typing import Literal
+
+EmbedKind = Literal["query", "document"]
 
 from ..config import Config
 from ..db import Db
@@ -42,6 +45,17 @@ def _cosine(a: Sequence[float], b: Sequence[float]) -> float:
     if na == 0 or nb == 0:
         return 0.0
     return dot / (na * nb)
+
+
+def _cosine_with_norm(a_norm: float, a: Sequence[float], b: Sequence[float]) -> float:
+    """Cosine similarity when caller already knows ||a||."""
+    if a_norm == 0 or not b:
+        return 0.0
+    dot = sum(x * y for x, y in zip(a, b))
+    nb = sum(y * y for y in b) ** 0.5
+    if nb == 0:
+        return 0.0
+    return dot / (a_norm * nb)
 
 
 def _chunk_text(text: str, chunk_size: int, chunk_count: int) -> list[str]:
@@ -199,21 +213,59 @@ def _search_impl(
             continue
         by_rule.setdefault(row["rule_id"], []).append(vec)
 
+    qnorm = sum(x * x for x in qvec) ** 0.5
     results: list[ScoredResult] = []
     for rule in rules:
         embeddings = by_rule.get(rule.id) or []
         if not embeddings:
             continue
-        best = max(_cosine(qvec, emb) for emb in embeddings)
+        best = max(_cosine_with_norm(qnorm, qvec, emb) for emb in embeddings)
         results.append(ScoredResult(rule=rule, cosine=best))
     results.sort(key=lambda r: r.cosine or 0.0, reverse=True)
     return results[:top_k]
 
 
-LOCAL_MODEL_NAME = "paraphrase-multilingual-MiniLM-L12-v2"
+# IBM Granite R2: 97M params, 384-dim, bi-encoder retrieval (query vs document).
+# Requires sentence-transformers>=3.0 (encode_query / encode_document).
+LOCAL_MODEL_HF_ID = "ibm-granite/granite-embedding-97m-multilingual-r2"
+LOCAL_MODEL_NAME = LOCAL_MODEL_HF_ID
 LOCAL_DIMENSIONS = 384
 
+# Local Granite path: one vector per rule/query unless user sets [embed] chunk_* / env.
+# 24576 chars covers schema max (trigger 16KiB + action 8KiB + metadata).
+LOCAL_EMBED_CHUNK_SIZE = 24_576
+LOCAL_EMBED_CHUNK_COUNT = 1
+
 _LOCAL_WEIGHT_NAMES = ("model.safetensors", "pytorch_model.bin", "onnx/model.onnx")
+
+
+def embed_chunk_params(cfg: Config, *, local: bool) -> tuple[int, int]:
+    """Chunk size/count for embedding.
+
+    Remote: always ``cfg`` values (defaults 4000×2).
+    Local: per-field — unset项用 Granite 默认 (24576×1)；只配一项时另一项仍走本地默认。
+    """
+    if not local:
+        return cfg.embed_chunk_size, cfg.embed_chunk_count
+    size = (
+        cfg.embed_chunk_size
+        if cfg.embed_chunk_size_configured
+        else LOCAL_EMBED_CHUNK_SIZE
+    )
+    count = (
+        cfg.embed_chunk_count
+        if cfg.embed_chunk_count_configured
+        else LOCAL_EMBED_CHUNK_COUNT
+    )
+    return size, count
+
+
+
+def local_model_hub_dir(model_id: str = LOCAL_MODEL_HF_ID) -> str:
+    """HuggingFace hub cache folder name under ``data_dir/models/``."""
+    if "/" in model_id:
+        return "models--" + model_id.replace("/", "--")
+    return f"models--sentence-transformers--{model_id}"
 
 
 def remote_embed_configured(cfg: Config) -> bool:
@@ -232,7 +284,7 @@ def local_model_cache_dir(cfg: Config) -> Path:
 def local_model_cached(cfg: Config) -> bool:
     """True when HuggingFace cache under data_dir/models has loadable weights."""
     cache = local_model_cache_dir(cfg)
-    hub = cache / f"models--sentence-transformers--{LOCAL_MODEL_NAME}"
+    hub = cache / local_model_hub_dir(LOCAL_MODEL_HF_ID)
     snapshots = hub / "snapshots"
     if not snapshots.is_dir():
         return False
@@ -271,7 +323,7 @@ def prefetch_local_model(cfg: Config) -> str:
     """Download/load local model weights into data_dir/models. Requires local-embed extra."""
     if not local_embed_package_available():
         raise EmbeddingError(
-            "sentence-transformers not installed; use: pip install -e '.[local-embed]'"
+            "sentence-transformers>=3.0 not installed; use: pip install -e '.[local-embed]'"
         )
     cfg.ensure_dirs()
     client = LocalEmbeddingClient(cfg)
@@ -288,13 +340,27 @@ def _sentence_transformers_available() -> bool:
         return False
 
 
+def _encode_chunks(model, chunks: list[str], *, kind: EmbedKind) -> list[list[float]]:
+    """Encode with Granite R2 retrieval API when available (encode_query / encode_document)."""
+    kwargs: dict = {"show_progress_bar": False, "convert_to_numpy": True}
+    if kind == "query" and hasattr(model, "encode_query"):
+        raw = model.encode_query(chunks, **kwargs)
+    elif kind == "document" and hasattr(model, "encode_document"):
+        raw = model.encode_document(chunks, **kwargs)
+    else:
+        raw = model.encode(chunks, normalize_embeddings=True, **kwargs)
+    if getattr(raw, "ndim", 0) == 1:
+        return [raw.tolist()]
+    return [v.tolist() for v in raw]
+
+
 class LocalEmbeddingClient:
     """Loads sentence-transformers inside the embed server process only (not in hooks)."""
 
     def __init__(self, cfg: Config):
         self.cfg = cfg
         self._model = None
-        self._model_name = LOCAL_MODEL_NAME
+        self._model_name = LOCAL_MODEL_HF_ID
         self._cache_dir = str(cfg.data_dir / "models")
 
     def available(self) -> bool:
@@ -309,19 +375,13 @@ class LocalEmbeddingClient:
         )
         return self._model
 
-    def embed(self, text: str) -> list[list[float]]:
-        chunks = _chunk_text(
-            text,
-            chunk_size=self.cfg.embed_chunk_size,
-            chunk_count=self.cfg.embed_chunk_count,
-        )
+    def embed(self, text: str, *, kind: EmbedKind = "document") -> list[list[float]]:
+        chunk_size, chunk_count = embed_chunk_params(self.cfg, local=True)
+        chunks = _chunk_text(text, chunk_size=chunk_size, chunk_count=chunk_count)
         if not chunks:
             return []
         model = self.load_model()
-        vectors = model.encode(
-            chunks, show_progress_bar=False, normalize_embeddings=True,
-        )
-        return [v.tolist() for v in vectors]
+        return _encode_chunks(model, chunks, kind=kind)
 
 
 def search_local_shared(
@@ -359,7 +419,9 @@ def search_local_shared(
     elif not embed_ipc.ensure_running(cfg, max_wait=15.0):
         return [], "off"
 
-    qvecs = embed_ipc.embed_text(cfg, query, timeout=timeout, auto_start=False)
+    qvecs = embed_ipc.embed_text(
+        cfg, query, timeout=timeout, auto_start=False, kind="query"
+    )
     if not qvecs:
         return [], "off"
 
@@ -390,7 +452,9 @@ def index_rule_if_enabled(db: Db, rule: Rule, cfg: Config) -> None:
             text = _rule_text(rule)
             if not embed_ipc.ensure_running(cfg, max_wait=15.0):
                 return
-            vectors = embed_ipc.embed_text(cfg, text, timeout=60.0, auto_start=False)
+            vectors = embed_ipc.embed_text(
+                cfg, text, timeout=60.0, auto_start=False, kind="document"
+            )
             if vectors:
                 _store_impl(db, rule.id, vectors, LOCAL_MODEL_NAME)
         else:

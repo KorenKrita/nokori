@@ -5,7 +5,7 @@ import json
 import os
 from typing import Any
 
-from .host import Host, detect_host_from_payload, effective_session_id
+from .host import Host, effective_session_id
 
 _MAX_FIELD = 400
 _MAX_PROMPT = 120
@@ -96,7 +96,7 @@ def log_hook_enter(
     payload: dict,
     raw_stdin_len: int,
     host: Host,
-) -> Host:
+) -> None:
     if hook_diag_enabled():
         tools = _tool_fields(payload)
         log.debug(
@@ -115,7 +115,6 @@ def log_hook_enter(
             _env_hints(),
             payload_summary(payload),
         )
-    return host
 
 
 def log_hook_exit(log, *, cli_event: str, host: Host, response: dict) -> None:

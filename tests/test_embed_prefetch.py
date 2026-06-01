@@ -18,7 +18,7 @@ def test_local_model_cached_detects_weights(tmp_path, monkeypatch):
     snap = (
         tmp_path
         / "models"
-        / f"models--sentence-transformers--{embedding.LOCAL_MODEL_NAME}"
+        / embedding.local_model_hub_dir(embedding.LOCAL_MODEL_HF_ID)
         / "snapshots"
         / "abc123"
     )

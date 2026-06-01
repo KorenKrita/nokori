@@ -7,7 +7,7 @@ pip install nokori
 nokori install
 ```
 
-可选本地 embedding（会安装 `sentence-transformers`，并在装包 / `nokori install` 时自动把模型权重下载到 `~/.nokori/models/`）：
+可选本地 embedding（会安装 **sentence-transformers>=3.0**（Granite 需 `encode_query`/`encode_document`），并在装包 / `nokori install` 时自动把模型权重下载到 `~/.nokori/models/`）：
 
 ```bash
 pip install "nokori[local-embed]"

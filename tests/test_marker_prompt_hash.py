@@ -1,6 +1,5 @@
 """Gate marker prompt_hash validation."""
 
-import json
 from datetime import datetime, timezone
 
 from nokori.config import Config
@@ -98,23 +97,55 @@ def test_per_prompt_hash_markers_do_not_overwrite(monkeypatch, tmp_path):
     sess = "s-multi"
     ph_a = prompt_hash("prompt A about deploy")
     ph_b = prompt_hash("prompt B about tests")
-    marker_io.write(
-        cfg, sess, "prompt A about deploy",
-        [MarkerRule("aaaaaa", "action a", "correction")], ph=ph_a,
-    )
-    marker_io.write(
-        cfg, sess, "prompt B about tests",
-        [MarkerRule("bbbbbb", "action b", "correction")], ph=ph_b,
-    )
-    assert cfg.marker_path(sess, ph_a).exists()
-    assert cfg.marker_path(sess, ph_b).exists()
-    from nokori.hooks.pre_tool_use import handle
 
-    out = handle(
-        {"session_id": sess, "tool_name": "Bash", "prompt": "prompt A about deploy"},
-        cfg,
-        host=Host.CLAUDE,
-    )
-    assert (out.get("hookSpecificOutput") or {}).get("permissionDecision") == "deny"
-    assert not cfg.marker_path(sess, ph_a).exists()
-    assert cfg.marker_path(sess, ph_b).exists()
+    db = open_db(cfg.db_path)
+    try:
+        now = _utcnow_iso()
+        with db.transaction() as tx:
+            tx.execute(
+                "INSERT INTO rules (id, short_id, trigger_text, action, "
+                "source_type, confidence, status, project_scope, project_id, "
+                "created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                ("rule-a", "aaaaaa", "deploy trigger", "action a",
+                 "correction", "high", "active", "global", None, now, now),
+            )
+            tx.execute(
+                "INSERT INTO rules (id, short_id, trigger_text, action, "
+                "source_type, confidence, status, project_scope, project_id, "
+                "created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                ("rule-b", "bbbbbb", "test trigger", "action b",
+                 "correction", "high", "active", "global", None, now, now),
+            )
+            tx.execute(
+                "INSERT INTO injections (rule_id, session_id, prompt_hash, level, created_at) "
+                "VALUES (?,?,?,?,?)",
+                ("rule-a", sess, ph_a, "hot", now),
+            )
+            tx.execute(
+                "INSERT INTO injections (rule_id, session_id, prompt_hash, level, created_at) "
+                "VALUES (?,?,?,?,?)",
+                ("rule-b", sess, ph_b, "hot", now),
+            )
+
+        marker_io.write(
+            cfg, sess, "prompt A about deploy",
+            [MarkerRule("aaaaaa", "action a", "correction")], ph=ph_a,
+        )
+        marker_io.write(
+            cfg, sess, "prompt B about tests",
+            [MarkerRule("bbbbbb", "action b", "correction")], ph=ph_b,
+        )
+        assert cfg.marker_path(sess, ph_a).exists()
+        assert cfg.marker_path(sess, ph_b).exists()
+        from nokori.hooks.pre_tool_use import handle
+
+        out = handle(
+            {"session_id": sess, "tool_name": "Bash", "prompt": "prompt A about deploy"},
+            cfg,
+            host=Host.CLAUDE,
+        )
+        assert (out.get("hookSpecificOutput") or {}).get("permissionDecision") == "deny"
+        assert not cfg.marker_path(sess, ph_a).exists()
+        assert cfg.marker_path(sess, ph_b).exists()
+    finally:
+        db.close()

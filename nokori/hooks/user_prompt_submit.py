@@ -20,7 +20,7 @@ from ..utils import sessions
 from ..utils.hook_response import user_prompt_submit_response
 from ..utils.host import Host, effective_session_id
 from ..utils.logging import get_logger
-from ..utils.time import now_iso
+from ..utils.time import iso_of, now_iso
 from .prompt_inject import RetrieveFailed, inject_for_prompt
 
 log = get_logger("nokori.hooks.user_prompt_submit")
@@ -41,7 +41,7 @@ def _run_dismiss(db: Db, prompt: str, session_id: str, cfg: Config) -> int:
     seen_sids: set[str] = set()
     now = now_iso()
     cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
-    cutoff_iso = cutoff.isoformat(timespec="seconds").replace("+00:00", "Z")
+    cutoff_iso = iso_of(cutoff)
     for m in pattern.finditer(prompt or ""):
         sid = m.group("sid").lower()
         if sid in seen_sids:

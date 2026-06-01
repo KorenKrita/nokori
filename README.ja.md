@@ -486,7 +486,7 @@ pip install nokori[local-embed]
 # 開発インストール：pip install -e ".[local-embed]"
 ```
 
-`[local-embed]` インストール時に Python 依存を取得；**モデル重み**（`paraphrase-multilingual-MiniLM-L12-v2`、約118MB、384次元）は以下のタイミングで `~/.nokori/models/` にダウンロード（hook 内ではダウンロードしない。タイムアウト回避）：
+`[local-embed]` インストール時に **sentence-transformers>=3.0** を入れる（Granite の `encode_query` / `encode_document` に必須。ST 2.x 非対応）。**モデル重み**（`ibm-granite/granite-embedding-97m-multilingual-r2`、約97Mパラメータ、384次元）は以下のタイミングで `~/.nokori/models/` にダウンロード（hook 内ではダウンロードしない。タイムアウト回避）。ユーザープロンプトは `encode_query`、ルール索引は `encode_document`（Granite R2 検索 API）。旧デフォルトモデルからの移行後は `nokori embed prefetch` を実行し、ルールを再インデックス（`add` / `import` / trigger 関連フィールドの編集）して `rule_embeddings` の `model_version` を新モデルに合わせてください：
 
 | タイミング | 説明 |
 |------|------|
@@ -597,8 +597,8 @@ nokori install [--dry-run | --uninstall | --disable | --enable | --no-prefetch-e
 | `NOKORI_EMBED_MODEL` | — | Embedding モデル名 |
 | `NOKORI_EMBED_API_KEY` | — | Embedding API key |
 | `NOKORI_EMBED_DIMENSIONS` | `0`（未指定、モデルデフォルト） | ベクトル次元（パラメータ対応モデルのみ設定） |
-| `NOKORI_EMBED_CHUNK_SIZE` | `512` | テキストチャンク文字数 |
-| `NOKORI_EMBED_CHUNK_COUNT` | `3` | ルールあたり最大チャンク数 |
+| `NOKORI_EMBED_CHUNK_SIZE` | `4000` | テキストチャンク文字数 |
+| `NOKORI_EMBED_CHUNK_COUNT` | `2` | ルールあたり最大チャンク数 |
 | `NOKORI_STRICT` | `0` | `1` 時 hook 例外を再送出（デバッグ；デフォルト fail-open） |
 | `NOKORI_DISABLED` | `0` | 完全無効 |
 | `NOKORI_DISMISS_PHRASE` | `dismiss` | 会話内ルール退役の動詞（`動詞 + short_id`）；[Dismiss](#4-ルールが古くなったdismiss) 参照 |
@@ -641,8 +641,8 @@ base_url = "https://api.example.com/v1"
 model = "text-embedding-v4"
 api_key = "sk-xxx"
 # dimensions = 0  # 未設定または 0 = API に渡さない（モデルデフォルト次元）
-chunk_size = 512
-chunk_count = 3
+chunk_size = 4000
+chunk_count = 2
 enabled = true
 # ローカル embed 共有プロセス（base_url 未設定かつ pip install nokori[local-embed] 時）
 # hook_timeout_seconds = 2

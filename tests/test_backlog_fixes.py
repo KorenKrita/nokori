@@ -43,7 +43,8 @@ def test_import_rolls_back_on_failure(tmp_path):
         ],
     }
     out.write_text(json.dumps(payload), encoding="utf-8")
-    env = {"PATH": "/usr/bin:/bin", "NOKORI_DATA_DIR": str(data)}
+    env = {"PATH": "/usr/bin:/bin", "NOKORI_DATA_DIR": str(data),
+           "NOKORI_EMBED_ENABLED": "0", "HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1"}
     r = subprocess.run(
         [sys.executable, "-m", "nokori", "import", str(out)],
         capture_output=True,
@@ -61,7 +62,8 @@ def test_import_rolls_back_on_failure(tmp_path):
 def test_dismiss_strips_gate_marker(tmp_path, monkeypatch):
     monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
     cfg = Config.from_env()
-    env = {"PATH": "/usr/bin:/bin", "NOKORI_DATA_DIR": str(tmp_path)}
+    env = {"PATH": "/usr/bin:/bin", "NOKORI_DATA_DIR": str(tmp_path),
+           "NOKORI_EMBED_ENABLED": "0", "HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1"}
     subprocess.run(
         [sys.executable, "-m", "nokori", "add",
          "--trigger", "deploy prisma", "--action", "use lease",

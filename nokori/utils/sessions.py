@@ -12,13 +12,23 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from ..config import Config
-from .atomic_json import atomic_write_json
+from .fs import atomic_write_json
+from .ids import safe_session_id
 from .time import now_iso, parse_iso
 
 
 def _path_for(cfg: Config, session_id: str) -> Path:
-    safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in session_id)
-    return cfg.sessions_dir / f"{safe}.json"
+    return cfg.sessions_dir / f"{safe_session_id(session_id)}.json"
+
+
+def _read_record(cfg: Config, session_id: str) -> dict | None:
+    p = _path_for(cfg, session_id)
+    if not p.exists():
+        return None
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
 
 
 def register(
@@ -43,26 +53,16 @@ def register(
 
 def get_project_id(cfg: Config, session_id: str) -> str | None:
     """Cached project_id from SessionStart (avoids git on every UserPromptSubmit)."""
-    p = _path_for(cfg, session_id)
-    if not p.exists():
-        return None
-    try:
-        data = json.loads(p.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+    data = _read_record(cfg, session_id)
+    if data is None:
         return None
     pid = data.get("project_id")
     return str(pid) if pid else None
 
 
 def get_project_id_from_git(cfg: Config, session_id: str) -> bool:
-    p = _path_for(cfg, session_id)
-    if not p.exists():
-        return False
-    try:
-        data = json.loads(p.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return False
-    return bool(data.get("project_id_from_git"))
+    data = _read_record(cfg, session_id)
+    return bool(data.get("project_id_from_git")) if data else False
 
 
 def resolve_project_id_for_session(
@@ -73,8 +73,10 @@ def resolve_project_id_for_session(
     """Use session cache; refresh when cwd maps to a different project_id."""
     from .project import resolve_project_id_detailed
 
-    cached = get_project_id(cfg, session_id)
-    cached_from_git = get_project_id_from_git(cfg, session_id)
+    record = _read_record(cfg, session_id) or {}
+    cached_pid = record.get("project_id")
+    cached = str(cached_pid) if cached_pid else None
+    cached_from_git = bool(record.get("project_id_from_git"))
     if not cwd:
         return cached
     resolved, used_git = resolve_project_id_detailed(cwd)
@@ -104,12 +106,8 @@ def update_project_id(
 ) -> None:
     cfg.ensure_dirs()
     p = _path_for(cfg, session_id)
-    if p.exists():
-        try:
-            data = json.loads(p.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            data = {"session_id": session_id}
-    else:
+    data = _read_record(cfg, session_id)
+    if data is None:
         data = {"session_id": session_id, "started_at": now_iso(), "ended_at": None}
     data["project_id"] = project_id
     if project_id_from_git is not None:
@@ -119,30 +117,20 @@ def update_project_id(
 
 
 def touch(cfg: Config, session_id: str) -> None:
-    p = _path_for(cfg, session_id)
-    if not p.exists():
-        register(cfg, session_id)
-        return
-    try:
-        data = json.loads(p.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+    data = _read_record(cfg, session_id)
+    if data is None:
         register(cfg, session_id)
         return
     data["last_activity"] = now_iso()
-    atomic_write_json(p, data)
+    atomic_write_json(_path_for(cfg, session_id), data)
 
 
 def end(cfg: Config, session_id: str) -> None:
-    cfg.ensure_dirs()
-    p = _path_for(cfg, session_id)
-    if not p.exists():
-        return
-    try:
-        data = json.loads(p.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+    data = _read_record(cfg, session_id)
+    if data is None:
         return
     data["ended_at"] = now_iso()
-    atomic_write_json(p, data)
+    atomic_write_json(_path_for(cfg, session_id), data)
 
 
 def is_session_open(data: dict) -> bool:

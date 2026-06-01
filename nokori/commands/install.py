@@ -106,7 +106,7 @@ def _build_cursor_hook_entry(
 def _is_nokori_claude(entry: dict) -> bool:
     for h in entry.get("hooks", []):
         cmd = h.get("command", "")
-        if NOKORI_MARKER in cmd or "nokori" in cmd:
+        if NOKORI_MARKER in cmd:
             return True
     return False
 

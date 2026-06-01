@@ -42,17 +42,14 @@ def compress(turns: Iterable[Turn], budget_tokens: int = 30000) -> str:
             continue
 
     text = "\n".join(sections)
-    if _approx_tokens(text) <= budget_tokens:
+    tokens = _approx_tokens(text)
+    if tokens <= budget_tokens:
         return text
 
-    keep_chars = budget_tokens
-    while _approx_tokens(text) > budget_tokens and keep_chars > 200:
-        keep_chars = max(200, keep_chars // 2)
-    if len(text) > keep_chars:
-        half = keep_chars // 2
-        text = (
-            text[:half]
-            + "\n...[transcript truncated: middle omitted]...\n"
-            + text[-half:]
-        )
-    return text
+    keep_chars = max(400, int(len(text) * budget_tokens / tokens))
+    half = keep_chars // 2
+    return (
+        text[:half]
+        + "\n...[transcript truncated: middle omitted]...\n"
+        + text[-half:]
+    )

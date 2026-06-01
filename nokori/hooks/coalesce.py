@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from ..config import Config
@@ -11,12 +12,13 @@ from ..gate.marker import prompt_hash
 from ..utils.host import effective_session_id
 from ..utils.logging import get_logger
 from ..utils.prompt_text import normalize_prompt_for_hash
-from ..utils.time import now_iso
+from ..utils.time import now_iso, parse_iso
 from ..utils.transcript import resolve_transcript_path, transcript_key
 
 log = get_logger("nokori.hooks.coalesce")
 
 _TRUE = frozenset({"1", "true", "yes", "on"})
+_DEFAULT_CLAIM_MAX_AGE_HOURS = 24
 
 
 def coalesce_enabled() -> bool:
@@ -24,15 +26,18 @@ def coalesce_enabled() -> bool:
     return raw not in ("0", "false", "no", "off")
 
 
-def generation_id_from_payload(payload: dict) -> str:
-    raw = payload.get("generation_id")
-    if isinstance(raw, str):
-        return raw.strip()
-    return ""
-
-
 def claim_key_for_event(cli_event: str, payload: dict) -> str | None:
-    """Stable idempotency key per hook invocation, or None to skip coalesce."""
+    """Stable idempotency key per hook invocation, or None to skip coalesce.
+
+  pre-tool-use: intentionally None — gate uses a single on-disk marker; the first
+  process deletes it after deny, so a parallel second hook sees no marker and
+  pass-throughs (cursor deferred uses try_claim_deferred separately).
+
+  session-end: key is transcript path; Claude (~/.claude) vs Cursor (~/.cursor)
+  paths differ, so cross-platform dedup does not apply. Coalesce only helps when
+  the same platform fires session-end twice; extract defer is idempotent via
+  sessions.end() and job files.
+    """
     session_id = effective_session_id(payload)
     if cli_event == "session-start":
         return f"session-start|{session_id}"
@@ -42,8 +47,8 @@ def claim_key_for_event(cli_event: str, payload: dict) -> str | None:
         ph = prompt_hash(normalized) if normalized else ""
         if not ph:
             return None
-        gen = generation_id_from_payload(payload) or "-"
-        return f"user-prompt-submit|{session_id}|{gen}|{ph}"
+        # session_id + prompt_hash only — generation_id differs across hosts.
+        return f"user-prompt-submit|{session_id}|{ph}"
     if cli_event == "session-end":
         path = resolve_transcript_path(payload)
         if path is None:
@@ -82,6 +87,33 @@ def try_claim(cfg: Config, key: str, *, cli_event: str = "") -> bool:
     except FileExistsError:
         return False
     return True
+
+
+def prune_stale_claims(cfg: Config, max_age_hours: int = _DEFAULT_CLAIM_MAX_AGE_HOURS) -> int:
+    """Remove hook_coalesce claim files older than max_age_hours."""
+    root = cfg.data_dir / "hook_coalesce"
+    if not root.is_dir():
+        return 0
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=max_age_hours)
+    removed = 0
+    for path in root.glob("*.json"):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            try:
+                path.unlink()
+                removed += 1
+            except OSError:
+                pass
+            continue
+        claimed = parse_iso(data.get("claimed_at"))
+        if claimed is None or claimed < cutoff:
+            try:
+                path.unlink()
+                removed += 1
+            except OSError:
+                pass
+    return removed
 
 
 def duplicate_passthrough(cli_event: str, host) -> dict:

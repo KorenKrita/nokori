@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 
 from .config import Config
-from .utils.atomic_json import atomic_write_json
+from .utils.fs import atomic_write_json
 from .utils.time import now_iso
 
 PLATFORM_CLAUDE = "claude"

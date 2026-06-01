@@ -10,7 +10,7 @@ log = get_logger("nokori.utils.transcript")
 
 
 def transcript_key(path: Path) -> str:
-    """Canonical key for a transcript path (extract jobs, coalesce claims)."""
+    """Canonical key for a transcript path: extract jobs, coalesce, checkpoints."""
     return str(path.expanduser().resolve())
 
 
@@ -85,7 +85,7 @@ def resolve_transcript_path(payload: dict) -> Path | None:
     if path.suffix.lower() != ".jsonl":
         log.warning("transcript_path is not a .jsonl file: %s", path)
         return None
-    if not _is_under_allowed_root(path):
+    if not is_path_allowed(path):
         log.warning("transcript_path outside allowed roots: %s", path)
         return None
     if path.is_file():

@@ -6,7 +6,13 @@ from nokori import __version__
 
 
 def _nokori(monkeypatch, tmp_path, *args):
-    env = {"NOKORI_DATA_DIR": str(tmp_path), "PATH": "/usr/bin:/bin"}
+    env = {
+        "NOKORI_DATA_DIR": str(tmp_path),
+        "PATH": "/usr/bin:/bin",
+        "NOKORI_EMBED_ENABLED": "0",
+        "HF_HUB_OFFLINE": "1",
+        "TRANSFORMERS_OFFLINE": "1",
+    }
     return subprocess.run(
         [sys.executable, "-m", "nokori", *args],
         capture_output=True,
@@ -98,7 +104,8 @@ def test_status_shows_promotion_progress(tmp_path, monkeypatch):
 
 
 def test_hook_session_start_smoke(tmp_path, monkeypatch):
-    env = {"NOKORI_DATA_DIR": str(tmp_path), "PATH": "/usr/bin:/bin"}
+    env = {"NOKORI_DATA_DIR": str(tmp_path), "PATH": "/usr/bin:/bin",
+           "NOKORI_EMBED_ENABLED": "0", "HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1"}
     proc = subprocess.run(
         [sys.executable, "-m", "nokori", "hook", "session-start"],
         input=json.dumps({"session_id": "s1", "cwd": str(tmp_path)}),
@@ -116,6 +123,9 @@ def test_hook_disabled_short_circuits(tmp_path):
         "NOKORI_DATA_DIR": str(tmp_path),
         "NOKORI_DISABLED": "1",
         "PATH": "/usr/bin:/bin",
+        "NOKORI_EMBED_ENABLED": "0",
+        "HF_HUB_OFFLINE": "1",
+        "TRANSFORMERS_OFFLINE": "1",
     }
     proc = subprocess.run(
         [sys.executable, "-m", "nokori", "hook", "user-prompt-submit"],

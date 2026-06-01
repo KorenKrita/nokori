@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 
 from ..config import Config
 from ..db import open_db
+from ..utils.time import iso_of
 from ..lifecycle.promotion import (
     CROSS_PROJECT_PROMOTE_THRESHOLD,
     unique_promotion_project_ids,
@@ -54,9 +55,7 @@ def run(_args: argparse.Namespace, cfg: Config) -> int:
     db = open_db(cfg.db_path)
     try:
         rules = db.fetchall("SELECT status, COUNT(*) AS n FROM rules GROUP BY status")
-        cutoff = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat(
-            timespec="seconds"
-        ).replace("+00:00", "Z")
+        cutoff = iso_of(datetime.now(timezone.utc) - timedelta(hours=24))
         injected_24h = db.fetchone(
             "SELECT COUNT(*) AS n FROM injections WHERE created_at >= ?",
             (cutoff,),

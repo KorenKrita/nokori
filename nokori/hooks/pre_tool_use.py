@@ -62,6 +62,7 @@ def _run_gate(payload: dict, cfg: Config, session_id: str, host) -> dict:
     if not matched:
         return {}
 
+    on_disk = marker_io.read_latest_marker(cfg, session_id)
     current_ph: str | None = None
     prompt_raw = payload.get("prompt")
     if isinstance(prompt_raw, str) and prompt_raw.strip():
@@ -74,7 +75,6 @@ def _run_gate(payload: dict, cfg: Config, session_id: str, host) -> dict:
         return {}
     try:
         if not current_ph:
-            on_disk = marker_io.read_latest_marker(cfg, session_id)
             if on_disk and on_disk.rules:
                 if marker_io.injection_exists(db, session_id, on_disk.prompt_hash):
                     current_ph = on_disk.prompt_hash
@@ -92,7 +92,10 @@ def _run_gate(payload: dict, cfg: Config, session_id: str, host) -> dict:
         marker_io.delete_session(cfg, session_id)
         return {}
 
-    marker = marker_io.read(cfg, session_id, prompt_hash_value=current_ph)
+    if on_disk and on_disk.prompt_hash == current_ph:
+        marker = on_disk
+    else:
+        marker = marker_io.read(cfg, session_id, prompt_hash_value=current_ph)
     if marker is None:
         marker_io.prune_stale_markers(cfg, session_id, current_ph)
         return {}

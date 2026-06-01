@@ -508,7 +508,7 @@ pip install nokori[local-embed]
 # Or dev install: pip install -e ".[local-embed]"
 ```
 
-Installing `[local-embed]` pulls Python deps; **model weights** (`paraphrase-multilingual-MiniLM-L12-v2`, ~118MB, 384-dim) download to `~/.nokori/models/` at these times (not in hooks — avoids timeout):
+Installing `[local-embed]` pulls **sentence-transformers>=3.0** (required for Granite `encode_query` / `encode_document`; ST 2.x is unsupported). **Model weights** (`ibm-granite/granite-embedding-97m-multilingual-r2`, ~97M params, 384-dim) download to `~/.nokori/models/` at these times (not in hooks — avoids timeout). User prompts use `encode_query`, indexed rules use `encode_document` (Granite R2 retrieval API). After upgrading from an older default model, run `nokori embed prefetch` and re-index rules (`add` / `import` / edit trigger fields) so `rule_embeddings` match the new `model_version`:
 
 | When | Notes |
 |------|-------|
@@ -619,8 +619,8 @@ nokori install [--dry-run | --uninstall | --disable | --enable | --no-prefetch-e
 | `NOKORI_EMBED_MODEL` | — | Embedding model name |
 | `NOKORI_EMBED_API_KEY` | — | Embedding API key |
 | `NOKORI_EMBED_DIMENSIONS` | `0` (omit, use model default) | Vector dimensions (only for models that support the parameter) |
-| `NOKORI_EMBED_CHUNK_SIZE` | `512` | Text chunk size in characters |
-| `NOKORI_EMBED_CHUNK_COUNT` | `3` | Max chunks per rule |
+| `NOKORI_EMBED_CHUNK_SIZE` | `4000` | Text chunk size in characters |
+| `NOKORI_EMBED_CHUNK_COUNT` | `2` | Max chunks per rule |
 | `NOKORI_STRICT` | `0` | `1` = hook errors propagate (debug; default fail-open) |
 | `NOKORI_DISABLED` | `0` | Disable entirely |
 | `NOKORI_DISMISS_PHRASE` | `dismiss` | Chat verb to retire rules (`verb + short_id`); see [Dismiss](#4-outdated-rules-dismiss) |
@@ -664,8 +664,8 @@ base_url = "https://api.example.com/v1"
 model = "text-embedding-v4"
 api_key = "sk-xxx"
 # dimensions = 0  # unset or 0 = do not pass to API (use model default dimensions)
-chunk_size = 512
-chunk_count = 3
+chunk_size = 4000
+chunk_count = 2
 enabled = true
 # Local embed shared process (when base_url unset and pip install nokori[local-embed])
 # hook_timeout_seconds = 2

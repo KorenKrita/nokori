@@ -16,7 +16,7 @@ def _check_db(cfg: Config) -> tuple[str, str]:
     try:
         db = open_db(cfg.db_path)
         try:
-            v = db.schema_version()
+            db.schema_version()
         finally:
             db.close()
         return ("ok", "rules.db readable")
@@ -272,10 +272,17 @@ def _check_hook_host_detection() -> tuple[str, str]:
 
 
 def _check_dual_hook_registration() -> tuple[str, str]:
+    from ..hooks.coalesce import coalesce_enabled
     from .install import describe_dual_hook_registration
 
     dual = describe_dual_hook_registration()
     if dual.get("both_installed"):
+        if not coalesce_enabled():
+            return (
+                "warn",
+                "dual hook registration with NOKORI_HOOK_COALESCE=0 — "
+                "expect duplicate inject/gate; re-enable coalesce or use one path",
+            )
         return (
             "warn",
             "claude settings + cursor hooks.json both register nokori "

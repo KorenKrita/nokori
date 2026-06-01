@@ -12,7 +12,7 @@ from ..db import (
 )
 from ..errors import NokoriError
 from ..gate import marker as marker_io
-from ..utils.time import now_iso
+from ..utils.time import iso_of, now_iso
 
 
 def run(args: argparse.Namespace, cfg: Config) -> int:
@@ -25,7 +25,7 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
             print(f"{rule.short_id} already archived")
             return 0
         cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
-        cutoff_iso = cutoff.isoformat(timespec="seconds").replace("+00:00", "Z")
+        cutoff_iso = iso_of(cutoff)
         if find_rule_id_injected_since(db, rule.short_id, cutoff_iso) is None:
             raise NokoriError(
                 f"rule {args.short_id!r} was not injected in the last 24 hours "

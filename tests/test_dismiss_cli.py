@@ -9,7 +9,12 @@ from nokori.db import open_db
 
 
 def _run(*args, env_extra=None):
-    env = {"PATH": "/usr/bin:/bin"}
+    env = {
+        "PATH": "/usr/bin:/bin",
+        "NOKORI_EMBED_ENABLED": "0",
+        "HF_HUB_OFFLINE": "1",
+        "TRANSFORMERS_OFFLINE": "1",
+    }
     if env_extra:
         env.update(env_extra)
     return subprocess.run(

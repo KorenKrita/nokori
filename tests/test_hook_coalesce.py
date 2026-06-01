@@ -13,6 +13,8 @@ from nokori.hooks.coalesce import (
     claim_key_for_event,
     coalesce_enabled,
     duplicate_passthrough,
+    is_claimed,
+    prune_stale_claims,
     try_claim,
 )
 from nokori.utils.host import Host
@@ -26,15 +28,16 @@ def cfg(tmp_path, monkeypatch):
     return Config.from_env()
 
 
-def test_claim_key_user_prompt_submit():
-    payload = {
-        "session_id": "s1",
-        "generation_id": "g1",
-        "prompt": "hello",
-    }
-    key = claim_key_for_event("user-prompt-submit", payload)
-    assert key is not None
-    assert key.startswith("user-prompt-submit|s1|g1|")
+def test_claim_key_user_prompt_submit_ignores_generation_id():
+    from nokori.gate.marker import prompt_hash
+    from nokori.utils.prompt_text import normalize_prompt_for_hash
+
+    ph = prompt_hash(normalize_prompt_for_hash("hello"))
+    payload_a = {"session_id": "s1", "generation_id": "g1", "prompt": "hello"}
+    payload_b = {"session_id": "s1", "prompt": "hello"}
+    key_a = claim_key_for_event("user-prompt-submit", payload_a)
+    key_b = claim_key_for_event("user-prompt-submit", payload_b)
+    assert key_a == key_b == f"user-prompt-submit|s1|{ph}"
 
 
 def test_try_claim_exclusive(cfg):
@@ -87,6 +90,22 @@ def test_describe_dual_hook_registration(monkeypatch):
     dual = install.describe_dual_hook_registration()
     assert dual["both_installed"] is True
     assert "coalesce" in dual["note"].lower() or "both" in dual["note"].lower()
+
+
+def test_prune_stale_claims(cfg):
+    key = "session-start|old-sess"
+    path = cfg.data_dir / "hook_coalesce"
+    path.mkdir(parents=True, exist_ok=True)
+    stale = path / "stale.json"
+    stale.write_text(
+        '{"claimed_at": "2020-01-01T00:00:00Z"}',
+        encoding="utf-8",
+    )
+    fresh_key = "session-start|fresh"
+    try_claim(cfg, fresh_key, cli_event="session-start")
+    assert prune_stale_claims(cfg, max_age_hours=24) >= 1
+    assert not stale.exists()
+    assert is_claimed(cfg, fresh_key)
 
 
 def test_coalesce_enabled_default(monkeypatch):

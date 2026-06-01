@@ -58,7 +58,7 @@ def _process_path(path: Path, project_id: str | None, cfg: Config,
                     path,
                 )
                 break
-            merge_checkpoint.record_candidate_merged(cfg, path, cand)
+            merge_checkpoint.record_candidate_merged(cfg, path, cand, done_keys)
             done_keys |= merge_checkpoint.candidate_keys(cand)
             merged += outcome.inserted + outcome.activated + outcome.superseded
         if merge_ok:

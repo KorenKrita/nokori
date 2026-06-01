@@ -49,7 +49,10 @@ def _handle_connection(
                 return False
             elif op == "embed":
                 text = req.get("text") or ""
-                vectors = client.embed(text)
+                kind = req.get("kind") or "document"
+                if kind not in ("query", "document"):
+                    kind = "document"
+                vectors = client.embed(text, kind=kind)
                 _reply(conn, {"ok": True, "op": "embed", "vectors": vectors})
             else:
                 _reply(conn, {"ok": False, "error": f"unknown op: {op!r}"})
@@ -59,6 +62,15 @@ def _handle_connection(
         except OSError:
             pass
     return True
+
+
+def _cleanup(sock: socket.socket, sock_path, cfg: Config) -> None:
+    sock.close()
+    embed_ipc._clear_pid(cfg)
+    try:
+        sock_path.unlink()
+    except FileNotFoundError:
+        pass
 
 
 def run_server(cfg: Config) -> int:
@@ -81,24 +93,14 @@ def run_server(cfg: Config) -> int:
     client = LocalEmbeddingClient(cfg)
     if not client.available():
         log.error("sentence-transformers not available; embed server exiting")
-        sock.close()
-        embed_ipc._clear_pid(cfg)
-        try:
-            sock_path.unlink()
-        except FileNotFoundError:
-            pass
+        _cleanup(sock, sock_path, cfg)
         return 1
 
     try:
-        model = client.load_model()
+        client.load_model()
     except Exception:
         log.exception("embed server model load failed")
-        sock.close()
-        embed_ipc._clear_pid(cfg)
-        try:
-            sock_path.unlink()
-        except FileNotFoundError:
-            pass
+        _cleanup(sock, sock_path, cfg)
         return 1
 
     last_activity = time.monotonic()
@@ -124,11 +126,5 @@ def run_server(cfg: Config) -> int:
                 break
             last_activity = time.monotonic()
     finally:
-        sock.close()
-        embed_ipc._clear_pid(cfg)
-        try:
-            sock_path.unlink()
-        except FileNotFoundError:
-            pass
-        del model
+        _cleanup(sock, sock_path, cfg)
     return 0

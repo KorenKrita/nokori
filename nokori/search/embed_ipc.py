@@ -221,8 +221,14 @@ def embed_text(
     *,
     timeout: float = 5.0,
     auto_start: bool = True,
+    kind: str = "document",
 ) -> list[list[float]]:
-    """Encode text via the shared server. Returns [] on failure."""
+    """Encode text via the shared server. Returns [] on failure.
+
+    ``kind`` must be ``query`` (user prompt) or ``document`` (indexed rules).
+    """
+    if kind not in ("query", "document"):
+        kind = "document"
     if auto_start:
         if not ensure_running(cfg, max_wait=_STARTUP_WAIT_SECONDS):
             return []
@@ -231,7 +237,7 @@ def embed_text(
     try:
         resp = request(
             cfg,
-            {"op": "embed", "text": text},
+            {"op": "embed", "text": text, "kind": kind},
             timeout=timeout,
         )
     except (OSError, json.JSONDecodeError) as e:
@@ -244,8 +250,3 @@ def embed_text(
     return [list(v) for v in vectors]
 
 
-def run_server(cfg: Config) -> int:
-    """Delegate to ``embedding_server`` (kept for backward-compatible imports)."""
-    from .embedding_server import run_server as _run_blocking_server
-
-    return _run_blocking_server(cfg)

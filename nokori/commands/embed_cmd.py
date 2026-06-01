@@ -32,7 +32,7 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
 
         if not local_embed_package_available():
             print(
-                "nokori: sentence-transformers not installed; "
+                "nokori: sentence-transformers>=3.0 not installed; "
                 "use: pip install -e '.[local-embed]'",
                 file=sys.stderr,
             )

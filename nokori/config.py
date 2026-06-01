@@ -7,6 +7,7 @@ from pathlib import Path
 
 from .constants import DEFAULT_GATE_MATCHER
 from .errors import ConfigError
+from .utils.ids import safe_session_id
 
 
 _TRUE = {"1", "true", "yes", "on"}
@@ -18,11 +19,8 @@ _CONFIG_FILE_NAME = "config.toml"
 def _load_toml(path: Path) -> dict:
     if not path.exists():
         return {}
-    try:
-        with open(path, "rb") as f:
-            return tomllib.load(f)
-    except tomllib.TOMLDecodeError:
-        raise
+    with open(path, "rb") as f:
+        return tomllib.load(f)
 
 
 # --- Config file → flat dict mapping ---
@@ -143,8 +141,6 @@ def _log_level_val(name: str, default: str, file_values: dict[str, str]) -> str:
     if raw is None:
         return default
     level = raw.strip().lower()
-    if level == "warn":
-        return "warn"
     if level not in _LOG_LEVELS:
         raise ConfigError(
             f"{name} must be one of debug, info, warn, warning, error (got {raw!r})"
@@ -167,6 +163,12 @@ def _enum_val(name: str, default: str, choices: tuple[str, ...], file_values: di
 
 
 _GATE_MATCHER_MAX_LEN = 512
+
+
+def _value_explicitly_set(name: str, file_values: dict[str, str]) -> bool:
+    """True when env or config.toml provides a non-empty value (matches _int_val)."""
+    raw = _get(name, file_values)
+    return raw is not None and raw.strip() != ""
 
 
 def _gate_matcher_val(file_values: dict[str, str]) -> str:
@@ -203,6 +205,8 @@ class Config:
     embed_dimensions: int
     embed_chunk_size: int
     embed_chunk_count: int
+    embed_chunk_size_configured: bool
+    embed_chunk_count_configured: bool
     embed_hook_timeout_seconds: int
     embed_server_idle_seconds: int
     embed_server_auto_start: bool
@@ -237,8 +241,14 @@ class Config:
             embed_model=_str_or_none_val("NOKORI_EMBED_MODEL", file_values),
             embed_api_key=_str_or_none_val("NOKORI_EMBED_API_KEY", file_values),
             embed_dimensions=_int_val("NOKORI_EMBED_DIMENSIONS", 0, file_values, min_value=0),
-            embed_chunk_size=_int_val("NOKORI_EMBED_CHUNK_SIZE", 512, file_values, min_value=16),
-            embed_chunk_count=_int_val("NOKORI_EMBED_CHUNK_COUNT", 3, file_values, min_value=1),
+            embed_chunk_size=_int_val("NOKORI_EMBED_CHUNK_SIZE", 4000, file_values, min_value=16),
+            embed_chunk_count=_int_val("NOKORI_EMBED_CHUNK_COUNT", 2, file_values, min_value=1),
+            embed_chunk_size_configured=_value_explicitly_set(
+                "NOKORI_EMBED_CHUNK_SIZE", file_values
+            ),
+            embed_chunk_count_configured=_value_explicitly_set(
+                "NOKORI_EMBED_CHUNK_COUNT", file_values
+            ),
             embed_hook_timeout_seconds=_int_val(
                 "NOKORI_HOOK_EMBED_TIMEOUT", 2, file_values, min_value=1
             ),
@@ -276,7 +286,7 @@ class Config:
         return self.data_dir / "active_sessions"
 
     def _safe_session_id(self, session_id: str) -> str:
-        return "".join(c if c.isalnum() or c in "-_" else "_" for c in session_id)
+        return safe_session_id(session_id)
 
     def marker_dir(self, session_id: str) -> Path:
         """Per-session gate markers (one file per user prompt_hash)."""

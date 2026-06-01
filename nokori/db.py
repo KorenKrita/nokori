@@ -316,29 +316,37 @@ def log_injections_batch(
                 )
 
 
+def find_rule_id_by_injection(
+    db: "Db", short_id: str, since_iso: str, *, session_id: str | None = None
+) -> str | None:
+    """Find rule by short_id injected since cutoff, optionally scoped to session."""
+    if session_id is not None:
+        row = db.fetchone(
+            "SELECT r.id AS id FROM injections i JOIN rules r ON r.id = i.rule_id "
+            "WHERE i.session_id = ? AND r.short_id = ? AND i.created_at >= ? "
+            "ORDER BY i.created_at DESC LIMIT 1",
+            (session_id, short_id, since_iso),
+        )
+    else:
+        row = db.fetchone(
+            "SELECT r.id AS id FROM injections i JOIN rules r ON r.id = i.rule_id "
+            "WHERE r.short_id = ? AND i.created_at >= ? "
+            "ORDER BY i.created_at DESC LIMIT 1",
+            (short_id, since_iso),
+        )
+    return row["id"] if row else None
+
+
 def find_rule_id_by_recent_injection(
     db: "Db", session_id: str, short_id: str, since_iso: str
 ) -> str | None:
-    row = db.fetchone(
-        "SELECT r.id AS id FROM injections i JOIN rules r ON r.id = i.rule_id "
-        "WHERE i.session_id = ? AND r.short_id = ? AND i.created_at >= ? "
-        "ORDER BY i.created_at DESC LIMIT 1",
-        (session_id, short_id, since_iso),
-    )
-    return row["id"] if row else None
+    return find_rule_id_by_injection(db, short_id, since_iso, session_id=session_id)
 
 
 def find_rule_id_injected_since(
-    db: "Db", short_id: str, since_iso: str,
+    db: "Db", short_id: str, since_iso: str
 ) -> str | None:
-    """Any session: rule short_id injected since cutoff (CLI dismiss 24h window)."""
-    row = db.fetchone(
-        "SELECT r.id AS id FROM injections i JOIN rules r ON r.id = i.rule_id "
-        "WHERE r.short_id = ? AND i.created_at >= ? "
-        "ORDER BY i.created_at DESC LIMIT 1",
-        (short_id, since_iso),
-    )
-    return row["id"] if row else None
+    return find_rule_id_by_injection(db, short_id, since_iso)
 
 
 def fetch_shadow_rules(db: "Db", *, project_id: str | None) -> list:
@@ -367,9 +375,14 @@ def archive_rule(db: "Db", rule_id: str, reason: str, now: str) -> None:
         )
 
 
+def _delete_rule_cascade_tx(tx, rule_id: str) -> None:
+    """Remove rule and dependent rows within an existing transaction cursor."""
+    tx.execute("DELETE FROM injections WHERE rule_id = ?", (rule_id,))
+    tx.execute("DELETE FROM rule_embeddings WHERE rule_id = ?", (rule_id,))
+    tx.execute("DELETE FROM rules WHERE id = ?", (rule_id,))
+
+
 def delete_rule_cascade(db: "Db", rule_id: str) -> None:
     """Remove rule and dependent rows (foreign_keys=ON)."""
     with db.transaction() as tx:
-        tx.execute("DELETE FROM injections WHERE rule_id = ?", (rule_id,))
-        tx.execute("DELETE FROM rule_embeddings WHERE rule_id = ?", (rule_id,))
-        tx.execute("DELETE FROM rules WHERE id = ?", (rule_id,))
+        _delete_rule_cascade_tx(tx, rule_id)

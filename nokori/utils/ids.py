@@ -11,6 +11,11 @@ def new_uuid() -> str:
     return str(uuid.uuid4())
 
 
+def safe_session_id(session_id: str) -> str:
+    """Sanitize a session id for use as a filesystem path component."""
+    return "".join(c if c.isalnum() or c in "-_" else "_" for c in session_id)
+
+
 def short_id_for(full_id: str, taken: Iterable[str]) -> str:
     """Return the shortest unique prefix of `full_id` (>= 6 chars) not in taken.
 
