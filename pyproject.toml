@@ -41,6 +41,7 @@ dependencies = []
 dev = ["pytest>=7.0"]
 # >=3.0 required: Granite uses encode_query / encode_document (ST 2.x lacks these).
 local-embed = ["sentence-transformers>=3.0"]
+web = ["fastapi>=0.104", "uvicorn[standard]>=0.24", "websockets>=12.0"]
 
 [project.urls]
 Homepage = "https://github.com/KorenKrita/nokori"

@@ -167,6 +167,10 @@ def _build_parser() -> argparse.ArgumentParser:
         help="serve=foreground; start=detach; stop=shutdown; status=probe; prefetch=download local weights",
     )
 
+    sp_web = sub.add_parser("web", help="launch the web UI dashboard")
+    sp_web.add_argument("--port", type=int, default=8765, help="server port (default: 8765)")
+    sp_web.add_argument("--no-browser", action="store_true", help="don't auto-open browser")
+
     return p
 
 
@@ -244,6 +248,10 @@ def _dispatch(args: argparse.Namespace, cfg: Config) -> int:
         from .commands import embed_cmd
 
         return embed_cmd.run(args, cfg)
+    if cmd == "web":
+        from .web import run as web_run
+
+        return web_run(args, cfg)
 
     print(f"nokori: unknown command {cmd!r}", file=sys.stderr)
     return 2
