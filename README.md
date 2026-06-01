@@ -227,6 +227,21 @@ Extra notes:
 
 See `nokori install --help`.
 
+### Updating
+
+```bash
+# pipx
+pipx upgrade nokori
+
+# venv
+~/.local/venvs/nokori/bin/pip install --upgrade nokori
+
+# from source
+git pull && pip install -e ".[local-embed,dev]"
+```
+
+After upgrading, run `nokori health` to confirm everything still checks out. Hook registrations are stable across upgrades (no need to re-run `nokori install`).
+
 ---
 
 ## Quick start

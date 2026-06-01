@@ -225,6 +225,21 @@ nokori install --enable
 
 詳しくは `nokori install --help`。
 
+### アップデート
+
+```bash
+# pipx
+pipx upgrade nokori
+
+# pip（venv 内）
+pip install --upgrade nokori
+
+# ソースから
+git pull && pip install -e ".[local-embed,dev]"
+```
+
+アップグレード後に `nokori health` を実行して問題がないか確認してください。Hook 登録はバージョン間で安定しており、アップグレード後に `nokori install` を再実行する必要はありません。
+
 ---
 ## クイックスタート
 

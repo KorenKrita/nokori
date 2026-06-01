@@ -227,6 +227,21 @@ nokori install --enable
 
 详见 `nokori install --help`。
 
+### 更新
+
+```bash
+# pipx
+pipx upgrade nokori
+
+# pip（venv 内）
+pip install --upgrade nokori
+
+# 从源码
+git pull && pip install -e ".[local-embed,dev]"
+```
+
+升级后跑一下 `nokori health` 确认一切正常。Hook 注册跨版本稳定，升级后不需要重新 `nokori install`。
+
 ---
 
 ## 快速开始
