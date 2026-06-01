@@ -22,7 +22,7 @@
   --color-text-secondary: #a1a1aa;
   --color-text-tertiary: #71717a;
   --color-text-muted: #52525b;
-  --color-pill-active-bg: rgba(255, 255, 255, 0.10);
+  --color-pill-active-bg: rgba(255, 255, 255, 0.12);
   --color-pill-active-text: #ffffff;
   --color-pill-hover-bg: rgba(255, 255, 255, 0.04);
   --color-nav-active-bg: rgba(255, 255, 255, 0.08);
@@ -31,30 +31,32 @@
   --color-row-hover: rgba(255, 255, 255, 0.02);
   --color-input-bg: rgba(255, 255, 255, 0.03);
   --color-input-border: rgba(255, 255, 255, 0.10);
+  --color-card-shadow: none;
   color-scheme: dark;
 }
 
 /* Light theme */
 :root.light {
-  --color-bg-base: #fafafa;
-  --color-bg-surface: rgba(0, 0, 0, 0.02);
-  --color-bg-elevated: rgba(0, 0, 0, 0.04);
-  --color-border-subtle: rgba(0, 0, 0, 0.06);
-  --color-border-default: rgba(0, 0, 0, 0.10);
-  --color-border-focus: rgba(0, 0, 0, 0.25);
-  --color-text-primary: #18181b;
-  --color-text-secondary: #52525b;
-  --color-text-tertiary: #a1a1aa;
-  --color-text-muted: #d4d4d8;
-  --color-pill-active-bg: rgba(0, 0, 0, 0.08);
-  --color-pill-active-text: #18181b;
-  --color-pill-hover-bg: rgba(0, 0, 0, 0.04);
-  --color-nav-active-bg: rgba(0, 0, 0, 0.06);
-  --color-nav-active-text: #18181b;
-  --color-nav-hover-text: #18181b;
+  --color-bg-base: #f8f9fa;
+  --color-bg-surface: #ffffff;
+  --color-bg-elevated: #f3f4f6;
+  --color-border-subtle: rgba(0, 0, 0, 0.08);
+  --color-border-default: rgba(0, 0, 0, 0.12);
+  --color-border-focus: rgba(56, 189, 248, 0.5);
+  --color-text-primary: #111827;
+  --color-text-secondary: #4b5563;
+  --color-text-tertiary: #9ca3af;
+  --color-text-muted: #d1d5db;
+  --color-pill-active-bg: #111827;
+  --color-pill-active-text: #ffffff;
+  --color-pill-hover-bg: rgba(0, 0, 0, 0.05);
+  --color-nav-active-bg: rgba(56, 189, 248, 0.08);
+  --color-nav-active-text: #0369a1;
+  --color-nav-hover-text: #111827;
   --color-row-hover: rgba(0, 0, 0, 0.02);
-  --color-input-bg: rgba(0, 0, 0, 0.03);
-  --color-input-border: rgba(0, 0, 0, 0.10);
+  --color-input-bg: #ffffff;
+  --color-input-border: rgba(0, 0, 0, 0.15);
+  --color-card-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
   color-scheme: light;
 }
 
@@ -74,10 +76,7 @@ body {
 }
 
 :root.light body {
-  background:
-    radial-gradient(ellipse at 20% 50%, rgba(139, 92, 246, 0.02), transparent 50%),
-    radial-gradient(ellipse at 80% 20%, rgba(52, 211, 153, 0.015), transparent 40%),
-    #fafafa;
+  background: #f8f9fa;
 }
 
 * {

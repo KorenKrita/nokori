@@ -29,7 +29,7 @@ const NAV_ITEMS = [
 export function Layout() {
   return (
     <div className="flex min-h-[100dvh]">
-      <aside className="fixed left-0 top-0 h-full w-60 border-r border-white/[0.06] bg-white/[0.02] backdrop-blur-xl p-4 flex flex-col z-10">
+      <aside className="fixed left-0 top-0 h-full w-60 border-r border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] backdrop-blur-xl p-4 flex flex-col z-10">
         <div className="px-3 py-4 mb-4">
           <motion.h1
             initial={{ opacity: 0, x: -10 }}
