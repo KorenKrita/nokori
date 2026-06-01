@@ -169,6 +169,7 @@ def _triage_one(
 def _run_triage(
     pool: list[Path],
     *,
+    target_samples: int,
     base_url: str,
     api_key: str | None,
     judge_model: str,
@@ -176,17 +177,51 @@ def _run_triage(
     timeout: int,
     max_workers: int,
 ) -> dict[str, dict]:
-    """Triage all transcripts in pool, using cache where available."""
-    cache = _load_triage_cache()
-    to_triage: list[Path] = []
-    for p in pool:
-        key = str(p)
-        if key in cache:
-            continue
-        to_triage.append(p)
+    """Triage just enough transcripts to fill buckets, using cache first.
 
-    if to_triage:
-        _log(f"  triage: {len(to_triage)} new transcripts (cache has {len(cache)}) ...")
+    Strategy: need ~3x target_samples classified to reliably fill 20/60/20.
+    Classify in small batches, stop early once all buckets are full.
+    """
+    cache = _load_triage_cache()
+    need_per_bucket = {
+        0: max(2, round(target_samples * 0.2)) + 2,
+        1: max(2, round(target_samples * 0.6)) + 2,
+        2: max(2, round(target_samples * 0.2)) + 2,
+    }
+
+    def _bucket_counts() -> dict[int, int]:
+        counts: dict[int, int] = {0: 0, 1: 0, 2: 0}
+        for p in pool:
+            entry = cache.get(str(p))
+            if entry is None:
+                continue
+            b = min(2, max(0, entry.get("expected_rules", 0)))
+            counts[b] += 1
+        return counts
+
+    counts = _bucket_counts()
+    buckets_full = all(counts[b] >= need_per_bucket[b] for b in (0, 1, 2))
+
+    if buckets_full:
+        _log(f"  triage: buckets already full from cache ({sum(counts.values())} classified)")
+        return cache
+
+    uncached = [p for p in pool if str(p) not in cache]
+    if not uncached:
+        _log(f"  triage: all {len(pool)} transcripts cached")
+        return cache
+
+    # Classify in batches until buckets are full or pool exhausted
+    batch_size = min(30, len(uncached))
+    total_classified = 0
+    random.shuffle(uncached)
+
+    _log(f"  triage: need to classify more (cache={len(cache)}, uncached={len(uncached)})")
+
+    while uncached and not buckets_full:
+        batch = uncached[:batch_size]
+        uncached = uncached[batch_size:]
+
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = {
                 executor.submit(
@@ -197,26 +232,24 @@ def _run_triage(
                     budget_tokens=budget_tokens,
                     timeout=timeout,
                 ): p
-                for p in to_triage
+                for p in batch
             }
-            done = 0
             for future in as_completed(futures):
                 p = futures[future]
-                done += 1
                 try:
                     result = future.result()
                 except Exception:
                     result = None
                 if result is not None:
                     cache[str(p)] = result
-                if done % 10 == 0:
-                    _log(f"    triage progress: {done}/{len(to_triage)}")
-                    _save_triage_cache(cache)
-        _save_triage_cache(cache)
-        _log(f"  triage done: cache now has {len(cache)} entries")
-    else:
-        _log(f"  triage: all {len(pool)} transcripts cached")
+                    total_classified += 1
 
+        _save_triage_cache(cache)
+        counts = _bucket_counts()
+        buckets_full = all(counts[b] >= need_per_bucket[b] for b in (0, 1, 2))
+        _log(f"    classified {total_classified} so far → buckets: 0={counts[0]} 1={counts[1]} 2+={counts[2]}")
+
+    _log(f"  triage done: {total_classified} new classifications")
     return cache
 
 
@@ -741,6 +774,7 @@ def main() -> int:
         _log("Pre-classifying transcripts (triage phase) ...")
         triage_cache = _run_triage(
             pool,
+            target_samples=samples_n,
             base_url=cfg.llm_base_url,
             api_key=cfg.llm_api_key,
             judge_model=triage_model,
