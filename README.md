@@ -4,9 +4,9 @@
 
 > What experience leaves behind runs deeper than memory.
 
-**A rule notebook for Claude Code** — turns your corrections and hard-won lessons into rules that are automatically recalled next time.
+**A rule notebook for Claude Code and Cursor** — turns your corrections into rules that come back automatically next time.
 
-It does not record “what you talked about last time”; it records “what to do next time”: remind Claude in similar situations, and when needed **block one tool call** so it reads the rule before changing code.
+Nokori does not save “what you chatted about”; it saves “what to do next time”: when your message looks similar, matching rules are injected into context. For high-risk corrections, it can **block the first tool call once** so the agent reads the rule before editing files or running commands.
 
 ---
 
@@ -90,9 +90,9 @@ pip install -e .
 pip install -e ".[local-embed]"
 
 # Register hooks (default: Claude Code only; with [local-embed], also prefetches weights)
-nokori install              # same as --claude → ~/.claude/settings.json
-nokori install --cursor     # native Cursor → ~/.cursor/hooks.json
-nokori install --claude --cursor   # both (prints duplicate-hook warning)
+nokori install              # Claude Code → ~/.claude/settings.json
+nokori install --cursor     # Cursor only → ~/.cursor/hooks.json
+nokori install --all        # both (prints duplicate-hook warning)
 # Skip weight download: nokori install --no-prefetch-embed
 # Manual download/retry: nokori embed prefetch
 
@@ -116,28 +116,43 @@ nokori install --disable
 nokori install --enable
 ```
 
-### Using Nokori in Cursor
+### Claude Code and Cursor
 
-Pick **one** registration path (do not combine):
+Nokori supports **Claude Code** (default install) and **Cursor** (native hooks or import from Claude). Use one registration path per machine — not two at once (see below).
 
-| Mode | Command / setup |
-|------|-----------------|
-| **A. Claude import (recommended)** | `nokori install` or `--claude`, then Cursor **Settings → Hooks → Import from Claude Code** |
-| **B. Native Cursor** | `nokori install --cursor` → `~/.cursor/hooks.json`; do **not** enable Claude import |
+#### Which install command?
 
-**Avoid duplicate runs**
+| You want | Command |
+|----------|---------|
+| Claude Code only | `nokori install` |
+| Cursor only (native `~/.cursor/hooks.json`) | `nokori install --cursor` |
+| Both platforms | `nokori install --all` *(prints a warning)* |
 
-- Mode A: turn off **project-level** hooks imported from this repo’s `.claude`; keep user-level `~/.claude` nokori only.
-- Mode B: use `--cursor` only; no Claude import.
-- **`nokori install --claude --cursor`** prints a warning (also on `--dry-run`); single-target installs do **not**.
+`nokori install --disable` / `--enable` only change Claude’s `settings.json`. To stop Cursor: `nokori install --uninstall --cursor`.
+
+#### Pick one way to hook Cursor (do not combine)
+
+| Path | What you do | Good when |
+|------|-------------|-----------|
+| **A — Import from Claude (simplest)** | `nokori install`, then in Cursor: **Settings → Hooks → Import from Claude Code** | You already use Claude Code; one shared hook config |
+| **B — Native Cursor hooks** | `nokori install --cursor` only; **do not** turn on Claude import in Cursor | You want Cursor-only setup with `Shell` in the matcher and deferred inject |
+
+**If both paths are active** (Claude settings + Cursor `hooks.json`, or import + native), the same user message can trigger Nokori twice. By default **hook coalesce** (`NOKORI_HOOK_COALESCE=1`) lets only the first invocation run retrieve/gate/extract; the second gets an empty pass-through. `nokori health` warns when both are registered. Still, prefer one path — see README table above.
+
+Extra tips:
+
+- Path A: disable **project-level** hooks imported from this repo’s `.claude`; keep user-level `~/.claude` nokori only.
+- Path B: do not enable “Import from Claude Code” in Cursor settings.
+
+#### Cursor-only details
+
+**Terminal tool name**: Cursor Agent uses `Shell`; Claude Code uses `Bash`. Native install (`--cursor`) includes `Shell` in the preToolUse matcher. If you only imported Claude hooks, extend the PreToolUse `matcher` to include `Shell` (or `*`), or gate/deferred inject may never run on shell commands. When Nokori detects a Cursor transcript (`~/.cursor/...`), the in-hook gate matcher also defaults to include `Shell` ([Gate two-layer matching](#gate-and-pretooluse-two-layers-of-tool-matching)).
+
+**How rules appear in Cursor**: [Cursor’s hook docs](https://cursor.com/docs/agent/hooks) allow only `continue` and `user_message` on `beforeSubmitPrompt` — not Claude’s `additionalContext`. Nokori still retrieves rules on every send. Blocking uses Cursor’s `permission: deny` on `preToolUse`. Session-start hot cache uses `sessionStart` → `additional_context`. Per-message rule text is best-effort on `beforeSubmitPrompt`; when that hook does not run, see deferred inject below.
+
+**Deferred inject (when `beforeSubmitPrompt` is skipped)**: For a user turn where Cursor never fired `beforeSubmitPrompt`, the **first** matching `preToolUse` (e.g. `Shell`, `Write`) may **deny once** and put the full rule text in `agent_message`. **Run the same tool again** after the deny — that is expected, not a failure. Other tools in the same turn are not denied again (atomic dedup per prompt).
 
 See `nokori install --help`.
-
-**Gate and Cursor tool names**: Cursor Agent uses `Shell` for terminal commands (Claude Code uses `Bash`). If the **first-layer** PreToolUse `matcher` in `settings.json` only lists `Bash`, `Shell` never invokes the hook. Extend nokori’s `PreToolUse.matcher` to include `Shell`, or use `*`. When the transcript path is under `~/.cursor/...`, Nokori’s **second-layer** `[gate]` matcher defaults include `Shell` (see [Gate two-layer matching](#gate-and-pretooluse-two-layers-of-tool-matching)).
-
-**Cursor prompt injection (official limits)**: Per [Cursor hooks docs](https://cursor.com/docs/agent/hooks), `beforeSubmitPrompt` output is only `continue` and `user_message` — not Claude’s `additionalContext`. Nokori still runs retrieve + gate on every send; **gate blocking** uses Cursor-native `permission: deny` on `preToolUse`. **Hot-cache** text at session open uses `sessionStart` → `additional_context`. Per-prompt rule text on Cursor is sent as best-effort `additional_context` on `beforeSubmitPrompt` (may be ignored by Cursor); for reliable injection, prefer Claude Code or project rules.
-
-**Deferred injection when `beforeSubmitPrompt` is skipped**: If Cursor does not run `beforeSubmitPrompt` for a user turn, Nokori may **deny the first matching tool** (`Shell`, `Write`, etc.) on `preToolUse`, inject the full rule text via `agent_message`, and mark that turn as handled. **Run the tool again** after the deny — this is intentional, not a bug. Later tools in the same turn are not denied again (dedup by `generation_id` + prompt hash, or prompt hash alone when `generation_id` is absent).
 
 ---
 
@@ -458,6 +473,7 @@ Maintenance runs automatically on `SessionStart` (interval checks):
 - **Candidate cleanup** (scan interval at most every 30 days): delete ordinary candidates with **created_at ≥20 calendar days**, `anti_pattern` candidates **≥40 days** (not “alive 30 days”)
 - **Unmerge check** (at most every 90 days): `status=merged` rules whose `superseded_by` target was deleted or is dormant/archived revert to `dormant`; **immediate orphan unmerge** after candidate cleanup deletes anchor rule
 - **Session file cleanup**: delete registry files in `active_sessions/` ended more than 60 days ago
+- **Hook coalesce cleanup**: delete `hook_coalesce/` claim files older than 24 hours (avoids buildup when many prompts run)
 - **Injection cleanup** (scan interval at most every 7 days): delete `injections` rows **older than 30 days** (dismiss only checks 24h; buffer retained)
 
 Manual trigger:
@@ -589,7 +605,7 @@ nokori export <path.json>
 nokori import <path.json>
 
 # Installation
-nokori install [--dry-run | --uninstall | --disable | --enable | --no-prefetch-embed]
+nokori install [--claude | --cursor | --all] [--dry-run | --uninstall | --disable | --enable | --no-prefetch-embed]
 ```
 
 ---
@@ -623,6 +639,7 @@ nokori install [--dry-run | --uninstall | --disable | --enable | --no-prefetch-e
 | `NOKORI_EMBED_CHUNK_COUNT` | `2` | Max chunks per rule |
 | `NOKORI_STRICT` | `0` | `1` = hook errors propagate (debug; default fail-open) |
 | `NOKORI_DISABLED` | `0` | Disable entirely |
+| `NOKORI_HOOK_COALESCE` | `1` | When Claude + Cursor both register hooks: only first invocation per event runs logic (`0` = off, may double-inject) |
 | `NOKORI_DISMISS_PHRASE` | `dismiss` | Chat verb to retire rules (`verb + short_id`); see [Dismiss](#4-outdated-rules-dismiss) |
 | `NOKORI_LOG_LEVEL` | `warn` | Log level (`debug` also enables `[diag]` hook traces) |
 | `NOKORI_HOOK_DEBUG` | `0` | `1` = verbose per-hook `[diag]` lines in `hook.log` |
@@ -708,6 +725,7 @@ All data is stored locally under `~/.nokori/`:
 ├── jobs/                 # Extract job queue
 ├── active_sessions/      # Session registry
 ├── gate_markers/         # Gate markers (by session + prompt_hash)
+├── hook_coalesce/        # Dedup claims when Claude + Cursor both fire hooks
 ├── logs/
 │   ├── hook.log          # Hook process logs
 │   ├── pipeline.log      # Extract/merge logs

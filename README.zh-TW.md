@@ -4,9 +4,9 @@
 
 > 經驗留下的痕跡，比記憶更深。
 
-**面向 Claude Code 的規則筆記本**——把你糾正過的話、踩過的坑，沉澱爲下次能自動召回的行爲規則。
+**面向 Claude Code 與 Cursor 的規則筆記本**——把你糾正過的話、踩過的坑，沉澱爲下次能自動召回的行爲規則。
 
-記錄的不是「上次聊了什麼」，而是「下次該怎麼做」：在相似場景裏先提醒 Claude，必要時**攔截一次工具調用**，讓它先看到規則再改代碼。
+記錄的不是「上次聊了什麼」，而是「下次該怎麼做」：你的話與某條規矩的觸發場景相似時，自動寫進上下文提醒；若是高危糾正且命中很準，可以**先攔截一次工具調用**，讓 Agent 先看到規則再改檔案或跑命令。
 
 ---
 
@@ -89,8 +89,10 @@ pip install -e .
 # 可選：本地 embedding（會安裝 sentence-transformers，並自動下載模型權重到 ~/.nokori/models/）
 pip install -e ".[local-embed]"
 
-# 註冊 hooks 到 Claude Code（已裝 [local-embed] 時也會 prefetch，與 hooks 是否變更無關）
-nokori install
+# 註冊 hooks（預設僅 Claude Code；已裝 [local-embed] 時也會 prefetch）
+nokori install              # Claude Code → ~/.claude/settings.json
+nokori install --cursor     # 僅原生 Cursor → ~/.cursor/hooks.json
+nokori install --all        # Claude + Cursor（會列印避免重複執行的提醒）
 # 跳過權重下載：nokori install --no-prefetch-embed
 # 手動補下/重試：nokori embed prefetch
 
@@ -114,9 +116,43 @@ nokori install --disable
 nokori install --enable
 ```
 
-### 在 Cursor 裡使用（Claude Code hook 匯入）
+### Claude Code 與 Cursor
 
-與 [README.zh-CN「在 Cursor 裡使用」](README.zh-CN.md#在-cursor-裡使用claude-code-hook-导入) 相同：`nokori install` 只寫使用者級 `~/.claude/settings.json`。若 Cursor 已開啟「從 Claude Code 匯入 hook」，請**關閉該專案下由 Claude Code 匯入的 project 級 hook**，只保留使用者級 nokori，避免重複執行。`nokori install` / `--dry-run` 結束時會列印提醒。
+預設裝 **Claude Code**；也支援 **Cursor**（原生 hook 或從 Claude 匯入）。同一台機器上請只選一種 Cursor 註冊方式，不要疊兩套。
+
+#### 裝哪條命令？
+
+| 目標 | 命令 |
+|------|------|
+| 僅 Claude Code | `nokori install` |
+| 僅 Cursor（原生 `~/.cursor/hooks.json`） | `nokori install --cursor` |
+| 兩個平台都裝 | `nokori install --all`（結束時會列印避免重複執行的提醒） |
+
+`nokori install --disable` / `--enable` 只改 Claude 的 `settings.json`。要停 Cursor：`nokori install --uninstall --cursor`。
+
+#### Cursor 只選一條路（不要混用）
+
+| 路徑 | 怎麼做 | 適合 |
+|------|--------|------|
+| **A — 從 Claude 匯入（最省事）** | `nokori install`，再在 Cursor：**Settings → Hooks → 從 Claude Code 匯入** | 本來就用 Claude Code，想共用一份 hook 設定 |
+| **B — Cursor 原生** | 只跑 `nokori install --cursor`；**不要**在 Cursor 裏再開 Claude 匯入 | 只要 Cursor；需要 matcher 含 `Shell`、支援 deferred 注入 |
+
+**若兩套都生效**（Claude settings + Cursor `hooks.json`，或匯入 + 原生），同一條使用者訊息可能觸發 Nokori 兩次。預設開啟 **hook 合併**（`NOKORI_HOOK_COALESCE=1`）：只有第一次呼叫會跑檢索/Gate/提取，第二次空跑通過。`nokori health` 會在雙註冊時警告。仍建議只保留一種路徑。
+
+補充：
+
+- 路徑 A：關掉本倉庫 **專案級** 從 `.claude` 匯入的 hook，只留使用者級 `~/.claude` 裏的 nokori。
+- 路徑 B：不要在 Cursor 設定裏再開「從 Claude Code 匯入」。
+
+#### 僅 Cursor 要注意的
+
+**終端工具名**：Cursor 用 `Shell`，Claude Code 用 `Bash`。`nokori install --cursor` 會在 preToolUse matcher 裏帶上 `Shell`。若只走了 Claude 匯入、matcher 仍只有 `Bash`，Shell 命令不會進 hook——請把 matcher 擴成含 `Shell` 或 `*`。識別到 Cursor transcript（`~/.cursor/...`）時，hook 內第二層 `[gate]` 也會預設含 `Shell`（見 [Gate 兩層匹配](#gate-與-pretooluse兩層工具匹配)）。
+
+**規則怎麼進上下文**：[Cursor 官方 hook 文件](https://cursor.com/docs/agent/hooks) 裏，`beforeSubmitPrompt` 只允許 `continue` 和 `user_message`，沒有 Claude 的 `additionalContext`。Nokori 仍會在每次傳送時檢索；阻斷用 Cursor 的 `preToolUse` → `permission: deny`。會話開始的熱快取走 `sessionStart` → `additional_context`。每條訊息的規則文字在 `beforeSubmitPrompt` 上是盡力注入；若該 hook 沒跑，見下條 deferred。
+
+**Deferred 注入（`beforeSubmitPrompt` 沒跑時）**：某輪若 Cursor 沒觸發 `beforeSubmitPrompt`，**第一次**匹配的 `preToolUse`（如 `Shell`、`Write`）可能 **deny 一次**，在 `agent_message` 裏帶上完整規則。**deny 後請再執行同一工具**，這是設計如此，不是故障。同輪後面的工具不會再次 deny（按 prompt 原子去重）。
+
+詳見 `nokori install --help`。
 
 ---
 
@@ -436,6 +472,7 @@ SessionStart 找「上一場 transcript」：
 - **Candidate 清理**（掃描間隔最多每 30 天跑一次）：刪除 **created_at ≥20 日曆天** 的普通 candidate、**≥40 天** 的 `anti_pattern` candidate（非「活 30 天」）
 - **Unmerge 檢查**（最多每 90 天）：`status=merged` 的規則若 `superseded_by` 指向的規則已刪除或 dormant/archived，則恢復爲 `dormant`；**candidate 清理刪除錨點規則後**也會立即做一次 orphan unmerge
 - **Session 文件清理**：刪除 `active_sessions/` 裏已結束超過 60 天的 registry 文件
+- **Hook 合併清理**：刪除 `hook_coalesce/` 裏超過 24 小時的 claim 文件（雙端註冊、訊息很多時避免堆積）
 - **Injection 清理**（掃描間隔最多每 7 天）：刪除 **30 天前** 的 `injections` 行（dismiss 僅查 24h，留緩衝）
 
 也可手動觸發：
@@ -567,7 +604,7 @@ nokori export <path.json>
 nokori import <path.json>
 
 # 安裝
-nokori install [--dry-run | --uninstall | --disable | --enable | --no-prefetch-embed]
+nokori install [--claude | --cursor | --all] [--dry-run | --uninstall | --disable | --enable | --no-prefetch-embed]
 ```
 
 ---
@@ -601,6 +638,7 @@ nokori install [--dry-run | --uninstall | --disable | --enable | --no-prefetch-e
 | `NOKORI_EMBED_CHUNK_COUNT` | `2` | 每規則最多分塊數 |
 | `NOKORI_STRICT` | `0` | `1` 時 hook 異常向上拋出（調試；默認 fail-open） |
 | `NOKORI_DISABLED` | `0` | 完全禁用 |
+| `NOKORI_HOOK_COALESCE` | `1` | Claude + Cursor 都註冊 hook 時：同一事件只讓第一次真正執行（`0` 關閉，可能重複注入） |
 | `NOKORI_DISMISS_PHRASE` | `dismiss` | 對話裏退役規則的動詞（`動詞 + short_id`）；見 [Dismiss](#4-規則過時了dismiss) |
 | `NOKORI_LOG_LEVEL` | `warn` | 日誌級別 |
 
@@ -685,6 +723,7 @@ enabled = true
 ├── jobs/                 # Extract job 隊列
 ├── active_sessions/      # Session registry
 ├── gate_markers/         # Gate markers（按 session + prompt_hash）
+├── hook_coalesce/        # Claude + Cursor 雙註冊時的去重 claim
 ├── logs/
 │   ├── hook.log          # Hook 進程日誌
 │   ├── pipeline.log      # 提取/合併日誌

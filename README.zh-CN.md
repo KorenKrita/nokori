@@ -4,9 +4,9 @@
 
 > 经验留下的痕迹，比记忆更深。
 
-**面向 Claude Code 的规则笔记本**——把你纠正过的话、踩过的坑，沉淀为下次能自动召回的行为规则。
+**面向 Claude Code 与 Cursor 的规则笔记本**——把你纠正过的话、踩过的坑，沉淀为下次能自动召回的行为规则。
 
-记录的不是「上次聊了什么」，而是「下次该怎么做」：在相似场景里先提醒 Claude，必要时**拦截一次工具调用**，让它先看到规则再改代码。
+记录的不是「上次聊了什么」，而是「下次该怎么做」：你的话和某条规矩的触发场景相似时，自动写进上下文提醒；若是高危纠正且命中很准，可以**先拦截一次工具调用**，让 Agent 先看到规则再改文件或跑命令。
 
 ---
 
@@ -118,26 +118,43 @@ nokori install --disable
 nokori install --enable
 ```
 
-### 在 Cursor 里使用
+### Claude Code 与 Cursor
 
-任选一种（不要混用多种注册方式）：
+默认装 **Claude Code**；也支持 **Cursor**（原生 hook 或从 Claude 导入）。同一台机器上请只选一种 Cursor 注册方式，不要叠两套（见下表）。
 
-| 方式 | 命令 / 设置 |
-|------|-------------|
-| **A. Claude 导入（推荐，只装一处）** | `nokori install`（或 `--claude`），Cursor 开 **Settings → Hooks → 从 Claude Code 导入** |
-| **B. Cursor 原生** | `nokori install --cursor` → `~/.cursor/hooks.json`，**不要**再开 Claude 导入 |
+#### 装哪条命令？
 
-**避免重复执行**
+| 目标 | 命令 |
+|------|------|
+| 仅 Claude Code | `nokori install` |
+| 仅 Cursor（原生 `~/.cursor/hooks.json`） | `nokori install --cursor` |
+| 两个平台都装 | `nokori install --all`（结束时会打印避免重复执行的提醒） |
 
-- 方式 A：若 Cursor 已导入 Claude hooks，请 **关闭项目级** 从本仓库 `.claude` 导入的 hook，只保留用户级 `~/.claude` 里的 nokori。
-- 方式 B：只用 `--cursor`，勿再开 Claude 导入。
-- **同时** `nokori install --claude --cursor` 时，命令结束会打印提醒：勿再开 Claude 导入、勿启用 project 级导入，否则会跑两遍。
+`nokori install --disable` / `--enable` 只改 Claude 的 `settings.json`。要停 Cursor：`nokori install --uninstall --cursor`。
 
-仅选 A 或仅选 B 时 **不会** 打印该提醒。
+#### Cursor 只选一条路（不要混用）
 
-**Gate 与 Cursor 工具名**：Cursor Agent 的终端工具名为 `Shell`（Claude Code 为 `Bash`）。若 PreToolUse **第一层** matcher 仍只有 `Bash`，`Shell` 不会进入 hook。可在 `~/.claude/settings.json` 里把 nokori 那条 `PreToolUse.matcher` 扩为含 `Shell`，或使用 `*`；Nokori 在识别到 Cursor transcript 路径（`~/.cursor/...`）时，**第二层** `[gate]` 会自动使用含 `Shell` 的默认 matcher（见 [Gate 两层匹配](#gate-与-pretooluse两层工具匹配)）。
+| 路径 | 怎么做 | 适合 |
+|------|--------|------|
+| **A — 从 Claude 导入（最省事）** | `nokori install`，再在 Cursor：**Settings → Hooks → 从 Claude Code 导入** | 本来就用 Claude Code，想共用一份 hook 配置 |
+| **B — Cursor 原生** | 只跑 `nokori install --cursor`；**不要**在 Cursor 里再开 Claude 导入 | 只要 Cursor；需要 matcher 含 `Shell`、支持 deferred 注入 |
 
-**Deferred 注入（`beforeSubmitPrompt` 未触发时）**：若某轮用户输入未跑 `beforeSubmitPrompt`，Nokori 可能在 **第一次** 匹配的 `preToolUse`（如 `Shell`、`Write`）上 `deny`，通过 `agent_message` 注入完整规则，并标记该轮已处理。**deny 后请再次执行该工具**，属预期行为而非故障；同轮后续工具不会重复 deny（有 `generation_id` 时用 generation+prompt hash，无 id 时仅用 prompt hash 去重）。
+**若两套都生效**（Claude settings + Cursor `hooks.json`，或导入 + 原生），同一条用户消息可能触发 Nokori 两次。默认开启 **hook 合并**（`NOKORI_HOOK_COALESCE=1`）：只有第一次调用会跑检索/Gate/提取，第二次空跑通过。`nokori health` 会在双注册时警告。仍建议只保留一种路径。
+
+补充：
+
+- 路径 A：关掉本仓库 **项目级** 从 `.claude` 导入的 hook，只留用户级 `~/.claude` 里的 nokori。
+- 路径 B：不要在 Cursor 设置里再开「从 Claude Code 导入」。
+
+#### 仅 Cursor 要注意的
+
+**终端工具名**：Cursor 用 `Shell`，Claude Code 用 `Bash`。`nokori install --cursor` 会在 preToolUse matcher 里带上 `Shell`。若只走了 Claude 导入、matcher 仍只有 `Bash`，Shell 命令不会进 hook——请把 matcher 扩成含 `Shell` 或 `*`。识别到 Cursor transcript（`~/.cursor/...`）时，hook 内第二层 `[gate]` 也会默认含 `Shell`（见 [Gate 两层匹配](#gate-与-pretooluse两层工具匹配)）。
+
+**规则怎么进上下文**：[Cursor 官方 hook 文档](https://cursor.com/docs/agent/hooks) 里，`beforeSubmitPrompt` 只允许 `continue` 和 `user_message`，没有 Claude 的 `additionalContext`。Nokori 仍会在每次发送时检索；阻断用 Cursor 的 `preToolUse` → `permission: deny`。会话开始的热缓存走 `sessionStart` → `additional_context`。每条消息的规则文本在 `beforeSubmitPrompt` 上是尽力注入；若该 hook 没跑，见下条 deferred。
+
+**Deferred 注入（`beforeSubmitPrompt` 没跑时）**：某轮若 Cursor 没触发 `beforeSubmitPrompt`，**第一次**匹配的 `preToolUse`（如 `Shell`、`Write`）可能 **deny 一次**，在 `agent_message` 里带上完整规则。**deny 后请再执行同一工具**，这是设计如此，不是故障。同轮后面的工具不会再次 deny（按 prompt 原子去重）。
+
+详见 `nokori install --help`。
 
 ---
 
@@ -457,6 +474,7 @@ SessionStart 找「上一场 transcript」：
 - **Candidate 清理**（扫描间隔最多每 30 天跑一次）：删除 **created_at ≥20 日历天** 的普通 candidate、**≥40 天** 的 `anti_pattern` candidate（非「活 30 天」）
 - **Unmerge 检查**（最多每 90 天）：`status=merged` 的规则若 `superseded_by` 指向的规则已删除或 dormant/archived，则恢复为 `dormant`；**candidate 清理删除锚点规则后**也会立即做一次 orphan unmerge
 - **Session 文件清理**：删除 `active_sessions/` 里已结束超过 60 天的 registry 文件
+- **Hook 合并清理**：删除 `hook_coalesce/` 里超过 24 小时的 claim 文件（双端注册、消息很多时避免堆积）
 - **Injection 清理**（扫描间隔最多每 7 天）：删除 **30 天前** 的 `injections` 行（dismiss 仅查 24h，留缓冲）
 
 也可手动触发：
@@ -588,7 +606,7 @@ nokori export <path.json>
 nokori import <path.json>
 
 # 安装
-nokori install [--dry-run | --uninstall | --disable | --enable | --no-prefetch-embed]
+nokori install [--claude | --cursor | --all] [--dry-run | --uninstall | --disable | --enable | --no-prefetch-embed]
 ```
 
 ---
@@ -622,6 +640,7 @@ nokori install [--dry-run | --uninstall | --disable | --enable | --no-prefetch-e
 | `NOKORI_EMBED_CHUNK_COUNT` | `2` | 每规则最多分块数 |
 | `NOKORI_STRICT` | `0` | `1` 时 hook 异常向上抛出（调试；默认 fail-open） |
 | `NOKORI_DISABLED` | `0` | 完全禁用 |
+| `NOKORI_HOOK_COALESCE` | `1` | Claude + Cursor 都注册 hook 时：同一事件只让第一次真正执行（`0` 关闭，可能重复注入） |
 | `NOKORI_DISMISS_PHRASE` | `dismiss` | 对话里退役规则的动词（`动词 + short_id`）；见 [Dismiss](#4-规则过时了dismiss) |
 | `NOKORI_LOG_LEVEL` | `warn` | 日志级别 |
 
@@ -706,6 +725,7 @@ enabled = true
 ├── jobs/                 # Extract job 队列
 ├── active_sessions/      # Session registry
 ├── gate_markers/         # Gate markers（按 session + prompt_hash）
+├── hook_coalesce/        # Claude + Cursor 双注册时的去重 claim
 ├── logs/
 │   ├── hook.log          # Hook 进程日志
 │   ├── pipeline.log      # 提取/合并日志
