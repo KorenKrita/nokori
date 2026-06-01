@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 
 from ..llm.adapter import LLMAdapter
+from ..llm.json_payload import parse_json_payload
 from ..llm.prompts import EXTRACT_SYSTEM, wrap_untrusted
 from ..utils.logging import get_logger
 
@@ -46,13 +46,12 @@ def extract(transcript: str, llm: LLMAdapter) -> tuple[list[Candidate], bool]:
 
 
 def _parse_candidates(raw: str) -> tuple[list[Candidate], bool]:
-    text = raw.strip()
-    if text.startswith("```"):
-        text = strip_fence(text)
-    try:
-        data = json.loads(text)
-    except json.JSONDecodeError:
-        log.warning("extract LLM returned non-JSON; first 60 chars=%r", text[:60])
+    data = parse_json_payload(raw)
+    if data is None:
+        log.warning(
+            "extract LLM returned non-JSON; first 60 chars=%r",
+            (raw or "").strip()[:60],
+        )
         return [], False
 
     if isinstance(data, dict):
@@ -74,15 +73,6 @@ def _parse_candidates(raw: str) -> tuple[list[Candidate], bool]:
     if had_items and not out:
         return [], False
     return out, True
-
-
-def strip_fence(text: str) -> str:
-    lines = text.splitlines()
-    if lines and lines[0].startswith("```"):
-        lines = lines[1:]
-    if lines and lines[-1].startswith("```"):
-        lines = lines[:-1]
-    return "\n".join(lines)
 
 
 def _coerce(item: dict) -> Candidate:

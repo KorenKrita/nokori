@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from ..db import Db, RULE_COLUMNS, dumps_json, fetch_short_ids, row_to_rule
 from ..lifecycle.evidence import add_evidence, should_activate_pure_ai
 from ..llm.adapter import LLMAdapter
+from ..llm.json_payload import parse_json_payload
 from ..llm.prompts import MERGE_SYSTEM, format_merge_user
 from ..models import Rule
 from ..search import bm25
@@ -14,7 +15,7 @@ from ..search.embedding import index_rule_if_enabled
 from ..utils.ids import new_uuid, short_id_for
 from ..utils.logging import get_logger
 from ..utils.time import now_iso
-from .extractor import Candidate, strip_fence
+from .extractor import Candidate
 
 log = get_logger("nokori.extract.merger")
 
@@ -229,12 +230,8 @@ def _ask_llm(cand: Candidate, neighbors: list[Rule], llm: LLMAdapter) -> dict | 
         return None
     if raw is None:
         return None
-    text = raw.strip()
-    if text.startswith("```"):
-        text = strip_fence(text)
-    try:
-        data = json.loads(text)
-    except json.JSONDecodeError:
+    data = parse_json_payload(raw)
+    if data is None:
         log.warning("merge LLM returned non-JSON")
         return None
     if isinstance(data, list):
