@@ -12,7 +12,43 @@ from ..lifecycle.promotion import (
 )
 from ..extract import jobs as job_io
 from ..search import embed_ipc
+from ..commands.install import (
+    describe_claude_hooks,
+    describe_cursor_hooks,
+    describe_dual_hook_registration,
+)
+from ..hooks.coalesce import coalesce_enabled
 from ..utils import sessions
+
+
+def _yn(value: bool) -> str:
+    return "yes" if value else "no"
+
+
+def _print_hook_platform(label: str, state: dict[str, object], *, disable_hint: str) -> None:
+    installed = bool(state.get("installed"))
+    print(f"hooks.{label}.installed { _yn(installed) }")
+    if label == "claude":
+        disabled = bool(state.get("disabled"))
+        print(f"hooks.{label}.disabled  { _yn(disabled) if installed else 'n/a' }")
+        if disabled:
+            print(
+                f"hooks.{label}.note      NOKORI_DISABLED in settings.json env "
+                "(hooks still registered; nokori install --enable)"
+            )
+        elif not installed:
+            note = state.get("note")
+            if note:
+                print(f"hooks.{label}.note      {note}")
+    else:
+        print(f"hooks.{label}.disabled  n/a ({disable_hint})")
+        if not installed:
+            note = state.get("note")
+            if note:
+                print(f"hooks.{label}.note      {note}")
+    path = state.get("path")
+    if path:
+        print(f"hooks.{label}.path      {path}")
 
 
 def run(_args: argparse.Namespace, cfg: Config) -> int:
@@ -45,6 +81,22 @@ def run(_args: argparse.Namespace, cfg: Config) -> int:
 
     print(f"data_dir       {cfg.data_dir}")
     print(f"db             {cfg.db_path}")
+    print(f"config.disabled {cfg.disabled}")
+    _print_hook_platform(
+        "claude",
+        describe_claude_hooks(),
+        disable_hint="",
+    )
+    _print_hook_platform(
+        "cursor",
+        describe_cursor_hooks(),
+        disable_hint="use: nokori install --uninstall --cursor",
+    )
+    dual = describe_dual_hook_registration()
+    print(f"hooks.duplicate_risk  {_yn(bool(dual.get('both_installed')))}")
+    print(f"hooks.coalesce        {'on' if coalesce_enabled() else 'off'}")
+    if dual.get("note"):
+        print(f"hooks.duplicate_note  {dual['note']}")
     print(f"rules.total    {total}")
     print(f"rules.active   {by_status.get('active', 0)}")
     print(f"rules.dormant  {by_status.get('dormant', 0)}")

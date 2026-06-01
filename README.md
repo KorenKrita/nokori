@@ -4,9 +4,9 @@
 
 > What experience leaves behind runs deeper than memory.
 
-**A rule notebook for Claude Code** — turns your corrections and hard-won lessons into rules that are automatically recalled next time.
+**A rule notebook for Claude Code and Cursor** — turns your corrections into rules that come back automatically next time.
 
-It does not record “what you talked about last time”; it records “what to do next time”: remind Claude in similar situations, and when needed **block one tool call** so it reads the rule before changing code.
+Nokori does not save “what you chatted about”; it saves “what to do next time”: when your message looks similar, matching rules are injected into context. For high-risk corrections, it can **block the first tool call once** so the agent reads the rule before editing files or running commands.
 
 ---
 
@@ -89,8 +89,10 @@ pip install -e .
 # Optional: local embedding (installs sentence-transformers and downloads model weights to ~/.nokori/models/)
 pip install -e ".[local-embed]"
 
-# Register hooks with Claude Code (with [local-embed] installed, also prefetches weights regardless of hook changes)
-nokori install
+# Register hooks (default: Claude Code only; with [local-embed], also prefetches weights)
+nokori install              # Claude Code → ~/.claude/settings.json
+nokori install --cursor     # Cursor only → ~/.cursor/hooks.json
+nokori install --all        # both (prints duplicate-hook warning)
 # Skip weight download: nokori install --no-prefetch-embed
 # Manual download/retry: nokori embed prefetch
 
@@ -101,6 +103,8 @@ nokori logs          # hook / pipeline / async-extract logs
 ```
 
 `nokori install` writes the hooks above into `~/.claude/settings.json`, **merging** with your existing plugins rather than overwriting them. If `settings.json` is corrupted (invalid JSON), install **refuses to write** and exits (same validation as `nokori health` for settings).
+
+Hook commands use `python -I -m nokori hook` (`-I` = isolated: ignores `PYTHONPATH` and the current directory so a repo-local `nokori/` folder cannot shadow the installed package). Use a normal install (`pip install nokori` or `pip install -e .`); do not rely on `PYTHONPATH` alone to load Nokori in hooks.
 
 ```bash
 # Preview changes before writing
@@ -113,6 +117,44 @@ nokori install --uninstall
 nokori install --disable
 nokori install --enable
 ```
+
+### Claude Code and Cursor
+
+Nokori supports **Claude Code** (default install) and **Cursor** (native hooks or import from Claude). Use one registration path per machine — not two at once (see below).
+
+#### Which install command?
+
+| You want | Command |
+|----------|---------|
+| Claude Code only | `nokori install` |
+| Cursor only (native `~/.cursor/hooks.json`) | `nokori install --cursor` |
+| Both platforms | `nokori install --all` *(prints a warning)* |
+
+`nokori install --disable` / `--enable` only change Claude’s `settings.json`. To stop Cursor: `nokori install --uninstall --cursor`.
+
+#### Pick one way to hook Cursor (do not combine)
+
+| Path | What you do | Good when |
+|------|-------------|-----------|
+| **A — Import from Claude (simplest)** | `nokori install`, then in Cursor: **Settings → Hooks → Import from Claude Code** | You already use Claude Code; one shared hook config |
+| **B — Native Cursor hooks** | `nokori install --cursor` only; **do not** turn on Claude import in Cursor | You want Cursor-only setup with `Shell` in the matcher and deferred inject |
+
+**If both paths are active** (Claude settings + Cursor `hooks.json`, or import + native), the same user message can trigger Nokori twice. By default **hook coalesce** (`NOKORI_HOOK_COALESCE=1`) lets only the first invocation run retrieve/gate/extract; the second gets an empty pass-through. `nokori health` warns when both are registered. Still, prefer one path — see README table above.
+
+Extra tips:
+
+- Path A: disable **project-level** hooks imported from this repo’s `.claude`; keep user-level `~/.claude` nokori only.
+- Path B: do not enable “Import from Claude Code” in Cursor settings.
+
+#### Cursor-only details
+
+**Terminal tool name**: Cursor Agent uses `Shell`; Claude Code uses `Bash`. Native install (`--cursor`) includes `Shell` in the preToolUse matcher. If you only imported Claude hooks, extend the PreToolUse `matcher` to include `Shell` (or `*`), or gate/deferred inject may never run on shell commands. When Nokori detects a Cursor transcript (`~/.cursor/...`), the in-hook gate matcher also defaults to include `Shell` ([Gate two-layer matching](#gate-and-pretooluse-two-layers-of-tool-matching)).
+
+**How rules appear in Cursor**: [Cursor’s hook docs](https://cursor.com/docs/agent/hooks) allow only `continue` and `user_message` on `beforeSubmitPrompt` — not Claude’s `additionalContext`. Nokori still retrieves rules on every send. Blocking uses Cursor’s `permission: deny` on `preToolUse`. Session-start hot cache uses `sessionStart` → `additional_context`. Per-message rule text is best-effort on `beforeSubmitPrompt`; when that hook does not run, see deferred inject below.
+
+**Deferred inject (when `beforeSubmitPrompt` is skipped)**: For a user turn where Cursor never fired `beforeSubmitPrompt`, the **first** matching `preToolUse` (e.g. `Shell`, `Write`) may **deny once** and put the full rule text in `agent_message`. **Run the same tool again** after the deny — that is expected, not a failure. Other tools in the same turn are not denied again (atomic dedup per prompt).
+
+See `nokori install --help`.
 
 ---
 
@@ -433,6 +475,8 @@ Maintenance runs automatically on `SessionStart` (interval checks):
 - **Candidate cleanup** (scan interval at most every 30 days): delete ordinary candidates with **created_at ≥20 calendar days**, `anti_pattern` candidates **≥40 days** (not “alive 30 days”)
 - **Unmerge check** (at most every 90 days): `status=merged` rules whose `superseded_by` target was deleted or is dormant/archived revert to `dormant`; **immediate orphan unmerge** after candidate cleanup deletes anchor rule
 - **Session file cleanup**: delete registry files in `active_sessions/` ended more than 60 days ago
+- **Hook coalesce cleanup**: delete `hook_coalesce/` claim files older than 24 hours (avoids buildup when many prompts run)
+- **Prompt ack cleanup**: delete `prompt_submit_ack/` and `cursor_deferred/` files older than 24 hours; `SessionEnd` also removes that session’s ack/deferred directory
 - **Injection cleanup** (scan interval at most every 7 days): delete `injections` rows **older than 30 days** (dismiss only checks 24h; buffer retained)
 
 Manual trigger:
@@ -564,7 +608,7 @@ nokori export <path.json>
 nokori import <path.json>
 
 # Installation
-nokori install [--dry-run | --uninstall | --disable | --enable | --no-prefetch-embed]
+nokori install [--claude | --cursor | --all] [--dry-run | --uninstall | --disable | --enable | --no-prefetch-embed]
 ```
 
 ---
@@ -598,8 +642,10 @@ nokori install [--dry-run | --uninstall | --disable | --enable | --no-prefetch-e
 | `NOKORI_EMBED_CHUNK_COUNT` | `2` | Max chunks per rule |
 | `NOKORI_STRICT` | `0` | `1` = hook errors propagate (debug; default fail-open) |
 | `NOKORI_DISABLED` | `0` | Disable entirely |
+| `NOKORI_HOOK_COALESCE` | `1` | When Claude + Cursor both register hooks: only first invocation per event runs logic (`0` = off, may double-inject) |
 | `NOKORI_DISMISS_PHRASE` | `dismiss` | Chat verb to retire rules (`verb + short_id`); see [Dismiss](#4-outdated-rules-dismiss) |
-| `NOKORI_LOG_LEVEL` | `warn` | Log level |
+| `NOKORI_LOG_LEVEL` | `warn` | Log level (`debug` also enables `[diag]` hook traces) |
+| `NOKORI_HOOK_DEBUG` | `0` | `1` = verbose per-hook `[diag]` lines in `hook.log` |
 
 **Environment variables only** (no `config.toml` field; see [config.toml.example](config.toml.example)):
 
@@ -682,6 +728,7 @@ All data is stored locally under `~/.nokori/`:
 ├── jobs/                 # Extract job queue
 ├── active_sessions/      # Session registry
 ├── gate_markers/         # Gate markers (by session + prompt_hash)
+├── hook_coalesce/        # Dedup claims when Claude + Cursor both fire hooks
 ├── logs/
 │   ├── hook.log          # Hook process logs
 │   ├── pipeline.log      # Extract/merge logs

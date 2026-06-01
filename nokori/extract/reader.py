@@ -53,9 +53,7 @@ def read(path: Path) -> list[Turn]:
         except json.JSONDecodeError:
             log.warning("transcript parse skip path=%s line=%d", path.name, lineno)
             continue
-        turn = _parse(entry)
-        if turn:
-            out.append(turn)
+        out.extend(_parse_multi(entry))
     return out
 
 
@@ -87,26 +85,114 @@ def read_tail_user_turns(path: Path, limit: int = 3) -> list[Turn]:
                     entry = json.loads(raw.decode("utf-8", errors="replace"))
                 except json.JSONDecodeError:
                     continue
-                turn = _parse(entry)
-                if turn and turn.role == "human":
-                    human.append(turn)
-                    if len(human) >= limit:
-                        break
+                for turn in _parse_multi(entry):
+                    if turn.role == "human":
+                        human.append(turn)
+                        if len(human) >= limit:
+                            break
+                if len(human) >= limit:
+                    break
         if len(human) < limit and leftover.strip():
             try:
                 entry = json.loads(leftover.decode("utf-8", errors="replace"))
             except json.JSONDecodeError:
                 pass
             else:
-                turn = _parse(entry)
-                if turn and turn.role == "human":
-                    human.append(turn)
+                for turn in _parse_multi(entry):
+                    if turn.role == "human":
+                        human.append(turn)
 
     human.reverse()
     return human[-limit:]
 
 
 def _parse(entry: dict) -> Turn | None:
+    multi = _parse_multi(entry)
+    return multi[0] if multi else None
+
+
+def _parse_multi(entry: dict) -> list[Turn]:
+    blocks = _parse_message_blocks(entry)
+    if blocks:
+        return blocks
+    single = _parse_legacy(entry)
+    return [single] if single else []
+
+
+def _parse_message_blocks(entry: dict) -> list[Turn]:
+    """Cursor / nested message.content[] (text, tool_use, tool_result)."""
+    role = entry.get("role") or entry.get("type")
+    msg = entry.get("message")
+    content = None
+    if isinstance(msg, dict):
+        role = msg.get("role") or role
+        content = msg.get("content")
+    if content is None:
+        content = entry.get("content")
+    if not isinstance(content, list):
+        return []
+    return _content_blocks_to_turns(role, content)
+
+
+def _content_blocks_to_turns(role: str | None, blocks: list) -> list[Turn]:
+    turns: list[Turn] = []
+    texts: list[str] = []
+    norm_role = _normalize_role(role)
+
+    def flush_text() -> None:
+        if not texts:
+            return
+        turns.append(Turn(role=norm_role, content="\n".join(texts)))
+        texts.clear()
+
+    for block in blocks:
+        if not isinstance(block, dict):
+            continue
+        kind = block.get("type")
+        if kind == "text":
+            piece = str(block.get("text", ""))
+            if piece:
+                texts.append(piece)
+        elif kind == "tool_use":
+            flush_text()
+            inp = block.get("input") or {}
+            turns.append(
+                Turn(
+                    role="tool_use",
+                    content="",
+                    tool_name=block.get("name") or block.get("tool_name") or "tool",
+                    input_summary=_coerce_text(inp)[:200],
+                )
+            )
+        elif kind == "tool_result":
+            flush_text()
+            content = _coerce_text(block.get("content") or block.get("output") or "")
+            is_err = bool(block.get("is_error") or block.get("error"))
+            first_err_line = ""
+            if is_err:
+                first_err_line = content.splitlines()[0][:200] if content else ""
+            turns.append(
+                Turn(
+                    role="tool_result",
+                    content=content[:400] if not is_err else "",
+                    is_error=is_err,
+                    error_line=first_err_line,
+                )
+            )
+
+    flush_text()
+    return turns
+
+
+def _normalize_role(role: str | None) -> str:
+    if role in ("user", "human"):
+        return "human"
+    if role == "assistant":
+        return "assistant"
+    return role or "assistant"
+
+
+def _parse_legacy(entry: dict) -> Turn | None:
     t = entry.get("type") or entry.get("role")
     if t == "user" or t == "human":
         content = _coerce_text(entry.get("message") or entry.get("content") or entry)

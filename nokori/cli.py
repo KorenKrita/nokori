@@ -104,7 +104,31 @@ def _build_parser() -> argparse.ArgumentParser:
     sp_import = sub.add_parser("import", help="import rules from JSON")
     sp_import.add_argument("path")
 
-    sp_install = sub.add_parser("install", help="install/uninstall hooks")
+    sp_install = sub.add_parser(
+        "install",
+        help="install hooks for Claude Code and/or Cursor",
+        description=(
+            "Register Nokori hooks. Default: Claude only (~/.claude/settings.json). "
+            "Use --cursor for native ~/.cursor/hooks.json; --all for both "
+            "(prints duplicate-hook warning)."
+        ),
+    )
+    sp_install.add_argument(
+        "--claude",
+        action="store_true",
+        help="install into ~/.claude/settings.json (default when no platform flag)",
+    )
+    sp_install.add_argument(
+        "--cursor",
+        action="store_true",
+        help="install into ~/.cursor/hooks.json (native Cursor agent hooks)",
+    )
+    sp_install.add_argument(
+        "--all",
+        dest="all_platforms",
+        action="store_true",
+        help="install into Claude Code and Cursor (prints duplicate-hook warning)",
+    )
     sp_install.add_argument("--dry-run", action="store_true")
     sp_install.add_argument(
         "--no-prefetch-embed",
@@ -113,8 +137,19 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     install_mode = sp_install.add_mutually_exclusive_group()
     install_mode.add_argument("--uninstall", action="store_true")
-    install_mode.add_argument("--disable", action="store_true")
-    install_mode.add_argument("--enable", action="store_true")
+    install_mode.add_argument(
+        "--disable",
+        action="store_true",
+        help=(
+            "set NOKORI_DISABLED=1 in Claude ~/.claude/settings.json env only; "
+            "does not stop Cursor hooks (use --uninstall --cursor)"
+        ),
+    )
+    install_mode.add_argument(
+        "--enable",
+        action="store_true",
+        help="clear NOKORI_DISABLED in Claude settings.json env (Cursor unchanged)",
+    )
 
     sp_hook = sub.add_parser("hook", help="hook entry (called by Claude Code)")
     sp_hook.add_argument(

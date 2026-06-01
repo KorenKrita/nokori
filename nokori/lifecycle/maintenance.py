@@ -206,16 +206,24 @@ def run_session_file_cleanup(cfg) -> int:
 
 def run_due_jobs(db: Db, cfg=None) -> dict:
     session_cleanup = 0
+    coalesce_cleanup = 0
+    prompt_ack_cleanup = 0
     if cfg is not None:
         from ..extract import jobs as job_io
+        from ..gate import prompt_ack
+        from ..hooks.coalesce import prune_stale_claims
 
         job_io.quarantine_corrupt_jobs(cfg)
         session_cleanup = run_session_file_cleanup(cfg)
+        coalesce_cleanup = prune_stale_claims(cfg)
+        prompt_ack_cleanup = prompt_ack.prune_stale(cfg)
     summary = {
         "dormant_scan": run_dormant_scan(db),
         "candidate_cleanup": run_candidate_cleanup(db),
         "injection_cleanup": run_injection_cleanup(db),
         "unmerge_check": run_unmerge_check(db),
         "session_cleanup": session_cleanup,
+        "coalesce_cleanup": coalesce_cleanup,
+        "prompt_ack_cleanup": prompt_ack_cleanup,
     }
     return summary

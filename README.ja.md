@@ -4,9 +4,9 @@
 
 > 経験が残す痕跡は、記憶よりも深い。
 
-**Claude Code 向けのルール・ノートブック**——あなたが修正した言葉や踏んだ落とし穴を、次回自動で呼び出せる行動ルールとして蓄積する。
+**Claude Code と Cursor 向けのルール・ノートブック**——あなたが修正した言葉や踏んだ落とし穴を、次回自動で呼び出せる行動ルールとして蓄積する。
 
-記録するのは「前回何を話したか」ではなく、「次回どうすべきか」：類似シーンで先に Claude に知らせ、必要なら**ツール呼び出しを一度だけブロック**し、ルールを読んでからコードを直させる。
+記録するのは「前回何を話したか」ではなく、「次回どうすべきか」：メッセージがルールのトリガーに似ていればコンテキストへ注入。高危険度の修正で命中が高い場合は、**ツール呼び出しを一度だけブロック**し、ファイル編集やコマンド実行の前にルールを読ませる。
 
 ---
 
@@ -89,8 +89,10 @@ pip install -e .
 # 任意：ローカル embedding（sentence-transformers を入れ、~/.nokori/models/ に重みを自動ダウンロード）
 pip install -e ".[local-embed]"
 
-# Claude Code に hook を登録（[local-embed] 済みなら hook 変更の有無に関わらず prefetch）
-nokori install
+# hook 登録（デフォルトは Claude Code のみ；[local-embed] 済みなら prefetch）
+nokori install              # Claude Code → ~/.claude/settings.json
+nokori install --cursor     # Cursor のみ → ~/.cursor/hooks.json
+nokori install --all        # 両方（重複実行の警告を表示）
 # 重みダウンロードをスキップ：nokori install --no-prefetch-embed
 # 手動ダウンロード／再試行：nokori embed prefetch
 
@@ -101,6 +103,8 @@ nokori logs          # hook / pipeline / async-extract ログ
 ```
 
 `nokori install` は上記 hook を `~/.claude/settings.json` に**マージ**して書き込み、既存の他プラグインは上書きしない。`settings.json` が破損している（不正 JSON）場合、install は**書き込みを拒否して終了**（`nokori health` の settings 検証と同じ）。
+
+登録される hook コマンドは `python -I -m nokori hook`（`-I` は隔離モード：`PYTHONPATH` とカレントディレクトリを無視し、リポジトリ直下の `nokori/` にパッケージが取られないようにする）。通常のインストール（`pip install nokori` または `pip install -e .`）を使い、hook 子プロセス向けに `PYTHONPATH` だけに頼らないでください。
 
 ```bash
 # 書き込み前に変更をプレビュー
@@ -113,6 +117,44 @@ nokori install --uninstall
 nokori install --disable
 nokori install --enable
 ```
+
+### Claude Code と Cursor
+
+デフォルトは **Claude Code**。**Cursor** も対応（ネイティブ hook または Claude からのインポート）。1 台のマシンでは Cursor の登録方法は **1 つだけ** にしてください。
+
+#### どのコマンドで入れる？
+
+| 目的 | コマンド |
+|------|----------|
+| Claude Code のみ | `nokori install` |
+| Cursor のみ（ネイティブ `~/.cursor/hooks.json`） | `nokori install --cursor` |
+| 両方 | `nokori install --all`（重複警告あり） |
+
+`nokori install --disable` / `--enable` は Claude の `settings.json` のみ。Cursor を止める：`nokori install --uninstall --cursor`。
+
+#### Cursor はどちらか一方（混在しない）
+
+| 経路 | 手順 | 向いている人 |
+|------|------|----------------|
+| **A — Claude からインポート（手軽）** | `nokori install` のあと Cursor：**Settings → Hooks → Import from Claude Code** | すでに Claude Code を使い、hook 設定を共有したい |
+| **B — Cursor ネイティブ** | `nokori install --cursor` のみ；Cursor で Claude インポートは **オフ** | Cursor 専用；matcher に `Shell`、deferred 注入 |
+
+**両方が有効**（Claude settings + Cursor `hooks.json`、またはインポート + ネイティブ）だと、同じユーザー送信で Nokori が 2 回走ることがあります。既定で **hook coalesce**（`NOKORI_HOOK_COALESCE=1`）：最初の呼び出しだけ検索/Gate/extract、2 回目は空のパススルー。`nokori health` が二重登録を警告。それでも 1 経路に絞ることを推奨。
+
+補足：
+
+- 経路 A：リポジトリ **プロジェクト級** の `.claude` インポート hook はオフ、ユーザー級 `~/.claude` の nokori のみ。
+- 経路 B：Cursor 設定で「Claude からインポート」をオンにしない。
+
+#### Cursor 固有の注意
+
+**ターミナルツール名**：Cursor は `Shell`、Claude Code は `Bash`。`nokori install --cursor` は preToolUse matcher に `Shell` を含む。Claude インポートのみで matcher が `Bash` だけのとき、Shell は hook に入らない——`Shell` または `*` を含めてください。Cursor transcript（`~/.cursor/...`）検出時、hook 内第 2 層 `[gate]` も既定で `Shell` を含む（[Gate 2段階マッチ](#gate-と-pretooluse2段階のツールマッチ)）。
+
+**ルールの見え方**：[Cursor 公式 hook](https://cursor.com/docs/agent/hooks) では `beforeSubmitPrompt` は `continue` と `user_message` のみ（Claude の `additionalContext` なし）。送信のたびに検索は実行。ブロックは `preToolUse` の `permission: deny`。セッション開始のホットキャッシュは `sessionStart` → `additional_context`。メッセージ単位の注入は `beforeSubmitPrompt` でベストエフォート；走らない場合は下の deferred。
+
+**Deferred 注入（`beforeSubmitPrompt` が走らないとき）**：そのターンで `beforeSubmitPrompt` が無い場合、**最初**の `preToolUse`（例：`Shell`、`Write`）で **一度 deny** し、`agent_message` に全文ルール。**deny 後は同じツールを再実行**——仕様であり不具合ではない。同ターンの後続ツールは再 deny しない（prompt 単位の原子 dedup）。
+
+`nokori install --help` も参照。
 
 ---
 
@@ -432,6 +474,8 @@ SessionStart が「前セッション transcript」を探す：
 - **Candidate クリーンアップ**（スキャン間隔最大30日に1回）：**created_at ≥20 暦日**の通常 candidate、**≥40 日**の `anti_pattern` candidate を削除（「30日生存」ではない）
 - **Unmerge チェック**（最大90日に1回）：`status=merged` で `superseded_by` 先が削除または dormant/archived なら `dormant` に復帰；**candidate クリーンアップでアンカールール削除後**も即 orphan unmerge
 - **Session ファイルクリーンアップ**：`active_sessions/` で終了から60日超の registry ファイルを削除
+- **Hook coalesce クリーンアップ**：`hook_coalesce/` の 24 時間超の claim ファイルを削除（二重登録でメッセージが多いときの蓄積防止）
+- **Prompt ack クリーンアップ**：24 時間超の `prompt_submit_ack/` / `cursor_deferred/` を削除；`SessionEnd` でも当該 session の ack/deferred ディレクトリを削除
 - **Injection クリーンアップ**（スキャン間隔最大7日に1回）：**30日前**の `injections` 行を削除（dismiss は24h のみ参照、バッファ確保）
 
 手動トリガーも可能：
@@ -563,7 +607,7 @@ nokori export <path.json>
 nokori import <path.json>
 
 # インストール
-nokori install [--dry-run | --uninstall | --disable | --enable | --no-prefetch-embed]
+nokori install [--claude | --cursor | --all] [--dry-run | --uninstall | --disable | --enable | --no-prefetch-embed]
 ```
 
 ---
@@ -597,6 +641,7 @@ nokori install [--dry-run | --uninstall | --disable | --enable | --no-prefetch-e
 | `NOKORI_EMBED_CHUNK_COUNT` | `2` | ルールあたり最大チャンク数 |
 | `NOKORI_STRICT` | `0` | `1` 時 hook 例外を再送出（デバッグ；デフォルト fail-open） |
 | `NOKORI_DISABLED` | `0` | 完全無効 |
+| `NOKORI_HOOK_COALESCE` | `1` | Claude + Cursor 両方登録時：同一イベントは最初の呼び出しのみ本処理（`0` でオフ、二重注入の可能性） |
 | `NOKORI_DISMISS_PHRASE` | `dismiss` | 会話内ルール退役の動詞（`動詞 + short_id`）；[Dismiss](#4-ルールが古くなったdismiss) 参照 |
 | `NOKORI_LOG_LEVEL` | `warn` | ログレベル |
 
@@ -681,6 +726,7 @@ enabled = true
 ├── jobs/                 # Extract job キュー
 ├── active_sessions/      # Session registry
 ├── gate_markers/         # Gate markers（session + prompt_hash 単位）
+├── hook_coalesce/        # Claude + Cursor 二重登録時の dedup claim
 ├── logs/
 │   ├── hook.log          # Hook プロセスログ
 │   ├── pipeline.log      # 抽出／マージログ

@@ -6,24 +6,25 @@ from datetime import datetime, timedelta, timezone
 from ..config import Config
 from ..db import (
     Db,
-    fetch_rules,
-    fetch_shadow_rules,
-    log_injections_batch,
-    open_db,
     archive_rule,
     find_rule_id_by_recent_injection,
     find_rule_id_injected_since,
+    open_db,
 )
 from ..gate import marker as marker_io
-from ..gate.blocker import format_injection, select_gate_rules
+from ..gate import prompt_ack
+from ..gate.blocker import select_gate_rules
 from ..gate.marker import MarkerRule, prompt_hash
-from ..lifecycle import maintenance, promotion
-from ..search.retrieve import retrieve_formal_and_shadow
+from ..utils.prompt_text import normalize_prompt_for_hash
 from ..utils import sessions
+from ..utils.hook_response import user_prompt_submit_response
+from ..utils.host import Host, effective_session_id
 from ..utils.logging import get_logger
 from ..utils.time import iso_of, now_iso
+from .prompt_inject import RetrieveFailed, inject_for_prompt
 
 log = get_logger("nokori.hooks.user_prompt_submit")
+
 
 def _dismiss_re(phrase: str) -> re.Pattern[str]:
     escaped = re.escape(phrase.lower())
@@ -86,9 +87,12 @@ def _update_gate_marker(
         marker_io.delete_session(cfg, session_id)
 
 
-def handle(payload: dict, cfg: Config) -> dict:
-    session_id = payload.get("session_id") or "-"
+def handle(payload: dict, cfg: Config, *, host: Host) -> dict:
+    session_id = effective_session_id(payload)
     prompt = payload.get("prompt") or ""
+    normalized_prompt = normalize_prompt_for_hash(prompt)
+    ph_for_ack = prompt_hash(normalized_prompt) if normalized_prompt else ""
+
     project_id = sessions.resolve_project_id_for_session(
         cfg, session_id, payload.get("cwd"),
     )
@@ -99,80 +103,60 @@ def handle(payload: dict, cfg: Config) -> dict:
     try:
         _run_dismiss(db, prompt, session_id, cfg)
 
-        if project_id is None:
-            formal_rules = fetch_rules(
-                db, statuses=("active", "dormant"), global_only=True
-            )
-        else:
-            formal_rules = fetch_rules(
-                db, statuses=("active", "dormant"), project_id=project_id
-            )
-        shadow_rules = (
-            fetch_shadow_rules(db, project_id=project_id)
-            if project_id and cfg.promotion_enabled
-            else []
-        )
-        if not formal_rules and not shadow_rules:
-            if cfg.gate_enabled:
-                marker_io.delete_session(cfg, session_id)
-            return {"continue": True}
-
         try:
-            result, shadow_hot, shadow_warm = retrieve_formal_and_shadow(
-                prompt,
-                formal_rules,
-                shadow_rules,
+            outcome = inject_for_prompt(
                 db,
                 cfg,
-                interaction="hook",
+                session_id=session_id,
+                prompt=prompt,
+                project_id=project_id,
             )
-        except OSError as e:
+        except RetrieveFailed as e:
             log.warning("retrieve failed (%s); continuing without rules", e)
             if cfg.gate_enabled:
                 marker_io.delete_session(cfg, session_id)
             return {"continue": True}
-        hot, warm = result.hot, result.warm
 
-        if project_id:
-            for r in shadow_hot + shadow_warm:
-                try:
-                    promotion.record_shadow_hit(db, r.rule.id, project_id)
-                except Exception as e:
-                    log.info(
-                        "shadow promotion skipped rule=%s: %s", r.rule.id, e,
-                    )
+        if outcome is None:
+            if cfg.gate_enabled:
+                marker_io.delete_session(cfg, session_id)
+            return {"continue": True}
+
+        hot, warm = outcome.hot, outcome.warm
+        shadow_hot, shadow_warm = outcome.shadow_hot, outcome.shadow_warm
+        text = outcome.text
+        rendered_entries = outcome.rendered_entries
+        ph = outcome.ph
 
         if not hot and not warm:
             if cfg.gate_enabled:
                 marker_io.delete_session(cfg, session_id)
             return {"continue": True}
 
-        text, rendered_entries = format_injection(
-            hot, warm, max_chars=cfg.max_injection_chars, dismiss_phrase=cfg.dismiss_phrase
-        )
-
-        ph = prompt_hash(prompt)
-        now = now_iso()
         if text:
-            log_injections_batch(db, session_id, ph, rendered_entries, now)
             injected_hot_ids = {
                 rid for rid, level in rendered_entries if level == "hot"
             }
             gate_hot = [r for r in hot if r.rule.id in injected_hot_ids]
-            _update_gate_marker(cfg, session_id, prompt, gate_hot, ph)
-            for r in warm:
-                if r.retrieval_hot and r.rule.status == "dormant":
-                    maintenance.reactivate_dormant_on_retrieval_hot(db, r.rule.id)
+            _update_gate_marker(
+                cfg, session_id, normalized_prompt or prompt, gate_hot, ph,
+            )
         elif cfg.gate_enabled:
             marker_io.delete_session(cfg, session_id)
+
+        if ph_for_ack:
+            prompt_ack.record(cfg, session_id, ph_for_ack)
 
         log.info(
             "injected hot=%d warm=%d shadow_hot=%d shadow_warm=%d session=%s",
             len(hot), len(warm), len(shadow_hot), len(shadow_warm), session_id,
         )
-        if not text:
-            return {"continue": True}
-        return {"hookSpecificOutput": {"hookEventName": "UserPromptSubmit",
-                                       "additionalContext": text}}
+        if host == Host.CURSOR and text:
+            log.info(
+                "cursor beforeSubmitPrompt injection (best-effort; "
+                "official schema is continue/user_message only) session=%s",
+                session_id,
+            )
+        return user_prompt_submit_response(host, text or None)
     finally:
         db.close()

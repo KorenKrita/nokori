@@ -77,7 +77,10 @@ class _NameStartsWith(logging.Filter):
         self.prefixes = prefixes
 
     def filter(self, record: logging.LogRecord) -> bool:
-        return any(record.name.startswith(p) for p in self.prefixes)
+        return any(
+            record.name == p.rstrip(".") or record.name.startswith(p)
+            for p in self.prefixes
+        )
 
 
 def get_logger(name: str) -> logging.Logger:

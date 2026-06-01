@@ -231,9 +231,11 @@ def resolve_current_prompt_hash(
     db: Db | None = None,
 ) -> str | None:
     """Best-effort hash for the active user turn (PreToolUse has no prompt field)."""
+    from ..utils.prompt_text import normalize_prompt_for_hash
+
     text = payload.get("prompt")
-    if isinstance(text, str) and text:
-        return prompt_hash(text)
+    if isinstance(text, str) and text.strip():
+        return prompt_hash(normalize_prompt_for_hash(text))
     ph = latest_marker_prompt_hash(cfg, session_id)
     if ph and db is not None and injection_exists(db, session_id, ph):
         return ph

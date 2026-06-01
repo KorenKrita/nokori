@@ -6,8 +6,14 @@ from ..config import Config
 from ..db import open_db
 from ..errors import DbError
 from ..gate import marker as marker_io
-from ..gate.blocker import format_block_reason
+from ..gate.blocker import format_block_reason, format_cursor_user_notice
+from .cursor_deferred import maybe_deferred_pre_tool_use
+from ..utils.hook_diag import log_diag
+from ..utils.hook_response import pre_tool_deny_response
+from ..gate.marker import prompt_hash
+from ..utils.host import Host, effective_gate_matcher, effective_session_id
 from ..utils.logging import get_logger
+from ..utils.prompt_text import normalize_prompt_for_hash
 
 log = get_logger("nokori.hooks.pre_tool_use")
 
@@ -29,34 +35,53 @@ def _tool_matches_gate(tool_name: str | None, matcher: str) -> bool:
     return bool(pattern.fullmatch(tool_name))
 
 
-def handle(payload: dict, cfg: Config) -> dict:
+def _run_gate(payload: dict, cfg: Config, session_id: str, host) -> dict:
+    tool_name = payload.get("tool_name") or payload.get("tool")
+    gate_matcher = effective_gate_matcher(cfg.gate_matcher, host)
+
     if not cfg.gate_enabled:
+        log_diag(
+            log,
+            "[diag] pre_tool_use skip gate_enabled=false tool=%s host=%s",
+            tool_name or "-",
+            host.value,
+        )
         return {}
 
-    tool_name = payload.get("tool_name")
-    if not _tool_matches_gate(tool_name, cfg.gate_matcher):
+    matched = _tool_matches_gate(tool_name, gate_matcher)
+    log_diag(
+        log,
+        "[diag] pre_tool_use gate_check tool=%s host=%s matcher=%s matched=%s "
+        "cfg_gate_matcher=%s",
+        tool_name or "-",
+        host.value,
+        gate_matcher,
+        matched,
+        cfg.gate_matcher,
+    )
+    if not matched:
         return {}
-
-    session_id = payload.get("session_id") or "-"
 
     on_disk = marker_io.read_latest_marker(cfg, session_id)
     current_ph: str | None = None
+    prompt_raw = payload.get("prompt")
+    if isinstance(prompt_raw, str) and prompt_raw.strip():
+        current_ph = prompt_hash(normalize_prompt_for_hash(prompt_raw))
+
     try:
         db = open_db(cfg.db_path)
     except DbError as e:
         log.warning("gate db open failed, fail-open session=%s: %s", session_id, e)
         return {}
     try:
-        prompt_text = payload.get("prompt")
-        if isinstance(prompt_text, str) and prompt_text:
-            current_ph = marker_io.prompt_hash(prompt_text)
-        elif on_disk and on_disk.rules:
-            if marker_io.injection_exists(db, session_id, on_disk.prompt_hash):
-                current_ph = on_disk.prompt_hash
-            else:
-                marker_io.delete(
-                    cfg, session_id, prompt_hash_value=on_disk.prompt_hash,
-                )
+        if not current_ph:
+            if on_disk and on_disk.rules:
+                if marker_io.injection_exists(db, session_id, on_disk.prompt_hash):
+                    current_ph = on_disk.prompt_hash
+                else:
+                    marker_io.delete(
+                        cfg, session_id, prompt_hash_value=on_disk.prompt_hash,
+                    )
         if not current_ph:
             current_ph = marker_io.resolve_current_prompt_hash(
                 payload, cfg, session_id, db=db,
@@ -94,12 +119,28 @@ def handle(payload: dict, cfg: Config) -> dict:
         "gate blocked tool session=%s rules=%s",
         session_id, ",".join(r.short_id for r in marker.rules),
     )
-    # continue=True is required by Claude Code; tool denial is via permissionDecision.
-    return {
-        "continue": True,
-        "hookSpecificOutput": {
-            "hookEventName": "PreToolUse",
-            "permissionDecision": "deny",
-            "permissionDecisionReason": reason,
-        },
-    }
+    short_ids = sorted({r.short_id for r in marker.rules})
+    if host.value == "cursor":
+        user_note = format_cursor_user_notice(
+            tool_name=tool_name or "tool",
+            rule_short_ids=short_ids,
+            dismiss_phrase=cfg.dismiss_phrase,
+            deferred=False,
+        )
+        return pre_tool_deny_response(
+            host, reason, user_message=user_note, agent_message=reason,
+        )
+    return pre_tool_deny_response(host, reason)
+
+
+def handle(payload: dict, cfg: Config, *, host: Host) -> dict:
+    session_id = effective_session_id(payload)
+    tool_name = payload.get("tool_name") or payload.get("tool")
+
+    deferred = maybe_deferred_pre_tool_use(
+        payload, cfg, session_id, tool_name, host
+    )
+    if deferred is not None:
+        return deferred
+
+    return _run_gate(payload, cfg, session_id, host)

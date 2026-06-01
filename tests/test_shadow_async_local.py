@@ -9,6 +9,7 @@ import pytest
 
 from nokori.config import Config
 from nokori.db import open_db, fetch_shadow_rules
+from nokori.utils.host import Host
 
 
 def _utcnow_iso(delta_days: int = 0) -> str:
@@ -127,7 +128,7 @@ class TestShadowPoolHotTier:
                 "session_id": "s-shadow-warm",
                 "prompt": "deploy prisma schema",
                 "cwd": str(proj),
-            }, cfg)
+            }, cfg, host=Host.CLAUDE)
             for rid in ("rule-a", "rule-b"):
                 row = db.fetchone(
                     "SELECT shadow_hit_count FROM rules WHERE id = ?", (rid,)
@@ -164,7 +165,7 @@ class TestShadowPoolHotTier:
                 "session_id": "s-shadow-hot",
                 "prompt": "git push force remote branch",
                 "cwd": str(proj),
-            }, cfg)
+            }, cfg, host=Host.CLAUDE)
             row = db.fetchone(
                 "SELECT shadow_hit_count, evidence_score FROM rules WHERE id = ?",
                 ("rule-strong",),
@@ -216,7 +217,7 @@ class TestAsyncExtract:
         with patch("nokori.hooks.session_end.subprocess.Popen") as mock_popen, \
              patch("nokori.utils.project.subprocess.run", return_value=type("R", (), {"returncode": 1, "stdout": ""})()) as _:
             from nokori.hooks.session_end import handle
-            result = handle(payload, cfg)
+            result = handle(payload, cfg, host=Host.CLAUDE)
 
         assert result == {"continue": True}
         mock_popen.assert_called_once()
@@ -243,7 +244,7 @@ class TestAsyncExtract:
         with patch("nokori.hooks.session_end.subprocess.Popen") as mock_popen, \
              patch("nokori.utils.project.subprocess.run", return_value=type("R", (), {"returncode": 1, "stdout": ""})()) as _:
             from nokori.hooks.session_end import handle
-            result = handle(payload, cfg)
+            result = handle(payload, cfg, host=Host.CLAUDE)
 
         assert result == {"continue": True}
         mock_popen.assert_not_called()
@@ -266,7 +267,7 @@ class TestAsyncExtract:
                    side_effect=OSError("no such file")), \
              patch("nokori.utils.project.subprocess.run", return_value=type("R", (), {"returncode": 1, "stdout": ""})()) as _:
             from nokori.hooks.session_end import handle
-            result = handle(payload, cfg)
+            result = handle(payload, cfg, host=Host.CLAUDE)
 
         assert result == {"continue": True}
 

@@ -2,6 +2,9 @@
 
 DEFAULT_GATE_MATCHER = "Edit|Write|MultiEdit|Bash|NotebookEdit"
 
+# Cursor PreToolUse uses Shell/Read/Write/Grep/Task instead of Bash/Edit/MultiEdit.
+CURSOR_GATE_MATCHER = "Edit|Write|MultiEdit|Bash|Shell|NotebookEdit|Delete|Grep|Task"
+
 # Extract / hot_cache transcript reads
 MAX_TRANSCRIPT_BYTES = 50 * 1024 * 1024
 

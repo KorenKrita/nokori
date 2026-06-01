@@ -179,11 +179,13 @@ def test_dormant_reactivates_same_session(monkeypatch, tmp_path):
             )
         from nokori.hooks.user_prompt_submit import handle
 
+        from nokori.utils.host import Host
+
         handle({
             "session_id": "s-dorm",
             "prompt": "git push force remote branch please",
             "cwd": str(tmp_path),
-        }, cfg)
+        }, cfg, host=Host.CLAUDE)
         row = db.fetchone("SELECT status, last_hit FROM rules WHERE id = 'd1'")
         assert row["status"] == "active"
         assert row["last_hit"] is not None

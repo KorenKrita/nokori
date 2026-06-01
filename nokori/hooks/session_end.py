@@ -6,11 +6,13 @@ import sys
 from pathlib import Path
 
 from ..config import Config
+from ..gate import prompt_ack
 from ..extract import jobs as job_io
 from ..extract.lock import is_locked
 from ..extract.reader import stat as transcript_stat
 from ..lifecycle import transcript_index
 from ..utils import sessions
+from ..utils.host import Host, effective_session_id
 from ..utils.logging import get_logger
 from ..utils.transcript import resolve_transcript_path
 
@@ -51,12 +53,15 @@ def _spawn_async_extract(cfg: Config) -> None:
                 pass
 
 
-def handle(payload: dict, cfg: Config) -> dict:
+def handle(payload: dict, cfg: Config, *, host: Host) -> dict:
     if cfg.disabled:
         return {"continue": True}
 
-    session_id = payload.get("session_id") or "-"
+    session_id = effective_session_id(payload)
     sessions.end(cfg, session_id)
+    ack_removed = prompt_ack.cleanup_session(cfg, session_id)
+    if ack_removed:
+        log.info("cleaned prompt ack/deferred session=%s files=%d", session_id, ack_removed)
 
     transcript = resolve_transcript_path(payload)
     if transcript is None:
