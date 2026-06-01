@@ -9,7 +9,7 @@ from nokori.web.deps import get_config
 
 router = APIRouter()
 
-LOG_FILES = ["hook.log", "pipeline.log"]
+LOG_FILES = ["hook.log", "pipeline.log", "async-extract.log", "embed-server.log"]
 
 
 def _find_log_files(logs_dir: Path) -> list[Path]:
