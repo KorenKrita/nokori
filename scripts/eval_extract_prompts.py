@@ -96,6 +96,176 @@ def _discover_transcripts(
     return [p for p, _, _ in entries[:limit_pool]]
 
 
+_TRIAGE_CACHE = Path("/tmp/nokori-eval-triage.json")
+
+_TRIAGE_SYSTEM = """You quickly classify a compressed Claude Code conversation transcript.
+Decide how many reusable behavioral rules a good extractor SHOULD find.
+
+Output JSON only (no prose):
+{"expected_rules": 0 | 1 | 2, "reason": "<one sentence>"}
+
+- 0: no user correction, no preference stated, routine Q&A or task execution
+- 1: exactly one clear correction, preference, or reusable lesson
+- 2: two or more distinct corrections/preferences/lessons
+
+Be strict: routine "do X" tasks with no pushback = 0. Only count explicit user corrections or stated preferences."""
+
+
+def _load_triage_cache() -> dict[str, dict]:
+    if not _TRIAGE_CACHE.exists():
+        return {}
+    try:
+        data = json.loads(_TRIAGE_CACHE.read_text(encoding="utf-8"))
+        if isinstance(data, dict):
+            return data
+    except (json.JSONDecodeError, OSError):
+        pass
+    return {}
+
+
+def _save_triage_cache(cache: dict[str, dict]) -> None:
+    _TRIAGE_CACHE.write_text(json.dumps(cache, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _triage_one(
+    path: Path,
+    *,
+    base_url: str,
+    api_key: str | None,
+    judge_model: str,
+    budget_tokens: int,
+    timeout: int,
+) -> dict | None:
+    """Classify one transcript. Returns {"expected_rules": 0|1|2, "reason": ...} or None on failure."""
+    try:
+        text = compress(read(path), budget_tokens=budget_tokens)
+    except Exception:
+        return None
+    if not text.strip():
+        return {"expected_rules": 0, "reason": "empty transcript"}
+    # Use first 8000 chars for quick triage (saves tokens)
+    snippet = text[:8000] if len(text) > 8000 else text
+    raw, _, err = _call_chat(
+        base_url=base_url,
+        api_key=api_key,
+        model=judge_model,
+        system=_TRIAGE_SYSTEM,
+        user=snippet,
+        max_tokens=200,
+        timeout=timeout,
+    )
+    if err or not raw:
+        return None
+    parsed = parse_json_payload(raw)
+    if isinstance(parsed, dict) and "expected_rules" in parsed:
+        n = parsed["expected_rules"]
+        if n not in (0, 1, 2):
+            n = min(2, max(0, int(n)))
+            parsed["expected_rules"] = n
+        return parsed
+    return None
+
+
+def _run_triage(
+    pool: list[Path],
+    *,
+    base_url: str,
+    api_key: str | None,
+    judge_model: str,
+    budget_tokens: int,
+    timeout: int,
+    max_workers: int,
+) -> dict[str, dict]:
+    """Triage all transcripts in pool, using cache where available."""
+    cache = _load_triage_cache()
+    to_triage: list[Path] = []
+    for p in pool:
+        key = str(p)
+        if key in cache:
+            continue
+        to_triage.append(p)
+
+    if to_triage:
+        _log(f"  triage: {len(to_triage)} new transcripts (cache has {len(cache)}) ...")
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {
+                executor.submit(
+                    _triage_one, p,
+                    base_url=base_url,
+                    api_key=api_key,
+                    judge_model=judge_model,
+                    budget_tokens=budget_tokens,
+                    timeout=timeout,
+                ): p
+                for p in to_triage
+            }
+            done = 0
+            for future in as_completed(futures):
+                p = futures[future]
+                done += 1
+                try:
+                    result = future.result()
+                except Exception:
+                    result = None
+                if result is not None:
+                    cache[str(p)] = result
+                if done % 10 == 0:
+                    _log(f"    triage progress: {done}/{len(to_triage)}")
+                    _save_triage_cache(cache)
+        _save_triage_cache(cache)
+        _log(f"  triage done: cache now has {len(cache)} entries")
+    else:
+        _log(f"  triage: all {len(pool)} transcripts cached")
+
+    return cache
+
+
+def _pick_balanced_samples(
+    pool: list[Path],
+    triage_cache: dict[str, dict],
+    n: int,
+    rng: random.Random,
+) -> list[Path]:
+    """Pick samples with target distribution: 20% zero, 60% one, 20% two+."""
+    buckets: dict[int, list[Path]] = {0: [], 1: [], 2: []}
+    for p in pool:
+        entry = triage_cache.get(str(p))
+        if entry is None:
+            continue
+        expected = entry.get("expected_rules", 0)
+        bucket = min(2, max(0, expected))
+        buckets[bucket].append(p)
+
+    target_0 = max(1, round(n * 0.2))
+    target_1 = max(1, round(n * 0.6))
+    target_2 = max(1, n - target_0 - target_1)
+
+    def _sample_bucket(items: list[Path], count: int) -> list[Path]:
+        rng.shuffle(items)
+        return items[:count]
+
+    picked_0 = _sample_bucket(buckets[0], target_0)
+    picked_1 = _sample_bucket(buckets[1], target_1)
+    picked_2 = _sample_bucket(buckets[2], target_2)
+
+    result = picked_0 + picked_1 + picked_2
+
+    # If any bucket was short, fill from others
+    if len(result) < n:
+        used = set(str(p) for p in result)
+        remaining = [p for p in pool if str(p) not in used and str(p) in triage_cache]
+        rng.shuffle(remaining)
+        result.extend(remaining[:n - len(result)])
+
+    rng.shuffle(result)
+
+    _log(
+        f"  balanced pick: {len(picked_0)} zero + {len(picked_1)} one + "
+        f"{len(picked_2)} two+ = {len(result)} (target {n})"
+    )
+    return result[:n]
+
+
 def _cap_transcript(text: str, max_chars: int) -> str:
     """Optional eval-only cap; production extract does not use this."""
     if max_chars <= 0:
@@ -478,6 +648,8 @@ def main() -> int:
     parser.add_argument("--no-judge", action="store_true")
     parser.add_argument("--no-synthesize", action="store_true", help="Skip final merge of improvements")
     parser.add_argument("--resume", action="store_true", help="Resume from partial output file")
+    parser.add_argument("--triage", action="store_true", help="Pre-classify transcripts for balanced sampling (20%% zero / 60%% one / 20%% two+)")
+    parser.add_argument("--triage-model", default="", help="Model for triage (default: same as --judge-model)")
     parser.add_argument(
         "--min-bytes",
         type=int,
@@ -561,7 +733,24 @@ def main() -> int:
         )
         return 1
 
-    picked = random.Random(args.seed).sample(pool, min(samples_n, len(pool)))
+    rng = random.Random(args.seed)
+    triage_model = args.triage_model or args.judge_model
+
+    triage_cache: dict[str, dict] = {}
+    if args.triage:
+        _log("Pre-classifying transcripts (triage phase) ...")
+        triage_cache = _run_triage(
+            pool,
+            base_url=cfg.llm_base_url,
+            api_key=cfg.llm_api_key,
+            judge_model=triage_model,
+            budget_tokens=args.budget_tokens,
+            timeout=60,
+            max_workers=args.max_workers,
+        )
+        picked = _pick_balanced_samples(pool, triage_cache, samples_n, rng)
+    else:
+        picked = rng.sample(pool, min(samples_n, len(pool)))
 
     ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     out_json = Path(args.out_json or str(Path.home() / "Desktop" / f"nokori-extract-eval-{ts}.json"))
@@ -634,6 +823,7 @@ def main() -> int:
         trunc_s = f" truncated={','.join(trunc_flags)}" if trunc_flags else ""
         _log(f"[{idx}/{len(picked)}] {rel} ({len(text)} chars{trunc_s})")
 
+        triage_info = triage_cache.get(str(path)) if args.triage else None
         sample: dict = {
             "path": str(path),
             "rel": rel,
@@ -641,6 +831,7 @@ def main() -> int:
             "compressed_chars": len(text),
             "compress_truncated": compress_truncated,
             "eval_capped": eval_capped,
+            "triage": triage_info,
             "extractions": [],
         }
         user = wrap_untrusted(text)
