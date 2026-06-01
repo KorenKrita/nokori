@@ -4,6 +4,7 @@ import { GlassCard } from '@/components/GlassCard'
 import { StatusBadge } from '@/components/StatusBadge'
 import { PageSkeleton } from '@/components/PageSkeleton'
 import { useApi } from '@/hooks/useApi'
+import { t } from '@/lib/i18n'
 import type { Injection, Meta } from '@/lib/types'
 
 export function Injections() {
@@ -26,7 +27,7 @@ export function Injections() {
       className="space-y-6"
     >
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-semibold tracking-tight">Injections</h2>
+        <h2 className="text-2xl font-semibold tracking-tight">{t('injections.title')}</h2>
         <span className="text-sm text-text-tertiary font-mono">{meta?.total ?? 0} total</span>
       </div>
 
@@ -41,7 +42,7 @@ export function Injections() {
                 : 'text-text-secondary hover:text-white hover:bg-white/[0.04]'
             }`}
           >
-            {f || 'All'}
+            {f || t('injections.filter.all')}
           </button>
         ))}
       </div>
@@ -51,10 +52,10 @@ export function Injections() {
           <table className="w-full text-sm">
             <thead>
               <tr className="text-xs uppercase tracking-wider text-text-tertiary border-b border-white/[0.04]">
-                <th className="text-left py-3 px-2">Rule</th>
-                <th className="text-left py-3 px-2">Level</th>
-                <th className="text-left py-3 px-2">Session</th>
-                <th className="text-left py-3 px-2">Time</th>
+                <th className="text-left py-3 px-2">{t('injections.col.rule')}</th>
+                <th className="text-left py-3 px-2">{t('injections.col.level')}</th>
+                <th className="text-left py-3 px-2">{t('injections.col.session')}</th>
+                <th className="text-left py-3 px-2">{t('injections.col.time')}</th>
               </tr>
             </thead>
             <tbody>
@@ -63,22 +64,14 @@ export function Injections() {
                   <td className="py-3 px-2 font-mono text-accent-sky">
                     {inj.rule_short_id ?? inj.rule_id.slice(0, 8)}
                   </td>
-                  <td className="py-3 px-2">
-                    <StatusBadge status={inj.level} />
-                  </td>
-                  <td className="py-3 px-2 text-text-tertiary font-mono text-xs">
-                    {inj.session_id.slice(0, 16)}
-                  </td>
-                  <td className="py-3 px-2 text-text-tertiary text-xs">
-                    {inj.created_at}
-                  </td>
+                  <td className="py-3 px-2"><StatusBadge status={inj.level} /></td>
+                  <td className="py-3 px-2 text-text-tertiary font-mono text-xs">{inj.session_id.slice(0, 16)}</td>
+                  <td className="py-3 px-2 text-text-tertiary text-xs">{inj.created_at}</td>
                 </tr>
               ))}
               {injections.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="py-8 text-center text-text-tertiary">
-                    No injections recorded
-                  </td>
+                  <td colSpan={4} className="py-8 text-center text-text-tertiary">{t('injections.no_results')}</td>
                 </tr>
               )}
             </tbody>

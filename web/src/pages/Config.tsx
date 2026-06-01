@@ -3,14 +3,10 @@ import { GlassCard } from '@/components/GlassCard'
 import { StatusBadge } from '@/components/StatusBadge'
 import { PageSkeleton } from '@/components/PageSkeleton'
 import { useApi } from '@/hooks/useApi'
+import { t } from '@/lib/i18n'
 
-interface ConfigData {
-  data: Record<string, unknown>
-}
-
-interface HealthData {
-  data: Record<string, { status: string; detail: string }>
-}
+interface ConfigData { data: Record<string, unknown> }
+interface HealthData { data: Record<string, { status: string; detail: string }> }
 
 export function Config() {
   const { data: config, isLoading: l1 } = useApi<ConfigData>('/config')
@@ -25,20 +21,16 @@ export function Config() {
       transition={{ duration: 0.5, ease: [0.32, 0.72, 0, 1] }}
       className="space-y-6"
     >
-      <h2 className="text-2xl font-semibold tracking-tight">Config & Health</h2>
+      <h2 className="text-2xl font-semibold tracking-tight">{t('config.title')}</h2>
 
-      <GlassCard>
-        <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary mb-4">
-          Health Checks
-        </h3>
+      <GlassCard hover>
+        <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary mb-4">{t('config.health')}</h3>
         <div className="space-y-2">
           {Object.entries(health?.data ?? {}).map(([key, check]) => (
             <div key={key} className="flex items-center justify-between py-1">
               <span className="text-sm text-text-secondary">{key}</span>
               <div className="flex items-center gap-2">
-                <span className="text-xs font-mono text-text-tertiary max-w-[300px] truncate">
-                  {check.detail}
-                </span>
+                <span className="text-xs font-mono text-text-tertiary max-w-[300px] truncate">{check.detail}</span>
                 <StatusBadge status={check.status} />
               </div>
             </div>
@@ -47,16 +39,12 @@ export function Config() {
       </GlassCard>
 
       <GlassCard>
-        <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary mb-4">
-          Active Configuration
-        </h3>
+        <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary mb-4">{t('config.active')}</h3>
         <div className="space-y-1">
           {Object.entries(config?.data ?? {}).map(([key, value]) => (
             <div key={key} className="flex justify-between py-1 border-b border-white/[0.02]">
               <span className="text-sm text-text-secondary">{key}</span>
-              <span className="text-xs font-mono text-text-tertiary">
-                {value === null ? 'null' : String(value)}
-              </span>
+              <span className="text-xs font-mono text-text-tertiary">{value === null ? 'null' : String(value)}</span>
             </div>
           ))}
         </div>

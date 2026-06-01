@@ -3,6 +3,7 @@ import { motion } from 'motion/react'
 import { GlassCard } from '@/components/GlassCard'
 import { StatusBadge } from '@/components/StatusBadge'
 import { mutateApi } from '@/lib/api'
+import { t } from '@/lib/i18n'
 import type { ScoredResult } from '@/lib/types'
 
 interface RetrieveResponse {
@@ -44,15 +45,15 @@ export function Retrieve() {
       transition={{ duration: 0.5, ease: [0.32, 0.72, 0, 1] }}
       className="space-y-6"
     >
-      <h2 className="text-2xl font-semibold tracking-tight">Retrieve Simulation</h2>
+      <h2 className="text-2xl font-semibold tracking-tight">{t('retrieve.title')}</h2>
 
       <GlassCard>
         <form onSubmit={handleSubmit} className="space-y-4">
           <textarea
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
-            placeholder="Enter a user prompt to simulate retrieval..."
-            className="w-full h-28 bg-white/[0.03] border border-white/10 rounded-lg px-4 py-3 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-white/20 resize-none"
+            placeholder={t('retrieve.placeholder')}
+            className="w-full h-28 bg-white/[0.03] border border-white/10 rounded-lg px-4 py-3 text-sm placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-white/20 resize-none"
           />
           <div className="flex items-center justify-between">
             <label className="flex items-center gap-2 text-sm text-text-secondary cursor-pointer">
@@ -62,24 +63,31 @@ export function Retrieve() {
                 onChange={(e) => setUseEmbed(e.target.checked)}
                 className="rounded"
               />
-              Use embedding (if available)
+              {t('retrieve.use_embedding')}
             </label>
-            <button
+            <motion.button
               type="submit"
               disabled={loading || !prompt.trim()}
-              className="px-4 py-2 rounded-full bg-white/10 text-white text-sm font-medium hover:bg-white/15 disabled:opacity-40 transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] active:scale-[0.98]"
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              className="px-4 py-2 rounded-full bg-white/10 text-sm font-medium hover:bg-white/15 disabled:opacity-40 transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]"
             >
-              {loading ? 'Searching...' : 'Search'}
-            </button>
+              {loading ? t('retrieve.searching') : t('retrieve.search')}
+            </motion.button>
           </div>
         </form>
       </GlassCard>
 
       {result && (
-        <div className="space-y-4">
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4 }}
+          className="space-y-4"
+        >
           <div className="flex gap-4 text-xs text-text-tertiary">
-            <span>Mode: <span className="font-mono text-text-secondary">{result.embed_mode}</span></span>
-            <span>BM25 matches: <span className="font-mono text-text-secondary">{result.bm25_matches}</span></span>
+            <span>{t('retrieve.mode')}: <span className="font-mono text-text-secondary">{result.embed_mode}</span></span>
+            <span>{t('retrieve.bm25_matches')}: <span className="font-mono text-text-secondary">{result.bm25_matches}</span></span>
           </div>
 
           <ResultSection title="HOT" items={result.hot} level="hot" />
@@ -88,7 +96,7 @@ export function Retrieve() {
           {(result.shadow_hot.length > 0 || result.shadow_warm.length > 0) && (
             <details className="mt-4">
               <summary className="text-xs text-text-tertiary cursor-pointer hover:text-text-secondary">
-                Shadow pool ({result.shadow_hot.length + result.shadow_warm.length} results)
+                {t('retrieve.shadow_pool')} ({result.shadow_hot.length + result.shadow_warm.length} {t('retrieve.results', { n: result.shadow_hot.length + result.shadow_warm.length })})
               </summary>
               <div className="mt-2 space-y-4">
                 <ResultSection title="Shadow HOT" items={result.shadow_hot} level="hot" />
@@ -96,7 +104,7 @@ export function Retrieve() {
               </div>
             </details>
           )}
-        </div>
+        </motion.div>
       )}
     </motion.div>
   )

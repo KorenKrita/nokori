@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { motion } from 'motion/react'
 import { GlassCard } from '@/components/GlassCard'
+import { t } from '@/lib/i18n'
 
 export function Logs() {
   const [lines, setLines] = useState<string[]>([])
@@ -14,17 +15,13 @@ export function Logs() {
     const ws = new WebSocket(`${protocol}//${window.location.host}/api/logs`)
     wsRef.current = ws
 
-    ws.onopen = () => {
-      ws.send(JSON.stringify({ level }))
-    }
-
+    ws.onopen = () => { ws.send(JSON.stringify({ level })) }
     ws.onmessage = (event) => {
       const msg = JSON.parse(event.data)
       if (msg.type === 'log') {
         setLines((prev) => [...prev.slice(-500), msg.line])
       }
     }
-
     return () => { ws.close() }
   }, [level])
 
@@ -42,14 +39,14 @@ export function Logs() {
       className="space-y-4"
     >
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-semibold tracking-tight">Logs</h2>
+        <h2 className="text-2xl font-semibold tracking-tight">{t('logs.title')}</h2>
         <div className="flex items-center gap-3">
           <select
             value={level}
             onChange={(e) => { setLevel(e.target.value); setLines([]) }}
-            className="bg-white/[0.03] border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:ring-2 focus:ring-white/20"
+            className="bg-white/[0.03] border border-white/10 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-white/20"
           >
-            <option value="all">All levels</option>
+            <option value="all">{t('logs.all_levels')}</option>
             <option value="debug">Debug</option>
             <option value="info">Info</option>
             <option value="warn">Warning</option>
@@ -61,7 +58,7 @@ export function Logs() {
               paused ? 'bg-amber-500/20 text-amber-300' : 'bg-white/10 text-white'
             }`}
           >
-            {paused ? 'Paused' : 'Auto-scroll'}
+            {paused ? t('logs.paused') : t('logs.auto_scroll')}
           </button>
         </div>
       </div>
@@ -71,9 +68,7 @@ export function Logs() {
           ref={containerRef}
           className="h-[calc(100dvh-200px)] overflow-y-auto font-mono text-xs leading-relaxed space-y-0.5"
         >
-          {lines.length === 0 && (
-            <p className="text-text-tertiary py-4 text-center">Waiting for log output...</p>
-          )}
+          {lines.length === 0 && <p className="text-text-tertiary py-4 text-center">{t('logs.waiting')}</p>}
           {lines.map((line, i) => (
             <div
               key={i}

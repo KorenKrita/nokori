@@ -64,7 +64,6 @@ class LLMAdapter:
             "model": self.cfg.llm_model,
             "messages": messages,
             "max_tokens": max_tokens,
-            "temperature": 0.1,
         }
         headers = {"Content-Type": "application/json"}
         if self.cfg.llm_api_key:

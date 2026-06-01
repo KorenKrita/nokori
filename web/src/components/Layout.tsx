@@ -3,6 +3,7 @@ import { motion } from 'motion/react'
 import { cn } from '@/lib/utils'
 import { t } from '@/lib/i18n'
 import { LocaleSwitcher } from '@/components/LocaleSwitcher'
+import { ThemeSwitcher } from '@/components/ThemeSwitcher'
 import {
   ChartBar,
   ListBullets,
@@ -67,7 +68,8 @@ export function Layout() {
             </NavLink>
           ))}
         </nav>
-        <div className="mt-auto pt-4 border-t border-white/[0.04]">
+        <div className="mt-auto pt-4 border-t border-white/[0.04] space-y-2">
+          <ThemeSwitcher />
           <LocaleSwitcher />
         </div>
       </aside>

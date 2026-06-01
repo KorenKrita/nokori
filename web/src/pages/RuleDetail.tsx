@@ -5,6 +5,7 @@ import { StatusBadge } from '@/components/StatusBadge'
 import { PageSkeleton } from '@/components/PageSkeleton'
 import { useApi } from '@/hooks/useApi'
 import { mutateApi } from '@/lib/api'
+import { t } from '@/lib/i18n'
 import type { Rule } from '@/lib/types'
 
 export function RuleDetail() {
@@ -33,47 +34,49 @@ export function RuleDetail() {
             onClick={() => navigate('/rules')}
             className="text-text-tertiary hover:text-white text-sm"
           >
-            Rules /
+            {t('rules.back')} /
           </button>
           <h2 className="text-2xl font-semibold tracking-tight font-mono">{rule.short_id}</h2>
           <StatusBadge status={rule.status} />
         </div>
         {rule.status !== 'archived' && (
-          <button
+          <motion.button
             onClick={handleDismiss}
-            className="px-4 py-2 rounded-full bg-rose-500/10 text-rose-300 text-sm font-medium hover:bg-rose-500/20 transition-all duration-300 active:scale-[0.98]"
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            className="px-4 py-2 rounded-full bg-rose-500/10 text-rose-300 text-sm font-medium hover:bg-rose-500/20 transition-all duration-300"
           >
-            Dismiss
-          </button>
+            {t('rules.dismiss')}
+          </motion.button>
         )}
       </div>
 
       <div className="grid grid-cols-12 gap-4">
         <GlassCard className="col-span-8">
-          <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary mb-3">Trigger</h3>
+          <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary mb-3">{t('rules.trigger')}</h3>
           <p className="text-sm text-white">{rule.trigger_text}</p>
           {rule.trigger_variants.length > 0 && (
             <div className="mt-3 space-y-1">
-              <p className="text-xs text-text-tertiary">Variants:</p>
+              <p className="text-xs text-text-tertiary">{t('rules.variants')}:</p>
               {rule.trigger_variants.map((v, i) => (
                 <p key={i} className="text-xs text-text-secondary font-mono pl-2">{v}</p>
               ))}
             </div>
           )}
 
-          <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary mt-6 mb-3">Action</h3>
+          <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary mt-6 mb-3">{t('rules.action')}</h3>
           <p className="text-sm text-white">{rule.action}</p>
 
           {rule.behavior && (
             <>
-              <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary mt-6 mb-3">Behavior (incorrect)</h3>
+              <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary mt-6 mb-3">{t('rules.behavior')}</h3>
               <p className="text-sm text-text-secondary">{rule.behavior}</p>
             </>
           )}
 
           {rule.rationale && (
             <>
-              <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary mt-6 mb-3">Rationale</h3>
+              <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary mt-6 mb-3">{t('rules.rationale')}</h3>
               <p className="text-sm text-text-secondary">{rule.rationale}</p>
             </>
           )}
@@ -81,18 +84,18 @@ export function RuleDetail() {
 
         <div className="col-span-4 space-y-4">
           <GlassCard>
-            <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary mb-3">Metadata</h3>
+            <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary mb-3">{t('rules.metadata')}</h3>
             <dl className="space-y-2 text-xs">
               {([
-                ['Source type', rule.source_type],
-                ['Confidence', rule.confidence],
-                ['Evidence score', String(rule.evidence_score)],
-                ['Hit count', String(rule.hit_count)],
-                ['Last hit', rule.last_hit ?? 'never'],
-                ['Project scope', rule.project_scope],
-                ['Project ID', rule.project_id ?? 'global'],
-                ['Created', rule.created_at],
-                ['Updated', rule.updated_at],
+                [t('rules.source_type'), rule.source_type],
+                [t('rules.confidence'), rule.confidence],
+                [t('rules.evidence_score'), String(rule.evidence_score)],
+                [t('rules.hit_count'), String(rule.hit_count)],
+                [t('rules.last_hit'), rule.last_hit ?? t('rules.never')],
+                [t('rules.project_scope'), rule.project_scope],
+                [t('rules.project_id'), rule.project_id ?? 'global'],
+                [t('rules.created'), rule.created_at],
+                [t('rules.updated'), rule.updated_at],
               ] as [string, string][]).map(([label, value]) => (
                 <div key={label} className="flex justify-between">
                   <dt className="text-text-tertiary">{label}</dt>
@@ -104,14 +107,14 @@ export function RuleDetail() {
 
           {Object.keys(rule.search_terms).length > 0 && (
             <GlassCard>
-              <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary mb-3">Search Terms</h3>
+              <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary mb-3">{t('rules.search_terms')}</h3>
               {Object.entries(rule.search_terms).map(([lang, terms]) => (
                 <div key={lang} className="mb-2">
                   <span className="text-xs text-text-tertiary">{lang}:</span>
                   <div className="flex flex-wrap gap-1 mt-1">
-                    {terms.map((t) => (
-                      <span key={t} className="px-2 py-0.5 rounded bg-white/[0.04] text-xs font-mono text-text-secondary">
-                        {t}
+                    {terms.map((term) => (
+                      <span key={term} className="px-2 py-0.5 rounded bg-white/[0.04] text-xs font-mono text-text-secondary">
+                        {term}
                       </span>
                     ))}
                   </div>
@@ -124,7 +127,7 @@ export function RuleDetail() {
 
       {rule.evidence_log.length > 0 && (
         <GlassCard>
-          <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary mb-3">Evidence Log</h3>
+          <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary mb-3">{t('rules.evidence_log')}</h3>
           <div className="space-y-1 max-h-60 overflow-y-auto">
             {rule.evidence_log.map((entry, i) => (
               <div key={i} className="text-xs font-mono text-text-secondary py-1 border-b border-white/[0.02]">

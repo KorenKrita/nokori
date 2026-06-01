@@ -1,6 +1,17 @@
 @import "tailwindcss";
 
 @theme {
+  --color-accent-emerald: #34d399;
+  --color-accent-rose: #fb7185;
+  --color-accent-amber: #fbbf24;
+  --color-accent-violet: #a78bfa;
+  --color-accent-sky: #38bdf8;
+  --font-sans: "Geist", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, monospace;
+}
+
+/* Dark theme (default) */
+:root.dark, :root:not(.light) {
   --color-bg-base: #050505;
   --color-bg-surface: rgba(255, 255, 255, 0.03);
   --color-bg-elevated: rgba(255, 255, 255, 0.06);
@@ -11,25 +22,54 @@
   --color-text-secondary: #a1a1aa;
   --color-text-tertiary: #71717a;
   --color-text-muted: #52525b;
-  --color-accent-emerald: #34d399;
-  --color-accent-rose: #fb7185;
-  --color-accent-amber: #fbbf24;
-  --color-accent-violet: #a78bfa;
-  --color-accent-sky: #38bdf8;
-  --font-sans: "Geist", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "Geist Mono", ui-monospace, monospace;
+  color-scheme: dark;
+}
+
+/* Light theme */
+:root.light {
+  --color-bg-base: #fafafa;
+  --color-bg-surface: rgba(0, 0, 0, 0.02);
+  --color-bg-elevated: rgba(0, 0, 0, 0.04);
+  --color-border-subtle: rgba(0, 0, 0, 0.06);
+  --color-border-default: rgba(0, 0, 0, 0.10);
+  --color-border-focus: rgba(0, 0, 0, 0.25);
+  --color-text-primary: #18181b;
+  --color-text-secondary: #52525b;
+  --color-text-tertiary: #a1a1aa;
+  --color-text-muted: #d4d4d8;
+  color-scheme: light;
 }
 
 body {
-  background: radial-gradient(ellipse at 20% 50%, rgba(139, 92, 246, 0.03), transparent 50%),
-    radial-gradient(ellipse at 80% 20%, rgba(52, 211, 153, 0.02), transparent 40%),
-    #050505;
+  background: var(--color-bg-base);
   color: var(--color-text-primary);
   font-family: var(--font-sans);
   min-height: 100dvh;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+:root.dark body {
+  background:
+    radial-gradient(ellipse at 20% 50%, rgba(139, 92, 246, 0.03), transparent 50%),
+    radial-gradient(ellipse at 80% 20%, rgba(52, 211, 153, 0.02), transparent 40%),
+    #050505;
+}
+
+:root.light body {
+  background:
+    radial-gradient(ellipse at 20% 50%, rgba(139, 92, 246, 0.02), transparent 50%),
+    radial-gradient(ellipse at 80% 20%, rgba(52, 211, 153, 0.015), transparent 40%),
+    #fafafa;
 }
 
 * {
   scrollbar-width: thin;
+}
+
+:root.dark * {
   scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+}
+
+:root.light * {
+  scrollbar-color: rgba(0, 0, 0, 0.1) transparent;
 }

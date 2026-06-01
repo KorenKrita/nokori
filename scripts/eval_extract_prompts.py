@@ -38,22 +38,27 @@ from nokori.llm.json_payload import parse_json_payload
 from nokori.llm.prompts import (
     EXTRACT_SYSTEM,
     JUDGE_EXTRACT_SYSTEM,
+    JUDGE_SYNTHESIZE_SYSTEM,
     wrap_untrusted,
 )
 
-DEFAULT_MODELS = (
-    "deepseek-v4-flash,deepseek-v4-pro,gemini-3.5-flash,glm-5v-turbo,glm-5.1,MiniMax-M3,"
-    "claude-sonnet-4-6,claude-opus-4-5"
-)
-QUICK_MODELS = (
-    "deepseek-v4-flash,gemini-3.5-flash,claude-sonnet-4-6,claude-opus-4-5"
-)
+DEFAULT_MODELS = "deepseek-v4-flash,gemini-3.5-flash"
+QUICK_MODELS = "deepseek-v4-flash,gemini-3.5-flash"
 DEFAULT_JUDGE = "claude-opus-4-5"
 DEFAULT_MIN_BYTES = 10_240
 DEFAULT_MAX_BYTES = 180_000
 PROD_COMPRESS_BUDGET_TOKENS = 30_000
 PROD_EXTRACT_MAX_TOKENS = 3_000
 PROD_EXTRACT_TIMEOUT_SEC = 60
+# Judge reviews all models + rubric scores; keep separate from extract hot-path timeout.
+JUDGE_TIMEOUT_SEC = 300
+# Matches EXTRACT_SYSTEM "at most 3 candidates"
+MAX_EXPECTED_RULES = 3
+
+# Judge rubric: five dimensions 0-100 (percent), total = rounded mean
+SCORE_DIMS = ("format", "count", "trigger", "search_terms", "action")
+SCORE_MAX_PER_DIM = 100
+SCORE_MAX_TOTAL = 100
 _COMPRESS_TRUNC_MARKER = "[transcript truncated: middle omitted]"
 
 
@@ -99,16 +104,16 @@ def _discover_transcripts(
 _TRIAGE_CACHE = Path("/tmp/nokori-eval-triage.json")
 
 _TRIAGE_SYSTEM = """You quickly classify a compressed Claude Code conversation transcript.
-Decide how many reusable behavioral rules a good extractor SHOULD find.
+Decide how many reusable behavioral rules a good extractor SHOULD find (software-engineering lessons only).
 
 Output JSON only (no prose):
-{"expected_rules": 0 | 1 | 2, "reason": "<one sentence>"}
+{"expected_rules": <integer 0-3>, "reason": "<one sentence>"}
 
-- 0: no user correction, no preference stated, routine Q&A or task execution
-- 1: exactly one clear correction, preference, or reusable lesson
-- 2: two or more distinct corrections/preferences/lessons
+Count distinct reusable behavioral lessons a good extractor should emit (max 3):
+- 0: none — routine Q&A, no pushback; math/trivia with only generic retry ("对么", "再想") and no stated preference
+- 1, 2, or 3: that exact number of separate corrections/preferences/lessons (do not collapse multiple lessons into a lower number)
 
-Be strict: routine "do X" tasks with no pushback = 0. Only count explicit user corrections or stated preferences."""
+Be strict: routine "do X" with no pushback = 0. Only count explicit user corrections or stated preferences."""
 
 
 def _load_triage_cache() -> dict[str, dict]:
@@ -127,6 +132,158 @@ def _save_triage_cache(cache: dict[str, dict]) -> None:
     _TRIAGE_CACHE.write_text(json.dumps(cache, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def _normalize_expected_rule_count(parsed: dict) -> int:
+    """Exact count 0..MAX_EXPECTED_RULES (not a 2+ bucket)."""
+    if "expected_rule_count" in parsed:
+        n = parsed["expected_rule_count"]
+    elif "expected_rules" in parsed:
+        n = parsed["expected_rules"]
+    elif "should_extract" in parsed:
+        n = 1 if parsed["should_extract"] else 0
+    else:
+        n = 0
+    try:
+        n = int(n)
+    except (TypeError, ValueError):
+        n = 0
+    return min(MAX_EXPECTED_RULES, max(0, n))
+
+
+def _count_matches_expected(expected: int, actual: int) -> bool:
+    return expected == actual
+
+
+def _clamp_dim_score(value: object) -> int:
+    try:
+        n = int(round(float(value)))
+    except (TypeError, ValueError):
+        return 0
+    return max(0, min(SCORE_MAX_PER_DIM, n))
+
+
+def _normalize_scores(raw: dict | None) -> dict[str, int]:
+    scores = raw if isinstance(raw, dict) else {}
+    out = {dim: _clamp_dim_score(scores.get(dim, 0)) for dim in SCORE_DIMS}
+    out["total"] = round(sum(out[dim] for dim in SCORE_DIMS) / len(SCORE_DIMS))
+    return out
+
+
+def _per_model_by_name(review: dict) -> dict[str, dict]:
+    out: dict[str, dict] = {}
+    for pm in review.get("per_model") or []:
+        if isinstance(pm, dict) and pm.get("model"):
+            out[str(pm["model"])] = pm
+    return out
+
+
+def _normalize_judge_review(parsed: dict) -> dict:
+    n = _normalize_expected_rule_count(parsed)
+    parsed["expected_rule_count"] = n
+    parsed["expected_rules"] = n
+    parsed["should_extract"] = n > 0
+    normalized_pms: list[dict] = []
+    for pm in parsed.get("per_model") or []:
+        if not isinstance(pm, dict):
+            continue
+        pm = dict(pm)
+        pm["scores"] = _normalize_scores(pm.get("scores"))
+        normalized_pms.append(pm)
+    parsed["per_model"] = normalized_pms
+    return parsed
+
+
+def _format_scores_short(scores: dict[str, int] | None) -> str:
+    if not scores:
+        return "—"
+    parts = [f"{scores.get(d, 0)}" for d in SCORE_DIMS]
+    return "/".join(parts) + f"→{scores.get('total', 0)}%"
+
+
+def _build_score_leaderboard(payload: dict) -> list[dict]:
+    """Aggregate judge scores per extract model across samples."""
+    models = list(payload.get("meta", {}).get("models") or [])
+    buckets: dict[str, dict] = {
+        m: {
+            "model": m,
+            "samples_scored": 0,
+            "api_errors": 0,
+            "count_hits": 0,
+            "count_opportunities": 0,
+            **{d: [] for d in SCORE_DIMS},
+            "total": [],
+        }
+        for m in models
+    }
+
+    for sample in payload.get("samples", []):
+        review = (sample.get("judge") or {}).get("review") or {}
+        judge_n = review.get("expected_rule_count")
+        if judge_n is not None:
+            judge_n = _normalize_expected_rule_count(review)
+        by_name = _per_model_by_name(review)
+
+        for ex in sample.get("extractions", []):
+            model = str(ex.get("model", ""))
+            if model not in buckets:
+                buckets[model] = {
+                    "model": model,
+                    "samples_scored": 0,
+                    "api_errors": 0,
+                    "count_hits": 0,
+                    "count_opportunities": 0,
+                    **{d: [] for d in SCORE_DIMS},
+                    "total": [],
+                }
+            if ex.get("error"):
+                buckets[model]["api_errors"] += 1
+                continue
+            if judge_n is not None:
+                buckets[model]["count_opportunities"] += 1
+                if _count_matches_expected(judge_n, len(ex.get("candidates") or [])):
+                    buckets[model]["count_hits"] += 1
+            pm = by_name.get(model)
+            if not pm:
+                continue
+            scores = pm.get("scores")
+            if not isinstance(scores, dict):
+                continue
+            buckets[model]["samples_scored"] += 1
+            for d in SCORE_DIMS:
+                buckets[model][d].append(int(scores.get(d, 0)))
+            buckets[model]["total"].append(int(scores.get("total", 0)))
+
+    rows: list[dict] = []
+    for model in models:
+        b = buckets.get(model)
+        if not b:
+            continue
+        row = {
+            "model": model,
+            "samples_scored": b["samples_scored"],
+            "api_errors": b["api_errors"],
+        }
+        if b["count_opportunities"]:
+            row["count_hit_rate"] = b["count_hits"] / b["count_opportunities"]
+        else:
+            row["count_hit_rate"] = None
+        for d in SCORE_DIMS:
+            vals = b[d]
+            row[f"avg_{d}"] = sum(vals) / len(vals) if vals else None
+        totals = b["total"]
+        row["avg_total"] = sum(totals) / len(totals) if totals else None
+        rows.append(row)
+
+    rows.sort(
+        key=lambda r: (
+            r["avg_total"] is not None,
+            r["avg_total"] or -1,
+            r["count_hit_rate"] or -1,
+        ),
+        reverse=True,
+    )
+    return rows
+
+
 def _triage_one(
     path: Path,
     *,
@@ -136,7 +293,7 @@ def _triage_one(
     budget_tokens: int,
     timeout: int,
 ) -> dict | None:
-    """Classify one transcript. Returns {"expected_rules": 0|1|2, "reason": ...} or None on failure."""
+    """Classify one transcript. Returns {"expected_rules": 0..3, "reason": ...} or None on failure."""
     try:
         text = compress(read(path), budget_tokens=budget_tokens)
     except Exception:
@@ -157,24 +314,25 @@ def _triage_one(
     if err or not raw:
         return None
     parsed = parse_json_payload(raw)
-    if isinstance(parsed, dict) and "expected_rules" in parsed:
-        n = parsed["expected_rules"]
-        if n not in (0, 1, 2):
-            n = min(2, max(0, int(n)))
-            parsed["expected_rules"] = n
+    if isinstance(parsed, dict) and (
+        "expected_rules" in parsed
+        or "expected_rule_count" in parsed
+        or "should_extract" in parsed
+    ):
+        n = _normalize_expected_rule_count(parsed)
+        parsed["expected_rules"] = n
         return parsed
     return None
 
 
 def _cache_pool_counts(cache: dict[str, dict], pool: list[Path]) -> dict[int, int]:
-    """Count how many pool entries are classified into each bucket in cache."""
-    counts: dict[int, int] = {0: 0, 1: 0, 2: 0}
+    """Count cache entries per exact expected_rules (0..MAX_EXPECTED_RULES)."""
+    counts: dict[int, int] = {i: 0 for i in range(MAX_EXPECTED_RULES + 1)}
     for p in pool:
         entry = cache.get(str(p))
         if entry is None:
             continue
-        b = min(2, max(0, entry.get("expected_rules", 0)))
-        counts[b] += 1
+        counts[_normalize_expected_rule_count(entry)] += 1
     return counts
 
 
@@ -206,24 +364,24 @@ def _run_triage(
         counts = _cache_pool_counts(cache, pool)
         _log(
             f"  triage: cache has {cached_in_pool} entries (>= {skip_threshold}), "
-            f"skipping LLM calls. buckets: 0={counts[0]} 1={counts[1]} 2+={counts[2]}"
+            f"skipping LLM calls. counts: {_format_rule_counts(counts)}"
         )
         return cache, set()
 
     need_per_bucket = {
         0: max(2, round(target_samples * 0.2)) + 2,
         1: max(2, round(target_samples * 0.6)) + 2,
-        2: max(2, round(target_samples * 0.2)) + 2,
+        2: max(2, round(target_samples * 0.1)) + 1,
+        3: max(1, round(target_samples * 0.1)) + 1,
     }
 
     def _fresh_bucket_counts() -> dict[int, int]:
-        counts: dict[int, int] = {0: 0, 1: 0, 2: 0}
+        counts: dict[int, int] = {i: 0 for i in range(MAX_EXPECTED_RULES + 1)}
         for key in newly_classified:
             entry = cache.get(key)
             if entry is None:
                 continue
-            b = min(2, max(0, entry.get("expected_rules", 0)))
-            counts[b] += 1
+            counts[_normalize_expected_rule_count(entry)] += 1
         return counts
 
     uncached = [p for p in pool if str(p) not in cache]
@@ -264,33 +422,32 @@ def _run_triage(
 
         _save_triage_cache(cache)
         counts = _fresh_bucket_counts()
-        _log(f"    fresh {len(newly_classified)} → buckets: 0={counts[0]} 1={counts[1]} 2+={counts[2]}")
+        _log(f"    fresh {len(newly_classified)} → counts: {_format_rule_counts(counts)}")
 
-        if all(counts[b] >= need_per_bucket[b] for b in (0, 1, 2)):
+        if all(counts[b] >= need_per_bucket[b] for b in need_per_bucket):
             break
 
     _log(f"  triage done: {len(newly_classified)} new classifications")
     return cache, newly_classified
 
 
-def _compute_bucket_targets(n: int) -> tuple[int, int, int]:
-    """Compute (target_0, target_1, target_2) with min guarantees.
+def _format_rule_counts(counts: dict[int, int]) -> str:
+    return " ".join(f"{k}={counts.get(k, 0)}" for k in range(MAX_EXPECTED_RULES + 1))
 
-    n=1: (0, 1, 0)  — at least 1 extractable
-    n=2: (0, 1, 1)  — at least 1 one-rule + 1 two-rule
-    n=3: (1, 1, 1)  — at least 1 of each
-    n>=4: 20% / 60% / 20% with each bucket >= 1
-    """
+
+def _compute_bucket_targets(n: int) -> tuple[int, int, int, int]:
+    """Compute (target_0, target_1, target_2, target_3) — exact rule counts."""
     if n <= 1:
-        return (0, 1, 0)
+        return (0, 1, 0, 0)
     if n == 2:
-        return (0, 1, 1)
+        return (0, 1, 1, 0)
     if n == 3:
-        return (1, 1, 1)
+        return (1, 1, 1, 0)
     target_0 = max(1, round(n * 0.2))
-    target_2 = max(1, round(n * 0.2))
-    target_1 = max(1, n - target_0 - target_2)
-    return (target_0, target_1, target_2)
+    target_3 = max(0, round(n * 0.1))
+    target_2 = max(1, round(n * 0.15))
+    target_1 = max(1, n - target_0 - target_2 - target_3)
+    return (target_0, target_1, target_2, target_3)
 
 
 def _pick_balanced_samples(
@@ -305,21 +462,20 @@ def _pick_balanced_samples(
     Prefer newly classified transcripts (from this run) over cached ones.
     Only fall back to cached entries when fresh ones can't fill the buckets.
     """
-    fresh_buckets: dict[int, list[Path]] = {0: [], 1: [], 2: []}
-    cached_buckets: dict[int, list[Path]] = {0: [], 1: [], 2: []}
+    fresh_buckets: dict[int, list[Path]] = {i: [] for i in range(MAX_EXPECTED_RULES + 1)}
+    cached_buckets: dict[int, list[Path]] = {i: [] for i in range(MAX_EXPECTED_RULES + 1)}
 
     for p in pool:
         entry = triage_cache.get(str(p))
         if entry is None:
             continue
-        expected = entry.get("expected_rules", 0)
-        bucket = min(2, max(0, expected))
+        bucket = _normalize_expected_rule_count(entry)
         if str(p) in newly_classified:
             fresh_buckets[bucket].append(p)
         else:
             cached_buckets[bucket].append(p)
 
-    target_0, target_1, target_2 = _compute_bucket_targets(n)
+    target_0, target_1, target_2, target_3 = _compute_bucket_targets(n)
 
     def _pick_from(fresh: list[Path], cached: list[Path], count: int) -> list[Path]:
         if count <= 0:
@@ -334,8 +490,9 @@ def _pick_balanced_samples(
     picked_0 = _pick_from(fresh_buckets[0], cached_buckets[0], target_0)
     picked_1 = _pick_from(fresh_buckets[1], cached_buckets[1], target_1)
     picked_2 = _pick_from(fresh_buckets[2], cached_buckets[2], target_2)
+    picked_3 = _pick_from(fresh_buckets[3], cached_buckets[3], target_3)
 
-    result = picked_0 + picked_1 + picked_2
+    result = picked_0 + picked_1 + picked_2 + picked_3
 
     if len(result) < n:
         used = set(str(p) for p in result)
@@ -346,8 +503,8 @@ def _pick_balanced_samples(
     rng.shuffle(result)
 
     _log(
-        f"  balanced pick: {len(picked_0)} zero + {len(picked_1)} one + "
-        f"{len(picked_2)} two+ = {len(result)} (target {n})"
+        f"  balanced pick: 0={len(picked_0)} 1={len(picked_1)} 2={len(picked_2)} "
+        f"3={len(picked_3)} total={len(result)} (target {n})"
     )
     return result[:n]
 
@@ -391,7 +548,6 @@ def _call_chat(
             {"role": "user", "content": user},
         ],
         "max_tokens": max_tokens,
-        "temperature": 0.1,
     }
     headers = {"Content-Type": "application/json"}
     if api_key:
@@ -559,7 +715,7 @@ def _run_judge(
     out["raw_response"] = raw
     parsed = parse_json_payload(raw or "")
     if isinstance(parsed, dict):
-        out["review"] = parsed
+        out["review"] = _normalize_judge_review(parsed)
     else:
         out["parse_error"] = "judge did not return a JSON object"
     return out
@@ -585,9 +741,58 @@ def _render_report(payload: dict) -> str:
         lines.append("")
         judge = sample.get("judge") or {}
         review = judge.get("review") or {}
+        triage_n = None
+        if sample.get("triage") is not None:
+            triage_n = _normalize_expected_rule_count(sample["triage"])
+        judge_n = review.get("expected_rule_count")
+        if judge_n is not None:
+            judge_n = _normalize_expected_rule_count(review)
         if review.get("transcript_summary"):
             lines.append(f"**Summary:** {review['transcript_summary']}")
+        if triage_n is not None or judge_n is not None:
+            parts = []
+            if triage_n is not None:
+                parts.append(f"triage cache `{triage_n}`")
+            if judge_n is not None:
+                parts.append(f"judge `{judge_n}`")
+            lines.append(f"**Expected rules:** {' | '.join(parts)}")
+            if triage_n is not None and judge_n is not None and triage_n != judge_n:
+                lines.append(f"- *(triage vs judge mismatch)*")
+        elif review.get("should_extract") is not None:
             lines.append(f"**Should extract:** `{review.get('should_extract')}`")
+        by_name = _per_model_by_name(review)
+        if judge_n is not None:
+            lines.append("")
+            lines.append(
+                "| Model | n | vs exp | total | "
+                "fmt | cnt | trig | srch | act |"
+            )
+            lines.append(
+                "|-------|---|--------|-------|"
+                "-----|-----|------|------|-----|"
+            )
+            for ex in sample.get("extractions", []):
+                model = ex.get("model", "?")
+                if ex.get("error"):
+                    lines.append(f"| `{model}` | err | — | — | — | — | — | — | — |")
+                    continue
+                n = len(ex.get("candidates") or [])
+                ok = _count_matches_expected(judge_n, n)
+                pm = by_name.get(str(model)) or {}
+                sc = pm.get("scores") if isinstance(pm.get("scores"), dict) else {}
+                def _c(dim: str) -> str:
+                    return str(sc.get(dim, "—"))
+                lines.append(
+                    f"| `{model}` | {n} | {'ok' if ok else 'MISS'} | "
+                    f"{sc.get('total', '—')} | "
+                    f"{_c('format')} | {_c('count')} | {_c('trigger')} | "
+                    f"{_c('search_terms')} | {_c('action')} |"
+                )
+            lines.append("")
+            lines.append(
+                "*Scores: each dimension 0-100 (percent); total = mean of five. "
+                "fmt=format, cnt=count, trig=trigger, srch=search_terms, act=action.*"
+            )
             lines.append("")
 
         for ex in sample.get("extractions", []):
@@ -597,10 +802,18 @@ def _render_report(payload: dict) -> str:
                 lines.append(f"- API error: `{ex['error']}`")
                 lines.append("")
                 continue
+            n_cand = len(ex.get("candidates") or [])
+            match_s = ""
+            if judge_n is not None:
+                match_s = (
+                    " match=ok"
+                    if _count_matches_expected(judge_n, n_cand)
+                    else " match=MISS"
+                )
             lines.append(
                 f"- parse_ok={ex.get('parse_ok')} | "
-                f"candidates={len(ex.get('candidates') or [])} | "
-                f"{ex.get('elapsed')}s"
+                f"candidates={n_cand} | "
+                f"{ex.get('elapsed')}s{match_s}"
             )
             lines.append("")
             lines.append("<details><summary>Raw model output</summary>")
@@ -623,6 +836,15 @@ def _render_report(payload: dict) -> str:
             lines.append("")
             for pm in review["per_model"]:
                 lines.append(f"#### `{pm.get('model', '?')}`")
+                sc = pm.get("scores")
+                if isinstance(sc, dict):
+                    lines.append(
+                        f"- **Scores (%):** format={sc.get('format')} count={sc.get('count')} "
+                        f"trigger={sc.get('trigger')} search_terms={sc.get('search_terms')} "
+                        f"action={sc.get('action')} → **total={sc.get('total')}**"
+                    )
+                    if pm.get("extracted_well") is not None:
+                        lines.append(f"- **extracted_well:** `{pm.get('extracted_well')}`")
                 if pm.get("format_issues"):
                     lines.append("- **Format:** " + "; ".join(pm["format_issues"]))
                 if pm.get("false_positives"):
@@ -661,6 +883,40 @@ def _render_report(payload: dict) -> str:
         lines.append("---")
         lines.append("")
 
+    leaderboard = _build_score_leaderboard(payload)
+    if leaderboard:
+        lines.append("## Score leaderboard (judge, percent per sample)")
+        lines.append("")
+        lines.append(
+            "Dimensions averaged over samples where the judge returned scores. "
+            f"Each dimension 0-{SCORE_MAX_PER_DIM}%; total = mean of five (0-{SCORE_MAX_TOTAL}%)."
+        )
+        lines.append("")
+        lines.append(
+            "| Model | scored | err | count% | avg total | "
+            "avg fmt | avg cnt | avg trig | avg srch | avg act |"
+        )
+        lines.append(
+            "|-------|--------|-----|--------|-----------|"
+            "--------|---------|----------|----------|---------|"
+        )
+
+        def _avg(v: float | None) -> str:
+            return f"{v:.2f}" if v is not None else "—"
+
+        for row in leaderboard:
+            chr_ = row.get("count_hit_rate")
+            chr_s = f"{chr_ * 100:.0f}%" if chr_ is not None else "—"
+            lines.append(
+                f"| `{row['model']}` | {row['samples_scored']} | {row['api_errors']} | "
+                f"{chr_s} | **{_avg(row.get('avg_total'))}%** | "
+                f"{_avg(row.get('avg_format'))} | {_avg(row.get('avg_count'))} | "
+                f"{_avg(row.get('avg_trigger'))} | {_avg(row.get('avg_search_terms'))} | "
+                f"{_avg(row.get('avg_action'))} |"
+            )
+        lines.append("")
+        payload["score_leaderboard"] = leaderboard
+
     if payload.get("global_synthesis"):
         gs = payload["global_synthesis"]
         lines.append("## Global synthesis (all samples)")
@@ -670,7 +926,7 @@ def _render_report(payload: dict) -> str:
                 lines.append(f"- {item}")
             if gs.get("draft_prompt_patch"):
                 lines.append("")
-                lines.append("### Draft patch")
+                lines.append("### Merge plan (vs current EXTRACT_SYSTEM)")
                 lines.append("")
                 lines.append("```")
                 lines.append(gs["draft_prompt_patch"])
@@ -691,16 +947,16 @@ def _synthesize_global(
     if not improvements:
         return None
     user = (
-        "Below are prompt_improvements collected from multiple transcript reviews.\n"
-        "Deduplicate and merge into a short actionable list. Output JSON only:\n"
-        '{"deduped_improvements":["..."], "draft_prompt_patch":"paragraph to add to EXTRACT_SYSTEM"}\n\n'
+        "## CURRENT EXTRACT_SYSTEM\n\n"
+        f"{EXTRACT_SYSTEM}\n\n"
+        "## PROMPT_IMPROVEMENTS (from per-sample judges)\n\n"
         + json.dumps(improvements, ensure_ascii=False, indent=2)
     )
     raw, _, err = _call_chat(
         base_url=base_url,
         api_key=api_key,
         model=judge_model,
-        system=JUDGE_EXTRACT_SYSTEM,
+        system=JUDGE_SYNTHESIZE_SYSTEM,
         user=user,
         max_tokens=2000,
         timeout=timeout,
@@ -734,7 +990,11 @@ def main() -> int:
     parser.add_argument("--no-judge", action="store_true")
     parser.add_argument("--no-synthesize", action="store_true", help="Skip final merge of improvements")
     parser.add_argument("--resume", action="store_true", help="Resume from partial output file")
-    parser.add_argument("--triage", action="store_true", help="Pre-classify transcripts for balanced sampling (20%% zero / 60%% one / 20%% two+)")
+    parser.add_argument(
+        "--triage",
+        action="store_true",
+        help="Pre-classify transcripts (exact expected_rules 0-3) for balanced sampling",
+    )
     parser.add_argument("--triage-model", default="", help="Model for triage (default: same as --judge-model)")
     parser.add_argument(
         "--min-bytes",
@@ -772,18 +1032,23 @@ def main() -> int:
         default=0,
         help=f"Extract LLM max_tokens (0 → production {PROD_EXTRACT_MAX_TOKENS})",
     )
-    parser.add_argument("--judge-max-tokens", type=int, default=4000)
+    parser.add_argument(
+        "--judge-max-tokens",
+        type=int,
+        default=8000,
+        help="Judge max output tokens (7 models + scores need headroom; default 8000)",
+    )
     parser.add_argument(
         "--timeout",
         type=int,
-        default=0,
-        help=f"Extract LLM timeout seconds (0 → production {PROD_EXTRACT_TIMEOUT_SEC})",
+        default=PROD_EXTRACT_TIMEOUT_SEC,
+        help=f"Extract LLM timeout seconds (default {PROD_EXTRACT_TIMEOUT_SEC})",
     )
     parser.add_argument(
         "--judge-timeout",
         type=int,
-        default=180,
-        help="Judge LLM timeout seconds",
+        default=JUDGE_TIMEOUT_SEC,
+        help=f"Judge/triage LLM timeout seconds only (default {JUDGE_TIMEOUT_SEC}; extract uses --timeout)",
     )
     parser.add_argument("--max-workers", type=int, default=6, help="Parallel extract workers")
     parser.add_argument("--out-json", default="")
@@ -833,7 +1098,7 @@ def main() -> int:
             api_key=cfg.llm_api_key,
             judge_model=triage_model,
             budget_tokens=args.budget_tokens,
-            timeout=60,
+            timeout=args.judge_timeout,
             max_workers=args.max_workers,
             rng=rng,
         )
@@ -865,6 +1130,8 @@ def main() -> int:
 
     _log(f"extract models: {models}")
     _log(f"judge: {args.judge_model if not args.no_judge else '(disabled)'}")
+    if not args.no_judge:
+        _log(f"judge timeout: {args.judge_timeout}s (extract timeout: {extract_timeout}s)")
     _log(
         f"jsonl pool: {len(pool)} files in "
         f"[{args.min_bytes // 1024}KiB, {args.max_bytes // 1024}KiB]"
@@ -963,7 +1230,23 @@ def main() -> int:
             if sample["judge"].get("error"):
                 _log(f"    -> judge ERROR {sample['judge']['error'][:80]}")
             else:
-                _log(f"    -> judge {sample['judge'].get('elapsed')}s")
+                jn = review.get("expected_rule_count")
+                _log(
+                    f"    -> judge {sample['judge'].get('elapsed')}s "
+                    f"expected_rule_count={jn} should_extract={review.get('should_extract')}"
+                )
+                by_name = _per_model_by_name(review)
+                for ex in sample["extractions"]:
+                    if ex.get("error"):
+                        continue
+                    pm = by_name.get(str(ex.get("model", "")))
+                    if not pm:
+                        continue
+                    sc = pm.get("scores") or {}
+                    _log(
+                        f"       {ex['model']}: total={sc.get('total', '?')}% "
+                        f"({_format_scores_short(sc)})"
+                    )
                 for imp in (review.get("prompt_improvements") or [])[:2]:
                     if isinstance(imp, dict):
                         _log(f"       * {imp.get('issue', '')[:70]}")
@@ -1001,6 +1284,8 @@ def _make_meta(cfg, models, args, ts, max_chars, max_tokens, extract_timeout, po
             "compress_budget_tokens": args.budget_tokens,
             "extract_max_tokens": max_tokens,
             "extract_timeout_sec": extract_timeout,
+            "judge_timeout_sec": args.judge_timeout,
+            "judge_max_tokens": args.judge_max_tokens,
             "max_chars_eval_cap": max_chars or None,
             "min_bytes": args.min_bytes,
             "max_bytes": args.max_bytes,
