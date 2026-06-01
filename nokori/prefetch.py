@@ -12,7 +12,7 @@ def maybe_prefetch_local_embed(
     *,
     out: TextIO | None = None,
 ) -> bool:
-    """Download MiniLM weights when local-embed is installed and cache is empty.
+    """Download local Granite embed weights when local-embed is installed and cache is empty.
 
     Returns True if weights are on disk after this call (or were already).
     No-op when sentence-transformers is not installed.

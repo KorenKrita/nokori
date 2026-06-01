@@ -49,7 +49,10 @@ def _handle_connection(
                 return False
             elif op == "embed":
                 text = req.get("text") or ""
-                vectors = client.embed(text)
+                kind = req.get("kind") or "document"
+                if kind not in ("query", "document"):
+                    kind = "document"
+                vectors = client.embed(text, kind=kind)
                 _reply(conn, {"ok": True, "op": "embed", "vectors": vectors})
             else:
                 _reply(conn, {"ok": False, "error": f"unknown op: {op!r}"})

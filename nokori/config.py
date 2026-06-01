@@ -169,6 +169,12 @@ def _enum_val(name: str, default: str, choices: tuple[str, ...], file_values: di
 _GATE_MATCHER_MAX_LEN = 512
 
 
+def _value_explicitly_set(name: str, file_values: dict[str, str]) -> bool:
+    """True when env or config.toml provides a non-empty value (matches _int_val)."""
+    raw = _get(name, file_values)
+    return raw is not None and raw.strip() != ""
+
+
 def _gate_matcher_val(file_values: dict[str, str]) -> str:
     raw = _str_val(
         "NOKORI_GATE_MATCHER", DEFAULT_GATE_MATCHER, file_values
@@ -203,6 +209,8 @@ class Config:
     embed_dimensions: int
     embed_chunk_size: int
     embed_chunk_count: int
+    embed_chunk_size_configured: bool
+    embed_chunk_count_configured: bool
     embed_hook_timeout_seconds: int
     embed_server_idle_seconds: int
     embed_server_auto_start: bool
@@ -237,8 +245,14 @@ class Config:
             embed_model=_str_or_none_val("NOKORI_EMBED_MODEL", file_values),
             embed_api_key=_str_or_none_val("NOKORI_EMBED_API_KEY", file_values),
             embed_dimensions=_int_val("NOKORI_EMBED_DIMENSIONS", 0, file_values, min_value=0),
-            embed_chunk_size=_int_val("NOKORI_EMBED_CHUNK_SIZE", 512, file_values, min_value=16),
-            embed_chunk_count=_int_val("NOKORI_EMBED_CHUNK_COUNT", 3, file_values, min_value=1),
+            embed_chunk_size=_int_val("NOKORI_EMBED_CHUNK_SIZE", 4000, file_values, min_value=16),
+            embed_chunk_count=_int_val("NOKORI_EMBED_CHUNK_COUNT", 2, file_values, min_value=1),
+            embed_chunk_size_configured=_value_explicitly_set(
+                "NOKORI_EMBED_CHUNK_SIZE", file_values
+            ),
+            embed_chunk_count_configured=_value_explicitly_set(
+                "NOKORI_EMBED_CHUNK_COUNT", file_values
+            ),
             embed_hook_timeout_seconds=_int_val(
                 "NOKORI_HOOK_EMBED_TIMEOUT", 2, file_values, min_value=1
             ),

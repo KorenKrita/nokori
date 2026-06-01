@@ -482,7 +482,7 @@ pip install nokori[local-embed]
 # 或开发安装：pip install -e ".[local-embed]"
 ```
 
-安装 `[local-embed]` 时会拉取 Python 依赖；**模型权重**（`paraphrase-multilingual-MiniLM-L12-v2`，约 118MB、384 维）在以下时机下载到 `~/.nokori/models/`（不在 hook 里下载，避免超时）：
+安装 `[local-embed]` 时会安装 **sentence-transformers>=3.0**（Granite 的 `encode_query` / `encode_document` 需要；ST 2.x 不支持）。**模型权重**（`ibm-granite/granite-embedding-97m-multilingual-r2`，约 97M 参数、384 维）在以下时机下载到 `~/.nokori/models/`（不在 hook 里下载，避免超时）。用户话走 `encode_query`，规则索引走 `encode_document`（Granite R2 检索 API）。从旧默认模型升级后请执行 `nokori embed prefetch`，并对规则重新索引（`add` / `import` / 编辑 trigger 相关字段），使 `rule_embeddings` 的 `model_version` 与新模型一致：
 
 | 时机 | 说明 |
 |------|------|
@@ -593,8 +593,8 @@ nokori install [--dry-run | --uninstall | --disable | --enable | --no-prefetch-e
 | `NOKORI_EMBED_MODEL` | — | Embedding 模型名 |
 | `NOKORI_EMBED_API_KEY` | — | Embedding API key |
 | `NOKORI_EMBED_DIMENSIONS` | `0`（不传，用模型默认） | 向量维度（仅支持该参数的模型需要设） |
-| `NOKORI_EMBED_CHUNK_SIZE` | `512` | 文本分块字符数 |
-| `NOKORI_EMBED_CHUNK_COUNT` | `3` | 每规则最多分块数 |
+| `NOKORI_EMBED_CHUNK_SIZE` | `4000` | 文本分块字符数 |
+| `NOKORI_EMBED_CHUNK_COUNT` | `2` | 每规则最多分块数 |
 | `NOKORI_STRICT` | `0` | `1` 时 hook 异常向上抛出（调试；默认 fail-open） |
 | `NOKORI_DISABLED` | `0` | 完全禁用 |
 | `NOKORI_DISMISS_PHRASE` | `dismiss` | 对话里退役规则的动词（`动词 + short_id`）；见 [Dismiss](#4-规则过时了dismiss) |
@@ -637,8 +637,8 @@ base_url = "https://api.example.com/v1"
 model = "text-embedding-v4"
 api_key = "sk-xxx"
 # dimensions = 0  # 不填或 0 = 不传给 API（用模型默认维度）
-chunk_size = 512
-chunk_count = 3
+chunk_size = 4000
+chunk_count = 2
 enabled = true
 # 本地 embed 共享进程（未配 base_url 且 pip install nokori[local-embed] 时）
 # hook_timeout_seconds = 2

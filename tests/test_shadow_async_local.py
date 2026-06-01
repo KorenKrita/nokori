@@ -333,14 +333,14 @@ class TestLocalEmbedding:
         # sentence-transformers returns numpy arrays, but tolist() is called
         mock_arr = MagicMock()
         mock_arr.tolist.return_value = [0.1] * 384
-        mock_model.encode.return_value = [mock_arr]
+        mock_model.encode_document.return_value = [mock_arr]
 
         with patch("nokori.search.embedding._sentence_transformers_available",
                    return_value=True):
             from nokori.search.embedding import LocalEmbeddingClient
             client = LocalEmbeddingClient(cfg)
             client._model = mock_model
-            vectors = client.embed("test text")
+            vectors = client.embed("test text", kind="document")
             assert len(vectors) == 1
             assert len(vectors[0]) == 384
-            mock_model.encode.assert_called_once()
+            mock_model.encode_document.assert_called_once()
