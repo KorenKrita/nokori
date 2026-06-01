@@ -176,6 +176,7 @@ def _run_triage(
     budget_tokens: int,
     timeout: int,
     max_workers: int,
+    rng: random.Random,
 ) -> tuple[dict[str, dict], set[str]]:
     """Triage just enough NEW transcripts to fill buckets. Returns (cache, newly_classified).
 
@@ -205,7 +206,7 @@ def _run_triage(
         _log(f"  triage: no uncached transcripts (pool all cached), using cache")
         return cache, set()
 
-    random.shuffle(uncached)
+    rng.shuffle(uncached)
     batch_size = min(30, len(uncached))
 
     _log(f"  triage: {len(uncached)} uncached transcripts to classify (target: fill {target_samples} balanced)")
@@ -790,6 +791,7 @@ def main() -> int:
             budget_tokens=args.budget_tokens,
             timeout=60,
             max_workers=args.max_workers,
+            rng=rng,
         )
         picked = _pick_balanced_samples(pool, triage_cache, samples_n, rng, newly_classified)
     else:
