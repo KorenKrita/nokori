@@ -9,9 +9,9 @@ from pathlib import Path
 
 from .errors import DbError
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
-_DDL_V2 = """
+_SCHEMA_DDL = """
 CREATE TABLE IF NOT EXISTS rules (
     id TEXT PRIMARY KEY,
     short_id TEXT UNIQUE NOT NULL,
@@ -51,7 +51,8 @@ CREATE TABLE IF NOT EXISTS extract_state (
     transcript_path TEXT PRIMARY KEY,
     transcript_mtime REAL NOT NULL,
     extracted_at TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'done'
+    status TEXT NOT NULL DEFAULT 'done',
+    last_byte_offset INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS injections (
@@ -167,7 +168,14 @@ def _migrate(conn: sqlite3.Connection) -> None:
     if current == 0:
         script = (
             "BEGIN;\n"
-            f"{_DDL_V2}\n"
+            f"{_SCHEMA_DDL}\n"
+            f"PRAGMA user_version = {int(SCHEMA_VERSION)};\n"
+            "COMMIT;\n"
+        )
+    elif current == 2:
+        script = (
+            "BEGIN;\n"
+            "ALTER TABLE extract_state ADD COLUMN last_byte_offset INTEGER NOT NULL DEFAULT 0;\n"
             f"PRAGMA user_version = {int(SCHEMA_VERSION)};\n"
             "COMMIT;\n"
         )

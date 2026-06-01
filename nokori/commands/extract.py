@@ -13,8 +13,8 @@ from ..extract.compressor import compress
 from ..extract.extractor import extract as extract_candidates
 from ..extract import checkpoint as merge_checkpoint
 from ..extract.merger import merge_candidate
-from ..extract.reader import read as read_transcript
-from ..lifecycle.hot_cache import mark_extracted
+from ..extract.reader import read_after, read_tail_user_turns
+from ..lifecycle.hot_cache import load_last_byte_offset, mark_extracted
 from ..llm.adapter import LLMAdapter
 from ..utils.logging import get_logger
 from ..utils.project import resolve_project_id
@@ -22,28 +22,41 @@ from ..utils.project import resolve_project_id
 log = get_logger("nokori.commands.extract")
 
 
+_CONTEXT_TURNS = 2
+
+
+def _safe_mtime(path: Path) -> float:
+    try:
+        return path.stat().st_mtime
+    except OSError:
+        return 0.0
+
+
 def _process_path(path: Path, project_id: str | None, cfg: Config,
                   *, dry_run: bool) -> tuple[int, int, bool]:
-    turns = read_transcript(path)
-    text = compress(turns)
-    if not text.strip():
-        if not dry_run:
-            db = open_db(cfg.db_path)
-            try:
-                mark_extracted(db, path, path.stat().st_mtime)
-            finally:
-                db.close()
-        return (0, 0, True)
-    llm = LLMAdapter(cfg)
-    candidates, llm_ok = extract_candidates(text, llm)
-    if not llm_ok:
-        log.warning("extract failed (llm): %s", path)
-        return (0, 0, False)
-    if dry_run:
-        return (len(candidates), 0, False)
-
     db = open_db(cfg.db_path)
     try:
+        prev_offset = load_last_byte_offset(db, path)
+        turns, new_offset = read_after(path, prev_offset)
+
+        if prev_offset > 0 and new_offset > prev_offset:
+            context = read_tail_user_turns(path, _CONTEXT_TURNS, end_offset=prev_offset)
+            turns = context + turns
+
+        text = compress(turns)
+        if not text.strip():
+            if not dry_run:
+                mark_extracted(db, path, _safe_mtime(path), new_offset)
+            return (0, 0, True)
+
+        llm = LLMAdapter(cfg)
+        candidates, llm_ok = extract_candidates(text, llm)
+        if not llm_ok:
+            log.warning("extract failed (llm): %s", path)
+            return (0, 0, False)
+        if dry_run:
+            return (len(candidates), 0, False)
+
         merged = 0
         merge_ok = True
         done_keys = merge_checkpoint.load_merged_keys(cfg, path)
@@ -62,11 +75,7 @@ def _process_path(path: Path, project_id: str | None, cfg: Config,
             done_keys |= merge_checkpoint.candidate_keys(cand)
             merged += outcome.inserted + outcome.activated + outcome.superseded
         if merge_ok:
-            try:
-                final_mtime = path.stat().st_mtime
-            except OSError:
-                final_mtime = 0.0
-            mark_extracted(db, path, final_mtime)
+            mark_extracted(db, path, _safe_mtime(path), new_offset)
             merge_checkpoint.clear(cfg, path)
         else:
             log.warning("extract merge incomplete, transcript not marked extracted: %s", path)

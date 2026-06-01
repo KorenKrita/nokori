@@ -27,13 +27,23 @@ def stat(path: Path) -> TranscriptMeta:
     return TranscriptMeta(path=path, mtime=s.st_mtime, size=s.st_size)
 
 
-def read(path: Path) -> list[Turn]:
-    """Parse a Claude Code JSONL transcript into Turn objects.
+def _parse_jsonl_text(text: str, path: Path, label: str = "line") -> list[Turn]:
+    out: list[Turn] = []
+    for lineno, line in enumerate(text.splitlines(), 1):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError:
+            log.warning("transcript parse skip path=%s %s=%d", path.name, label, lineno)
+            continue
+        out.extend(_parse_multi(entry))
+    return out
 
-    The format Claude Code uses is a stream of records, one per line, with a
-    `type` discriminating user / assistant / tool / etc. We tolerate unknown
-    types and malformed lines (logged as warnings, skipped).
-    """
+
+def read(path: Path) -> list[Turn]:
+    """Parse a Claude Code JSONL transcript into Turn objects."""
     if not path.exists():
         return []
     with open(path, "rb") as fh:
@@ -42,34 +52,47 @@ def read(path: Path) -> list[Turn]:
         raise NokoriError(
             f"transcript too large ({len(raw)} bytes; max {MAX_TRANSCRIPT_BYTES})"
         )
-    out: list[Turn] = []
-    text = raw.decode("utf-8", errors="replace")
-    for lineno, line in enumerate(text.splitlines(), 1):
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            entry = json.loads(line)
-        except json.JSONDecodeError:
-            log.warning("transcript parse skip path=%s line=%d", path.name, lineno)
-            continue
-        out.extend(_parse_multi(entry))
-    return out
+    return _parse_jsonl_text(raw.decode("utf-8", errors="replace"), path)
 
 
-def read_tail_user_turns(path: Path, limit: int = 3) -> list[Turn]:
-    """Last N user turns without loading the full transcript into memory."""
-    if limit <= 0 or not path.exists():
-        return []
+def read_after(path: Path, byte_offset: int) -> tuple[list[Turn], int]:
+    """Read turns added after byte_offset. Returns (turns, new_byte_offset).
+
+    If byte_offset <= 0 or exceeds file size (truncation/sync conflict), falls
+    back to full read from start.
+    """
+    if not path.exists():
+        return [], 0
     try:
-        size = path.stat().st_size
+        with open(path, "rb") as fh:
+            size = fh.seek(0, 2)
+            if byte_offset <= 0 or byte_offset > size:
+                return read(path), size
+            delta = size - byte_offset
+            if delta > MAX_TRANSCRIPT_BYTES:
+                raise NokoriError(
+                    f"transcript delta too large ({delta} bytes; max {MAX_TRANSCRIPT_BYTES})"
+                )
+            fh.seek(byte_offset)
+            raw = fh.read()
     except OSError:
+        return [], 0
+    incremental = _parse_jsonl_text(raw.decode("utf-8", errors="replace"), path, "incremental_line")
+    return incremental, size
+
+
+def read_tail_user_turns(path: Path, limit: int = 3, *, end_offset: int | None = None) -> list[Turn]:
+    """Last N human turns, scanning backwards from end_offset (default: EOF)."""
+    if limit <= 0 or not path.exists():
         return []
     human: list[Turn] = []
     block = 65536
     leftover = b""
     with open(path, "rb") as f:
-        pos = f.seek(0, 2)
+        if end_offset is not None and end_offset > 0:
+            pos = min(end_offset, f.seek(0, 2))
+        else:
+            pos = f.seek(0, 2)
         while pos > 0 and len(human) < limit:
             step = min(block, pos)
             pos -= step
@@ -101,7 +124,6 @@ def read_tail_user_turns(path: Path, limit: int = 3) -> list[Turn]:
                 for turn in _parse_multi(entry):
                     if turn.role == "human":
                         human.append(turn)
-
     human.reverse()
     return human[-limit:]
 

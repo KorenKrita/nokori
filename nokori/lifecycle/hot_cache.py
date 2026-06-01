@@ -74,7 +74,7 @@ def _find_previous_transcript_glob(current: Path) -> Path | None:
 
 def _fetch_extract_state(db: Db, path: Path):
     return db.fetchone(
-        "SELECT extracted_at, transcript_mtime, status "
+        "SELECT extracted_at, transcript_mtime, status, last_byte_offset "
         "FROM extract_state WHERE transcript_path = ?",
         (transcript_key(path),),
     )
@@ -146,15 +146,27 @@ def maybe_inject(payload: dict, cfg: Config, db: Db) -> str | None:
     return "".join(parts)
 
 
-def mark_extracted(db: Db, path: Path, mtime: float) -> None:
+def load_last_byte_offset(db: Db, path: Path) -> int:
+    """Return the byte offset up to which this transcript was last extracted."""
+    row = _fetch_extract_state(db, path)
+    if row is None:
+        return 0
+    try:
+        return int(row["last_byte_offset"])
+    except (TypeError, ValueError):
+        return 0
+
+
+def mark_extracted(db: Db, path: Path, mtime: float, byte_offset: int = 0) -> None:
     now = now_iso()
     key = transcript_key(path)
     with db.transaction() as tx:
         tx.execute(
             "INSERT INTO extract_state (transcript_path, transcript_mtime, "
-            "extracted_at, status) VALUES (?, ?, ?, 'done') "
+            "extracted_at, status, last_byte_offset) VALUES (?, ?, ?, 'done', ?) "
             "ON CONFLICT(transcript_path) DO UPDATE SET "
             "transcript_mtime = excluded.transcript_mtime, "
-            "extracted_at = excluded.extracted_at, status = excluded.status",
-            (key, mtime, now),
+            "extracted_at = excluded.extracted_at, status = excluded.status, "
+            "last_byte_offset = excluded.last_byte_offset",
+            (key, mtime, now, byte_offset),
         )

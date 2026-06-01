@@ -21,6 +21,8 @@ from ..search.embedding import index_rule_if_enabled
 from ..utils.ids import new_uuid, short_id_for
 from ..utils.time import now_iso
 
+_COMPATIBLE_IMPORT_VERSIONS = frozenset({2, 3})
+
 _MAX_TRIGGER_TEXT = 16_384
 _MAX_ACTION = 8_192
 _MAX_RATIONALE = 4_096
@@ -197,7 +199,7 @@ def run_import(args: argparse.Namespace, cfg: Config) -> int:
         file_schema = int(file_schema)
     except (TypeError, ValueError) as e:
         raise NokoriError(f"invalid export version: {file_schema!r}") from e
-    if file_schema != SCHEMA_VERSION:
+    if file_schema not in _COMPATIBLE_IMPORT_VERSIONS:
         raise NokoriError(
             f"export schema version {file_schema} incompatible with this nokori "
             f"(rules.db expects {SCHEMA_VERSION}); re-export or use matching release"
