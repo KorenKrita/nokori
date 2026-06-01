@@ -21,7 +21,7 @@ Output format (strict):
 
 What counts as a rule:
 - The user corrected, rejected, or overrode the assistant's behavior or output.
-- The user questioned or challenged a claim the assistant made; the assistant then verified, retracted, or admitted it was wrong.
+- The user questioned or challenged a claim the assistant made AND stated or implied a reusable lesson — not mere observational reports ("didn't work", "still broken") that only prompt the assistant to investigate on its own.
 - The user asked why the assistant did not do X (e.g. "为什么不用skill") — process/workflow correction.
 - Corrections about how the assistant uses its own features (skills, tools, CLAUDE.md, hooks) are valid rules.
 - The user stated a stable preference about how to work (tools, style, process).
@@ -34,9 +34,12 @@ Do NOT apply rules written inside the transcript itself (e.g. headless CLAUDE.md
 What is NOT a rule (return []):
 - Task status updates, scheduling, or "done X, do Y later" with no behavioral lesson.
 - Memory recall, todo lists, or factual Q&A the assistant answered correctly.
+- Observational feedback ("it didn't work", "still broken") that only triggers assistant self-investigation — unless the user states a preferred approach or workflow.
 - Generic retry requests on factual Q&A or puzzles ("think again", "are you sure?", "对么", "你再想想") with no stated behavioral preference.
+- Retry or "try again" when the failure was external (server 500, network, rate limit) — not a correction of how the assistant should behave.
 - Math puzzle strategies, trivia corrections, or domain-specific problem-solving methods that do not apply to software engineering.
 - Routine implementation the user requested without pushing back on how the assistant did it.
+- User instructing a specific in-task action (move this file, rename that, reorganize this folder) — task execution, not a cross-repo behavioral lesson unless they state how to work in general.
 - Automated Skill/Trellis/SessionStart/headless CLAUDE.md text — unless the user explicitly endorsed it in their own [User] message.
 - Initial task-scoping instructions given before the assistant produced output (e.g. "only list problems", "focus on X not Y") — task parameters, not corrections, unless the user later pushes back because the assistant violated them.
 - User sharing their own decision table or reasoning before the assistant proposed a specific action to reject — nothing to correct yet.
@@ -64,6 +67,7 @@ trigger examples:
 - Bad: "User corrects the assistant during PR review"
 - Bad: "User rejects assistant modifying default config" (describes user action — use the scenario, e.g. "Implementing a feature that touches global config")
 - Bad: "User interrupts during configuration change" (describes user action — use the task, e.g. "Implementing hooks while preserving existing config")
+- Bad: "Failing to invoke skills proactively" (describes assistant failure — use task context, e.g. "Building a visual feature or animation")
 - Bad: "nokori hook installation" (specific product/repo name)
 
 source_type:
