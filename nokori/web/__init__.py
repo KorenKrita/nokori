@@ -1,20 +1,11 @@
 from __future__ import annotations
 
 import argparse
-import sys
+
+import uvicorn
 
 
 def run(args: argparse.Namespace, cfg) -> int:
-    try:
-        import uvicorn  # noqa: F401
-    except ImportError:
-        print(
-            "nokori: web UI requires extra dependencies. "
-            "Install with: pip install nokori[web]",
-            file=sys.stderr,
-        )
-        return 1
-
     from .app import create_app
 
     app = create_app(cfg)
