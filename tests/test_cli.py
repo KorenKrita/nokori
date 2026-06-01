@@ -36,6 +36,30 @@ def test_status_on_empty_db(tmp_path, monkeypatch):
     assert "rules.active   0" in r.stdout
     assert "promotion.threshold   3" in r.stdout
     assert "promotion.in_progress 0" in r.stdout
+    assert "hooks.claude.installed" in r.stdout
+    assert "hooks.cursor.installed" in r.stdout
+    assert "hooks.cursor.disabled  n/a" in r.stdout
+
+
+def test_status_claude_disabled_flag(tmp_path, monkeypatch):
+    claude_home = tmp_path / "claude"
+    env_extra = {
+        "NOKORI_DATA_DIR": str(tmp_path),
+        "NOKORI_CLAUDE_HOME": str(claude_home),
+    }
+    from tests.test_install import _run
+
+    _run("install", env_extra=env_extra)
+    _run("install", "--disable", env_extra=env_extra)
+    env = {"NOKORI_DATA_DIR": str(tmp_path), "PATH": "/usr/bin:/bin", **env_extra}
+    r = subprocess.run(
+        [sys.executable, "-m", "nokori", "status"],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert r.returncode == 0, r.stderr
+    assert "hooks.claude.disabled  yes" in r.stdout
 
 
 def test_status_shows_promotion_progress(tmp_path, monkeypatch):

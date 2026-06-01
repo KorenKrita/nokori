@@ -92,6 +92,54 @@ def format_injection(
     return "".join(parts), logged
 
 
+def format_cursor_user_notice(
+    *,
+    tool_name: str,
+    rule_short_ids: list[str],
+    dismiss_phrase: str = "dismiss",
+    deferred: bool = False,
+) -> str:
+    """Short message for Cursor preToolUse user_message when a tool call is denied."""
+    ids = ", ".join(rule_short_ids) if rule_short_ids else "matched rules"
+    prefix = (
+        "[Nokori] Paused this tool call"
+        if deferred
+        else "[Nokori] Paused this tool call (safety gate)"
+    )
+    lines = [
+        f"{prefix} ({tool_name or 'tool'}).",
+        f"Matched lesson(s): {ids}.",
+        "The agent was given the full rule text in this turn's blocked response.",
+        f"If a rule is outdated, say `{dismiss_phrase} <short_id>` or run "
+        f"`nokori dismiss <short_id>`, then retry the tool call.",
+    ]
+    return "\n".join(lines)
+
+
+def format_cursor_agent_delivery(
+    injection_text: str,
+    gate_rules: Iterable[MarkerRule],
+    *,
+    dismiss_phrase: str = "dismiss",
+) -> str:
+    """Full context for Cursor preToolUse agent_message (deny path)."""
+    parts: list[str] = []
+    if injection_text:
+        parts.append(injection_text.strip())
+    gate_only = [r for r in gate_rules if r]
+    if gate_only:
+        block = format_block_reason(gate_only, dismiss_phrase=dismiss_phrase)
+        if block:
+            if parts:
+                parts.append("")
+                parts.append("---")
+                parts.append("")
+            parts.append(block)
+    if not parts:
+        return ""
+    return "\n".join(parts)
+
+
 def select_gate_rules(hot):
     """HOT rules that trigger PreToolUse block (not the same as injection).
 

@@ -114,6 +114,10 @@ nokori install --disable
 nokori install --enable
 ```
 
+### 在 Cursor 裡使用（Claude Code hook 匯入）
+
+與 [README.zh-CN「在 Cursor 裡使用」](README.zh-CN.md#在-cursor-裡使用claude-code-hook-导入) 相同：`nokori install` 只寫使用者級 `~/.claude/settings.json`。若 Cursor 已開啟「從 Claude Code 匯入 hook」，請**關閉該專案下由 Claude Code 匯入的 project 級 hook**，只保留使用者級 nokori，避免重複執行。`nokori install` / `--dry-run` 結束時會列印提醒。
+
 ---
 
 ## 快速開始

@@ -318,7 +318,9 @@ class LocalEmbeddingClient:
         if not chunks:
             return []
         model = self.load_model()
-        vectors = model.encode(chunks, show_progress_bar=False)
+        vectors = model.encode(
+            chunks, show_progress_bar=False, normalize_embeddings=True,
+        )
         return [v.tolist() for v in vectors]
 
 

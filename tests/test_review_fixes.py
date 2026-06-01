@@ -238,6 +238,14 @@ def test_health_embed_remote_fail(monkeypatch, tmp_path):
     assert "503" in detail
 
 
+def test_health_hook_host_detection():
+    from nokori.commands.health import _check_hook_host_detection
+
+    status, detail = _check_hook_host_detection()
+    assert status in ("ok", "warn")
+    assert detail
+
+
 def test_health_llm_probe_uses_post():
     import io
     from unittest.mock import MagicMock

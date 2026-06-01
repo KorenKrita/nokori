@@ -197,9 +197,7 @@ def _check_embedding_index_gaps(cfg: Config) -> tuple[str, str]:
     return ("ok", "all searchable rules have embedding rows")
 
 
-def _check_settings_registered(cfg: Config) -> tuple[str, str]:
-    from pathlib import Path
-
+def _check_claude_hooks_registered() -> tuple[str, str]:
     from .install import _settings_path
 
     settings = _settings_path()
@@ -226,6 +224,62 @@ def _check_settings_registered(cfg: Config) -> tuple[str, str]:
     return ("ok", "registered")
 
 
+def _check_cursor_hooks_registered() -> tuple[str, str]:
+    from .install import _cursor_hooks_path
+
+    path = _cursor_hooks_path()
+    if not path.exists():
+        return ("skip", f"{path} missing")
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as e:
+        return ("fail", f"json parse error: {e}")
+    hooks = data.get("hooks", {})
+    needed = ("sessionStart", "beforeSubmitPrompt", "preToolUse", "sessionEnd")
+    missing = []
+    for evt in needed:
+        spec = hooks.get(evt) or []
+        if not any(isinstance(entry, dict) and "nokori" in entry.get("command", "") for entry in spec):
+            missing.append(evt)
+    if missing:
+        return ("warn", f"missing: {','.join(missing)}")
+    return ("ok", "registered")
+
+
+def _check_hook_host_detection() -> tuple[str, str]:
+    from ..utils.host import Host, detect_host_from_payload
+
+    with_transcript = detect_host_from_payload(
+        {
+            "transcript_path": "/home/user/.cursor/projects/p/agent-transcripts/s.jsonl",
+            "hook_event_name": "preToolUse",
+        }
+    )
+    if with_transcript != Host.CURSOR:
+        return ("fail", "transcript under .cursor/ not detected as cursor")
+
+    minimal = detect_host_from_payload(
+        {"hook_event_name": "preToolUse", "session_id": "sess", "tool_name": "Shell"}
+    )
+    if minimal != Host.CURSOR:
+        return ("fail", f"preToolUse hook_event_name expected cursor, got {minimal}")
+
+    conv_only = detect_host_from_payload({"conversation_id": "conv-x"})
+    if conv_only != Host.UNKNOWN:
+        return ("fail", "conversation_id alone must not imply cursor")
+
+    return ("ok", "host detection")
+
+
+def _check_install_targets(cfg: Config) -> tuple[str, str]:
+    from ..install_targets import format_platforms_label, read_platforms, targets_path
+
+    recorded = read_platforms(cfg)
+    if not recorded:
+        return ("warn", f"not recorded (run nokori install); file={targets_path(cfg)}")
+    return ("ok", format_platforms_label(recorded))
+
+
 def run(_args: argparse.Namespace, cfg: Config) -> int:
     try:
         db = open_db(cfg.db_path)
@@ -236,14 +290,24 @@ def run(_args: argparse.Namespace, cfg: Config) -> int:
     except Exception:
         rule_count = 0
 
+    from ..install_targets import PLATFORM_CLAUDE, PLATFORM_CURSOR, platforms_for_health
+
+    platforms = platforms_for_health(cfg)
     rows = [
         ("db", *_check_db(cfg)),
         ("rules", *_check_rule_count(cfg)),
         ("embed.index", *_check_embedding_index_gaps(cfg)),
-        ("settings.json", *_check_settings_registered(cfg)),
+        ("install.platforms", *_check_install_targets(cfg)),
+    ]
+    if PLATFORM_CLAUDE in platforms:
+        rows.append(("hooks.claude", *_check_claude_hooks_registered()))
+    if PLATFORM_CURSOR in platforms:
+        rows.append(("hooks.cursor", *_check_cursor_hooks_registered()))
+        rows.append(("hooks.host", *_check_hook_host_detection()))
+    rows.extend([
         ("llm", *_check_llm_endpoint(cfg)),
         ("embed", *_check_embed(cfg, rule_count)),
-    ]
+    ])
     width = max(len(name) for name, *_ in rows)
     bad = False
     for name, status, detail in rows:

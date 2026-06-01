@@ -89,8 +89,12 @@ pip install -e .
 # 可选：本地 embedding（会安装 sentence-transformers，并自动下载模型权重到 ~/.nokori/models/）
 pip install -e ".[local-embed]"
 
-# 注册 hooks 到 Claude Code（已装 [local-embed] 时也会 prefetch，与 hooks 是否变更无关）
-nokori install
+# 注册 hooks（默认仅 Claude Code；已装 [local-embed] 时也会 prefetch）
+nokori install              # 默认 --claude → ~/.claude/settings.json
+nokori install --cursor     # 仅原生 Cursor → ~/.cursor/hooks.json
+nokori install --all        # Claude + Cursor（会打印避免重复执行的提醒）
+# 调试 hook：config.toml 里 log_level = "info" 或 export NOKORI_LOG_LEVEL=info
+# 日志：~/.nokori/logs/hook.log（搜 [diag]）
 # 跳过权重下载：nokori install --no-prefetch-embed
 # 手动补下/重试：nokori embed prefetch
 
@@ -113,6 +117,27 @@ nokori install --uninstall
 nokori install --disable
 nokori install --enable
 ```
+
+### 在 Cursor 里使用
+
+任选一种（不要混用多种注册方式）：
+
+| 方式 | 命令 / 设置 |
+|------|-------------|
+| **A. Claude 导入（推荐，只装一处）** | `nokori install`（或 `--claude`），Cursor 开 **Settings → Hooks → 从 Claude Code 导入** |
+| **B. Cursor 原生** | `nokori install --cursor` → `~/.cursor/hooks.json`，**不要**再开 Claude 导入 |
+
+**避免重复执行**
+
+- 方式 A：若 Cursor 已导入 Claude hooks，请 **关闭项目级** 从本仓库 `.claude` 导入的 hook，只保留用户级 `~/.claude` 里的 nokori。
+- 方式 B：只用 `--cursor`，勿再开 Claude 导入。
+- **同时** `nokori install --claude --cursor` 时，命令结束会打印提醒：勿再开 Claude 导入、勿启用 project 级导入，否则会跑两遍。
+
+仅选 A 或仅选 B 时 **不会** 打印该提醒。
+
+**Gate 与 Cursor 工具名**：Cursor Agent 的终端工具名为 `Shell`（Claude Code 为 `Bash`）。若 PreToolUse **第一层** matcher 仍只有 `Bash`，`Shell` 不会进入 hook。可在 `~/.claude/settings.json` 里把 nokori 那条 `PreToolUse.matcher` 扩为含 `Shell`，或使用 `*`；Nokori 在识别到 Cursor transcript 路径（`~/.cursor/...`）时，**第二层** `[gate]` 会自动使用含 `Shell` 的默认 matcher（见 [Gate 两层匹配](#gate-与-pretooluse两层工具匹配)）。
+
+**Deferred 注入（`beforeSubmitPrompt` 未触发时）**：若某轮用户输入未跑 `beforeSubmitPrompt`，Nokori 可能在 **第一次** 匹配的 `preToolUse`（如 `Shell`、`Write`）上 `deny`，通过 `agent_message` 注入完整规则，并标记该轮已处理。**deny 后请再次执行该工具**，属预期行为而非故障；同轮后续工具不会重复 deny（有 `generation_id` 时用 generation+prompt hash，无 id 时仅用 prompt hash 去重）。
 
 ---
 

@@ -11,6 +11,7 @@ from ..extract.lock import is_locked
 from ..extract.reader import stat as transcript_stat
 from ..lifecycle import transcript_index
 from ..utils import sessions
+from ..utils.host import Host, effective_session_id
 from ..utils.logging import get_logger
 from ..utils.transcript import resolve_transcript_path
 
@@ -51,11 +52,11 @@ def _spawn_async_extract(cfg: Config) -> None:
                 pass
 
 
-def handle(payload: dict, cfg: Config) -> dict:
+def handle(payload: dict, cfg: Config, *, host: Host | None = None) -> dict:
     if cfg.disabled:
         return {"continue": True}
 
-    session_id = payload.get("session_id") or "-"
+    session_id = effective_session_id(payload)
     sessions.end(cfg, session_id)
 
     transcript = resolve_transcript_path(payload)

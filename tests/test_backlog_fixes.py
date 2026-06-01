@@ -105,7 +105,7 @@ def test_dismiss_strips_gate_marker(tmp_path, monkeypatch):
 def test_no_gate_marker_when_injection_empty(monkeypatch, tmp_path):
     """#71: budget overflow → empty injection must not leave a gate marker."""
     monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
-    from nokori.hooks import user_prompt_submit as ups
+    from nokori.hooks import prompt_inject as pinject
     from nokori.hooks.user_prompt_submit import handle
     from nokori.models import Rule, ScoredResult
     from nokori.search.retrieve import RetrievalResult
@@ -142,8 +142,12 @@ def test_no_gate_marker_when_injection_empty(monkeypatch, tmp_path):
     def fake_retrieve(*_a, **_k):
         return RetrievalResult([hot], [], 1, "off"), [], []
 
-    monkeypatch.setattr(ups, "retrieve_formal_and_shadow", fake_retrieve)
-    monkeypatch.setattr(ups, "format_injection", lambda *_a, **_k: ("", []))
+    def fake_fetch(_db, _cfg, _project_id):
+        return ([rule], [])
+
+    monkeypatch.setattr(pinject, "_fetch_formal_and_shadow", fake_fetch)
+    monkeypatch.setattr(pinject, "retrieve_formal_and_shadow", fake_retrieve)
+    monkeypatch.setattr(pinject, "format_injection", lambda *_a, **_k: ("", []))
 
     out = handle({"session_id": "sess-empty", "prompt": "hello"}, cfg)
     assert out == {"continue": True}

@@ -96,9 +96,9 @@ def test_install_prefetch_when_hooks_unchanged(monkeypatch, tmp_path):
     cfg = Config.from_env()
     calls: list[Config] = []
 
-    with patch.object(install_cmd, "_read_settings", return_value={"hooks": {}}):
-        with patch.object(install_cmd, "_merge_settings", return_value={"hooks": {}}):
-            with patch.object(install_cmd, "_write_settings"):
+    with patch.object(install_cmd, "_read_json_file", return_value={}):
+        with patch.object(install_cmd, "_merge_claude_settings", return_value={"hooks": {}}):
+            with patch.object(install_cmd, "_write_json_file"):
                 with patch(
                     "nokori.prefetch.maybe_prefetch_local_embed",
                     side_effect=lambda c: calls.append(c) or True,

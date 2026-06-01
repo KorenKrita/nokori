@@ -8,23 +8,17 @@
 from __future__ import annotations
 
 import json
-import os
 from datetime import datetime, timezone
 from pathlib import Path
 
 from ..config import Config
+from .atomic_json import atomic_write_json
 from .time import now_iso, parse_iso
 
 
 def _path_for(cfg: Config, session_id: str) -> Path:
     safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in session_id)
     return cfg.sessions_dir / f"{safe}.json"
-
-
-def _atomic_write_json(path: Path, payload: dict) -> None:
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
-    os.replace(tmp, path)
 
 
 def register(
@@ -44,7 +38,7 @@ def register(
     }
     if project_id_from_git is not None:
         payload["project_id_from_git"] = project_id_from_git
-    _atomic_write_json(_path_for(cfg, session_id), payload)
+    atomic_write_json(_path_for(cfg, session_id), payload)
 
 
 def get_project_id(cfg: Config, session_id: str) -> str | None:
@@ -121,7 +115,7 @@ def update_project_id(
     if project_id_from_git is not None:
         data["project_id_from_git"] = project_id_from_git
     data["last_activity"] = now_iso()
-    _atomic_write_json(p, data)
+    atomic_write_json(p, data)
 
 
 def touch(cfg: Config, session_id: str) -> None:
@@ -135,10 +129,11 @@ def touch(cfg: Config, session_id: str) -> None:
         register(cfg, session_id)
         return
     data["last_activity"] = now_iso()
-    _atomic_write_json(p, data)
+    atomic_write_json(p, data)
 
 
 def end(cfg: Config, session_id: str) -> None:
+    cfg.ensure_dirs()
     p = _path_for(cfg, session_id)
     if not p.exists():
         return
@@ -147,7 +142,7 @@ def end(cfg: Config, session_id: str) -> None:
     except (OSError, json.JSONDecodeError):
         return
     data["ended_at"] = now_iso()
-    _atomic_write_json(p, data)
+    atomic_write_json(p, data)
 
 
 def is_session_open(data: dict) -> bool:

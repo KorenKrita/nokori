@@ -9,6 +9,7 @@ from pathlib import Path
 
 from ..config import Config
 from ..db import Db
+from ..utils.atomic_json import atomic_write_json
 from ..utils.logging import get_logger
 from ..utils.time import now_iso, parse_iso
 
@@ -35,13 +36,6 @@ class Marker:
     rules: list[MarkerRule]
 
 
-def _atomic_write_json(path: Path, payload: dict) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
-    os.replace(tmp, path)
-
-
 def write(
     cfg: Config,
     session_id: str,
@@ -59,7 +53,7 @@ def write(
         "rules": [asdict(r) for r in rules],
     }
     path = cfg.marker_path(session_id, ph)
-    _atomic_write_json(path, payload)
+    atomic_write_json(path, payload)
     return path
 
 
@@ -192,7 +186,7 @@ def strip_short_id_from_all_markers(cfg: Config, short_id: str) -> int:
                 "created_at": marker.created_at,
                 "rules": [asdict(r) for r in kept],
             }
-            _atomic_write_json(path, payload)
+            atomic_write_json(path, payload)
     return touched
 
 
@@ -235,9 +229,11 @@ def resolve_current_prompt_hash(
     db: Db | None = None,
 ) -> str | None:
     """Best-effort hash for the active user turn (PreToolUse has no prompt field)."""
+    from ..utils.prompt_text import normalize_prompt_for_hash
+
     text = payload.get("prompt")
-    if isinstance(text, str) and text:
-        return prompt_hash(text)
+    if isinstance(text, str) and text.strip():
+        return prompt_hash(normalize_prompt_for_hash(text))
     ph = latest_marker_prompt_hash(cfg, session_id)
     if ph and db is not None and injection_exists(db, session_id, ph):
         return ph

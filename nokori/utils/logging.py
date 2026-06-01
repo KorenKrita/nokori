@@ -79,7 +79,10 @@ class _NameStartsWith(logging.Filter):
         self.negate_other = negate_other
 
     def filter(self, record: logging.LogRecord) -> bool:
-        match = any(record.name.startswith(p) for p in self.prefixes)
+        match = any(
+            record.name == p.rstrip(".") or record.name.startswith(p)
+            for p in self.prefixes
+        )
         return match if not self.negate_other else not match
 
 

@@ -114,6 +114,10 @@ nokori install --disable
 nokori install --enable
 ```
 
+### Cursor で使う（Claude Code hook インポート）
+
+[README.zh-CN の Cursor 節](README.zh-CN.md#在-cursor-裡使用claude-code-hook-导入)と同様。`nokori install` はユーザーレベルの `~/.claude/settings.json` のみ。Cursor で Claude Code hook をインポートする場合、**プロジェクト経由でインポートされた hook はオフ**にし、ユーザーレベルの nokori だけにしてください。`nokori install` / `--dry-run` 実行後に注意が表示されます。
+
 ---
 
 ## クイックスタート

@@ -89,8 +89,10 @@ pip install -e .
 # Optional: local embedding (installs sentence-transformers and downloads model weights to ~/.nokori/models/)
 pip install -e ".[local-embed]"
 
-# Register hooks with Claude Code (with [local-embed] installed, also prefetches weights regardless of hook changes)
-nokori install
+# Register hooks (default: Claude Code only; with [local-embed], also prefetches weights)
+nokori install              # same as --claude → ~/.claude/settings.json
+nokori install --cursor     # native Cursor → ~/.cursor/hooks.json
+nokori install --claude --cursor   # both (prints duplicate-hook warning)
 # Skip weight download: nokori install --no-prefetch-embed
 # Manual download/retry: nokori embed prefetch
 
@@ -113,6 +115,29 @@ nokori install --uninstall
 nokori install --disable
 nokori install --enable
 ```
+
+### Using Nokori in Cursor
+
+Pick **one** registration path (do not combine):
+
+| Mode | Command / setup |
+|------|-----------------|
+| **A. Claude import (recommended)** | `nokori install` or `--claude`, then Cursor **Settings → Hooks → Import from Claude Code** |
+| **B. Native Cursor** | `nokori install --cursor` → `~/.cursor/hooks.json`; do **not** enable Claude import |
+
+**Avoid duplicate runs**
+
+- Mode A: turn off **project-level** hooks imported from this repo’s `.claude`; keep user-level `~/.claude` nokori only.
+- Mode B: use `--cursor` only; no Claude import.
+- **`nokori install --claude --cursor`** prints a warning (also on `--dry-run`); single-target installs do **not**.
+
+See `nokori install --help`.
+
+**Gate and Cursor tool names**: Cursor Agent uses `Shell` for terminal commands (Claude Code uses `Bash`). If the **first-layer** PreToolUse `matcher` in `settings.json` only lists `Bash`, `Shell` never invokes the hook. Extend nokori’s `PreToolUse.matcher` to include `Shell`, or use `*`. When the transcript path is under `~/.cursor/...`, Nokori’s **second-layer** `[gate]` matcher defaults include `Shell` (see [Gate two-layer matching](#gate-and-pretooluse-two-layers-of-tool-matching)).
+
+**Cursor prompt injection (official limits)**: Per [Cursor hooks docs](https://cursor.com/docs/agent/hooks), `beforeSubmitPrompt` output is only `continue` and `user_message` — not Claude’s `additionalContext`. Nokori still runs retrieve + gate on every send; **gate blocking** uses Cursor-native `permission: deny` on `preToolUse`. **Hot-cache** text at session open uses `sessionStart` → `additional_context`. Per-prompt rule text on Cursor is sent as best-effort `additional_context` on `beforeSubmitPrompt` (may be ignored by Cursor); for reliable injection, prefer Claude Code or project rules.
+
+**Deferred injection when `beforeSubmitPrompt` is skipped**: If Cursor does not run `beforeSubmitPrompt` for a user turn, Nokori may **deny the first matching tool** (`Shell`, `Write`, etc.) on `preToolUse`, inject the full rule text via `agent_message`, and mark that turn as handled. **Run the tool again** after the deny — this is intentional, not a bug. Later tools in the same turn are not denied again (dedup by `generation_id` + prompt hash, or prompt hash alone when `generation_id` is absent).
 
 ---
 
@@ -599,7 +624,8 @@ nokori install [--dry-run | --uninstall | --disable | --enable | --no-prefetch-e
 | `NOKORI_STRICT` | `0` | `1` = hook errors propagate (debug; default fail-open) |
 | `NOKORI_DISABLED` | `0` | Disable entirely |
 | `NOKORI_DISMISS_PHRASE` | `dismiss` | Chat verb to retire rules (`verb + short_id`); see [Dismiss](#4-outdated-rules-dismiss) |
-| `NOKORI_LOG_LEVEL` | `warn` | Log level |
+| `NOKORI_LOG_LEVEL` | `warn` | Log level (`debug` also enables `[diag]` hook traces) |
+| `NOKORI_HOOK_DEBUG` | `0` | `1` = verbose per-hook `[diag]` lines in `hook.log` |
 
 **Environment variables only** (no `config.toml` field; see [config.toml.example](config.toml.example)):
 

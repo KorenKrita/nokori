@@ -10,6 +10,8 @@ from ..lifecycle import hot_cache, maintenance
 from ..search import embedding as embedding_search
 from ..search import embed_ipc
 from ..utils import sessions
+from ..utils.hook_response import session_start_response
+from ..utils.host import Host, detect_host_from_payload, effective_session_id
 from ..utils.logging import get_logger
 from ..utils.project import resolve_project_id_detailed
 
@@ -41,8 +43,10 @@ def _maybe_kickstart_embed(cfg: Config, db) -> None:
     embed_ipc.kickstart_server(cfg)
 
 
-def handle(payload: dict, cfg: Config) -> dict:
-    session_id = payload.get("session_id") or str(uuid.uuid4())
+def handle(payload: dict, cfg: Config, *, host: Host | None = None) -> dict:
+    session_id = effective_session_id(payload, default="")
+    if not session_id:
+        session_id = str(uuid.uuid4())
     project_id, from_git = resolve_project_id_detailed(payload.get("cwd"))
     sessions.register(
         cfg, session_id, project_id, project_id_from_git=from_git,
@@ -72,9 +76,6 @@ def handle(payload: dict, cfg: Config) -> dict:
     finally:
         db.close()
 
-    if cache_text:
-        return {"hookSpecificOutput": {
-            "hookEventName": "SessionStart",
-            "additionalContext": cache_text,
-        }}
-    return {"continue": True}
+    if host is None:
+        host = detect_host_from_payload(payload)
+    return session_start_response(host, cache_text)
