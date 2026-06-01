@@ -1,5 +1,8 @@
 import { NavLink, Outlet } from 'react-router-dom'
+import { motion } from 'motion/react'
 import { cn } from '@/lib/utils'
+import { t } from '@/lib/i18n'
+import { LocaleSwitcher } from '@/components/LocaleSwitcher'
 import {
   ChartBar,
   ListBullets,
@@ -12,26 +15,33 @@ import {
 } from '@phosphor-icons/react'
 
 const NAV_ITEMS = [
-  { to: '/', label: 'Dashboard', icon: ChartBar },
-  { to: '/rules', label: 'Rules', icon: ListBullets },
-  { to: '/retrieve', label: 'Retrieve', icon: MagnifyingGlass },
-  { to: '/injections', label: 'Injections', icon: Syringe },
-  { to: '/extract', label: 'Extract', icon: FunnelSimple },
-  { to: '/lifecycle', label: 'Lifecycle', icon: ArrowsClockwise },
-  { to: '/config', label: 'Config', icon: GearSix },
-  { to: '/logs', label: 'Logs', icon: Terminal },
+  { to: '/', key: 'nav.dashboard', icon: ChartBar },
+  { to: '/rules', key: 'nav.rules', icon: ListBullets },
+  { to: '/retrieve', key: 'nav.retrieve', icon: MagnifyingGlass },
+  { to: '/injections', key: 'nav.injections', icon: Syringe },
+  { to: '/extract', key: 'nav.extract', icon: FunnelSimple },
+  { to: '/lifecycle', key: 'nav.lifecycle', icon: ArrowsClockwise },
+  { to: '/config', key: 'nav.config', icon: GearSix },
+  { to: '/logs', key: 'nav.logs', icon: Terminal },
 ]
 
 export function Layout() {
   return (
     <div className="flex min-h-[100dvh]">
-      <aside className="fixed left-0 top-0 h-full w-60 border-r border-white/[0.06] bg-white/[0.02] backdrop-blur-xl p-4 flex flex-col gap-1 z-10">
+      <aside className="fixed left-0 top-0 h-full w-60 border-r border-white/[0.06] bg-white/[0.02] backdrop-blur-xl p-4 flex flex-col z-10">
         <div className="px-3 py-4 mb-4">
-          <h1 className="text-lg font-semibold tracking-tight">Nokori</h1>
+          <motion.h1
+            initial={{ opacity: 0, x: -10 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.6, ease: [0.32, 0.72, 0, 1] }}
+            className="text-lg font-semibold tracking-tight"
+          >
+            Nokori
+          </motion.h1>
           <p className="text-xs text-text-tertiary mt-0.5">Web Dashboard</p>
         </div>
-        <nav className="flex flex-col gap-0.5">
-          {NAV_ITEMS.map(({ to, label, icon: Icon }) => (
+        <nav className="flex flex-col gap-0.5 flex-1">
+          {NAV_ITEMS.map(({ to, key, icon: Icon }, index) => (
             <NavLink
               key={to}
               to={to}
@@ -45,11 +55,21 @@ export function Layout() {
                 )
               }
             >
-              <Icon size={18} weight="light" />
-              {label}
+              <motion.div
+                initial={{ opacity: 0, x: -8 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.4, delay: index * 0.05, ease: [0.32, 0.72, 0, 1] }}
+                className="flex items-center gap-3"
+              >
+                <Icon size={18} weight="light" />
+                {t(key)}
+              </motion.div>
             </NavLink>
           ))}
         </nav>
+        <div className="mt-auto pt-4 border-t border-white/[0.04]">
+          <LocaleSwitcher />
+        </div>
       </aside>
       <main className="ml-60 flex-1 p-6">
         <div className="max-w-[1400px] mx-auto">

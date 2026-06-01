@@ -16,6 +16,7 @@ def create_app(cfg: Config) -> FastAPI:
     from .api import (
         config_api,
         dashboard,
+        embed,
         extract,
         health,
         injections,
@@ -33,6 +34,7 @@ def create_app(cfg: Config) -> FastAPI:
     app.include_router(lifecycle.router, prefix="/api")
     app.include_router(config_api.router, prefix="/api")
     app.include_router(health.router, prefix="/api")
+    app.include_router(embed.router, prefix="/api")
     app.include_router(logs.router, prefix="/api")
 
     static_dir = Path(__file__).parent / "static"

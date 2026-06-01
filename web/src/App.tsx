@@ -1,5 +1,6 @@
 import { createBrowserRouter, RouterProvider } from 'react-router-dom'
 import { Layout } from '@/components/Layout'
+import { MeshBackground } from '@/components/MeshBackground'
 import { Dashboard } from '@/pages/Dashboard'
 import { Rules } from '@/pages/Rules'
 import { RuleDetail } from '@/pages/RuleDetail'
@@ -28,5 +29,10 @@ const router = createBrowserRouter([
 ])
 
 export function App() {
-  return <RouterProvider router={router} />
+  return (
+    <>
+      <MeshBackground />
+      <RouterProvider router={router} />
+    </>
+  )
 }
