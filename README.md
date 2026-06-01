@@ -96,13 +96,44 @@ In practice it comes down to two things:
 
 Three ways to install, pick one: local model (recommended), minimal install, or from source.
 
+### macOS / Linux: do not `pip install` into system Python
+
+Python from Homebrew and many Linux distros is [PEP 668](https://peps.python.org/pep-0668/) **externally managed**. A bare `pip install nokori` fails with **`externally-managed-environment`**. Use **pipx** (recommended) or a **dedicated venv** — not `--break-system-packages`.
+
+#### Option A: `pipx` (recommended for CLI use)
+
+```bash
+brew install pipx
+pipx ensurepath
+# open a new terminal, or source ~/.zshrc
+
+pipx install "nokori[local-embed]"
+nokori install --all        # or --cursor / Claude-only default
+nokori health
+```
+
+`pipx` installs into an isolated app venv; the `nokori` command is usually `~/.local/bin/nokori`. `nokori install` registers hooks as that environment’s `python -I -m nokori hook`.
+
+#### Option B: dedicated venv
+
+```bash
+python3 -m venv ~/.local/venvs/nokori
+~/.local/venvs/nokori/bin/pip install -U pip
+~/.local/venvs/nokori/bin/pip install "nokori[local-embed]"
+echo 'export PATH="$HOME/.local/venvs/nokori/bin:$PATH"' >> ~/.zshrc
+source ~/.zshrc
+
+nokori install --all
+nokori health
+```
+
 ### From PyPI (recommended: local semantic retrieval)
 
 This path runs semantic retrieval on your own machine, no embedding API key required. It installs **sentence-transformers** and, on `nokori install`, prefetches the local embedding model **[IBM Granite Embedding 97M](https://huggingface.co/ibm-granite/granite-embedding-97m-multilingual-r2)** (`ibm-granite/granite-embedding-97m-multilingual-r2`) from Hugging Face into `~/.nokori/models/`: **97M params / 384-dim**, ~**220MB** download (weights ~186 MiB + tokenizer ~24 MiB; details in [Embedding](#embedding-optional)).
 
-```bash
-pip install "nokori[local-embed]"
+After installing via **pipx** or **venv** above:
 
+```bash
 # Register hooks. Claude Code only by default; with [local-embed] it also prefetches weights
 nokori install              # Claude Code  → ~/.claude/settings.json
 nokori install --cursor     # native Cursor only → ~/.cursor/hooks.json
@@ -123,7 +154,8 @@ A few common side branches:
 ### Minimal install (no local model)
 
 ```bash
-pip install nokori
+pipx install nokori
+# or: ~/.local/venvs/nokori/bin/pip install nokori
 nokori install
 ```
 
@@ -134,6 +166,8 @@ BM25 keyword retrieval works out of the box and is plenty. When you want semanti
 ```bash
 git clone https://github.com/KorenKrita/nokori.git
 cd nokori
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -e ".[local-embed,dev]"
 
 nokori install
@@ -141,7 +175,7 @@ nokori install
 
 `nokori install` **merges** hooks into `~/.claude/settings.json` (and/or `~/.cursor/hooks.json`), never touching the other plugins you already have. If `settings.json` is already broken (not valid JSON), install **refuses to write** and exits — the same validation `nokori health` runs against settings.
 
-The registered hook command is `python -I -m nokori hook`. The `-I` is isolated mode: it ignores `PYTHONPATH` and the current directory, so that running a hook from the repo root does not let the local `nokori/` source folder shadow the installed package. For daily use go through `pip install "nokori[local-embed]"`; reach for an editable install only when you are hacking on Nokori itself. Do not lean on `PYTHONPATH` alone.
+The registered hook command is `python -I -m nokori hook`. The `-I` is isolated mode: it ignores `PYTHONPATH` and the current directory, so that running a hook from the repo root does not let the local `nokori/` source folder shadow the installed package. For daily use install from PyPI via **pipx** or a **venv** (`pip install "nokori[local-embed]"` inside that environment — not Homebrew system Python). Use an editable install in the repo `.venv` only when hacking on Nokori itself. Do not lean on `PYTHONPATH` alone.
 
 ```bash
 # Preview what would be written, no disk changes

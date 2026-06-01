@@ -96,13 +96,44 @@ Nokori 在 Claude Code（與 Cursor）裡掛了 **4 個 hook**。你正常聊天
 
 三種裝法，按需挑一種：本地模型（推薦）、最小安裝、從原始碼開發。
 
+### macOS / Linux：別用系統 `pip` 直裝
+
+Homebrew 等自帶的 Python 受 [PEP 668](https://peps.python.org/pep-0668/) 保護，直接 `pip install nokori` 會報 **`externally-managed-environment`**。請用 **pipx**（推薦）或 **專用 venv**，不要用 `--break-system-packages`。
+
+#### 方式 A：`pipx`（推薦，適合 CLI）
+
+```bash
+brew install pipx
+pipx ensurepath
+# 新開一個終端，或 source ~/.zshrc
+
+pipx install "nokori[local-embed]"
+nokori install --all        # 或 --cursor / 預設只裝 Claude Code
+nokori health
+```
+
+`pipx` 把 `nokori` 裝進獨立環境，命令一般在 `~/.local/bin/nokori`；`nokori install` 會把 hook 寫成該環境的 `python -I -m nokori hook`。
+
+#### 方式 B：專用 venv
+
+```bash
+python3 -m venv ~/.local/venvs/nokori
+~/.local/venvs/nokori/bin/pip install -U pip
+~/.local/venvs/nokori/bin/pip install "nokori[local-embed]"
+echo 'export PATH="$HOME/.local/venvs/nokori/bin:$PATH"' >> ~/.zshrc
+source ~/.zshrc
+
+nokori install --all
+nokori health
+```
+
 ### 從 PyPI 安裝（推薦：本地語義檢索）
 
 這條路在本機跑語義檢索，不需要任何 embedding API key。它會裝上 **sentence-transformers**，並在 `nokori install` 時從 Hugging Face 預取本地嵌入模型 **[IBM Granite Embedding 97M](https://huggingface.co/ibm-granite/granite-embedding-97m-multilingual-r2)**（`ibm-granite/granite-embedding-97m-multilingual-r2`）到 `~/.nokori/models/`：**97M 參數 / 384 維**，下載約 **220MB**（權重 ~186 MiB + tokenizer ~24 MiB，細節見 [Embedding](#embedding嵌入向量可選)）。
 
-```bash
-pip install "nokori[local-embed]"
+按上一節用 **pipx** 或 **venv** 安裝後：
 
+```bash
 # 註冊 hooks。預設只裝 Claude Code；裝了 [local-embed] 會順手 prefetch 權重
 nokori install              # Claude Code  → ~/.claude/settings.json
 nokori install --cursor     # 僅原生 Cursor → ~/.cursor/hooks.json
@@ -123,7 +154,8 @@ nokori logs                 # hook / pipeline / async-extract 日誌
 ### 最小安裝（不要本地模型）
 
 ```bash
-pip install nokori
+pipx install nokori
+# 或：~/.local/venvs/nokori/bin/pip install nokori
 nokori install
 ```
 
@@ -134,6 +166,8 @@ nokori install
 ```bash
 git clone https://github.com/KorenKrita/nokori.git
 cd nokori
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -e ".[local-embed,dev]"
 
 nokori install
@@ -141,7 +175,7 @@ nokori install
 
 `nokori install` 把 hook **合併**進 `~/.claude/settings.json`（及/或 `~/.cursor/hooks.json`），不碰你已經裝好的其它外掛。要是 `settings.json` 已經壞了（不是合法 JSON），install 會**拒絕寫入**並退出，跟 `nokori health` 對 settings 的校驗同一套邏輯。
 
-註冊的 hook 命令是 `python -I -m nokori hook`。`-I` 是隔離模式，忽略 `PYTHONPATH` 和當前目錄，免得你在倉庫根目錄跑 hook 時被本地那個 `nokori/` 原始碼目錄搶了包。日常使用請走 `pip install "nokori[local-embed]"`，只有改 Nokori 自己的原始碼才用 editable 安裝。別指望單靠 `PYTHONPATH` 撐著。
+註冊的 hook 命令是 `python -I -m nokori hook`。`-I` 是隔離模式，忽略 `PYTHONPATH` 和當前目錄，免得你在倉庫根目錄跑 hook 時被本地那個 `nokori/` 原始碼目錄搶了包。日常使用請走 **pipx** 或 **venv** 安裝 PyPI 包（`pip install "nokori[local-embed]"` 寫在虛擬環境裡，不要寫進 Homebrew 系統 Python）；只有改 Nokori 自己的原始碼才在倉庫 `.venv` 裡 editable 安裝。別指望單靠 `PYTHONPATH` 撐著。
 
 ```bash
 # 預覽將要寫入的變更，不落盤
