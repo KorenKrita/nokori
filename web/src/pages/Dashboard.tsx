@@ -2,6 +2,7 @@ import { motion } from 'motion/react'
 import { GlassCard } from '@/components/GlassCard'
 import { StatusDot } from '@/components/StatusDot'
 import { EmbedControl } from '@/components/EmbedControl'
+import { AnimatedNumber } from '@/components/AnimatedNumber'
 import { PageSkeleton } from '@/components/PageSkeleton'
 import { useApi } from '@/hooks/useApi'
 import { t } from '@/lib/i18n'
@@ -49,10 +50,11 @@ export function Dashboard() {
               {(['active', 'dormant', 'candidate', 'merged', 'archived'] as const).map((status) => (
                 <motion.div
                   key={status}
-                  whileHover={{ scale: 1.05 }}
-                  transition={{ duration: 0.2 }}
+                  whileHover={{ scale: 1.08, y: -2 }}
+                  transition={{ duration: 0.25, ease: [0.32, 0.72, 0, 1] }}
+                  className="cursor-default"
                 >
-                  <p className="font-mono text-2xl font-semibold">{d.rules[status]}</p>
+                  <AnimatedNumber value={d.rules[status]} className="font-mono text-2xl font-semibold" />
                   <p className="text-xs text-text-tertiary capitalize">{status}</p>
                 </motion.div>
               ))}
@@ -70,14 +72,7 @@ export function Dashboard() {
             <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary mb-4">
               {t('dashboard.injections_24h')}
             </h3>
-            <motion.p
-              className="font-mono text-4xl font-semibold"
-              initial={{ scale: 0.5, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ duration: 0.8, ease: [0.32, 0.72, 0, 1], delay: 0.3 }}
-            >
-              {d.injections_24h}
-            </motion.p>
+            <AnimatedNumber value={d.injections_24h} className="font-mono text-4xl font-semibold block" />
             <p className="text-sm text-text-secondary mt-2">
               HOT: <span className="text-rose-300 font-mono">{d.injections_hot_24h}</span>
             </p>
@@ -117,14 +112,7 @@ export function Dashboard() {
             <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary mb-3">
               {t('dashboard.extract')}
             </h3>
-            <motion.p
-              className="font-mono text-2xl font-semibold"
-              initial={{ scale: 0.5, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ duration: 0.6, ease: [0.32, 0.72, 0, 1], delay: 0.4 }}
-            >
-              {d.extract_pending}
-            </motion.p>
+            <AnimatedNumber value={d.extract_pending} className="font-mono text-2xl font-semibold block" />
             <p className="text-xs text-text-tertiary">{t('dashboard.pending_jobs')}</p>
           </GlassCard>
         </motion.div>

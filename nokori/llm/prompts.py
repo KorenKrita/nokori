@@ -25,7 +25,7 @@ What counts as a rule:
 - The user asked why the assistant did not do X (e.g. "为什么不用skill") — process/workflow correction.
 - Corrections about how the assistant uses its own features (skills, tools, CLAUDE.md, hooks) are valid rules.
 - The user stated a stable preference about how to work (tools, style, process).
-- A clear failure→fix loop produced a reusable lesson — only if it generalizes beyond this task.
+- A clear failure→fix loop produced a reusable lesson — only if it generalizes beyond this task AND the user acknowledged, corrected, or clearly resolved it in a later [User] message; a bare error at session end with no user reaction is not extractable.
 - User narrows or rejects part of the assistant's proposed plan mid-task — extract if the lesson generalizes (e.g. "don't change unrelated config"); skip if purely task-specific scope reduction.
 - The user had to prompt the assistant to do something it should have done proactively (e.g. only checked untracked files until the user asked what tracked files should not be committed) — workflow correction.
 
@@ -38,8 +38,11 @@ What is NOT a rule (return []):
 - Math puzzle strategies, trivia corrections, or domain-specific problem-solving methods that do not apply to software engineering.
 - Routine implementation the user requested without pushing back on how the assistant did it.
 - Automated Skill/Trellis/SessionStart/headless CLAUDE.md text — unless the user explicitly endorsed it in their own [User] message.
+- Initial task-scoping instructions given before the assistant produced output (e.g. "only list problems", "focus on X not Y") — task parameters, not corrections, unless the user later pushes back because the assistant violated them.
+- User sharing their own decision table or reasoning before the assistant proposed a specific action to reject — nothing to correct yet.
+- Error output inside <local-command-caveat> or similar tags that tell you to ignore content — unless a later [User] message explicitly reacts to that error.
 
-Count only [User] lines as user intent.
+Count only [User] lines as user intent. Ignore content marked as ignorable by system caveat tags unless the user explicitly references it.
 
 Each item:
 {

@@ -53,7 +53,7 @@ export function Retrieve() {
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             placeholder={t('retrieve.placeholder')}
-            className="w-full h-28 bg-white/[0.03] border border-white/10 rounded-lg px-4 py-3 text-sm placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-white/20 resize-none"
+            className="w-full h-28 bg-[var(--color-input-bg)] border border-[var(--color-input-border)] rounded-lg px-4 py-3 text-sm text-[var(--color-text-primary)] placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-[var(--color-border-focus)] resize-none"
           />
           <div className="flex items-center justify-between">
             <label className="flex items-center gap-2 text-sm text-text-secondary cursor-pointer">
@@ -70,7 +70,7 @@ export function Retrieve() {
               disabled={loading || !prompt.trim()}
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
-              className="px-4 py-2 rounded-full bg-white/10 text-sm font-medium hover:bg-white/15 disabled:opacity-40 transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]"
+              className="px-4 py-2 rounded-full bg-[var(--color-pill-active-bg)] text-[var(--color-pill-active-text)] text-sm font-medium hover:bg-[var(--color-bg-elevated)] disabled:opacity-40 transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]"
             >
               {loading ? t('retrieve.searching') : t('retrieve.search')}
             </motion.button>

@@ -51,8 +51,8 @@ export function Layout() {
                 cn(
                   'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]',
                   isActive
-                    ? 'bg-white/[0.08] text-white border-l-2 border-accent-sky'
-                    : 'text-text-secondary hover:text-white hover:bg-white/[0.04]'
+                    ? 'bg-[var(--color-nav-active-bg)] text-[var(--color-nav-active-text)] border-l-2 border-accent-sky'
+                    : 'text-text-secondary hover:text-[var(--color-nav-hover-text)] hover:bg-[var(--color-pill-hover-bg)]'
                 )
               }
             >

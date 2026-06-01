@@ -44,7 +44,7 @@ export function Logs() {
           <select
             value={level}
             onChange={(e) => { setLevel(e.target.value); setLines([]) }}
-            className="bg-white/[0.03] border border-white/10 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-white/20"
+            className="bg-[var(--color-input-bg)] border border-[var(--color-input-border)] rounded-lg px-3 py-1.5 text-xs text-[var(--color-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-border-focus)]"
           >
             <option value="all">{t('logs.all_levels')}</option>
             <option value="debug">Debug</option>
@@ -55,7 +55,7 @@ export function Logs() {
           <button
             onClick={() => setPaused(!paused)}
             className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-300 ${
-              paused ? 'bg-amber-500/20 text-amber-300' : 'bg-white/10 text-white'
+              paused ? 'bg-amber-500/20 text-amber-300' : 'bg-[var(--color-pill-active-bg)] text-[var(--color-pill-active-text)]'
             }`}
           >
             {paused ? t('logs.paused') : t('logs.auto_scroll')}

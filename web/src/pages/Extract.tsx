@@ -7,6 +7,19 @@ import { t } from '@/lib/i18n'
 interface ExtractJobs { data: { pending: { path: string }[]; done: { path: string }[] } }
 interface ExtractState { data: { transcript_path: string; transcript_mtime: number; extracted_at: string; status: string; last_byte_offset: number }[] }
 
+function splitPath(fullPath: string) {
+  const parts = fullPath.split('/')
+  const file = parts.pop() || ''
+  const dir = parts.join('/')
+  return { dir, file }
+}
+
+const stagger = { hidden: {}, show: { transition: { staggerChildren: 0.05 } } }
+const item = {
+  hidden: { opacity: 0, y: 16, filter: 'blur(6px)' },
+  show: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.5, ease: [0.32, 0.72, 0, 1] } },
+}
+
 export function Extract() {
   const { data: jobs, isLoading: l1 } = useApi<ExtractJobs>('/extract/jobs')
   const { data: state, isLoading: l2 } = useApi<ExtractState>('/extract/state')
@@ -14,23 +27,28 @@ export function Extract() {
   if (l1 || l2) return <PageSkeleton />
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, ease: [0.32, 0.72, 0, 1] }}
-      className="space-y-6"
-    >
-      <h2 className="text-2xl font-semibold tracking-tight">{t('extract.title')}</h2>
+    <motion.div variants={stagger} initial="hidden" animate="show" className="space-y-6">
+      <motion.h2 variants={item} className="text-2xl font-semibold tracking-tight">
+        {t('extract.title')}
+      </motion.h2>
 
-      <div className="grid grid-cols-2 gap-4">
+      <motion.div variants={item} className="grid grid-cols-2 gap-4">
         <GlassCard hover>
           <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary mb-3">
             {t('extract.pending')} ({jobs?.data.pending.length ?? 0})
           </h3>
           {jobs?.data.pending.length === 0 && <p className="text-sm text-text-tertiary">{t('extract.no_pending')}</p>}
-          {jobs?.data.pending.map((j, i) => (
-            <p key={i} className="text-xs font-mono text-text-secondary truncate">{j.path}</p>
-          ))}
+          <div className="space-y-2">
+            {jobs?.data.pending.map((j, i) => {
+              const { dir, file } = splitPath(j.path)
+              return (
+                <div key={i} className="py-1">
+                  <p className="text-[10px] text-text-tertiary truncate">{dir}/</p>
+                  <p className="text-xs font-mono text-text-secondary">{file}</p>
+                </div>
+              )
+            })}
+          </div>
         </GlassCard>
 
         <GlassCard hover>
@@ -38,38 +56,48 @@ export function Extract() {
             {t('extract.done')} ({jobs?.data.done.length ?? 0})
           </h3>
           {jobs?.data.done.length === 0 && <p className="text-sm text-text-tertiary">{t('extract.no_done')}</p>}
-          {jobs?.data.done.slice(0, 10).map((j, i) => (
-            <p key={i} className="text-xs font-mono text-text-secondary truncate">{j.path}</p>
-          ))}
+          <div className="space-y-2">
+            {jobs?.data.done.slice(0, 10).map((j, i) => {
+              const { dir, file } = splitPath(j.path)
+              return (
+                <div key={i} className="py-1">
+                  <p className="text-[10px] text-text-tertiary truncate">{dir}/</p>
+                  <p className="text-xs font-mono text-text-secondary">{file}</p>
+                </div>
+              )
+            })}
+          </div>
         </GlassCard>
-      </div>
+      </motion.div>
 
-      <GlassCard>
-        <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary mb-3">{t('extract.state')}</h3>
-        <table className="w-full text-xs">
-          <thead>
-            <tr className="text-text-tertiary border-b border-white/[0.04]">
-              <th className="text-left py-2">{t('extract.col.transcript')}</th>
-              <th className="text-left py-2">{t('extract.col.status')}</th>
-              <th className="text-right py-2">{t('extract.col.offset')}</th>
-              <th className="text-left py-2">{t('extract.col.extracted')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(state?.data ?? []).map((s, i) => (
-              <tr key={i} className="border-b border-white/[0.03]">
-                <td className="py-2 font-mono text-text-secondary truncate max-w-[300px]">{s.transcript_path}</td>
-                <td className="py-2 text-text-secondary">{s.status}</td>
-                <td className="py-2 text-right font-mono">{s.last_byte_offset}</td>
-                <td className="py-2 text-text-tertiary">{s.extracted_at}</td>
-              </tr>
-            ))}
+      <motion.div variants={item}>
+        <GlassCard>
+          <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary mb-3">{t('extract.state')}</h3>
+          <div className="space-y-3">
+            {(state?.data ?? []).map((s, i) => {
+              const { dir, file } = splitPath(s.transcript_path)
+              return (
+                <div key={i} className="border-b border-[var(--color-border-subtle)] pb-3 last:border-0 last:pb-0">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[10px] text-text-tertiary truncate">{dir}/</p>
+                      <p className="text-xs font-mono text-text-secondary">{file}</p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-[10px] text-text-tertiary">{t('extract.col.status')}: {s.status}</p>
+                      <p className="text-[10px] font-mono text-text-tertiary">{t('extract.col.offset')}: {s.last_byte_offset}</p>
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-text-muted mt-1">{s.extracted_at}</p>
+                </div>
+              )
+            })}
             {(state?.data ?? []).length === 0 && (
-              <tr><td colSpan={4} className="py-4 text-center text-text-tertiary">{t('extract.no_state')}</td></tr>
+              <p className="text-sm text-text-tertiary text-center py-4">{t('extract.no_state')}</p>
             )}
-          </tbody>
-        </table>
-      </GlassCard>
+          </div>
+        </GlassCard>
+      </motion.div>
     </motion.div>
   )
 }

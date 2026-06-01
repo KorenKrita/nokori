@@ -45,8 +45,10 @@ from nokori.llm.prompts import (
 DEFAULT_MODELS = "deepseek-v4-flash,gemini-3.5-flash"
 QUICK_MODELS = "deepseek-v4-flash,gemini-3.5-flash"
 DEFAULT_JUDGE = "claude-opus-4-5"
-DEFAULT_MIN_BYTES = 10_240
-DEFAULT_MAX_BYTES = 180_000
+# Pool large transcripts: byte prefilter then compress() length gate.
+DEFAULT_MIN_BYTES = 150 * 1024  # 150 KiB on-disk prefilter (~≥10k chars after compress)
+DEFAULT_MAX_BYTES = 1_500_000  # 1.5 MiB — ~p95; skip multi-MiB outliers
+DEFAULT_MIN_TRANSCRIPT_CHARS = 10_000  # after read+compress; real "session size" floor
 PROD_COMPRESS_BUDGET_TOKENS = 30_000
 PROD_EXTRACT_MAX_TOKENS = 3_000
 PROD_EXTRACT_TIMEOUT_SEC = 60
@@ -71,6 +73,8 @@ def _discover_transcripts(
     limit_pool: int = 400,
     min_bytes: int = DEFAULT_MIN_BYTES,
     max_bytes: int = DEFAULT_MAX_BYTES,
+    min_transcript_chars: int = DEFAULT_MIN_TRANSCRIPT_CHARS,
+    compress_budget_tokens: int = PROD_COMPRESS_BUDGET_TOKENS,
 ) -> list[Path]:
     base = Path.home() / ".claude" / "projects"
     if not base.exists():
@@ -83,8 +87,8 @@ def _discover_transcripts(
         if min_bytes <= st.st_size <= max_bytes:
             entries.append((p, st.st_size, st.st_mtime))
 
-    def _rank(entry: tuple[Path, int, float]) -> tuple[int, float]:
-        p, _, mtime = entry
+    def _rank(entry: tuple[Path, int, float]) -> tuple[int, int, float]:
+        p, size, mtime = entry
         name = p.as_posix().lower()
         boost = 0
         if "nokori" in name:
@@ -95,10 +99,30 @@ def _discover_transcripts(
             boost -= 4
         if "ccstatusline" in name:
             boost -= 2
-        return (boost, mtime)
+        # Prefer larger files within the same boost band (harder extract/judge).
+        return (boost, size, mtime)
 
     entries.sort(key=_rank, reverse=True)
-    return [p for p, _, _ in entries[:limit_pool]]
+    if min_transcript_chars <= 0:
+        return [p for p, _, _ in entries[:limit_pool]]
+
+    qualified: list[Path] = []
+    scanned = 0
+    for p, _, _ in entries:
+        scanned += 1
+        if len(qualified) >= limit_pool:
+            break
+        try:
+            text = compress(read(p), budget_tokens=compress_budget_tokens)
+        except Exception:
+            continue
+        if len(text) >= min_transcript_chars:
+            qualified.append(p)
+    _log(
+        f"  pool filter: {len(qualified)} files with >= {min_transcript_chars} chars "
+        f"(scanned {scanned} byte-qualified jsonl)"
+    )
+    return qualified
 
 
 _TRIAGE_CACHE = Path("/tmp/nokori-eval-triage.json")
@@ -1000,13 +1024,22 @@ def main() -> int:
         "--min-bytes",
         type=int,
         default=DEFAULT_MIN_BYTES,
-        help=f"Min jsonl file size (default {DEFAULT_MIN_BYTES})",
+        help=f"Min jsonl file size in bytes (default {DEFAULT_MIN_BYTES} = 100KiB)",
     )
     parser.add_argument(
         "--max-bytes",
         type=int,
         default=DEFAULT_MAX_BYTES,
-        help=f"Max jsonl file size (default {DEFAULT_MAX_BYTES})",
+        help=f"Max jsonl file size in bytes (default {DEFAULT_MAX_BYTES} = 1.5MiB)",
+    )
+    parser.add_argument(
+        "--min-transcript-chars",
+        type=int,
+        default=DEFAULT_MIN_TRANSCRIPT_CHARS,
+        help=(
+            f"Min compressed transcript length after read+compress "
+            f"(default {DEFAULT_MIN_TRANSCRIPT_CHARS}; 0=disable)"
+        ),
     )
     parser.add_argument(
         "--min-compressed",
@@ -1076,11 +1109,19 @@ def main() -> int:
     pool = _discover_transcripts(
         min_bytes=args.min_bytes,
         max_bytes=args.max_bytes,
+        min_transcript_chars=args.min_transcript_chars,
+        compress_budget_tokens=args.budget_tokens,
     )
     if not pool:
         _log(
-            f"error: no transcripts in size range "
-            f"[{args.min_bytes}, {args.max_bytes}] under ~/.claude/projects"
+            f"error: no transcripts with "
+            f"bytes [{args.min_bytes}, {args.max_bytes}]"
+            + (
+                f" and >= {args.min_transcript_chars} compressed chars"
+                if args.min_transcript_chars > 0
+                else ""
+            )
+            + " under ~/.claude/projects"
         )
         return 1
 
@@ -1133,8 +1174,13 @@ def main() -> int:
     if not args.no_judge:
         _log(f"judge timeout: {args.judge_timeout}s (extract timeout: {extract_timeout}s)")
     _log(
-        f"jsonl pool: {len(pool)} files in "
+        f"jsonl pool: {len(pool)} files | bytes "
         f"[{args.min_bytes // 1024}KiB, {args.max_bytes // 1024}KiB]"
+        + (
+            f" | compress >= {args.min_transcript_chars} chars"
+            if args.min_transcript_chars > 0
+            else ""
+        )
     )
     cap_note = f" + eval cap {max_chars} chars" if max_chars else ""
     _log(
@@ -1289,6 +1335,7 @@ def _make_meta(cfg, models, args, ts, max_chars, max_tokens, extract_timeout, po
             "max_chars_eval_cap": max_chars or None,
             "min_bytes": args.min_bytes,
             "max_bytes": args.max_bytes,
+            "min_transcript_chars": args.min_transcript_chars or None,
             "pool_size": len(pool),
         },
         "samples": [],

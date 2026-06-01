@@ -38,8 +38,8 @@ export function Injections() {
             onClick={() => setLevelFilter(f)}
             className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] ${
               levelFilter === f
-                ? 'bg-white/10 text-white'
-                : 'text-text-secondary hover:text-white hover:bg-white/[0.04]'
+                ? 'bg-[var(--color-pill-active-bg)] text-[var(--color-pill-active-text)]'
+                : 'text-text-secondary hover:text-[var(--color-nav-hover-text)] hover:bg-[var(--color-pill-hover-bg)]'
             }`}
           >
             {f || t('injections.filter.all')}

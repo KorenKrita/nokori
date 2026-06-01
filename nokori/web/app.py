@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import FileResponse, Response
 
 from nokori.config import Config
 
@@ -41,6 +42,15 @@ def create_app(cfg: Config) -> FastAPI:
     if static_dir.is_dir():
         from fastapi.staticfiles import StaticFiles
 
-        app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")
+        app.mount("/assets", StaticFiles(directory=str(static_dir / "assets")), name="assets")
+
+        index_html = static_dir / "index.html"
+
+        @app.get("/{path:path}")
+        async def spa_fallback(request: Request, path: str) -> Response:
+            file_path = static_dir / path
+            if file_path.is_file() and not path.startswith("api"):
+                return FileResponse(file_path)
+            return FileResponse(index_html)
 
     return app

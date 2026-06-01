@@ -22,6 +22,15 @@
   --color-text-secondary: #a1a1aa;
   --color-text-tertiary: #71717a;
   --color-text-muted: #52525b;
+  --color-pill-active-bg: rgba(255, 255, 255, 0.10);
+  --color-pill-active-text: #ffffff;
+  --color-pill-hover-bg: rgba(255, 255, 255, 0.04);
+  --color-nav-active-bg: rgba(255, 255, 255, 0.08);
+  --color-nav-active-text: #ffffff;
+  --color-nav-hover-text: #ffffff;
+  --color-row-hover: rgba(255, 255, 255, 0.02);
+  --color-input-bg: rgba(255, 255, 255, 0.03);
+  --color-input-border: rgba(255, 255, 255, 0.10);
   color-scheme: dark;
 }
 
@@ -37,6 +46,15 @@
   --color-text-secondary: #52525b;
   --color-text-tertiary: #a1a1aa;
   --color-text-muted: #d4d4d8;
+  --color-pill-active-bg: rgba(0, 0, 0, 0.08);
+  --color-pill-active-text: #18181b;
+  --color-pill-hover-bg: rgba(0, 0, 0, 0.04);
+  --color-nav-active-bg: rgba(0, 0, 0, 0.06);
+  --color-nav-active-text: #18181b;
+  --color-nav-hover-text: #18181b;
+  --color-row-hover: rgba(0, 0, 0, 0.02);
+  --color-input-bg: rgba(0, 0, 0, 0.03);
+  --color-input-border: rgba(0, 0, 0, 0.10);
   color-scheme: light;
 }
 

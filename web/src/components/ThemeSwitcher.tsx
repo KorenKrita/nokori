@@ -18,7 +18,7 @@ export function ThemeSwitcher() {
   }
 
   return (
-    <div className="flex gap-0.5 rounded-full bg-white/[0.04] dark:bg-white/[0.04] light:bg-black/[0.04] p-0.5">
+    <div className="flex gap-0.5 rounded-full bg-[var(--color-pill-hover-bg)] p-0.5">
       {OPTIONS.map(({ value, icon: Icon, key }) => (
         <button
           key={value}
@@ -26,7 +26,7 @@ export function ThemeSwitcher() {
           title={t(key)}
           className={`p-1.5 rounded-full transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] ${
             current === value
-              ? 'bg-white/10 dark:bg-white/10 light:bg-black/10 text-white dark:text-white light:text-black'
+              ? 'bg-[var(--color-pill-active-bg)] text-[var(--color-pill-active-text)]'
               : 'text-text-tertiary hover:text-text-secondary'
           }`}
         >
