@@ -176,11 +176,11 @@ def _run_triage(
     budget_tokens: int,
     timeout: int,
     max_workers: int,
-) -> dict[str, dict]:
-    """Triage just enough transcripts to fill buckets, using cache first.
+) -> tuple[dict[str, dict], set[str]]:
+    """Triage just enough NEW transcripts to fill buckets. Returns (cache, newly_classified).
 
-    Strategy: need ~3x target_samples classified to reliably fill 20/60/20.
-    Classify in small batches, stop early once all buckets are full.
+    Priority: classify uncached transcripts first. Only fall back to cached
+    entries for bucket-filling when the fresh pool is exhausted.
     """
     cache = _load_triage_cache()
     need_per_bucket = {
@@ -188,37 +188,29 @@ def _run_triage(
         1: max(2, round(target_samples * 0.6)) + 2,
         2: max(2, round(target_samples * 0.2)) + 2,
     }
+    newly_classified: set[str] = set()
 
-    def _bucket_counts() -> dict[int, int]:
+    def _fresh_bucket_counts() -> dict[int, int]:
         counts: dict[int, int] = {0: 0, 1: 0, 2: 0}
-        for p in pool:
-            entry = cache.get(str(p))
+        for key in newly_classified:
+            entry = cache.get(key)
             if entry is None:
                 continue
             b = min(2, max(0, entry.get("expected_rules", 0)))
             counts[b] += 1
         return counts
 
-    counts = _bucket_counts()
-    buckets_full = all(counts[b] >= need_per_bucket[b] for b in (0, 1, 2))
-
-    if buckets_full:
-        _log(f"  triage: buckets already full from cache ({sum(counts.values())} classified)")
-        return cache
-
     uncached = [p for p in pool if str(p) not in cache]
     if not uncached:
-        _log(f"  triage: all {len(pool)} transcripts cached")
-        return cache
+        _log(f"  triage: no uncached transcripts (pool all cached), using cache")
+        return cache, set()
 
-    # Classify in batches until buckets are full or pool exhausted
-    batch_size = min(30, len(uncached))
-    total_classified = 0
     random.shuffle(uncached)
+    batch_size = min(30, len(uncached))
 
-    _log(f"  triage: need to classify more (cache={len(cache)}, uncached={len(uncached)})")
+    _log(f"  triage: {len(uncached)} uncached transcripts to classify (target: fill {target_samples} balanced)")
 
-    while uncached and not buckets_full:
+    while uncached:
         batch = uncached[:batch_size]
         uncached = uncached[batch_size:]
 
@@ -242,15 +234,18 @@ def _run_triage(
                     result = None
                 if result is not None:
                     cache[str(p)] = result
-                    total_classified += 1
+                    newly_classified.add(str(p))
 
         _save_triage_cache(cache)
-        counts = _bucket_counts()
-        buckets_full = all(counts[b] >= need_per_bucket[b] for b in (0, 1, 2))
-        _log(f"    classified {total_classified} so far → buckets: 0={counts[0]} 1={counts[1]} 2+={counts[2]}")
+        counts = _fresh_bucket_counts()
+        _log(f"    fresh classified {len(newly_classified)} → fresh buckets: 0={counts[0]} 1={counts[1]} 2+={counts[2]}")
 
-    _log(f"  triage done: {total_classified} new classifications")
-    return cache
+        # Stop once fresh classifications can fill all buckets
+        if all(counts[b] >= need_per_bucket[b] for b in (0, 1, 2)):
+            break
+
+    _log(f"  triage done: {len(newly_classified)} new classifications")
+    return cache, newly_classified
 
 
 def _pick_balanced_samples(
@@ -258,32 +253,45 @@ def _pick_balanced_samples(
     triage_cache: dict[str, dict],
     n: int,
     rng: random.Random,
+    newly_classified: set[str],
 ) -> list[Path]:
-    """Pick samples with target distribution: 20% zero, 60% one, 20% two+."""
-    buckets: dict[int, list[Path]] = {0: [], 1: [], 2: []}
+    """Pick samples with target distribution: 20% zero, 60% one, 20% two+.
+
+    Prefer newly classified transcripts (from this run) over cached ones.
+    Only fall back to cached entries when fresh ones can't fill the buckets.
+    """
+    fresh_buckets: dict[int, list[Path]] = {0: [], 1: [], 2: []}
+    cached_buckets: dict[int, list[Path]] = {0: [], 1: [], 2: []}
+
     for p in pool:
         entry = triage_cache.get(str(p))
         if entry is None:
             continue
         expected = entry.get("expected_rules", 0)
         bucket = min(2, max(0, expected))
-        buckets[bucket].append(p)
+        if str(p) in newly_classified:
+            fresh_buckets[bucket].append(p)
+        else:
+            cached_buckets[bucket].append(p)
 
     target_0 = max(1, round(n * 0.2))
     target_1 = max(1, round(n * 0.6))
     target_2 = max(1, n - target_0 - target_1)
 
-    def _sample_bucket(items: list[Path], count: int) -> list[Path]:
-        rng.shuffle(items)
-        return items[:count]
+    def _pick_from(fresh: list[Path], cached: list[Path], count: int) -> list[Path]:
+        rng.shuffle(fresh)
+        picked = fresh[:count]
+        if len(picked) < count:
+            rng.shuffle(cached)
+            picked.extend(cached[:count - len(picked)])
+        return picked
 
-    picked_0 = _sample_bucket(buckets[0], target_0)
-    picked_1 = _sample_bucket(buckets[1], target_1)
-    picked_2 = _sample_bucket(buckets[2], target_2)
+    picked_0 = _pick_from(fresh_buckets[0], cached_buckets[0], target_0)
+    picked_1 = _pick_from(fresh_buckets[1], cached_buckets[1], target_1)
+    picked_2 = _pick_from(fresh_buckets[2], cached_buckets[2], target_2)
 
     result = picked_0 + picked_1 + picked_2
 
-    # If any bucket was short, fill from others
     if len(result) < n:
         used = set(str(p) for p in result)
         remaining = [p for p in pool if str(p) not in used and str(p) in triage_cache]
@@ -770,9 +778,10 @@ def main() -> int:
     triage_model = args.triage_model or args.judge_model
 
     triage_cache: dict[str, dict] = {}
+    newly_classified: set[str] = set()
     if args.triage:
         _log("Pre-classifying transcripts (triage phase) ...")
-        triage_cache = _run_triage(
+        triage_cache, newly_classified = _run_triage(
             pool,
             target_samples=samples_n,
             base_url=cfg.llm_base_url,
@@ -782,7 +791,7 @@ def main() -> int:
             timeout=60,
             max_workers=args.max_workers,
         )
-        picked = _pick_balanced_samples(pool, triage_cache, samples_n, rng)
+        picked = _pick_balanced_samples(pool, triage_cache, samples_n, rng, newly_classified)
     else:
         picked = rng.sample(pool, min(samples_n, len(pool)))
 
