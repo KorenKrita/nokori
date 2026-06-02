@@ -120,7 +120,7 @@ function ResultSection({ title, items, level }: { title: string; items: ScoredRe
       </div>
       <div className="space-y-3">
         {items.map((sr) => (
-          <div key={sr.rule.id} className="border-b border-white/[0.03] pb-3 last:border-0 last:pb-0">
+          <div key={sr.rule.id} className="border-b border-[var(--color-border-subtle)] pb-3 last:border-0 last:pb-0">
             <div className="flex items-center gap-2">
               <span className="font-mono text-xs text-accent-sky">{sr.rule.short_id}</span>
               <StatusBadge status={sr.rule.status} />

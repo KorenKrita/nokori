@@ -55,13 +55,13 @@ export function Dashboard() {
                   className="cursor-default"
                 >
                   <AnimatedNumber value={d.rules[status]} className="font-mono text-2xl font-semibold" />
-                  <p className="text-xs text-text-tertiary capitalize">{status}</p>
+                  <p className="text-xs text-text-tertiary capitalize">{t(`dashboard.status.${status}`)}</p>
                 </motion.div>
               ))}
             </div>
-            <div className="mt-4 pt-3 border-t border-white/[0.04] flex gap-6 text-sm text-text-secondary">
-              <span>{t('dashboard.total')}: <span className="font-mono text-white">{d.rules.total}</span></span>
-              <span>{t('dashboard.global')}: <span className="font-mono text-white">{d.rules.global}</span></span>
+            <div className="mt-4 pt-3 border-t border-[var(--color-border-subtle)] flex gap-6 text-sm text-text-secondary">
+              <span>{t('dashboard.total')}: <span className="font-mono text-[var(--color-text-primary)]">{d.rules.total}</span></span>
+              <span>{t('dashboard.global')}: <span className="font-mono text-[var(--color-text-primary)]">{d.rules.global}</span></span>
             </div>
           </GlassCard>
         </motion.div>
@@ -74,7 +74,7 @@ export function Dashboard() {
             </h3>
             <AnimatedNumber value={d.injections_24h} className="font-mono text-4xl font-semibold block" />
             <p className="text-sm text-text-secondary mt-2">
-              HOT: <span className="text-rose-300 font-mono">{d.injections_hot_24h}</span>
+              {t('dashboard.hot_label')} <span className="text-accent-rose font-mono">{d.injections_hot_24h}</span>
             </p>
           </GlassCard>
         </motion.div>

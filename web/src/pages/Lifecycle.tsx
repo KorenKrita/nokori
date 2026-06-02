@@ -27,13 +27,13 @@ export function Lifecycle() {
         {!promo?.data.enabled && <p className="text-sm text-text-tertiary">{t('lifecycle.promotion_disabled')}</p>}
         {promo?.data.enabled && promo.data.candidates.length === 0 && <p className="text-sm text-text-tertiary">{t('lifecycle.no_candidates')}</p>}
         {promo?.data.candidates.map((c) => (
-          <div key={c.short_id} className="border-b border-white/[0.03] py-3 last:border-0">
+          <div key={c.short_id} className="border-b border-[var(--color-border-subtle)] py-3 last:border-0">
             <div className="flex items-center justify-between">
               <span className="font-mono text-xs text-accent-sky">{c.short_id}</span>
               <span className="text-xs text-text-tertiary font-mono">{c.progress}/{c.threshold}</span>
             </div>
             <p className="text-sm text-text-secondary mt-1 truncate">{c.trigger_text}</p>
-            <div className="mt-2 h-1.5 rounded-full bg-white/[0.04] overflow-hidden">
+            <div className="mt-2 h-1.5 rounded-full bg-[var(--color-bg-elevated)] overflow-hidden">
               <motion.div
                 className="h-full rounded-full bg-accent-violet"
                 initial={{ width: 0 }}

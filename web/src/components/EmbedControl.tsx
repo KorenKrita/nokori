@@ -44,8 +44,8 @@ export function EmbedControl({ running, pid, onAction }: EmbedControlProps) {
         transition={{ duration: 0.2, ease: [0.32, 0.72, 0, 1] }}
         className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors duration-300 disabled:opacity-40 ${
           running
-            ? 'bg-rose-500/10 text-rose-300 hover:bg-rose-500/20'
-            : 'bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20'
+            ? 'bg-accent-rose/10 text-accent-rose hover:bg-accent-rose/20'
+            : 'bg-accent-emerald/10 text-accent-emerald hover:bg-accent-emerald/20'
         }`}
       >
         {loading

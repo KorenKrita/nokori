@@ -1,17 +1,17 @@
 import { cn } from '@/lib/utils'
 
 const VARIANTS: Record<string, string> = {
-  active: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/20',
-  dormant: 'bg-zinc-500/15 text-zinc-400 border-zinc-500/20',
-  candidate: 'bg-violet-500/15 text-violet-300 border-violet-500/20',
-  merged: 'bg-sky-500/15 text-sky-300 border-sky-500/20',
-  archived: 'bg-zinc-800/50 text-zinc-500 border-zinc-700/30',
-  hot: 'bg-rose-500/20 text-rose-300 border-rose-500/20',
-  warm: 'bg-amber-500/20 text-amber-300 border-amber-500/20',
-  ok: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/20',
-  warn: 'bg-amber-500/15 text-amber-300 border-amber-500/20',
-  fail: 'bg-rose-500/15 text-rose-300 border-rose-500/20',
-  skip: 'bg-zinc-500/15 text-zinc-500 border-zinc-500/20',
+  active: 'bg-accent-emerald/15 text-accent-emerald border-accent-emerald/25',
+  dormant: 'bg-[var(--color-bg-elevated)] text-text-tertiary border-[var(--color-border-subtle)]',
+  candidate: 'bg-accent-violet/15 text-accent-violet border-accent-violet/25',
+  merged: 'bg-accent-sky/15 text-accent-sky border-accent-sky/25',
+  archived: 'bg-[var(--color-bg-elevated)] text-text-muted border-[var(--color-border-subtle)]',
+  hot: 'bg-accent-rose/20 text-accent-rose border-accent-rose/25',
+  warm: 'bg-accent-amber/20 text-accent-amber border-accent-amber/25',
+  ok: 'bg-accent-emerald/15 text-accent-emerald border-accent-emerald/25',
+  warn: 'bg-accent-amber/15 text-accent-amber border-accent-amber/25',
+  fail: 'bg-accent-rose/15 text-accent-rose border-accent-rose/25',
+  skip: 'bg-[var(--color-bg-elevated)] text-text-muted border-[var(--color-border-subtle)]',
 }
 
 interface StatusBadgeProps {

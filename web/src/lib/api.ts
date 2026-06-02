@@ -17,7 +17,7 @@ export async function fetchApi<T>(path: string, params?: Record<string, string>)
 
 export async function mutateApi<T>(
   path: string,
-  method: 'POST' | 'PATCH',
+  method: 'POST' | 'PATCH' | 'PUT',
   body?: unknown
 ): Promise<T> {
   const res = await fetch(BASE + path, {
@@ -27,7 +27,12 @@ export async function mutateApi<T>(
   })
   if (!res.ok) {
     const data = await res.json().catch(() => ({}))
-    throw new Error(data.detail || `API error ${res.status}`)
+    const detail = typeof data.detail === 'string'
+      ? data.detail
+      : Array.isArray(data.detail)
+        ? data.detail.map((e: { msg: string }) => e.msg).join('; ')
+        : `API error ${res.status}`
+    throw new Error(detail)
   }
   return res.json()
 }

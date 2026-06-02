@@ -32,7 +32,7 @@ export function RuleDetail() {
         <div className="flex items-center gap-3">
           <button
             onClick={() => navigate('/rules')}
-            className="text-text-tertiary hover:text-white text-sm"
+            className="text-text-tertiary hover:text-[var(--color-text-primary)] text-sm"
           >
             {t('rules.back')} /
           </button>
@@ -44,7 +44,7 @@ export function RuleDetail() {
             onClick={handleDismiss}
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
-            className="px-4 py-2 rounded-full bg-rose-500/10 text-rose-300 text-sm font-medium hover:bg-rose-500/20 transition-all duration-300"
+            className="px-4 py-2 rounded-full bg-accent-rose/10 text-accent-rose text-sm font-medium hover:bg-accent-rose/20 transition-all duration-300"
           >
             {t('rules.dismiss')}
           </motion.button>
@@ -54,7 +54,7 @@ export function RuleDetail() {
       <div className="grid grid-cols-12 gap-4">
         <GlassCard className="col-span-8">
           <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary mb-3">{t('rules.trigger')}</h3>
-          <p className="text-sm text-white">{rule.trigger_text}</p>
+          <p className="text-sm text-[var(--color-text-primary)]">{rule.trigger_text}</p>
           {rule.trigger_variants.length > 0 && (
             <div className="mt-3 space-y-1">
               <p className="text-xs text-text-tertiary">{t('rules.variants')}:</p>
@@ -65,7 +65,7 @@ export function RuleDetail() {
           )}
 
           <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary mt-6 mb-3">{t('rules.action')}</h3>
-          <p className="text-sm text-white">{rule.action}</p>
+          <p className="text-sm text-[var(--color-text-primary)]">{rule.action}</p>
 
           {rule.behavior && (
             <>
@@ -113,7 +113,7 @@ export function RuleDetail() {
                   <span className="text-xs text-text-tertiary">{lang}:</span>
                   <div className="flex flex-wrap gap-1 mt-1">
                     {terms.map((term) => (
-                      <span key={term} className="px-2 py-0.5 rounded bg-white/[0.04] text-xs font-mono text-text-secondary">
+                      <span key={term} className="px-2 py-0.5 rounded bg-[var(--color-bg-elevated)] text-xs font-mono text-text-secondary">
                         {term}
                       </span>
                     ))}
@@ -130,7 +130,7 @@ export function RuleDetail() {
           <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary mb-3">{t('rules.evidence_log')}</h3>
           <div className="space-y-1 max-h-60 overflow-y-auto">
             {rule.evidence_log.map((entry, i) => (
-              <div key={i} className="text-xs font-mono text-text-secondary py-1 border-b border-white/[0.02]">
+              <div key={i} className="text-xs font-mono text-text-secondary py-1 border-b border-[var(--color-border-subtle)]">
                 {JSON.stringify(entry)}
               </div>
             ))}

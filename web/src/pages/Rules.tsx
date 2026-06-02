@@ -36,11 +36,11 @@ export function Rules() {
 
       <div className="flex gap-2">
         {[
-          { value: 'active,dormant', label: 'Active' },
-          { value: 'active', label: 'Active' },
-          { value: 'dormant', label: 'Dormant' },
-          { value: 'candidate', label: 'Candidate' },
-          { value: 'archived,merged', label: 'Archived' },
+          { value: 'active,dormant', label: t('rules.filter.active_dormant') },
+          { value: 'active', label: t('rules.filter.active') },
+          { value: 'dormant', label: t('rules.filter.dormant') },
+          { value: 'candidate', label: t('rules.filter.candidate') },
+          { value: 'archived,merged', label: t('rules.filter.archived') },
           { value: '', label: t('rules.filter.all') },
         ].map((f) => (
           <button
@@ -52,7 +52,7 @@ export function Rules() {
                 : 'text-text-secondary hover:text-[var(--color-nav-hover-text)] hover:bg-[var(--color-pill-hover-bg)]'
             }`}
           >
-            {f.value || t('rules.filter.all')}
+            {f.label}
           </button>
         ))}
       </div>
@@ -61,7 +61,7 @@ export function Rules() {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-xs uppercase tracking-wider text-text-tertiary border-b border-white/[0.04] dark:border-white/[0.04]">
+              <tr className="text-xs uppercase tracking-wider text-text-tertiary border-b border-[var(--color-border-subtle)]">
                 <th className="text-left py-3 px-2">{t('rules.col.id')}</th>
                 <th className="text-left py-3 px-2">{t('rules.col.status')}</th>
                 <th className="text-left py-3 px-2">{t('rules.col.type')}</th>
@@ -74,7 +74,7 @@ export function Rules() {
               {rules.map((rule) => (
                 <tr
                   key={rule.id}
-                  className="border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors"
+                  className="border-b border-[var(--color-border-subtle)] hover:bg-[var(--color-row-hover)] transition-colors"
                 >
                   <td className="py-3 px-2">
                     <Link

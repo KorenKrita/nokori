@@ -68,7 +68,7 @@ export function Layout() {
             </NavLink>
           ))}
         </nav>
-        <div className="mt-auto pt-4 border-t border-white/[0.04] space-y-2">
+        <div className="mt-auto pt-4 border-t border-[var(--color-border-subtle)] space-y-2">
           <ThemeSwitcher />
           <LocaleSwitcher />
         </div>

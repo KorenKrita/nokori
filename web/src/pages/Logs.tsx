@@ -47,15 +47,15 @@ export function Logs() {
             className="bg-[var(--color-input-bg)] border border-[var(--color-input-border)] rounded-lg px-3 py-1.5 text-xs text-[var(--color-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-border-focus)]"
           >
             <option value="all">{t('logs.all_levels')}</option>
-            <option value="debug">Debug</option>
-            <option value="info">Info</option>
-            <option value="warn">Warning</option>
-            <option value="error">Error</option>
+            <option value="debug">{t('logs.level.debug')}</option>
+            <option value="info">{t('logs.level.info')}</option>
+            <option value="warn">{t('logs.level.warn')}</option>
+            <option value="error">{t('logs.level.error')}</option>
           </select>
           <button
             onClick={() => setPaused(!paused)}
             className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-300 ${
-              paused ? 'bg-amber-500/20 text-amber-300' : 'bg-[var(--color-pill-active-bg)] text-[var(--color-pill-active-text)]'
+              paused ? 'bg-accent-amber/20 text-accent-amber' : 'bg-[var(--color-pill-active-bg)] text-[var(--color-pill-active-text)]'
             }`}
           >
             {paused ? t('logs.paused') : t('logs.auto_scroll')}
@@ -74,9 +74,9 @@ export function Logs() {
               key={i}
               className={`py-0.5 px-2 rounded ${
                 line.toLowerCase().includes('error')
-                  ? 'text-rose-300 bg-rose-500/5'
+                  ? 'text-accent-rose bg-accent-rose/5'
                   : line.toLowerCase().includes('warn')
-                  ? 'text-amber-300 bg-amber-500/5'
+                  ? 'text-accent-amber bg-accent-amber/5'
                   : 'text-text-secondary'
               }`}
             >
