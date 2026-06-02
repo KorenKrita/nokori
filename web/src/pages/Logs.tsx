@@ -63,16 +63,16 @@ export function Logs() {
         </div>
       </div>
 
-      <GlassCard>
+      <GlassCard className="min-w-0 max-w-full overflow-hidden">
         <div
           ref={containerRef}
-          className="h-[calc(100dvh-200px)] overflow-y-auto font-mono text-xs leading-relaxed space-y-0.5"
+          className="h-[calc(100dvh-200px)] overflow-y-auto overflow-x-hidden font-mono text-xs leading-relaxed space-y-0.5"
         >
           {lines.length === 0 && <p className="text-text-tertiary py-4 text-center">{t('logs.waiting')}</p>}
           {lines.map((line, i) => (
             <div
               key={i}
-              className={`py-0.5 px-2 rounded ${
+              className={`py-0.5 px-2 rounded break-all whitespace-pre-wrap ${
                 line.toLowerCase().includes('error')
                   ? 'text-accent-rose bg-accent-rose/5'
                   : line.toLowerCase().includes('warn')

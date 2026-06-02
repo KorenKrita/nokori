@@ -46,6 +46,17 @@ const translations: Record<Locale, Record<string, string>> = {
     'rules.filter.candidate': '候选',
     'rules.filter.archived': '归档',
     'rules.filter.all': '全部',
+    'rules.filter.help.active_dormant':
+      '包含「活跃」和「休眠」：仍会参与检索、可能写入上下文的正式规则（不含候选与已归档/已合并）。',
+    'rules.filter.help.active':
+      '仅 status=active。可 HOT 注入；correction / anti_pattern 类在满足条件时可触发 Gate 阻断。',
+    'rules.filter.help.dormant':
+      '长期无强命中后降为休眠。命中时最多 WARM 注入，不触发 Gate。',
+    'rules.filter.help.candidate':
+      '自动提取或合并产生的待观察规则，暂不注入上下文，也不 Gate。',
+    'rules.filter.help.archived':
+      '已归档（archived）或已被新规则取代（merged），不再参与检索。',
+    'rules.filter.help.all': '显示所有状态的规则。',
     'rules.no_results': '暂无规则',
     'rules.col.id': 'ID',
     'rules.col.status': '状态',
@@ -110,6 +121,11 @@ const translations: Record<Locale, Record<string, string>> = {
     'lifecycle.no_candidates': '暂无提升候选',
     'lifecycle.maintenance': '维护任务',
     'lifecycle.no_maintenance': '暂无维护记录',
+    'lifecycle.job.dormant_scan': '休眠扫描（长期无强命中后降为休眠）',
+    'lifecycle.job.candidate_cleanup': '候选规则清理',
+    'lifecycle.job.injection_cleanup': '注入记录清理',
+    'lifecycle.job.unmerge_check': '合并回滚检查',
+    'lifecycle.last_run_never': '从未运行',
     // Config
     'config.title': '配置与健康',
     'config.health': '健康检查',
@@ -210,6 +226,17 @@ const translations: Record<Locale, Record<string, string>> = {
     'rules.filter.candidate': 'Candidate',
     'rules.filter.archived': 'Archived',
     'rules.filter.all': 'All',
+    'rules.filter.help.active_dormant':
+      'Active + dormant: formal rules still retrieved and may enter context (excludes candidates and archived/merged).',
+    'rules.filter.help.active':
+      'status=active only. HOT injection; correction / anti_pattern rules may Gate when conditions match.',
+    'rules.filter.help.dormant':
+      'Dormant after long inactivity. At most WARM when retrieved; no Gate.',
+    'rules.filter.help.candidate':
+      'Extracted or merged candidates under observation; not injected, not gated.',
+    'rules.filter.help.archived':
+      'Archived or superseded (merged); excluded from retrieval.',
+    'rules.filter.help.all': 'All rule statuses.',
     'rules.no_results': 'No rules found',
     'rules.col.id': 'ID',
     'rules.col.status': 'Status',
@@ -274,6 +301,11 @@ const translations: Record<Locale, Record<string, string>> = {
     'lifecycle.no_candidates': 'No promotion candidates yet',
     'lifecycle.maintenance': 'Maintenance Jobs',
     'lifecycle.no_maintenance': 'No maintenance runs recorded',
+    'lifecycle.job.dormant_scan': 'Dormant scan (inactive rules → dormant)',
+    'lifecycle.job.candidate_cleanup': 'Candidate cleanup',
+    'lifecycle.job.injection_cleanup': 'Injection history cleanup',
+    'lifecycle.job.unmerge_check': 'Unmerge check',
+    'lifecycle.last_run_never': 'Never run',
     // Config
     'config.title': 'Config & Health',
     'config.health': 'Health Checks',
@@ -374,6 +406,17 @@ const translations: Record<Locale, Record<string, string>> = {
     'rules.filter.candidate': '候補',
     'rules.filter.archived': 'アーカイブ',
     'rules.filter.all': 'すべて',
+    'rules.filter.help.active_dormant':
+      '「アクティブ」と「休止中」を含む。検索・コンテキスト注入の対象になる正式ルール（候補・アーカイブ/merged 除く）。',
+    'rules.filter.help.active':
+      'status=active のみ。HOT 注入可。correction / anti_pattern は条件一致時に Gate 可能。',
+    'rules.filter.help.dormant':
+      '長期間ヒットがなく休止中。命中時は最大 WARM、Gate なし。',
+    'rules.filter.help.candidate':
+      '抽出・マージ候補。観察中で注入・Gate なし。',
+    'rules.filter.help.archived':
+      'アーカイブまたは merged。検索対象外。',
+    'rules.filter.help.all': 'すべてのステータスを表示。',
     'rules.no_results': 'ルールがありません',
     'rules.col.id': 'ID',
     'rules.col.status': 'ステータス',
@@ -438,6 +481,11 @@ const translations: Record<Locale, Record<string, string>> = {
     'lifecycle.no_candidates': 'プロモーション候補なし',
     'lifecycle.maintenance': 'メンテナンスジョブ',
     'lifecycle.no_maintenance': 'メンテナンス記録なし',
+    'lifecycle.job.dormant_scan': '休止スキャン（長期未命中後に休止へ）',
+    'lifecycle.job.candidate_cleanup': '候補ルール掃除',
+    'lifecycle.job.injection_cleanup': '注入履歴掃除',
+    'lifecycle.job.unmerge_check': 'マージ解除チェック',
+    'lifecycle.last_run_never': '未実行',
     // Config
     'config.title': '設定とヘルスチェック',
     'config.health': 'ヘルスチェック',
@@ -521,6 +569,13 @@ export function t(key: string, params?: Record<string, string | number>): string
     })
   }
   return text
+}
+
+/** Localized maintenance job name; falls back to raw key if unknown. */
+export function maintenanceJobLabel(jobKey: string): string {
+  const i18nKey = `lifecycle.job.${jobKey}`
+  const label = t(i18nKey)
+  return label === i18nKey ? jobKey : label
 }
 
 export type { Locale }

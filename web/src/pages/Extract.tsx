@@ -2,6 +2,7 @@ import { motion } from 'motion/react'
 import { GlassCard } from '@/components/GlassCard'
 import { PageSkeleton } from '@/components/PageSkeleton'
 import { useApi } from '@/hooks/useApi'
+import { formatDateTime } from '@/lib/formatDateTime'
 import { t } from '@/lib/i18n'
 
 interface ExtractJobs { data: { pending: { path: string }[]; done: { path: string }[] } }
@@ -88,7 +89,7 @@ export function Extract() {
                       <p className="text-[10px] font-mono text-text-tertiary">{t('extract.col.offset')}: {s.last_byte_offset}</p>
                     </div>
                   </div>
-                  <p className="text-[10px] text-text-muted mt-1">{s.extracted_at}</p>
+                  <p className="text-[10px] text-text-muted mt-1 font-mono">{formatDateTime(s.extracted_at)}</p>
                 </div>
               )
             })}

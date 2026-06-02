@@ -5,8 +5,17 @@ import { StatusBadge } from '@/components/StatusBadge'
 import { PageSkeleton } from '@/components/PageSkeleton'
 import { useApi } from '@/hooks/useApi'
 import { mutateApi } from '@/lib/api'
+import { formatDateTime } from '@/lib/formatDateTime'
 import { t } from '@/lib/i18n'
 import type { Rule } from '@/lib/types'
+
+const DATE_META_KEYS = new Set(['last_hit', 'created_at', 'updated_at'])
+
+function formatMetaValue(field: string, value: string, neverLabel: string): string {
+  if (field === 'last_hit' && value === neverLabel) return value
+  if (DATE_META_KEYS.has(field)) return formatDateTime(value) || value
+  return value
+}
 
 export function RuleDetail() {
   const { shortId } = useParams<{ shortId: string }>()
@@ -86,20 +95,24 @@ export function RuleDetail() {
           <GlassCard>
             <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary mb-3">{t('rules.metadata')}</h3>
             <dl className="space-y-2 text-xs">
-              {([
-                [t('rules.source_type'), rule.source_type],
-                [t('rules.confidence'), rule.confidence],
-                [t('rules.evidence_score'), String(rule.evidence_score)],
-                [t('rules.hit_count'), String(rule.hit_count)],
-                [t('rules.last_hit'), rule.last_hit ?? t('rules.never')],
-                [t('rules.project_scope'), rule.project_scope],
-                [t('rules.project_id'), rule.project_id ?? 'global'],
-                [t('rules.created'), rule.created_at],
-                [t('rules.updated'), rule.updated_at],
-              ] as [string, string][]).map(([label, value]) => (
-                <div key={label} className="flex justify-between">
-                  <dt className="text-text-tertiary">{label}</dt>
-                  <dd className="font-mono text-text-secondary">{value}</dd>
+              {(
+                [
+                  ['source_type', t('rules.source_type'), rule.source_type],
+                  ['confidence', t('rules.confidence'), rule.confidence],
+                  ['evidence_score', t('rules.evidence_score'), String(rule.evidence_score)],
+                  ['hit_count', t('rules.hit_count'), String(rule.hit_count)],
+                  ['last_hit', t('rules.last_hit'), rule.last_hit ?? t('rules.never')],
+                  ['project_scope', t('rules.project_scope'), rule.project_scope],
+                  ['project_id', t('rules.project_id'), rule.project_id ?? 'global'],
+                  ['created_at', t('rules.created'), rule.created_at],
+                  ['updated_at', t('rules.updated'), rule.updated_at],
+                ] as const
+              ).map(([field, label, value]) => (
+                <div key={field} className="flex justify-between gap-3">
+                  <dt className="text-text-tertiary shrink-0">{label}</dt>
+                  <dd className="font-mono text-text-secondary text-right break-all">
+                    {formatMetaValue(field, value, t('rules.never'))}
+                  </dd>
                 </div>
               ))}
             </dl>

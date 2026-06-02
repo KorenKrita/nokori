@@ -1,12 +1,22 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'motion/react'
+import { FilterPill } from '@/components/FilterPill'
 import { GlassCard } from '@/components/GlassCard'
 import { StatusBadge } from '@/components/StatusBadge'
 import { PageSkeleton } from '@/components/PageSkeleton'
 import { useApi } from '@/hooks/useApi'
 import { t } from '@/lib/i18n'
 import type { Meta, Rule } from '@/lib/types'
+
+const STATUS_FILTERS = [
+  { value: 'active,dormant', labelKey: 'rules.filter.active_dormant', helpKey: 'rules.filter.help.active_dormant' },
+  { value: 'active', labelKey: 'rules.filter.active', helpKey: 'rules.filter.help.active' },
+  { value: 'dormant', labelKey: 'rules.filter.dormant', helpKey: 'rules.filter.help.dormant' },
+  { value: 'candidate', labelKey: 'rules.filter.candidate', helpKey: 'rules.filter.help.candidate' },
+  { value: 'archived,merged', labelKey: 'rules.filter.archived', helpKey: 'rules.filter.help.archived' },
+  { value: '', labelKey: 'rules.filter.all', helpKey: 'rules.filter.help.all' },
+] as const
 
 export function Rules() {
   const [statusFilter, setStatusFilter] = useState('active,dormant')
@@ -34,40 +44,37 @@ export function Rules() {
         </span>
       </div>
 
-      <div className="flex gap-2">
-        {[
-          { value: 'active,dormant', label: t('rules.filter.active_dormant') },
-          { value: 'active', label: t('rules.filter.active') },
-          { value: 'dormant', label: t('rules.filter.dormant') },
-          { value: 'candidate', label: t('rules.filter.candidate') },
-          { value: 'archived,merged', label: t('rules.filter.archived') },
-          { value: '', label: t('rules.filter.all') },
-        ].map((f) => (
-          <button
-            key={f.value}
+      <div className="relative z-20 flex flex-wrap gap-2 overflow-visible">
+        {STATUS_FILTERS.map((f) => (
+          <FilterPill
+            key={f.value || '__all__'}
+            active={statusFilter === f.value}
+            label={t(f.labelKey)}
+            help={t(f.helpKey)}
             onClick={() => setStatusFilter(f.value)}
-            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] ${
-              statusFilter === f.value
-                ? 'bg-[var(--color-pill-active-bg)] text-[var(--color-pill-active-text)]'
-                : 'text-text-secondary hover:text-[var(--color-nav-hover-text)] hover:bg-[var(--color-pill-hover-bg)]'
-            }`}
-          >
-            {f.label}
-          </button>
+          />
         ))}
       </div>
 
       <GlassCard>
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm table-fixed">
+            <colgroup>
+              <col className="w-[4.5rem]" />
+              <col className="w-[5.5rem]" />
+              <col className="w-[6.5rem]" />
+              <col />
+              <col className="w-[4.5rem]" />
+              <col className="w-[6.5rem]" />
+            </colgroup>
             <thead>
               <tr className="text-xs uppercase tracking-wider text-text-tertiary border-b border-[var(--color-border-subtle)]">
                 <th className="text-left py-3 px-2">{t('rules.col.id')}</th>
                 <th className="text-left py-3 px-2">{t('rules.col.status')}</th>
                 <th className="text-left py-3 px-2">{t('rules.col.type')}</th>
                 <th className="text-left py-3 px-2">{t('rules.col.trigger')}</th>
-                <th className="text-right py-3 px-2">{t('rules.col.hits')}</th>
-                <th className="text-left py-3 px-2">{t('rules.col.scope')}</th>
+                <th className="text-right py-3 pl-2 pr-6">{t('rules.col.hits')}</th>
+                <th className="text-left py-3 pl-6 pr-2">{t('rules.col.scope')}</th>
               </tr>
             </thead>
             <tbody>
@@ -86,10 +93,10 @@ export function Rules() {
                   </td>
                   <td className="py-3 px-2"><StatusBadge status={rule.status} /></td>
                   <td className="py-3 px-2 text-text-secondary">{rule.source_type}</td>
-                  <td className="py-3 px-2 text-text-secondary max-w-[300px] truncate">{rule.trigger_text}</td>
-                  <td className="py-3 px-2 text-right font-mono">{rule.hit_count}</td>
-                  <td className="py-3 px-2 text-text-tertiary text-xs">
-                    {rule.project_scope === 'global' ? 'global' : rule.project_id?.slice(0, 8) ?? '-'}
+                  <td className="py-3 px-2 text-text-secondary truncate">{rule.trigger_text}</td>
+                  <td className="py-3 pl-2 pr-6 text-right font-mono tabular-nums">{rule.hit_count}</td>
+                  <td className="py-3 pl-6 pr-2 text-text-tertiary text-xs font-mono truncate">
+                    {rule.project_scope === 'global' ? 'global' : rule.project_id ?? '-'}
                   </td>
                 </tr>
               ))}
