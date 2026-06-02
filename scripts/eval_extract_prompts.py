@@ -31,7 +31,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from nokori.config import Config
-from nokori.constants import MAX_TRANSCRIPT_BYTES
+from nokori.constants import MAX_EXTRACT_CANDIDATES, MAX_TRANSCRIPT_BYTES
 from nokori.extract.compressor import compress
 from nokori.extract.extractor import Candidate, _parse_candidates
 from nokori.extract.reader import read
@@ -55,11 +55,18 @@ PROD_EXTRACT_MAX_TOKENS = 3_000
 PROD_EXTRACT_TIMEOUT_SEC = 60
 # Judge reviews all models + rubric scores; keep separate from extract hot-path timeout.
 JUDGE_TIMEOUT_SEC = 300
-# Matches EXTRACT_SYSTEM "at most 3 candidates"
-MAX_EXPECTED_RULES = 3
+MAX_EXPECTED_RULES = MAX_EXTRACT_CANDIDATES
 
-# Judge rubric: five dimensions 0-100 (percent), total = rounded mean
+# Judge rubric: five dimensions 0-100 (percent); total = weighted mean (must match JUDGE_EXTRACT_SYSTEM)
 SCORE_DIMS = ("format", "count", "trigger", "search_terms", "action")
+SCORE_WEIGHTS: dict[str, float] = {
+    "format": 1.5,
+    "count": 2.0,
+    "trigger": 1.0,
+    "search_terms": 1.0,
+    "action": 1.5,
+}
+SCORE_WEIGHT_SUM = sum(SCORE_WEIGHTS[d] for d in SCORE_DIMS)
 SCORE_MAX_PER_DIM = 100
 SCORE_MAX_TOTAL = 100
 _COMPRESS_TRUNC_MARKER = "[transcript truncated: middle omitted]"
@@ -189,7 +196,8 @@ def _clamp_dim_score(value: object) -> int:
 def _normalize_scores(raw: dict | None) -> dict[str, int]:
     scores = raw if isinstance(raw, dict) else {}
     out = {dim: _clamp_dim_score(scores.get(dim, 0)) for dim in SCORE_DIMS}
-    out["total"] = round(sum(out[dim] for dim in SCORE_DIMS) / len(SCORE_DIMS))
+    weighted = sum(out[dim] * SCORE_WEIGHTS[dim] for dim in SCORE_DIMS)
+    out["total"] = round(weighted / SCORE_WEIGHT_SUM)
     return out
 
 
@@ -815,7 +823,7 @@ def _render_report(payload: dict) -> str:
                 )
             lines.append("")
             lines.append(
-                "*Scores: each dimension 0-100 (percent); total = mean of five. "
+                "*Scores: each dimension 0-100 (percent); total = weighted mean (fmt×1.5, cnt×2, …). "
                 "fmt=format, cnt=count, trig=trigger, srch=search_terms, act=action.*"
             )
             lines.append("")
@@ -914,7 +922,7 @@ def _render_report(payload: dict) -> str:
         lines.append("")
         lines.append(
             "Dimensions averaged over samples where the judge returned scores. "
-            f"Each dimension 0-{SCORE_MAX_PER_DIM}%; total = mean of five (0-{SCORE_MAX_TOTAL}%)."
+            f"Each dimension 0-{SCORE_MAX_PER_DIM}%; total = weighted mean (0-{SCORE_MAX_TOTAL}%)."
         )
         lines.append("")
         lines.append(

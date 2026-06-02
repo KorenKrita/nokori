@@ -2,10 +2,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from ..constants import MAX_EXTRACT_CANDIDATES
 from ..llm.adapter import LLMAdapter
 from ..llm.json_payload import parse_json_payload
 from ..llm.prompts import EXTRACT_SYSTEM, wrap_untrusted
 from ..utils.logging import get_logger
+
+from .term_normalize import normalize_search_terms, normalize_trigger_variants
 
 log = get_logger("nokori.extract.extractor")
 
@@ -76,6 +79,13 @@ def _parse_candidates(raw: str) -> tuple[list[Candidate], bool]:
         out.append(cand)
     if had_items and not out:
         return [], False
+    if len(out) > MAX_EXTRACT_CANDIDATES:
+        log.warning(
+            "extract truncated %d candidates to %d",
+            len(out),
+            MAX_EXTRACT_CANDIDATES,
+        )
+        out = out[:MAX_EXTRACT_CANDIDATES]
     return out, True
 
 
@@ -97,7 +107,9 @@ def _coerce(item: dict) -> Candidate:
     variants = item.get("trigger_variants") or []
     if not isinstance(variants, list):
         variants = []
-    variants = [str(v).strip() for v in variants if str(v).strip()]
+    variants = normalize_trigger_variants(
+        [str(v).strip() for v in variants if str(v).strip()]
+    )
     terms_raw = item.get("search_terms") or {}
     if not isinstance(terms_raw, dict):
         terms_raw = {}
@@ -108,6 +120,7 @@ def _coerce(item: dict) -> Candidate:
         cleaned = [str(x).strip() for x in items_ if str(x).strip()]
         if cleaned:
             terms[str(lang)] = cleaned
+    terms = normalize_search_terms(terms)
     return Candidate(
         trigger=trigger,
         trigger_variants=variants,
