@@ -40,7 +40,7 @@ const translations: Record<Locale, Record<string, string>> = {
     // Rules
     'rules.title': '规则管理',
     'rules.total': '共 {n} 条',
-    'rules.filter.active_dormant': '活跃',
+    'rules.filter.active_dormant': '在用',
     'rules.filter.active': '活跃',
     'rules.filter.dormant': '休眠',
     'rules.filter.candidate': '候选',
@@ -204,7 +204,7 @@ const translations: Record<Locale, Record<string, string>> = {
     // Rules
     'rules.title': 'Rules',
     'rules.total': '{n} total',
-    'rules.filter.active_dormant': 'Active',
+    'rules.filter.active_dormant': 'In use',
     'rules.filter.active': 'Active',
     'rules.filter.dormant': 'Dormant',
     'rules.filter.candidate': 'Candidate',
@@ -368,7 +368,7 @@ const translations: Record<Locale, Record<string, string>> = {
     // Rules
     'rules.title': 'ルール管理',
     'rules.total': '全 {n} 件',
-    'rules.filter.active_dormant': 'アクティブ',
+    'rules.filter.active_dormant': '使用中',
     'rules.filter.active': 'アクティブ',
     'rules.filter.dormant': '休止中',
     'rules.filter.candidate': '候補',
