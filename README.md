@@ -57,7 +57,7 @@ If you hit English abbreviations on a first read, skim this table first; the key
 | **BM25** | Keyword-overlap scoring; zero GPU, on by default |
 | **embedding** | Semantic similarity scoring; optional once you have enough rules |
 | **RRF** | Algorithm that merges the BM25 ranking and the vector ranking into one list |
-| **fail-open** | When Nokori itself errors, it **does not block** the agent — it would rather skip the reminder for that turn |
+| **fail-open** | When Nokori itself errors, it **does not block** the agent — it skips the reminder for that turn |
 | **extract** | Use an LLM to **extract** candidate rules from a transcript (cold path, not urgent) |
 | **shadow pool** | Rules from other projects: used only to tally "should this go global"; **not injected into your current chat** |
 | **promotion** | After a project rule is validated by several other projects, it is promoted to **global** (visible everywhere) |
@@ -70,7 +70,7 @@ If you hit English abbreviations on a first read, skim this table first; the key
 
 ## How it works
 
-Nokori registers **4 hooks** in Claude Code (and Cursor). During normal chat they only query the local DB, score, and read/write small files — **no LLM calls inside hooks**, because otherwise every message you send would sit there waiting on a model, and nobody can stand that.
+Nokori registers **4 hooks** in Claude Code (and Cursor). During normal chat they only query the local DB, score, and read/write small files — **no LLM calls inside hooks** — otherwise every message would block on model latency.
 
 | Hook | What it does | Latency budget |
 |------|--------------|----------------|
@@ -223,7 +223,7 @@ Extra notes:
 
 **How rules reach the context**: in [Cursor's official hook docs](https://cursor.com/docs/agent/hooks), `beforeSubmitPrompt` allows only `continue` and `user_message`, not Claude's `additionalContext`. Nokori still retrieves on every send; blocking uses Cursor's `preToolUse` → `permission: deny`. The session-start hot cache goes through `sessionStart` → `additional_context`. Per-message rule text is best-effort on `beforeSubmitPrompt`; when that hook doesn't fire, see deferred inject below.
 
-**Deferred inject (when `beforeSubmitPrompt` didn't fire)**: for a turn where Cursor never fired `beforeSubmitPrompt`, the **first** matching `preToolUse` (e.g. `Shell`, `Write`) may **deny once** and carry the full rule text in `agent_message`. **Run the same tool again after the deny** — that is by design, not a failure. Later tools in the same turn won't be denied again (atomic dedup per prompt).
+**Deferred inject (when `beforeSubmitPrompt` didn't fire)**: for a turn where Cursor never fired `beforeSubmitPrompt`, the **first** matching `preToolUse` (e.g. `Shell`, `Write`) may **deny once** and carry the full rule text in `agent_message`. **Run the same tool again after the deny** — expected on Cursor when `beforeSubmitPrompt` did not run. Later tools in the same turn won't be denied again (atomic dedup per prompt).
 
 See `nokori install --help`.
 
@@ -418,13 +418,13 @@ For example, a `solution` rule can appear in HOT prompts but **will not** Gate-b
 | `[gate] enabled` / `NOKORI_GATE_ENABLED` | Master switch; off = inject only, no block |
 | `[gate] ttl_seconds` / `NOKORI_GATE_TTL_SECONDS` | Marker TTL (default 600s); expired markers don't block; **set to `0` for never expire** |
 
-**Prompt-hash mismatch (fail-open)**: `UserPromptSubmit` records the current prompt's hash when writing a marker; `PreToolUse` resolves the current hash from the payload or this session's most recent `injections.prompt_hash` (**not** the "newest marker file" on disk masquerading as the current turn). If it can't be resolved, or doesn't match the marker (the user already sent the next message), **delete the marker and allow the tool**, no block.
+**Prompt-hash mismatch (fail-open)**: `UserPromptSubmit` records the current prompt's hash when writing a marker; `PreToolUse` resolves the current hash from the payload or this session's most recent `injections.prompt_hash` (**not** the newest marker file on disk used as a stand-in for the current turn). If it can't be resolved, or doesn't match the marker (the user already sent the next message), **delete the marker and allow the tool**, no block.
 
 ---
 
 ## Automatic extraction
 
-This is the cold path that only runs after a session closes — no rush. With an LLM configured, Nokori reads that session's **transcript** (the `.jsonl` session log), summarizes the corrections you made into candidate rules, then merges them once against the rules already in the DB. None of this sits on the interactive hot path, so taking its time bothers no one.
+This runs after a session closes, off the interactive path. With an LLM configured, Nokori reads that session's **transcript** (the `.jsonl` session log), summarizes the corrections you made into candidate rules, then merges them once against the rules already in the DB. It does not block chat while it runs.
 
 ```bash
 # Configure the LLM (any OpenAI-compatible endpoint)
@@ -466,12 +466,12 @@ The LLM returns one relation letter `A`–`E` per candidate, mapping to SAME / B
 | **UNRELATED (E)** | Insert a new `candidate`, independent of its neighbors |
 | No strong relation | Insert a new `candidate` |
 
-The two failure paths are both designed around "rather retry than write dirty":
+On failure, extraction prefers retrying over writing partial or inconsistent state:
 
 - **Extract LLM failure** (returns non-JSON, etc.): not one candidate is inserted, the job **stays pending**
 - **Merge LLM failure** (neighbors exist but the relation JSON is invalid or times out): the current candidate is **skipped, not inserted** (the log says `skipping insert`), `merge_ok=false`, `nokori extract` does **not** mark the transcript extracted, and the job **stays pending** (the checkpoint keeps the already-processed candidates so the next run can pick up where it left off)
 
-**Neighbor backfill (intentionally kept in v0.1)**: when the BM25 pre-filter yields fewer than 5 neighbors, recent rules by `updated_at` are added to top up to the cap and sent to the LLM together. The cost is extra tokens and possibly a pile of UNRELATED hits; the payoff is fewer missed "zero-word-overlap" merges. There is no toggle. This is a deliberate tradeoff: rather make a few more LLM calls than let a SAME/B/D merge that should have happened slip by.
+**Neighbor backfill**: when the BM25 pre-filter returns fewer than 5 neighbors, Nokori tops up the list with the most recently updated rules (by `updated_at`) up to the cap before sending them to the LLM for relation checks. This uses more tokens and may add UNRELATED comparisons, but helps catch SAME/B/D merges when trigger text has little or no word overlap with existing rules.
 
 ---
 
@@ -501,7 +501,7 @@ candidate → active → dormant → may reactivate or archived
 Two paths:
 
 - **Manual `nokori add`**, or an **extract merge that hit SAME**: a `high` + `correction` candidate goes straight to `active`, carrying an initial `user_correction` evidence
-- **Pure AI evidence accrued**: `evidence_score >= 2` with evidence spanning `>= 2` active days (including cross-project `shadow_hot`) is required to promote to active
+- **Evidence-based activation**: `evidence_score >= 2` with evidence spanning `>= 2` active days (including cross-project `shadow_hot`) is required to promote to active
 
 ### last_hit and hit_count
 
@@ -519,7 +519,7 @@ Nokori finds the project root with `git rev-parse --show-toplevel` and builds `<
 
 ### Global Promotion (cross-project)
 
-On every `UserPromptSubmit`, Nokori runs one retrieval over the **formal pool ∪ shadow pool** (BM25, plus embedding RRF when there are enough rules), then splits by pool to handle each: only the formal pool's HOT/WARM inject; a shadow pool hit at **HOT or WARM** only records one `record_shadow_hit`, used for promotion and never entering the current chat. A rule hit by **≥3 distinct project_id** is promoted to `global` (**no second confirmation**, a v0.1 product tradeoff). `preference` rules don't participate in promotion.
+On every `UserPromptSubmit`, Nokori runs one retrieval over the **formal pool ∪ shadow pool** (BM25, plus embedding RRF when there are enough rules), then splits by pool to handle each: only the formal pool's HOT/WARM inject; a shadow pool hit at **HOT or WARM** only records one `record_shadow_hit`, used for promotion and never entering the current chat. A rule hit by **≥3 distinct project_id** values is promoted to `global` without a separate confirmation step. `preference` rules don't participate in promotion.
 
 ### Shadow Pool
 
@@ -530,30 +530,30 @@ While you code in project A, rules already validated in project B still **take p
 - **At most 1 hit per (other project × calendar day)** — the same project hitting repeatedly in one day doesn't stack
 - **≥3 distinct projects** have hit → the rule is promoted to `global`, no confirmation from you needed
 
-A brand-new project with zero rules is fine too: as long as promotion is on, the shadow pool still runs, and cross-project consensus builds from scratch. Don't want it? Turn it off with `NOKORI_PROMOTION_ENABLED=0`.
+A brand-new project with no rules still works: with promotion enabled, the shadow pool still runs and cross-project consensus can build from scratch. Set `NOKORI_PROMOTION_ENABLED=0` to disable.
 
 Progress shows in `nokori status`: `shadow_hits` and `N/3 projects=...`.
 
 ### Async Extract Mode (auto-mine rules after session close)
 
-Extraction is yours to run by default. If that's a hassle, turn on async and let it mine in the background the moment a session closes:
+Extraction runs manually by default. To run it automatically after each session closes, enable async mode:
 
 ```bash
 export NOKORI_EXTRACT_MODE=async
 ```
 
-The difference between the two modes is one sentence:
+Summary:
 
 - **`manual` (default)**: closing a session only drops a to-do file; extraction is yours to run with `nokori extract`
 - **`async`**: closing a session tries to run extract in the background directly; if a process is already running, it just queues, no duplicate spawn
 
 Logs land in `~/.nokori/logs/async-extract.log`. With no LLM configured there's a fallback too: it tries the local `claude -p`.
 
-The rest are edge-case handling you won't usually run into:
+Edge cases:
 
 - If `{data_dir}/extract.lock` is held (another instance running, or a stale lock left behind), SessionEnd does **not** auto-spawn a child; the pending job stays, run `nokori extract` by hand later
 - If the transcript is still being appended after SessionEnd (file `mtime` changed), `nokori extract` **refreshes the job's mtime and keeps it pending**, never silently dropping the job
-- A corrupt `extract-*.json` that won't parse gets moved to `{data_dir}/jobs/bad/` during `list_jobs` / `nokori extract` / `SessionStart` maintenance, so zombie jobs don't squat in the directory
+- A corrupt `extract-*.json` that won't parse gets moved to `{data_dir}/jobs/bad/` during `list_jobs` / `nokori extract` / `SessionStart` maintenance, so corrupt jobs don't linger in the queue
 - With `NOKORI_EXTRACT_DEFER_ACTIVE=1`, in async mode, if there are still **other unfinished sessions** (`active_sessions/` with empty `ended_at`, see `count_open_sessions`), the current SessionEnd **only writes the job, doesn't fork** extract; it triggers after those sessions wrap
 - `NOKORI_SESSION_IDLE_SECONDS` (`[session] idle_seconds`) does **not** take part in the defer decision; it only governs how "active" displays in `nokori status` (open + a recent `touch` heartbeat)
 
@@ -566,21 +566,21 @@ SessionStart looks for the "previous transcript" in two steps:
 1. **Prefer** the previous/current pointers SessionEnd wrote into `{data_dir}/transcript_index/`. That points at the **last session that ended normally in this directory**, not necessarily the older `*.jsonl` with the largest mtime.
 2. **Fallback**: in the same directory, the newest `*.jsonl` whose mtime is strictly before the current file (heuristic, scans at most 50 files).
 
-If the previous session hasn't been extracted yet, it grabs the last 3 user messages from the **tail** of the file to inject (500 chars, separate budget, doesn't eat into the 1500). One thing worth saying: **dormant pseudo-HOT, shadow counts, the HOT `hit_count`** are all written to the DB **in UserPromptSubmit this turn**, never deferred to the next SessionStart.
+If the previous session hasn't been extracted yet, it injects the last 3 user messages from the **tail** of the file (500 chars, in a budget separate from the 1500-char rule budget). **dormant pseudo-HOT, shadow counts, and HOT `hit_count`** are written to the DB during **UserPromptSubmit** for that turn, not deferred to the next SessionStart.
 
-**Shadow feeding candidate activation**: a cross-project shadow HOT calls `add_evidence(..., shadow_hot, 1)`. If that other project's rule is still a `candidate`, shadow hits accumulating across multiple days can possibly reach the pure-AI activation line (score ≥ 2 and 2 active days). This runs against the "shadow pool only serves promotion" intuition, but v0.1 opens it up on purpose: cross-project retrieval evidence is allowed to take part in activation.
+**Shadow hits and candidate activation**: a cross-project shadow HOT records `add_evidence(..., shadow_hot, 1)`. If that rule is still a `candidate` in its home project, shadow hits accumulated over multiple days can count toward automatic activation (`evidence_score >= 2` across `>= 2` active days). Shadow-pool rules are never injected into the current chat, but their hits still contribute activation evidence.
 
 ### Maintenance
 
-Maintenance tasks hang off `SessionStart` and only run once their own interval comes due:
+Maintenance runs from `SessionStart` on its configured intervals:
 
 - **Dormant scan** (every 7 days): an active rule with no hit for 30 days drops to dormant
-- **Candidate cleanup** (at most once every 30 days): delete ordinary candidates whose `created_at` reached **20 calendar days**, and `anti_pattern` candidates that reached **40 days** (counted by calendar day, not the "alive 30 days" scheme)
+- **Candidate cleanup** (at most once every 30 days): delete ordinary candidates whose `created_at` reached **20 calendar days**, and `anti_pattern` candidates that reached **40 days** (by calendar date, not a rolling 30-day window)
 - **Unmerge check** (at most every 90 days): for a `status=merged` rule, if the rule its `superseded_by` points at was deleted or has gone dormant/archived, revert it to `dormant`; right after candidate cleanup deletes an anchor rule, an orphan unmerge also runs immediately
 - **Session file cleanup**: delete registry files in `active_sessions/` that ended more than 60 days ago
 - **Hook coalesce cleanup**: delete `hook_coalesce/` claim files older than 24 hours (prevents buildup when both ends are registered and messages run heavy)
-- **Prompt ack cleanup**: delete `prompt_submit_ack/` and `cursor_deferred/` files older than 24 hours; `SessionEnd` also clears this session's ack/deferred directory along the way
-- **Injection cleanup** (at most every 7 days): delete `injections` rows **older than 30 days** (dismiss only checks 24h, so there's plenty of buffer)
+- **Prompt ack cleanup**: delete `prompt_submit_ack/` and `cursor_deferred/` files older than 24 hours; `SessionEnd` also clears this session's ack/deferred directory
+- **Injection cleanup** (at most every 7 days): delete `injections` rows **older than 30 days** (dismiss checks only the last 24 hours)
 
 To run a pass right now:
 
@@ -592,7 +592,7 @@ nokori maintain
 
 ## Retrieval engine
 
-How does it pick the handful of rules relevant to this one sentence of yours out of the whole pile? Three steps: lay a keyword foundation first (BM25), stack a semantic-vector layer on top once enough rules have accrued (embedding), and fuse the two rankings into one list with RRF. Finally HOT / WARM tiers decide how much text to stuff into the context.
+How does Nokori pick the handful of rules relevant to your prompt from the full library? Three steps: keyword scoring with BM25, semantic vectors once enough rules exist (embedding), then fuse the two rankings with RRF. HOT / WARM tiers decide how much text to include in the context.
 
 ### BM25 (default, zero dependencies)
 
@@ -601,13 +601,13 @@ Works out of the box, no model or GPU required.
 - Indexes these four fields: `trigger_text`, `trigger_variants`, `search_terms`, `action`
 - Latin text: lowercased, tokenized, only words of length ≥ 2 are kept
 - CJK: mostly bigrams (adjacent pairs), with single stray CJK characters kept as unigrams to lift recall
-- Mixed Chinese/English switches automatically, nothing for you to fuss over
+- Mixed Chinese/English is handled automatically
 
 ### Embedding (optional)
 
 Once rules reach **≥ 20** and you've either configured a remote API or installed `pip install nokori[local-embed]`, semantic retrieval stacks on automatically. Want to force a try? `NOKORI_EMBED_ENABLED=1`, though a small pool may still run BM25-only on the first pass (reason below).
 
-There are two thresholds here, both called "20," and they're the easiest thing to mix up — they fundamentally count different sets of rules:
+There are two thresholds here, both called "20," and they are easy to confuse — they count different sets of rules:
 
 | Scenario | What it counts | What it decides |
 |----------|----------------|-----------------|
@@ -657,7 +657,7 @@ How hooks treat the embed server (`NOKORI_EMBED_SERVER_AUTO_START=1`, on by defa
 
 - **SessionStart**: if local weights are already in the cache directory, non-blocking `spawn` an embed server; if weights are still missing, just log a line — never block, never `import sentence_transformers` inside the hook
 - **UserPromptSubmit**: if the server isn't `ping`-able, background-spawn it and **run BM25-only this turn**; RRF usually shows up from the next turn on
-- The one rule: hooks never wait on a model download or a long load, to avoid hitting Claude's hook timeout
+- Hooks never wait on model download or long load, to stay within Claude's hook timeout budget
 
 `nokori embed start` can bring the server up ahead of time. `NOKORI_EMBED_ENABLED=1` forces an embed attempt (it tries even under 20 rules), but a small pool's very first message may still be BM25-only.
 
@@ -889,7 +889,7 @@ enabled = true
 
 Every field maps to an environment variable (one-to-one in the [config.toml.example](config.toml.example) quick reference).
 
-Two things people trip over most: `[gate] matcher` only governs whether the Nokori hook blocks **internally**, while whether PreToolUse **invokes the hook at all** is decided by `~/.claude/settings.json` (see [Gate two-layer matching](#gate-and-pretooluse-two-layers-of-tool-matching)); full `dismiss_phrase` details are in [Dismiss](#4-rule-out-of-date-dismiss).
+Common pitfalls: `[gate] matcher` only governs whether the Nokori hook blocks **internally**, while whether PreToolUse **invokes the hook at all** is decided by `~/.claude/settings.json` (see [Gate two-layer matching](#gate-and-pretooluse-two-layers-of-tool-matching)); full `dismiss_phrase` details are in [Dismiss](#4-rule-out-of-date-dismiss).
 
 ---
 
@@ -915,19 +915,19 @@ All data lives in this one local directory, `~/.nokori/`:
 └── extract.lock          # Extract single-instance lock
 ```
 
-On privacy, a few things up front: there's no network sync of any kind, the data is purely local. What rules store is behavioral descriptions, not your source code. Only the cold-path extract calls an LLM, and what goes out is compressed transcript fragments; point the endpoint at a local Ollama and it's fully offline.
+On privacy: there is no network sync; data stays local only. What rules store is behavioral descriptions, not your source code. Only the cold-path extract calls an LLM, and what goes out is compressed transcript fragments; point the endpoint at a local Ollama and it's fully offline.
 
 ---
 
 ## Relationship with existing systems
 
-Nokori doesn't fight the memory mechanisms you already use; each minds its own patch:
+Nokori works alongside the memory mechanisms you already use; each serves a different role:
 
 | System | Relationship |
 |--------|--------------|
 | CLAUDE.md | Complementary. Nokori doesn't touch your CLAUDE.md; it handles the dynamic "when X, do Y" |
 | Claude Code auto-memory | No conflict. Memory leans factual, Nokori leans behavioral rules |
-| Other memory plugins | Hooks can coexist, but don't stack too many "stuff the context" plugins — the context has a budget |
+| Other memory plugins | Hooks can coexist, but avoid stacking many context-injection plugins — context space is limited |
 
 ---
 
