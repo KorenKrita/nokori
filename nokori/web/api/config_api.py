@@ -1,8 +1,14 @@
 from __future__ import annotations
 
-from fastapi import APIRouter
+from typing import Any, Literal
 
-from nokori.web.deps import get_config
+from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel, Field
+
+from nokori.config import Config
+from nokori.config_editor import get_editor_state, save_editor
+from nokori.errors import ConfigError
+from nokori.web.deps import get_config, set_config
 
 router = APIRouter()
 
@@ -31,3 +37,34 @@ def show_config():
             "log_level": cfg.log_level,
         }
     }
+
+
+@router.get("/config/editor")
+def config_editor_get(locale: str | None = Query(None)):
+    cfg = get_config()
+    return {"data": get_editor_state(cfg, locale)}
+
+
+class ConfigEditorSave(BaseModel):
+    values: dict[str, Any] = Field(default_factory=dict)
+    embed_mode: Literal["local", "remote"] | None = None
+    set_keys: list[str] = Field(default_factory=list)
+
+
+@router.put("/config/editor")
+def config_editor_put(body: ConfigEditorSave):
+    cfg = get_config()
+    try:
+        result = save_editor(
+            cfg,
+            values=body.values,
+            embed_mode=body.embed_mode,
+            initial_set_keys=set(body.set_keys),
+        )
+    except ConfigError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    try:
+        set_config(Config.from_env())
+    except ConfigError as e:
+        raise HTTPException(status_code=500, detail=f"Config reload failed: {e}") from e
+    return {"data": result}
