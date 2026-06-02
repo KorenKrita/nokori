@@ -925,8 +925,7 @@ python3.11+ -m venv .venv
 ```
 
 プロジェクトの制約：
-- ランタイム依存ゼロ（`dependencies = []`）
-- 純 Python stdlib + urllib で API を呼ぶ
+- コアエンジン：純 stdlib + urllib（Web UI はデフォルト依存として fastapi/uvicorn/websockets を同梱）
 - 対話のホットパス（UserPromptSubmit / PreToolUse）では LLM 呼び出し禁止
 - すべての hooks はトップレベル try/except、失敗時は pass-through
 

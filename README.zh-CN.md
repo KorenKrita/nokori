@@ -934,8 +934,7 @@ python3.11+ -m venv .venv
 ```
 
 项目约束：
-- 零运行时依赖（`dependencies = []`）
-- 纯 Python stdlib + urllib 调用 API
+- 核心引擎：纯 stdlib + urllib（Web UI 以默认依赖引入 fastapi/uvicorn/websockets）
 - 交互热路径（UserPromptSubmit / PreToolUse）禁止 LLM 调用
 - 所有 hooks 顶层 try/except，失败返回 pass-through
 

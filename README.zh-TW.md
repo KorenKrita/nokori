@@ -934,8 +934,7 @@ python3.11+ -m venv .venv
 ```
 
 專案約束：
-- 零執行時依賴（`dependencies = []`）
-- 純 Python stdlib + urllib 調用 API
+- 核心引擎：純 stdlib + urllib（Web UI 以預設依賴引入 fastapi/uvicorn/websockets）
 - 交互熱路徑（UserPromptSubmit / PreToolUse）禁止 LLM 調用
 - 所有 hooks 頂層 try/except，失敗返回 pass-through
 

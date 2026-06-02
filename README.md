@@ -942,8 +942,7 @@ python3.11+ -m venv .venv
 ```
 
 Project constraints:
-- Zero runtime dependencies (`dependencies = []`)
-- Pure Python stdlib + urllib for API calls
+- Core engine: pure stdlib + urllib (web UI adds fastapi/uvicorn/websockets as default deps)
 - No LLM calls on the interactive hot path (UserPromptSubmit / PreToolUse)
 - All hooks wrapped in a top-level try/except; failures return pass-through
 
