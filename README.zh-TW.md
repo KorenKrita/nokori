@@ -90,7 +90,7 @@ Nokori 在 Claude Code（與 Cursor）裡掛了 **4 個 hook**。你正常聊天
 
 ### 開始之前
 
-- **Python ≥ 3.11**（執行時零第三方依賴，純 stdlib + urllib）
+- **Python ≥ 3.11**（核心引擎純 stdlib；Web UI 依賴 fastapi + uvicorn + websockets，隨套件安裝）
 - 已裝好 **Claude Code** 或 **Cursor** 任意一個
 - 想用本地語義檢索，預留約 **220MB** 磁碟裝嵌入模型權重（可選，見下）
 

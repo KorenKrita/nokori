@@ -90,7 +90,7 @@ In practice it comes down to two things:
 
 ### Before you begin
 
-- **Python ≥ 3.11** (zero third-party runtime deps; pure stdlib + urllib)
+- **Python ≥ 3.11** (core engine is pure stdlib; web UI pulls in fastapi + uvicorn + websockets)
 - **Claude Code** or **Cursor** already installed (either one)
 - For local semantic retrieval, leave about **220MB** of disk for the embedding model weights (optional, see below)
 
