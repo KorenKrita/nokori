@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from fastapi import FastAPI, Request
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response
 
 from nokori.config import Config
 
@@ -52,5 +52,21 @@ def create_app(cfg: Config) -> FastAPI:
             if file_path.is_file() and not path.startswith("api"):
                 return FileResponse(file_path)
             return FileResponse(index_html)
+    else:
+
+        @app.get("/")
+        async def web_ui_missing() -> Response:
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "error": "web_ui_not_packaged",
+                    "detail": (
+                        "Web UI static files are missing from this install "
+                        "(PyPI wheels before 0.2.4 did not bundle nokori/web/static). "
+                        "Upgrade to nokori>=0.2.4, or install from source after "
+                        "`cd web && npm ci && npm run build`."
+                    ),
+                },
+            )
 
     return app
