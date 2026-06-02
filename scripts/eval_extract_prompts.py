@@ -8,6 +8,7 @@ No extra truncation unless you pass --max-chars (eval-only).
 
   python3 -u scripts/eval_extract_prompts.py --quick
   python3 -u scripts/eval_extract_prompts.py --samples 5
+  python3 -u scripts/eval_extract_prompts.py --samples 5 --seed 99   # different random draw
 
 Outputs on ~/Desktop/:
   nokori-extract-eval-{timestamp}.json   — full raw outputs + judge JSON

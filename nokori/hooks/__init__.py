@@ -5,7 +5,7 @@ import sys
 
 from ..config import Config
 from ..utils.host import detect_host_from_payload
-from ..utils.hook_diag import log_hook_enter, log_hook_exit
+from ..utils.hook_diag import log_hook_enter, log_hook_exit, set_diag_from_config
 from ..utils.logging import get_logger
 from .coalesce import claim_key_for_event, duplicate_passthrough, try_claim
 
@@ -14,6 +14,7 @@ _log = get_logger("nokori.hooks")
 
 def dispatch(event: str, cfg: Config) -> int:
     """Hook event dispatcher. Reads stdin JSON, writes stdout JSON."""
+    set_diag_from_config(cfg.log_level)
     raw = sys.stdin.read()
     try:
         payload = json.loads(raw) if raw.strip() else {}

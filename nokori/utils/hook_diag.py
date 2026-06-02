@@ -10,13 +10,25 @@ from .host import Host, effective_session_id
 _MAX_FIELD = 400
 _MAX_PROMPT = 120
 _TRUE = frozenset({"1", "true", "yes", "on"})
+# Safe without locking: hooks run as single-threaded subprocesses
+_config_log_level: str | None = None
+
+
+def set_diag_from_config(log_level: str) -> None:
+    """Called at hook dispatch so [diag] can follow config.toml log_level."""
+    global _config_log_level
+    _config_log_level = (log_level or "").strip().lower() or None
 
 
 def hook_diag_enabled() -> bool:
     """Emit [diag] lines only when explicitly debugging hooks."""
     if os.environ.get("NOKORI_HOOK_DEBUG", "").strip().lower() in _TRUE:
         return True
-    level = os.environ.get("NOKORI_LOG_LEVEL", "warn").strip().lower()
+    level = os.environ.get("NOKORI_LOG_LEVEL", "").strip().lower()
+    if not level and _config_log_level:
+        level = _config_log_level
+    if not level:
+        level = "warn"
     return level == "debug"
 
 
