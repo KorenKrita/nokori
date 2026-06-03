@@ -57,6 +57,8 @@ def _index_key(rules_list: list[Rule]) -> tuple:
             terms,
             r.trigger_text_zh,
             r.action_zh,
+            r.behavior_zh,
+            r.rationale_zh,
         )
 
     return tuple(_rule_key(r) for r in sorted(rules_list, key=lambda r: r.id))

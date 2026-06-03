@@ -76,17 +76,17 @@ export function RuleDetail() {
           <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary mt-6 mb-3">{t('rules.action')}</h3>
           <p className="text-sm text-[var(--color-text-primary)]">{lz(rule.action, rule.action_zh)}</p>
 
-          {rule.behavior && (
+          {(rule.behavior || rule.behavior_zh) && (
             <>
               <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary mt-6 mb-3">{t('rules.behavior')}</h3>
-              <p className="text-sm text-text-secondary">{lz(rule.behavior!, rule.behavior_zh)}</p>
+              <p className="text-sm text-text-secondary">{lz(rule.behavior, rule.behavior_zh)}</p>
             </>
           )}
 
-          {rule.rationale && (
+          {(rule.rationale || rule.rationale_zh) && (
             <>
               <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary mt-6 mb-3">{t('rules.rationale')}</h3>
-              <p className="text-sm text-text-secondary">{lz(rule.rationale!, rule.rationale_zh)}</p>
+              <p className="text-sm text-text-secondary">{lz(rule.rationale, rule.rationale_zh)}</p>
             </>
           )}
         </GlassCard>

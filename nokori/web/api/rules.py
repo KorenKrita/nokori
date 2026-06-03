@@ -114,6 +114,14 @@ def edit_rule(short_id: str, body: RuleEdit):
             updates.append(("trigger_variants", dumps_json(body.trigger_variants)))
         if body.search_terms is not None:
             updates.append(("search_terms", dumps_json(body.search_terms)))
+        if body.trigger_text_zh is not None:
+            updates.append(("trigger_text_zh", body.trigger_text_zh))
+        if body.behavior_zh is not None:
+            updates.append(("behavior_zh", body.behavior_zh))
+        if body.action_zh is not None:
+            updates.append(("action_zh", body.action_zh))
+        if body.rationale_zh is not None:
+            updates.append(("rationale_zh", body.rationale_zh))
 
         if not updates:
             return {"data": _rule_to_dict(rule)}

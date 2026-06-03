@@ -71,7 +71,7 @@ Skip:
 Each item:
 {
   "trigger": "<English canonical scenario ONLY — never Chinese; NOT project/file/product names>",
-  "trigger_zh": "<Chinese translation of trigger — concise, same scope as English>",
+  "trigger_zh": "<Chinese translation of trigger — concise, same scope as English>",  # maps to trigger_text_zh in data model; kept short in prompt to save tokens
   "trigger_variants": ["<2-3 alternative phrasings, English; same actor rules as trigger — no User/Assistant prefixes>"],
   "search_terms": {"en": ["<Latin-script retrieval terms>"], "zh": ["<CJK retrieval terms from the user, if any>"]},
   "behavior": "<what the assistant did wrong or the old approach>",

@@ -6,7 +6,8 @@ from nokori.search import bm25, ranker
 
 def _rule(short, trigger, *, variants=(), terms_zh=(), action="do x", status="active",
           conf="high", source_type="correction",
-          trigger_text_zh=None, action_zh=None):
+          trigger_text_zh=None, action_zh=None,
+          behavior_zh=None, rationale_zh=None):
     now = datetime.now(timezone.utc).isoformat()
     return Rule(
         id=f"id-{short}",
@@ -34,6 +35,8 @@ def _rule(short, trigger, *, variants=(), terms_zh=(), action="do x", status="ac
         updated_at=now,
         trigger_text_zh=trigger_text_zh,
         action_zh=action_zh,
+        behavior_zh=behavior_zh,
+        rationale_zh=rationale_zh,
     )
 
 

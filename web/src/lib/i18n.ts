@@ -578,8 +578,8 @@ export function maintenanceJobLabel(jobKey: string): string {
   return label === i18nKey ? jobKey : label
 }
 
-export function lz(en: string, zh: string | null | undefined): string {
-  return getLocale() === 'zh' && zh ? zh : en
+export function lz(en: string | null | undefined, zh: string | null | undefined): string {
+  return (getLocale() === 'zh' && zh ? zh : en) ?? ''
 }
 
 export type { Locale }

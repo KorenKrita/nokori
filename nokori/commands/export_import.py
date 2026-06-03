@@ -63,6 +63,10 @@ def _validate_import_record(rec: dict) -> str | None:
         ("action", _MAX_ACTION),
         ("rationale", _MAX_RATIONALE),
         ("behavior", _MAX_BEHAVIOR),
+        ("trigger_text_zh", _MAX_TRIGGER_TEXT),
+        ("action_zh", _MAX_ACTION),
+        ("rationale_zh", _MAX_RATIONALE),
+        ("behavior_zh", _MAX_BEHAVIOR),
         ("short_id", _MAX_SHORT_ID),
     ):
         err = _str_len(rec.get(field), field, limit)

@@ -47,6 +47,10 @@ class RuleEdit(BaseModel):
     status: str | None = None
     trigger_variants: list[str] | None = None
     search_terms: dict[str, list[str]] | None = None
+    trigger_text_zh: str | None = None
+    behavior_zh: str | None = None
+    action_zh: str | None = None
+    rationale_zh: str | None = None
 
 
 class RetrieveRequest(BaseModel):
