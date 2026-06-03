@@ -23,7 +23,11 @@ def clear_index_cache() -> None:
 def _rule_doc_tokens(rule: Rule) -> list[str]:
     pieces: list[str] = []
     pieces.extend(tokenize(rule.trigger_text))
+    if rule.trigger_text_zh:
+        pieces.extend(tokenize(rule.trigger_text_zh))
     pieces.extend(tokenize(rule.action))
+    if rule.action_zh:
+        pieces.extend(tokenize(rule.action_zh))
     for v in rule.trigger_variants:
         pieces.extend(tokenize(v))
     for terms in rule.search_terms.values():
@@ -51,6 +55,8 @@ def _index_key(rules_list: list[Rule]) -> tuple:
             r.action,
             tuple(r.trigger_variants),
             terms,
+            r.trigger_text_zh,
+            r.action_zh,
         )
 
     return tuple(_rule_key(r) for r in sorted(rules_list, key=lambda r: r.id))

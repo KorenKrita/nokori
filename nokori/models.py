@@ -44,6 +44,10 @@ class Rule:
     archived_reason: str | None
     created_at: str
     updated_at: str
+    trigger_text_zh: str | None = None
+    behavior_zh: str | None = None
+    action_zh: str | None = None
+    rationale_zh: str | None = None
 
 
 @dataclass(frozen=True)

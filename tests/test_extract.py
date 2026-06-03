@@ -412,3 +412,53 @@ def test_extract_lock_exclusive(monkeypatch, tmp_path):
         assert first is True
         with acquire(cfg) as second:
             assert second is False
+
+
+def test_extractor_parses_zh_fields():
+    """_zh fields are extracted from LLM JSON when present."""
+    response = json.dumps([
+        {
+            "trigger": "Force push to a shared branch",
+            "trigger_zh": "强制推送到共享分支",
+            "trigger_variants": ["git push --force"],
+            "search_terms": {"en": ["force", "push"], "zh": ["强推"]},
+            "behavior": "git push --force",
+            "behavior_zh": "使用 git push --force",
+            "action": "use --force-with-lease",
+            "action_zh": "使用 --force-with-lease",
+            "rationale": "force push overwrites peers' work",
+            "rationale_zh": "强推会覆盖同事的工作",
+            "source_type": "correction",
+            "confidence": "high",
+        }
+    ])
+    cands, ok = extract("[User] dummy transcript\n", FakeLLM(response))
+    assert ok and len(cands) == 1
+    c = cands[0]
+    assert c.trigger_zh == "强制推送到共享分支"
+    assert c.behavior_zh == "使用 git push --force"
+    assert c.action_zh == "使用 --force-with-lease"
+    assert c.rationale_zh == "强推会覆盖同事的工作"
+
+
+def test_extractor_zh_fields_none_when_missing():
+    """_zh fields default to None when absent from LLM JSON."""
+    response = json.dumps([
+        {
+            "trigger": "Force push to a shared branch",
+            "trigger_variants": ["git push --force"],
+            "search_terms": {"en": ["force", "push"]},
+            "behavior": "git push --force",
+            "action": "use --force-with-lease",
+            "rationale": "force push overwrites peers' work",
+            "source_type": "correction",
+            "confidence": "high",
+        }
+    ])
+    cands, ok = extract("[User] dummy transcript\n", FakeLLM(response))
+    assert ok and len(cands) == 1
+    c = cands[0]
+    assert c.trigger_zh is None
+    assert c.behavior_zh is None
+    assert c.action_zh is None
+    assert c.rationale_zh is None

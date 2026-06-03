@@ -9,7 +9,7 @@ from pathlib import Path
 
 from .errors import DbError
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 _SCHEMA_DDL = """
 CREATE TABLE IF NOT EXISTS rules (
@@ -35,7 +35,11 @@ CREATE TABLE IF NOT EXISTS rules (
     superseded_by TEXT,
     archived_reason TEXT,
     created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+    updated_at TEXT NOT NULL,
+    trigger_text_zh TEXT,
+    behavior_zh TEXT,
+    action_zh TEXT,
+    rationale_zh TEXT
 );
 
 CREATE TABLE IF NOT EXISTS rule_embeddings (
@@ -176,6 +180,20 @@ def _migrate(conn: sqlite3.Connection) -> None:
         script = (
             "BEGIN;\n"
             "ALTER TABLE extract_state ADD COLUMN last_byte_offset INTEGER NOT NULL DEFAULT 0;\n"
+            "ALTER TABLE rules ADD COLUMN trigger_text_zh TEXT;\n"
+            "ALTER TABLE rules ADD COLUMN behavior_zh TEXT;\n"
+            "ALTER TABLE rules ADD COLUMN action_zh TEXT;\n"
+            "ALTER TABLE rules ADD COLUMN rationale_zh TEXT;\n"
+            f"PRAGMA user_version = {int(SCHEMA_VERSION)};\n"
+            "COMMIT;\n"
+        )
+    elif current == 3:
+        script = (
+            "BEGIN;\n"
+            "ALTER TABLE rules ADD COLUMN trigger_text_zh TEXT;\n"
+            "ALTER TABLE rules ADD COLUMN behavior_zh TEXT;\n"
+            "ALTER TABLE rules ADD COLUMN action_zh TEXT;\n"
+            "ALTER TABLE rules ADD COLUMN rationale_zh TEXT;\n"
             f"PRAGMA user_version = {int(SCHEMA_VERSION)};\n"
             "COMMIT;\n"
         )
@@ -238,6 +256,10 @@ def row_to_rule(row):
         archived_reason=row["archived_reason"],
         created_at=row["created_at"],
         updated_at=row["updated_at"],
+        trigger_text_zh=row["trigger_text_zh"],
+        behavior_zh=row["behavior_zh"],
+        action_zh=row["action_zh"],
+        rationale_zh=row["rationale_zh"],
     )
 
 
@@ -246,7 +268,8 @@ RULE_COLUMNS = (
     "rationale, source_type, confidence, status, evidence_score, evidence_log, "
     "hit_count, last_hit, shadow_hit_count, promotion_evidence, project_scope, "
     "project_id, superseded_by, archived_reason, "
-    "created_at, updated_at"
+    "created_at, updated_at, "
+    "trigger_text_zh, behavior_zh, action_zh, rationale_zh"
 )
 
 

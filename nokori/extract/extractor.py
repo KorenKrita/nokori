@@ -30,6 +30,10 @@ class Candidate:
     rationale: str | None
     source_type: str
     confidence: str
+    trigger_zh: str | None = None
+    behavior_zh: str | None = None
+    action_zh: str | None = None
+    rationale_zh: str | None = None
 
 
 def extract(transcript: str, llm: LLMAdapter) -> tuple[list[Candidate], bool]:
@@ -121,6 +125,10 @@ def _coerce(item: dict) -> Candidate:
         if cleaned:
             terms[str(lang)] = cleaned
     terms = normalize_search_terms(terms)
+    trigger_zh = (str(item["trigger_zh"]).strip() or None) if item.get("trigger_zh") else None
+    behavior_zh = (str(item["behavior_zh"]).strip() or None) if item.get("behavior_zh") else None
+    action_zh = (str(item["action_zh"]).strip() or None) if item.get("action_zh") else None
+    rationale_zh = (str(item["rationale_zh"]).strip() or None) if item.get("rationale_zh") else None
     return Candidate(
         trigger=trigger,
         trigger_variants=variants,
@@ -130,4 +138,8 @@ def _coerce(item: dict) -> Candidate:
         rationale=(str(item["rationale"]).strip() if item.get("rationale") else None),
         source_type=source_type,
         confidence=confidence,
+        trigger_zh=trigger_zh,
+        behavior_zh=behavior_zh,
+        action_zh=action_zh,
+        rationale_zh=rationale_zh,
     )

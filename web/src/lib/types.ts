@@ -22,6 +22,10 @@ export interface Rule {
   archived_reason: string | null
   created_at: string
   updated_at: string
+  trigger_text_zh: string | null
+  behavior_zh: string | null
+  action_zh: string | null
+  rationale_zh: string | null
 }
 
 export interface ScoredResult {

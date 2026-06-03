@@ -41,6 +41,10 @@ def _rule_to_dict(rule) -> dict:
         archived_reason=rule.archived_reason,
         created_at=rule.created_at,
         updated_at=rule.updated_at,
+        trigger_text_zh=rule.trigger_text_zh,
+        behavior_zh=rule.behavior_zh,
+        action_zh=rule.action_zh,
+        rationale_zh=rule.rationale_zh,
     ).model_dump()
 
 

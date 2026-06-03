@@ -71,14 +71,20 @@ Skip:
 Each item:
 {
   "trigger": "<English canonical scenario ONLY — never Chinese; NOT project/file/product names>",
+  "trigger_zh": "<Chinese translation of trigger — concise, same scope as English>",
   "trigger_variants": ["<2-3 alternative phrasings, English; same actor rules as trigger — no User/Assistant prefixes>"],
   "search_terms": {"en": ["<Latin-script retrieval terms>"], "zh": ["<CJK retrieval terms from the user, if any>"]},
   "behavior": "<what the assistant did wrong or the old approach>",
+  "behavior_zh": "<Chinese translation of behavior>",
   "action": "<imperative general pattern; 1-2 sentences — match correction scope; cover all issues if multiple in one message; do not broaden a specific rejection into a blanket rule; no specific paths/filenames from the transcript>",
+  "action_zh": "<Chinese translation of action — imperative, same scope>",
   "rationale": "<one sentence evidence from the transcript>",
+  "rationale_zh": "<Chinese translation of rationale>",
   "source_type": "correction" | "preference" | "solution" | "anti_pattern",
   "confidence": "high" | "medium"
 }
+
+_zh fields: Chinese translations of the corresponding English field. Keep concise (same scope as English). Always provide even if transcript is English-only.
 
 Field constraints:
 - trigger and every trigger_variant MUST NOT start with "User", "The user", "Assistant", "When the user", or "The assistant". Name a scenario, not an actor.
