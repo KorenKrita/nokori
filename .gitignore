@@ -24,3 +24,4 @@ AGENTS.md
 .ace-tool/
 web/node_modules
 .codegraph/
+.lean-ctx/

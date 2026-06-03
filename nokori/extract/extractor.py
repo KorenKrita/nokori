@@ -30,7 +30,7 @@ class Candidate:
     rationale: str | None
     source_type: str
     confidence: str
-    trigger_zh: str | None = None
+    trigger_text_zh: str | None = None
     behavior_zh: str | None = None
     action_zh: str | None = None
     rationale_zh: str | None = None
@@ -129,7 +129,7 @@ def _coerce(item: dict) -> Candidate:
         if cleaned:
             terms[str(lang)] = cleaned
     terms = normalize_search_terms(terms)
-    trigger_zh = _opt_str(item, "trigger_zh")
+    trigger_text_zh = _opt_str(item, "trigger_zh")
     behavior_zh = _opt_str(item, "behavior_zh")
     action_zh = _opt_str(item, "action_zh")
     rationale_zh = _opt_str(item, "rationale_zh")
@@ -142,7 +142,7 @@ def _coerce(item: dict) -> Candidate:
         rationale=(str(item["rationale"]).strip() if item.get("rationale") else None),
         source_type=source_type,
         confidence=confidence,
-        trigger_zh=trigger_zh,
+        trigger_text_zh=trigger_text_zh,
         behavior_zh=behavior_zh,
         action_zh=action_zh,
         rationale_zh=rationale_zh,

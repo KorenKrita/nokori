@@ -96,7 +96,7 @@ def _persist_new(db: Db, cand: Candidate, project_id: str | None, cfg=None) -> R
                 cand.source_type, cand.confidence, status,
                 ev_score, ev_log,
                 scope, pid, now, now,
-                cand.trigger_zh, cand.behavior_zh, cand.action_zh, cand.rationale_zh,
+                cand.trigger_text_zh, cand.behavior_zh, cand.action_zh, cand.rationale_zh,
             ),
         )
     row = db.fetchone(f"SELECT {RULE_COLUMNS} FROM rules WHERE id = ?", (rid,))
