@@ -36,6 +36,10 @@ class Candidate:
     rationale_zh: str | None = None
 
 
+def _opt_str(item: dict, key: str) -> str | None:
+    return (str(item[key]).strip() or None) if item.get(key) else None
+
+
 def extract(transcript: str, llm: LLMAdapter) -> tuple[list[Candidate], bool]:
     """Returns (candidates, llm_ok). llm_ok=False when the LLM call failed (not empty parse)."""
     if not transcript.strip():
@@ -125,10 +129,10 @@ def _coerce(item: dict) -> Candidate:
         if cleaned:
             terms[str(lang)] = cleaned
     terms = normalize_search_terms(terms)
-    trigger_zh = (str(item["trigger_zh"]).strip() or None) if item.get("trigger_zh") else None
-    behavior_zh = (str(item["behavior_zh"]).strip() or None) if item.get("behavior_zh") else None
-    action_zh = (str(item["action_zh"]).strip() or None) if item.get("action_zh") else None
-    rationale_zh = (str(item["rationale_zh"]).strip() or None) if item.get("rationale_zh") else None
+    trigger_zh = _opt_str(item, "trigger_zh")
+    behavior_zh = _opt_str(item, "behavior_zh")
+    action_zh = _opt_str(item, "action_zh")
+    rationale_zh = _opt_str(item, "rationale_zh")
     return Candidate(
         trigger=trigger,
         trigger_variants=variants,

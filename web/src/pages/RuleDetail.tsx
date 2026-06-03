@@ -6,12 +6,8 @@ import { PageSkeleton } from '@/components/PageSkeleton'
 import { useApi } from '@/hooks/useApi'
 import { mutateApi } from '@/lib/api'
 import { formatDateTime } from '@/lib/formatDateTime'
-import { t, getLocale } from '@/lib/i18n'
+import { t, lz } from '@/lib/i18n'
 import type { Rule } from '@/lib/types'
-
-function lz(en: string, zh: string | null | undefined): string {
-  return getLocale() === 'zh' && zh ? zh : en
-}
 
 const DATE_META_KEYS = new Set(['last_hit', 'created_at', 'updated_at'])
 
