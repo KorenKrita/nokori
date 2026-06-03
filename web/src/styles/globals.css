@@ -93,6 +93,14 @@ body {
   scrollbar-color: rgba(0, 0, 0, 0.1) transparent;
 }
 
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
 @keyframes shimmer {
   from { background-position: -200% 0; }
   to { background-position: 200% 0; }

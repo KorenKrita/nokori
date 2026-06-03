@@ -72,7 +72,7 @@ export function Rules() {
         ))}
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex gap-2 overflow-x-auto scrollbar-none pb-1">
         <FilterPill
           active={scopeFilter === ''}
           label={t('rules.filter.all')}
@@ -80,7 +80,7 @@ export function Rules() {
         />
         <FilterPill
           active={scopeFilter === 'global'}
-          label="Global"
+          label={t('rules.scope.global')}
           onClick={() => setScopeFilter('global')}
         />
         {projectIds.map((pid) => (
@@ -139,7 +139,7 @@ export function Rules() {
                   <td className="py-3 px-2 text-text-secondary truncate">{lz(rule.trigger_text, rule.trigger_text_zh)}</td>
                   <td className="py-3 pl-2 pr-6 text-right font-mono tabular-nums">{rule.hit_count}</td>
                   <td className="py-3 pl-6 pr-2 text-text-tertiary text-xs font-mono truncate">
-                    {rule.project_scope === 'global' ? 'global' : rule.project_id ?? '-'}
+                    {rule.project_scope === 'global' ? t('rules.scope.global') : rule.project_id ?? '-'}
                   </td>
                 </tr>
               ))}

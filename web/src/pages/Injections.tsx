@@ -54,11 +54,11 @@ export function Injections() {
           <table className="w-full text-sm">
             <thead>
               <tr className="text-xs uppercase tracking-wider text-text-tertiary border-b border-[var(--color-border-subtle)]">
-                <th className="text-left py-3 px-2 w-[5rem]">{t('injections.col.rule')}</th>
-                <th className="text-left py-3 px-2 w-[5rem]">{t('injections.col.level')}</th>
-                <th className="text-left py-3 px-2 w-[7rem]">{t('rules.col.scope')}</th>
-                <th className="text-left py-3 px-2 min-w-0">{t('injections.col.session')}</th>
-                <th className="text-left py-3 px-2 w-[11rem] whitespace-nowrap">{t('injections.col.time')}</th>
+                <th className="text-left py-3 px-4 w-[6rem]">{t('injections.col.rule')}</th>
+                <th className="text-left py-3 px-4 w-[5.5rem]">{t('injections.col.level')}</th>
+                <th className="text-left py-3 px-4 w-[10rem]">{t('rules.col.scope')}</th>
+                <th className="text-left py-3 px-4 min-w-0">{t('injections.col.session')}</th>
+                <th className="text-left py-3 px-4 w-[12rem] whitespace-nowrap">{t('injections.col.time')}</th>
               </tr>
             </thead>
             <tbody>
@@ -66,7 +66,7 @@ export function Injections() {
                 const ruleId = inj.rule_short_id ?? inj.rule_id.slice(0, 8)
                 return (
                   <tr key={inj.id} className="border-b border-[var(--color-border-subtle)] hover:bg-[var(--color-row-hover)]">
-                    <td className="py-3 px-2 font-mono">
+                    <td className="py-3 px-4 font-mono">
                       {inj.rule_short_id ? (
                         <Link
                           to={`/rules/${inj.rule_short_id}`}
@@ -78,14 +78,14 @@ export function Injections() {
                         <span className="text-text-tertiary">{ruleId}</span>
                       )}
                     </td>
-                    <td className="py-3 px-2"><StatusBadge status={inj.level} /></td>
-                    <td className="py-3 px-2 text-text-tertiary text-xs font-mono truncate">
-                      {inj.rule_project_scope === 'global' ? 'global' : inj.rule_project_id ?? '-'}
+                    <td className="py-3 px-4"><StatusBadge status={inj.level} /></td>
+                    <td className="py-3 px-4 text-text-tertiary text-xs font-mono truncate">
+                      {inj.rule_project_scope === 'global' ? t('rules.scope.global') : inj.rule_project_id ?? '-'}
                     </td>
-                    <td className="py-3 px-2 text-text-tertiary font-mono text-xs break-all">
+                    <td className="py-3 px-4 text-text-tertiary font-mono text-xs break-all">
                       {inj.session_id}
                     </td>
-                    <td className="py-3 px-2 text-text-tertiary text-xs font-mono whitespace-nowrap">
+                    <td className="py-3 px-4 text-text-tertiary text-xs font-mono whitespace-nowrap">
                       {formatDateTime(inj.created_at)}
                     </td>
                   </tr>
