@@ -101,6 +101,11 @@ body {
   display: none;
 }
 
+.scroll-fade-x {
+  mask-image: linear-gradient(to right, black calc(100% - 3rem), transparent);
+  -webkit-mask-image: linear-gradient(to right, black calc(100% - 3rem), transparent);
+}
+
 @keyframes shimmer {
   from { background-position: -200% 0; }
   to { background-position: 200% 0; }

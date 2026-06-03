@@ -72,7 +72,7 @@ export function Rules() {
         ))}
       </div>
 
-      <div className="flex gap-2 overflow-x-auto scrollbar-none pb-1">
+      <div className="flex gap-2 overflow-x-auto scrollbar-none scroll-fade-x pb-1">
         <FilterPill
           active={scopeFilter === ''}
           label={t('rules.filter.all')}
