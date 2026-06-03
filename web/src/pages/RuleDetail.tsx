@@ -6,7 +6,7 @@ import { PageSkeleton } from '@/components/PageSkeleton'
 import { useApi } from '@/hooks/useApi'
 import { mutateApi } from '@/lib/api'
 import { formatDateTime } from '@/lib/formatDateTime'
-import { t, lz } from '@/lib/i18n'
+import { t, lz, getLocale } from '@/lib/i18n'
 import type { Rule } from '@/lib/types'
 
 const DATE_META_KEYS = new Set(['last_hit', 'created_at', 'updated_at'])
@@ -67,7 +67,10 @@ export function RuleDetail() {
           {rule.trigger_variants.length > 0 && (
             <div className="mt-3 space-y-1">
               <p className="text-xs text-text-tertiary">{t('rules.variants')}:</p>
-              {rule.trigger_variants.map((v, i) => (
+              {(getLocale() === 'zh' && rule.trigger_variants_zh.length > 0
+                ? rule.trigger_variants_zh
+                : rule.trigger_variants
+              ).map((v, i) => (
                 <p key={i} className="text-xs text-text-secondary font-mono pl-2">{v}</p>
               ))}
             </div>

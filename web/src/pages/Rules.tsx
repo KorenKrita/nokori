@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'motion/react'
 import { FilterPill } from '@/components/FilterPill'
@@ -20,10 +20,26 @@ const STATUS_FILTERS = [
 
 export function Rules() {
   const [statusFilter, setStatusFilter] = useState('active,dormant')
+  const [scopeFilter, setScopeFilter] = useState('')
+  const params: Record<string, string> = { status: statusFilter }
+  if (scopeFilter === 'global') {
+    params.scope = 'global'
+  } else if (scopeFilter) {
+    params.project = scopeFilter
+  }
   const { data, isLoading } = useApi<{ data: Rule[]; meta: Meta }>(
     '/rules',
-    { status: statusFilter }
+    params
   )
+
+  const allRulesData = useApi<{ data: Rule[]; meta: Meta }>('/rules', { status: '' })
+  const projectIds = useMemo(() => {
+    const ids = new Set<string>()
+    for (const rule of allRulesData.data?.data ?? []) {
+      if (rule.project_id) ids.add(rule.project_id)
+    }
+    return Array.from(ids).sort()
+  }, [allRulesData.data])
 
   if (isLoading) return <PageSkeleton />
 
@@ -52,6 +68,27 @@ export function Rules() {
             label={t(f.labelKey)}
             help={t(f.helpKey)}
             onClick={() => setStatusFilter(f.value)}
+          />
+        ))}
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <FilterPill
+          active={scopeFilter === ''}
+          label={t('rules.filter.all')}
+          onClick={() => setScopeFilter('')}
+        />
+        <FilterPill
+          active={scopeFilter === 'global'}
+          label="Global"
+          onClick={() => setScopeFilter('global')}
+        />
+        {projectIds.map((pid) => (
+          <FilterPill
+            key={pid}
+            active={scopeFilter === pid}
+            label={pid}
+            onClick={() => setScopeFilter(pid)}
           />
         ))}
       </div>

@@ -3,6 +3,7 @@ export interface Rule {
   short_id: string
   trigger_text: string
   trigger_variants: string[]
+  trigger_variants_zh: string[]
   search_terms: Record<string, string[]>
   behavior: string | null
   action: string
@@ -62,6 +63,8 @@ export interface Injection {
   id: number
   rule_id: string
   rule_short_id: string | null
+  rule_project_scope: string | null
+  rule_project_id: string | null
   session_id: string
   prompt_hash: string
   level: string

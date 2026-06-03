@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import dataclasses
 from dataclasses import dataclass
 
 from ..constants import MAX_EXTRACT_CANDIDATES
@@ -13,7 +14,7 @@ from .term_normalize import normalize_search_terms, normalize_trigger_variants
 log = get_logger("nokori.extract.extractor")
 
 _VALID_SOURCE_TYPES = ("correction", "preference", "solution", "anti_pattern")
-_VALID_CONFIDENCE = ("high", "medium")
+_VALID_CONFIDENCE = ("high", "medium", "low")
 
 
 def _has_cjk(text: str) -> bool:
@@ -34,6 +35,7 @@ class Candidate:
     behavior_zh: str | None = None
     action_zh: str | None = None
     rationale_zh: str | None = None
+    trigger_variants_zh: list[str] = dataclasses.field(default_factory=list)
 
 
 def _opt_str(item: dict, key: str) -> str | None:
@@ -133,6 +135,10 @@ def _coerce(item: dict) -> Candidate:
     behavior_zh = _opt_str(item, "behavior_zh")
     action_zh = _opt_str(item, "action_zh")
     rationale_zh = _opt_str(item, "rationale_zh")
+    variants_zh_raw = item.get("trigger_variants_zh") or []
+    if not isinstance(variants_zh_raw, list):
+        variants_zh_raw = []
+    trigger_variants_zh = [str(v).strip() for v in variants_zh_raw if str(v).strip()]
     return Candidate(
         trigger=trigger,
         trigger_variants=variants,
@@ -146,4 +152,5 @@ def _coerce(item: dict) -> Candidate:
         behavior_zh=behavior_zh,
         action_zh=action_zh,
         rationale_zh=rationale_zh,
+        trigger_variants_zh=trigger_variants_zh,
     )

@@ -18,6 +18,7 @@ def _scored_to_dict(sr) -> dict:
         short_id=sr.rule.short_id,
         trigger_text=sr.rule.trigger_text,
         trigger_variants=sr.rule.trigger_variants,
+        trigger_variants_zh=sr.rule.trigger_variants_zh,
         search_terms=sr.rule.search_terms,
         behavior=sr.rule.behavior,
         action=sr.rule.action,

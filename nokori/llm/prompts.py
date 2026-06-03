@@ -73,6 +73,7 @@ Each item:
   "trigger": "<English canonical scenario ONLY — never Chinese; NOT project/file/product names>",
   "trigger_zh": "<Chinese translation of trigger — concise, same scope as English>",  # maps to trigger_text_zh in data model; kept short in prompt to save tokens
   "trigger_variants": ["<2-3 alternative phrasings, English; same actor rules as trigger — no User/Assistant prefixes>"],
+  "trigger_variants_zh": ["<2-3 Chinese alternative phrasings of trigger_variants; concise, same scope>"],
   "search_terms": {"en": ["<Latin-script retrieval terms>"], "zh": ["<CJK retrieval terms from the user, if any>"]},
   "behavior": "<what the assistant did wrong or the old approach>",
   "behavior_zh": "<Chinese translation of behavior>",
@@ -81,7 +82,7 @@ Each item:
   "rationale": "<one sentence evidence from the transcript>",
   "rationale_zh": "<Chinese translation of rationale>",
   "source_type": "correction" | "preference" | "solution" | "anti_pattern",
-  "confidence": "high" | "medium"
+  "confidence": "high" | "medium" | "low"
 }
 
 _zh fields: Chinese translations of the corresponding English field. Keep concise (same scope as English). Always provide even if transcript is English-only.
@@ -96,7 +97,7 @@ Field constraints:
     ".claude.json permission" → en: [".claude.json", "permission"], zh: []
     "用pnpm别用npm" → en: ["pnpm", "npm"], zh: []
 - source_type: correction (user corrected or directed: "don't", "stop", "改一下", "use X instead", "你可以用…", explicit rejection) | preference (stable preference without correcting a mistake: "we use pnpm") | solution (failure→fix loop where user acknowledged lesson in a later [User] message) | anti_pattern (approach that failed and should be avoided).
-- confidence: high (user explicitly stated or clearly rejected) | medium (inferred from failure→fix or implied). Never high if only assistant self-fixed without user pushback.
+- confidence: high (user repeated/emphasized strongly — "永远不要"/"必须"/"always"/"never again", or lesson is universally applicable across projects) | medium (user corrected once clearly, lesson is reusable but may be context-dependent) | low (inferred from failure→fix pattern, or user's correction was mild/ambiguous). Never high if only assistant self-fixed without user pushback.
 
 Count:
 - At most 3 items per transcript (distinct lessons only). Never pad — 0 is valid. Prefer fewer when lessons overlap.
@@ -109,7 +110,7 @@ Count only [User] lines as user intent. Ignore content marked as ignorable by sy
 
 1) Reusable in another SE repo? Not task-execution/CR-relay/scope-redirect/one-shot-format/retracted?
 2) trigger = English scenario (no actor prefix); action covers full correction scope?
-3) confidence high only with explicit user statement?
+3) confidence: high only with strong emphasis/repetition; medium for clear single correction; low for inferred/mild?
 4) search_terms: en Latin-only (incl. acronyms), zh CJK-only, mixed split, no negation-only zh?
 5) trigger_variants obey same actor/scenario rules as trigger?
 6) solution requires user ack in a later [User] message?

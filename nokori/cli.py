@@ -34,7 +34,7 @@ def _build_parser() -> argparse.ArgumentParser:
         default="correction",
         choices=("correction", "preference", "solution", "anti_pattern"),
     )
-    sp_add.add_argument("--confidence", default="high", choices=("high", "medium"))
+    sp_add.add_argument("--confidence", default="high", choices=("high", "medium", "low"))
     sp_add.add_argument("--variants", default=None, help="comma-separated variants")
     sp_add.add_argument("--terms-en", default=None, help="comma-separated English search terms")
     sp_add.add_argument("--terms-zh", default=None, help="comma-separated Chinese search terms")
@@ -62,7 +62,7 @@ def _build_parser() -> argparse.ArgumentParser:
     sp_edit.add_argument("--variants", default=None, help="comma-separated variants")
     sp_edit.add_argument("--terms-en", default=None, help="comma-separated English terms")
     sp_edit.add_argument("--terms-zh", default=None, help="comma-separated Chinese terms")
-    sp_edit.add_argument("--confidence", default=None, choices=("high", "medium"))
+    sp_edit.add_argument("--confidence", default=None, choices=("high", "medium", "low"))
     sp_edit.add_argument("--status", default=None, choices=("active", "dormant", "archived"))
 
     sp_test = sub.add_parser("test", help="simulate retrieval for a prompt")

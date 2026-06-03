@@ -90,6 +90,7 @@ def _rule_text(rule: Rule) -> str:
     if rule.rationale_zh:
         parts.append(rule.rationale_zh)
     parts.extend(rule.trigger_variants)
+    parts.extend(rule.trigger_variants_zh)
     for items in rule.search_terms.values():
         parts.extend(items)
     return "\n".join(p for p in parts if p)

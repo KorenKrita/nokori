@@ -30,6 +30,8 @@ def _rule_doc_tokens(rule: Rule) -> list[str]:
         pieces.extend(tokenize(rule.action_zh))
     for v in rule.trigger_variants:
         pieces.extend(tokenize(v))
+    for v in rule.trigger_variants_zh:
+        pieces.extend(tokenize(v))
     for terms in rule.search_terms.values():
         for t in terms:
             pieces.extend(tokenize(t))
@@ -39,6 +41,8 @@ def _rule_doc_tokens(rule: Rule) -> list[str]:
 def _variant_tokens(rule: Rule) -> set[str]:
     tokens: set[str] = set()
     for v in rule.trigger_variants:
+        tokens.update(tokenize(v))
+    for v in rule.trigger_variants_zh:
         tokens.update(tokenize(v))
     return tokens
 
@@ -54,6 +58,7 @@ def _index_key(rules_list: list[Rule]) -> tuple:
             r.trigger_text,
             r.action,
             tuple(r.trigger_variants),
+            tuple(r.trigger_variants_zh),
             terms,
             r.trigger_text_zh,
             r.action_zh,

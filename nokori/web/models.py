@@ -14,6 +14,7 @@ class RuleOut(BaseModel):
     short_id: str
     trigger_text: str
     trigger_variants: list[str]
+    trigger_variants_zh: list[str]
     search_terms: dict[str, list[str]]
     behavior: str | None
     action: str
@@ -46,6 +47,7 @@ class RuleEdit(BaseModel):
     confidence: str | None = None
     status: str | None = None
     trigger_variants: list[str] | None = None
+    trigger_variants_zh: list[str] | None = None
     search_terms: dict[str, list[str]] | None = None
     trigger_text_zh: str | None = None
     behavior_zh: str | None = None
@@ -63,6 +65,8 @@ class InjectionOut(BaseModel):
     id: int
     rule_id: str
     rule_short_id: str | None = None
+    rule_project_scope: str | None = None
+    rule_project_id: str | None = None
     session_id: str
     prompt_hash: str
     level: str

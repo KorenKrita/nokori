@@ -21,7 +21,7 @@ from ..search.embedding import index_rule_if_enabled
 from ..utils.ids import new_uuid, short_id_for
 from ..utils.time import now_iso
 
-_COMPATIBLE_IMPORT_VERSIONS = frozenset({2, 3, 4})
+_COMPATIBLE_IMPORT_VERSIONS = frozenset({2, 3, 4, 5})
 
 _MAX_TRIGGER_TEXT = 16_384
 _MAX_ACTION = 8_192
@@ -35,7 +35,7 @@ _MAX_TERMS_PER_LANG = 64
 _MAX_TERM_LEN = 256
 _MAX_IMPORT_FILE_BYTES = 100 * 1024 * 1024
 _SOURCE_TYPES = frozenset({"correction", "preference", "solution", "anti_pattern"})
-_CONFIDENCE = frozenset({"high", "medium"})
+_CONFIDENCE = frozenset({"high", "medium", "low"})
 _STATUSES = frozenset({"candidate", "active", "merged", "archived", "dormant"})
 _PROJECT_SCOPES = frozenset({"project", "global"})
 _HEX_SHORT_ID = re.compile(r"^[a-f0-9]{6,32}$", re.IGNORECASE)
@@ -79,6 +79,15 @@ def _validate_import_record(rec: dict) -> str | None:
         return f"trigger_variants exceeds {_MAX_VARIANTS} entries"
     for i, v in enumerate(variants):
         err = _str_len(v, f"trigger_variants[{i}]", _MAX_VARIANT_LEN)
+        if err:
+            return err
+    variants_zh = rec.get("trigger_variants_zh") or []
+    if not isinstance(variants_zh, list):
+        return "trigger_variants_zh must be a list"
+    if len(variants_zh) > _MAX_VARIANTS:
+        return f"trigger_variants_zh exceeds {_MAX_VARIANTS} entries"
+    for i, v in enumerate(variants_zh):
+        err = _str_len(v, f"trigger_variants_zh[{i}]", _MAX_VARIANT_LEN)
         if err:
             return err
     terms = rec.get("search_terms") or {}
@@ -168,6 +177,7 @@ def run_export(args: argparse.Namespace, cfg: Config) -> int:
                 "behavior_zh": r.behavior_zh,
                 "action_zh": r.action_zh,
                 "rationale_zh": r.rationale_zh,
+                "trigger_variants_zh": r.trigger_variants_zh,
             }
             for r in rules
         ],
@@ -263,6 +273,7 @@ def run_import(args: argparse.Namespace, cfg: Config) -> int:
                 rec.get("behavior_zh"),
                 rec.get("action_zh"),
                 rec.get("rationale_zh"),
+                dumps_json(rec.get("trigger_variants_zh") or []),
             ))
             inserted_sids.append(sid)
         if pending:
@@ -275,8 +286,9 @@ def run_import(args: argparse.Namespace, cfg: Config) -> int:
                         "shadow_hit_count, promotion_evidence, project_scope, project_id, "
                         "superseded_by, archived_reason, "
                         "created_at, updated_at, "
-                        "trigger_text_zh, behavior_zh, action_zh, rationale_zh) "
-                        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                        "trigger_text_zh, behavior_zh, action_zh, rationale_zh, "
+                        "trigger_variants_zh) "
+                        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                         row,
                     )
             inserted = len(pending)

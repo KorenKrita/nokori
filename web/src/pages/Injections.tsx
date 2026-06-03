@@ -56,6 +56,7 @@ export function Injections() {
               <tr className="text-xs uppercase tracking-wider text-text-tertiary border-b border-[var(--color-border-subtle)]">
                 <th className="text-left py-3 px-2 w-[5rem]">{t('injections.col.rule')}</th>
                 <th className="text-left py-3 px-2 w-[5rem]">{t('injections.col.level')}</th>
+                <th className="text-left py-3 px-2 w-[7rem]">{t('rules.col.scope')}</th>
                 <th className="text-left py-3 px-2 min-w-0">{t('injections.col.session')}</th>
                 <th className="text-left py-3 px-2 w-[11rem] whitespace-nowrap">{t('injections.col.time')}</th>
               </tr>
@@ -78,6 +79,9 @@ export function Injections() {
                       )}
                     </td>
                     <td className="py-3 px-2"><StatusBadge status={inj.level} /></td>
+                    <td className="py-3 px-2 text-text-tertiary text-xs font-mono truncate">
+                      {inj.rule_project_scope === 'global' ? 'global' : inj.rule_project_id ?? '-'}
+                    </td>
                     <td className="py-3 px-2 text-text-tertiary font-mono text-xs break-all">
                       {inj.session_id}
                     </td>
@@ -89,7 +93,7 @@ export function Injections() {
               })}
               {injections.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="py-8 text-center text-text-tertiary">{t('injections.no_results')}</td>
+                  <td colSpan={5} className="py-8 text-center text-text-tertiary">{t('injections.no_results')}</td>
                 </tr>
               )}
             </tbody>

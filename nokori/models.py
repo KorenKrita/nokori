@@ -5,7 +5,7 @@ from typing import Literal
 
 
 SourceType = Literal["correction", "preference", "solution", "anti_pattern"]
-Confidence = Literal["high", "medium"]
+Confidence = Literal["high", "medium", "low"]
 Status = Literal["candidate", "active", "merged", "archived", "dormant"]
 ProjectScope = Literal["project", "global"]
 InjectionLevel = Literal["hot", "warm"]
@@ -48,6 +48,7 @@ class Rule:
     behavior_zh: str | None = None
     action_zh: str | None = None
     rationale_zh: str | None = None
+    trigger_variants_zh: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)

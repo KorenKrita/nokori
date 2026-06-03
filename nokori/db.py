@@ -9,7 +9,7 @@ from pathlib import Path
 
 from .errors import DbError
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 _SCHEMA_DDL = """
 CREATE TABLE IF NOT EXISTS rules (
@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS rules (
     action TEXT NOT NULL,
     rationale TEXT,
     source_type TEXT NOT NULL CHECK(source_type IN ('correction','preference','solution','anti_pattern')),
-    confidence TEXT NOT NULL CHECK(confidence IN ('high','medium')),
+    confidence TEXT NOT NULL CHECK(confidence IN ('high','medium','low')),
     status TEXT NOT NULL DEFAULT 'candidate' CHECK(status IN ('candidate','active','merged','archived','dormant')),
     evidence_score INTEGER NOT NULL DEFAULT 0,
     evidence_log TEXT NOT NULL DEFAULT '[]',
@@ -39,7 +39,8 @@ CREATE TABLE IF NOT EXISTS rules (
     trigger_text_zh TEXT,
     behavior_zh TEXT,
     action_zh TEXT,
-    rationale_zh TEXT
+    rationale_zh TEXT,
+    trigger_variants_zh TEXT NOT NULL DEFAULT '[]'
 );
 
 CREATE TABLE IF NOT EXISTS rule_embeddings (
@@ -184,6 +185,7 @@ def _migrate(conn: sqlite3.Connection) -> None:
             "ALTER TABLE rules ADD COLUMN behavior_zh TEXT;\n"
             "ALTER TABLE rules ADD COLUMN action_zh TEXT;\n"
             "ALTER TABLE rules ADD COLUMN rationale_zh TEXT;\n"
+            "ALTER TABLE rules ADD COLUMN trigger_variants_zh TEXT NOT NULL DEFAULT '[]';\n"
             f"PRAGMA user_version = {int(SCHEMA_VERSION)};\n"
             "COMMIT;\n"
         )
@@ -194,6 +196,14 @@ def _migrate(conn: sqlite3.Connection) -> None:
             "ALTER TABLE rules ADD COLUMN behavior_zh TEXT;\n"
             "ALTER TABLE rules ADD COLUMN action_zh TEXT;\n"
             "ALTER TABLE rules ADD COLUMN rationale_zh TEXT;\n"
+            "ALTER TABLE rules ADD COLUMN trigger_variants_zh TEXT NOT NULL DEFAULT '[]';\n"
+            f"PRAGMA user_version = {int(SCHEMA_VERSION)};\n"
+            "COMMIT;\n"
+        )
+    elif current == 4:
+        script = (
+            "BEGIN;\n"
+            "ALTER TABLE rules ADD COLUMN trigger_variants_zh TEXT NOT NULL DEFAULT '[]';\n"
             f"PRAGMA user_version = {int(SCHEMA_VERSION)};\n"
             "COMMIT;\n"
         )
@@ -260,6 +270,7 @@ def row_to_rule(row):
         behavior_zh=row["behavior_zh"],
         action_zh=row["action_zh"],
         rationale_zh=row["rationale_zh"],
+        trigger_variants_zh=loads_json(row["trigger_variants_zh"], []),
     )
 
 
@@ -269,7 +280,7 @@ RULE_COLUMNS = (
     "hit_count, last_hit, shadow_hit_count, promotion_evidence, project_scope, "
     "project_id, superseded_by, archived_reason, "
     "created_at, updated_at, "
-    "trigger_text_zh, behavior_zh, action_zh, rationale_zh"
+    "trigger_text_zh, behavior_zh, action_zh, rationale_zh, trigger_variants_zh"
 )
 
 

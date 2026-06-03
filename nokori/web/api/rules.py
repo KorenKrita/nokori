@@ -22,6 +22,7 @@ def _rule_to_dict(rule) -> dict:
         short_id=rule.short_id,
         trigger_text=rule.trigger_text,
         trigger_variants=rule.trigger_variants,
+        trigger_variants_zh=rule.trigger_variants_zh,
         search_terms=rule.search_terms,
         behavior=rule.behavior,
         action=rule.action,
@@ -53,6 +54,7 @@ def list_rules(
     status: str | None = Query(None),
     source_type: str | None = Query(None),
     project: str | None = Query(None),
+    scope: str | None = Query(None),
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=200),
 ):
@@ -60,7 +62,12 @@ def list_rules(
     statuses = tuple(status.split(",")) if status else None
     db = open_db(cfg.db_path)
     try:
-        rules = fetch_rules(db, statuses=statuses, project_id=project)
+        rules = fetch_rules(
+            db,
+            statuses=statuses,
+            project_id=project,
+            global_only=(scope == "global"),
+        )
     finally:
         db.close()
 
@@ -112,6 +119,8 @@ def edit_rule(short_id: str, body: RuleEdit):
             updates.append(("status", body.status))
         if body.trigger_variants is not None:
             updates.append(("trigger_variants", dumps_json(body.trigger_variants)))
+        if body.trigger_variants_zh is not None:
+            updates.append(("trigger_variants_zh", dumps_json(body.trigger_variants_zh)))
         if body.search_terms is not None:
             updates.append(("search_terms", dumps_json(body.search_terms)))
         if body.trigger_text_zh is not None:
