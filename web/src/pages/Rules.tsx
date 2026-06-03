@@ -56,6 +56,12 @@ export function Rules() {
         ))}
       </div>
 
+      <motion.div
+        initial={{ opacity: 0, y: 24 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, margin: '-60px' }}
+        transition={{ duration: 0.5, ease: [0.32, 0.72, 0, 1] }}
+      >
       <GlassCard>
         <div className="overflow-x-auto">
           <table className="w-full text-sm table-fixed">
@@ -109,6 +115,7 @@ export function Rules() {
           </table>
         </div>
       </GlassCard>
+      </motion.div>
     </motion.div>
   )
 }

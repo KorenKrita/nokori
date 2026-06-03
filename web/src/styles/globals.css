@@ -32,6 +32,7 @@
   --color-input-bg: rgba(255, 255, 255, 0.03);
   --color-input-border: rgba(255, 255, 255, 0.10);
   --color-card-shadow: none;
+  --color-accent-glow: rgba(56, 189, 248, 0.15);
   color-scheme: dark;
 }
 
@@ -57,6 +58,7 @@
   --color-input-bg: #ffffff;
   --color-input-border: rgba(0, 0, 0, 0.15);
   --color-card-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  --color-accent-glow: rgba(2, 132, 199, 0.08);
   color-scheme: light;
 }
 
@@ -89,4 +91,9 @@ body {
 
 :root.light * {
   scrollbar-color: rgba(0, 0, 0, 0.1) transparent;
+}
+
+@keyframes shimmer {
+  from { background-position: -200% 0; }
+  to { background-position: 200% 0; }
 }

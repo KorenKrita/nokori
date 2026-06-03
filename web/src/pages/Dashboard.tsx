@@ -32,11 +32,19 @@ export function Dashboard() {
 
   return (
     <motion.div variants={stagger} initial="hidden" animate="show" className="space-y-6">
-      <motion.h2
-        variants={cardVariant}
-        className="text-2xl font-semibold tracking-tight"
-      >
-        {t('dashboard.title')}
+      <motion.h2 variants={cardVariant} className="text-2xl font-semibold tracking-tight">
+        {t('dashboard.title').split('').map((char, i) => (
+          <motion.span
+            key={i}
+            initial={{ opacity: 0, y: 16, filter: 'blur(4px)' }}
+            animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+            transition={{ duration: 0.4, delay: i * 0.03, ease: [0.32, 0.72, 0, 1] }}
+            className="inline-block"
+            style={{ whiteSpace: char === ' ' ? 'pre' : undefined }}
+          >
+            {char}
+          </motion.span>
+        ))}
       </motion.h2>
 
       <motion.div variants={stagger} className="grid grid-cols-12 gap-4">

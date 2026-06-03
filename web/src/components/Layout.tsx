@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from 'react-router-dom'
-import { motion } from 'motion/react'
+import { AnimatePresence, motion } from 'motion/react'
 import { cn } from '@/lib/utils'
 import { t } from '@/lib/i18n'
 import { LocaleSwitcher } from '@/components/LocaleSwitcher'
@@ -49,22 +49,33 @@ export function Layout() {
               end={to === '/'}
               className={({ isActive }) =>
                 cn(
-                  'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]',
+                  'relative flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]',
                   isActive
-                    ? 'bg-[var(--color-nav-active-bg)] text-[var(--color-nav-active-text)] border-l-2 border-accent-sky'
+                    ? 'text-[var(--color-nav-active-text)]'
                     : 'text-text-secondary hover:text-[var(--color-nav-hover-text)] hover:bg-[var(--color-pill-hover-bg)]'
                 )
               }
             >
-              <motion.div
-                initial={{ opacity: 0, x: -8 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.4, delay: index * 0.05, ease: [0.32, 0.72, 0, 1] }}
-                className="flex items-center gap-3"
-              >
-                <Icon size={18} weight="light" />
-                {t(key)}
-              </motion.div>
+              {({ isActive }) => (
+                <>
+                  {isActive && (
+                    <motion.div
+                      layoutId="nav-active-pill"
+                      className="absolute inset-0 rounded-lg bg-[var(--color-nav-active-bg)] border-l-2 border-accent-sky"
+                      transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+                    />
+                  )}
+                  <motion.div
+                    initial={{ opacity: 0, x: -8 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.4, delay: index * 0.05, ease: [0.32, 0.72, 0, 1] }}
+                    className="relative flex items-center gap-3"
+                  >
+                    <Icon size={18} weight="light" />
+                    {t(key)}
+                  </motion.div>
+                </>
+              )}
             </NavLink>
           ))}
         </nav>

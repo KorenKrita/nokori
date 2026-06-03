@@ -20,9 +20,10 @@ export function GlassCard({ children, className, hover = false }: GlassCardProps
   }
 
   const cardClasses = cn(
-    'rounded-2xl relative overflow-hidden',
+    'rounded relative overflow-hidden',
     'bg-[var(--color-bg-surface)] border border-[var(--color-border-subtle)]',
     'shadow-[var(--color-card-shadow)]',
+    isHovered && hover && 'border-[var(--color-accent-glow)]',
     className
   )
 
@@ -41,7 +42,7 @@ export function GlassCard({ children, className, hover = false }: GlassCardProps
       >
         {isHovered && (
           <div
-            className="absolute inset-0 rounded-2xl pointer-events-none transition-opacity duration-300"
+            className="absolute inset-0 rounded pointer-events-none transition-opacity duration-300"
             style={{
               background: `radial-gradient(300px circle at ${spotlightPos.x}px ${spotlightPos.y}px, rgba(56,189,248,0.04), transparent 60%)`,
             }}
