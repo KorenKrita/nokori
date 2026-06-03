@@ -5,7 +5,9 @@ from nokori.search import bm25, ranker
 
 
 def _rule(short, trigger, *, variants=(), terms_zh=(), action="do x", status="active",
-          conf="high", source_type="correction"):
+          conf="high", source_type="correction",
+          trigger_text_zh=None, action_zh=None,
+          behavior_zh=None, rationale_zh=None):
     now = datetime.now(timezone.utc).isoformat()
     return Rule(
         id=f"id-{short}",
@@ -31,6 +33,10 @@ def _rule(short, trigger, *, variants=(), terms_zh=(), action="do x", status="ac
         archived_reason=None,
         created_at=now,
         updated_at=now,
+        trigger_text_zh=trigger_text_zh,
+        action_zh=action_zh,
+        behavior_zh=behavior_zh,
+        rationale_zh=rationale_zh,
     )
 
 
@@ -131,3 +137,19 @@ def test_perf_500_rules_under_50ms():
     elapsed_ms = (time.perf_counter() - start) * 1000
     assert results[0].rule.short_id == "hit001"
     assert elapsed_ms < 100, f"BM25 took {elapsed_ms:.1f}ms (budget 50ms × 2)"
+
+
+def test_bm25_matches_chinese_trigger_zh():
+    """trigger_text_zh content is indexed and searchable via BM25."""
+    bm25.clear_index_cache()
+    rules = [
+        _rule("zh001", "Force push to shared branch",
+              trigger_text_zh="强制推送到共享分支",
+              action="use --force-with-lease", action_zh="使用 --force-with-lease"),
+        _rule("zh002", "Update database schema",
+              trigger_text_zh="更新数据库模式",
+              action="run migration first", action_zh="先运行迁移"),
+    ]
+    results = bm25.search("强制推送", rules)
+    assert len(results) > 0
+    assert results[0].rule.short_id == "zh001"

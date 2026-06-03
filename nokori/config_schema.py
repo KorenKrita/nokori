@@ -173,9 +173,9 @@ FIELDS: tuple[FieldDef, ...] = (
         label_zh="Gate 工具匹配器",
         label_en="Gate tool matcher",
         label_ja="Gate ツールマッチャー",
-        desc_zh="正则：哪些工具名会触发 Gate（Cursor 安装时会扩展 Shell 等）",
-        desc_en="Regex of tool names gated (Cursor install adds Shell, etc.)",
-        desc_ja="Gate 対象ツール名の正規表現（Cursor では Shell 等を追加）",
+        desc_zh="正则：哪些工具名会触发 Gate（Cursor 安装时会扩展 Shell 等）。配置 .* 阻断全部工具",
+        desc_en="Regex of tool names gated (Cursor install adds Shell, etc.). Use .* to gate all tools",
+        desc_ja="Gate 対象ツール名の正規表現（Cursor では Shell 等を追加）。.* で全ツールを対象に",
     ),
     _f(
         "extract.mode",

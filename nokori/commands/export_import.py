@@ -21,7 +21,7 @@ from ..search.embedding import index_rule_if_enabled
 from ..utils.ids import new_uuid, short_id_for
 from ..utils.time import now_iso
 
-_COMPATIBLE_IMPORT_VERSIONS = frozenset({2, 3})
+_COMPATIBLE_IMPORT_VERSIONS = frozenset({2, 3, 4})
 
 _MAX_TRIGGER_TEXT = 16_384
 _MAX_ACTION = 8_192
@@ -63,6 +63,10 @@ def _validate_import_record(rec: dict) -> str | None:
         ("action", _MAX_ACTION),
         ("rationale", _MAX_RATIONALE),
         ("behavior", _MAX_BEHAVIOR),
+        ("trigger_text_zh", _MAX_TRIGGER_TEXT),
+        ("action_zh", _MAX_ACTION),
+        ("rationale_zh", _MAX_RATIONALE),
+        ("behavior_zh", _MAX_BEHAVIOR),
         ("short_id", _MAX_SHORT_ID),
     ):
         err = _str_len(rec.get(field), field, limit)
@@ -160,6 +164,10 @@ def run_export(args: argparse.Namespace, cfg: Config) -> int:
                 "archived_reason": r.archived_reason,
                 "created_at": r.created_at,
                 "updated_at": r.updated_at,
+                "trigger_text_zh": r.trigger_text_zh,
+                "behavior_zh": r.behavior_zh,
+                "action_zh": r.action_zh,
+                "rationale_zh": r.rationale_zh,
             }
             for r in rules
         ],
@@ -251,6 +259,10 @@ def run_import(args: argparse.Namespace, cfg: Config) -> int:
                 rec.get("archived_reason"),
                 rec.get("created_at") or now_iso(),
                 rec.get("updated_at") or now_iso(),
+                rec.get("trigger_text_zh"),
+                rec.get("behavior_zh"),
+                rec.get("action_zh"),
+                rec.get("rationale_zh"),
             ))
             inserted_sids.append(sid)
         if pending:
@@ -262,8 +274,9 @@ def run_import(args: argparse.Namespace, cfg: Config) -> int:
                         "status, evidence_score, evidence_log, hit_count, last_hit, "
                         "shadow_hit_count, promotion_evidence, project_scope, project_id, "
                         "superseded_by, archived_reason, "
-                        "created_at, updated_at) "
-                        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                        "created_at, updated_at, "
+                        "trigger_text_zh, behavior_zh, action_zh, rationale_zh) "
+                        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                         row,
                     )
             inserted = len(pending)

@@ -192,6 +192,7 @@ export function Config() {
         set_keys: snapshot.set_keys,
       })
       await refetch()
+      savingRef.current = false
       setSaveOk(true)
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : 'Save failed')

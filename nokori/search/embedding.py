@@ -79,9 +79,16 @@ def _chunk_text(text: str, chunk_size: int, chunk_count: int) -> list[str]:
 
 
 def _rule_text(rule: Rule) -> str:
-    parts = [rule.trigger_text, rule.action]
+    parts = [rule.trigger_text]
+    if rule.trigger_text_zh:
+        parts.append(rule.trigger_text_zh)
+    parts.append(rule.action)
+    if rule.action_zh:
+        parts.append(rule.action_zh)
     if rule.rationale:
         parts.append(rule.rationale)
+    if rule.rationale_zh:
+        parts.append(rule.rationale_zh)
     parts.extend(rule.trigger_variants)
     for items in rule.search_terms.values():
         parts.extend(items)

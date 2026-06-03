@@ -85,8 +85,9 @@ def _persist_new(db: Db, cand: Candidate, project_id: str | None, cfg=None) -> R
             "INSERT INTO rules (id, short_id, trigger_text, trigger_variants, "
             "search_terms, behavior, action, rationale, source_type, confidence, "
             "status, evidence_score, evidence_log, project_scope, project_id, "
-            "created_at, updated_at) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "created_at, updated_at, "
+            "trigger_text_zh, behavior_zh, action_zh, rationale_zh) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 rid, sid, cand.trigger,
                 dumps_json(cand.trigger_variants),
@@ -95,6 +96,7 @@ def _persist_new(db: Db, cand: Candidate, project_id: str | None, cfg=None) -> R
                 cand.source_type, cand.confidence, status,
                 ev_score, ev_log,
                 scope, pid, now, now,
+                cand.trigger_text_zh, cand.behavior_zh, cand.action_zh, cand.rationale_zh,
             ),
         )
     row = db.fetchone(f"SELECT {RULE_COLUMNS} FROM rules WHERE id = ?", (rid,))

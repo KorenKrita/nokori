@@ -6,7 +6,7 @@ import { PageSkeleton } from '@/components/PageSkeleton'
 import { useApi } from '@/hooks/useApi'
 import { mutateApi } from '@/lib/api'
 import { formatDateTime } from '@/lib/formatDateTime'
-import { t } from '@/lib/i18n'
+import { t, lz } from '@/lib/i18n'
 import type { Rule } from '@/lib/types'
 
 const DATE_META_KEYS = new Set(['last_hit', 'created_at', 'updated_at'])
@@ -63,7 +63,7 @@ export function RuleDetail() {
       <div className="grid grid-cols-12 gap-4">
         <GlassCard className="col-span-8">
           <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary mb-3">{t('rules.trigger')}</h3>
-          <p className="text-sm text-[var(--color-text-primary)]">{rule.trigger_text}</p>
+          <p className="text-sm text-[var(--color-text-primary)]">{lz(rule.trigger_text, rule.trigger_text_zh)}</p>
           {rule.trigger_variants.length > 0 && (
             <div className="mt-3 space-y-1">
               <p className="text-xs text-text-tertiary">{t('rules.variants')}:</p>
@@ -74,19 +74,19 @@ export function RuleDetail() {
           )}
 
           <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary mt-6 mb-3">{t('rules.action')}</h3>
-          <p className="text-sm text-[var(--color-text-primary)]">{rule.action}</p>
+          <p className="text-sm text-[var(--color-text-primary)]">{lz(rule.action, rule.action_zh)}</p>
 
-          {rule.behavior && (
+          {(rule.behavior || rule.behavior_zh) && (
             <>
               <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary mt-6 mb-3">{t('rules.behavior')}</h3>
-              <p className="text-sm text-text-secondary">{rule.behavior}</p>
+              <p className="text-sm text-text-secondary">{lz(rule.behavior, rule.behavior_zh)}</p>
             </>
           )}
 
-          {rule.rationale && (
+          {(rule.rationale || rule.rationale_zh) && (
             <>
               <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary mt-6 mb-3">{t('rules.rationale')}</h3>
-              <p className="text-sm text-text-secondary">{rule.rationale}</p>
+              <p className="text-sm text-text-secondary">{lz(rule.rationale, rule.rationale_zh)}</p>
             </>
           )}
         </GlassCard>
