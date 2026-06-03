@@ -192,6 +192,7 @@ export function Config() {
         set_keys: snapshot.set_keys,
       })
       await refetch()
+      setSnapshot({ values: { ...values }, embed_mode: embedMode, set_keys: snapshot.set_keys })
       setSaveOk(true)
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : 'Save failed')
