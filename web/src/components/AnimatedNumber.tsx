@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { motion, useMotionValue, useTransform, animate } from 'motion/react'
 
 interface AnimatedNumberProps {
@@ -14,7 +14,7 @@ export function AnimatedNumber({ value, className }: AnimatedNumberProps) {
   useEffect(() => {
     const controls = animate(motionValue, value, {
       duration: 1.2,
-      ease: [0.32, 0.72, 0, 1],
+      ease: [0.32, 0.72, 0, 1] as const,
     })
     return () => controls.stop()
   }, [value, motionValue])
@@ -29,7 +29,7 @@ export function AnimatedNumber({ value, className }: AnimatedNumberProps) {
       className={className}
       initial={{ opacity: 0, scale: 0.5, filter: 'blur(8px)' }}
       animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
-      transition={{ duration: 0.8, ease: [0.32, 0.72, 0, 1] }}
+      transition={{ duration: 0.8, ease: [0.32, 0.72, 0, 1] as const }}
     >
       {display}
     </motion.span>

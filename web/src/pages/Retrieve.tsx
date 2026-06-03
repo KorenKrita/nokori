@@ -23,7 +23,7 @@ export function Retrieve() {
   const [result, setResult] = useState<RetrieveResponse['data'] | null>(null)
   const [loading, setLoading] = useState(false)
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.SubmitEvent) => {
     e.preventDefault()
     if (!prompt.trim()) return
     setLoading(true)
@@ -42,7 +42,7 @@ export function Retrieve() {
     <motion.div
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, ease: [0.32, 0.72, 0, 1] }}
+      transition={{ duration: 0.5, ease: [0.32, 0.72, 0, 1] as const }}
       className="space-y-6"
     >
       <h2 className="text-2xl font-semibold tracking-tight">{t('retrieve.title')}</h2>

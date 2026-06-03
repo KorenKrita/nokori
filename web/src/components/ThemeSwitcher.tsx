@@ -1,12 +1,12 @@
 import { useState } from 'react'
-import { Sun, Moon, Desktop } from '@phosphor-icons/react'
+import { SunIcon, MoonIcon, DesktopIcon } from '@phosphor-icons/react'
 import { getTheme, setTheme, type Theme } from '@/lib/theme'
 import { t } from '@/lib/i18n'
 
-const OPTIONS: { value: Theme; icon: typeof Sun; key: string }[] = [
-  { value: 'light', icon: Sun, key: 'theme.light' },
-  { value: 'dark', icon: Moon, key: 'theme.dark' },
-  { value: 'system', icon: Desktop, key: 'theme.system' },
+const OPTIONS: { value: Theme; icon: typeof SunIcon; key: string }[] = [
+  { value: 'light', icon: SunIcon, key: 'theme.light' },
+  { value: 'dark', icon: MoonIcon, key: 'theme.dark' },
+  { value: 'system', icon: DesktopIcon, key: 'theme.system' },
 ]
 
 export function ThemeSwitcher() {

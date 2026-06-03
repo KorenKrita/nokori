@@ -1,4 +1,4 @@
-import { motion } from 'motion/react'
+import { motion, type Variants } from 'motion/react'
 import { GlassCard } from '@/components/GlassCard'
 import { StatusDot } from '@/components/StatusDot'
 import { EmbedControl } from '@/components/EmbedControl'
@@ -13,14 +13,14 @@ const stagger = {
   show: { transition: { staggerChildren: 0.06 } },
 }
 
-const cardVariant = {
+const cardVariant: Variants = {
   hidden: { opacity: 0, y: 20, filter: 'blur(8px)', scale: 0.96 },
   show: {
     opacity: 1,
     y: 0,
     filter: 'blur(0px)',
     scale: 1,
-    transition: { duration: 0.6, ease: [0.32, 0.72, 0, 1] },
+    transition: { duration: 0.6, ease: [0.32, 0.72, 0, 1] as const },
   },
 }
 
@@ -38,7 +38,7 @@ export function Dashboard() {
             key={i}
             initial={{ opacity: 0, y: 16, filter: 'blur(4px)' }}
             animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-            transition={{ duration: 0.4, delay: i * 0.03, ease: [0.32, 0.72, 0, 1] }}
+            transition={{ duration: 0.4, delay: i * 0.03, ease: [0.32, 0.72, 0, 1] as const }}
             className="inline-block"
             style={{ whiteSpace: char === ' ' ? 'pre' : undefined }}
           >
@@ -59,7 +59,7 @@ export function Dashboard() {
                 <motion.div
                   key={status}
                   whileHover={{ scale: 1.08, y: -2 }}
-                  transition={{ duration: 0.25, ease: [0.32, 0.72, 0, 1] }}
+                  transition={{ duration: 0.25, ease: [0.32, 0.72, 0, 1] as const }}
                   className="cursor-default"
                 >
                   <AnimatedNumber value={d.rules[status]} className="font-mono text-2xl font-semibold" />

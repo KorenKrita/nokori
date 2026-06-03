@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
-import { Cpu, Cloud } from '@phosphor-icons/react'
+import { CpuIcon, CloudIcon } from '@phosphor-icons/react'
 import type { ConfigVariantSchema, ConfigValues } from '@/lib/configTypes'
 import { ConfigField } from '@/components/ConfigField'
 import { t } from '@/lib/i18n'
@@ -19,8 +19,8 @@ interface Props {
 }
 
 const VARIANT_ICON = {
-  local: Cpu,
-  remote: Cloud,
+  local: CpuIcon,
+  remote: CloudIcon,
 } as const
 
 export function ExclusiveVariantPanel({
@@ -119,7 +119,7 @@ export function ExclusiveVariantPanel({
                     initial={{ height: 0, opacity: 0 }}
                     animate={{ height: 'auto', opacity: 1 }}
                     exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: 0.25, ease: [0.32, 0.72, 0, 1] }}
+                    transition={{ duration: 0.25, ease: [0.32, 0.72, 0, 1] as const }}
                     className="overflow-hidden border-t border-[var(--color-border-subtle)]"
                   >
                     <div className="px-4 pb-2 bg-[var(--color-bg-surface)]">

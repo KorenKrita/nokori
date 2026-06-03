@@ -37,7 +37,7 @@ export function GlassCard({ children, className, hover = false }: GlassCardProps
         onMouseLeave={() => setIsHovered(false)}
         whileHover={{
           scale: 1.006,
-          transition: { duration: 0.4, ease: [0.32, 0.72, 0, 1] },
+          transition: { duration: 0.4, ease: [0.32, 0.72, 0, 1] as const },
         }}
       >
         {isHovered && (

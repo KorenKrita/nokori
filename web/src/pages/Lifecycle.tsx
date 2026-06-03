@@ -37,7 +37,7 @@ export function Lifecycle() {
     <motion.div
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, ease: [0.32, 0.72, 0, 1] }}
+      transition={{ duration: 0.5, ease: [0.32, 0.72, 0, 1] as const }}
       className="space-y-6"
     >
       <h2 className="text-2xl font-semibold tracking-tight">{t('lifecycle.title')}</h2>
@@ -67,7 +67,7 @@ export function Lifecycle() {
                 className="h-full rounded-full bg-accent-violet"
                 initial={{ width: 0 }}
                 animate={{ width: `${Math.min(100, (c.progress / c.threshold) * 100)}%` }}
-                transition={{ duration: 0.8, ease: [0.32, 0.72, 0, 1] }}
+                transition={{ duration: 0.8, ease: [0.32, 0.72, 0, 1] as const }}
               />
             </div>
           </div>

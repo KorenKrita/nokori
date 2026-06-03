@@ -1,4 +1,4 @@
-import { motion } from 'motion/react'
+import { motion, type Variants } from 'motion/react'
 import { GlassCard } from '@/components/GlassCard'
 import { PageSkeleton } from '@/components/PageSkeleton'
 import { useApi } from '@/hooks/useApi'
@@ -16,9 +16,9 @@ function splitPath(fullPath: string) {
 }
 
 const stagger = { hidden: {}, show: { transition: { staggerChildren: 0.05 } } }
-const item = {
+const item: Variants = {
   hidden: { opacity: 0, y: 16, filter: 'blur(6px)' },
-  show: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.5, ease: [0.32, 0.72, 0, 1] } },
+  show: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.5, ease: [0.32, 0.72, 0, 1] as const } },
 }
 
 export function Extract() {

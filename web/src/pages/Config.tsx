@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useBlocker } from 'react-router-dom'
 import { motion } from 'motion/react'
-import { CaretDown } from '@phosphor-icons/react'
+import { CaretDownIcon } from '@phosphor-icons/react'
 import { GlassCard } from '@/components/GlassCard'
 import { StatusBadge } from '@/components/StatusBadge'
 import { PageSkeleton } from '@/components/PageSkeleton'
@@ -246,7 +246,7 @@ export function Config() {
     <motion.div
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, ease: [0.32, 0.72, 0, 1] }}
+      transition={{ duration: 0.5, ease: [0.32, 0.72, 0, 1] as const }}
       className="space-y-6 pb-28"
     >
       <div>
@@ -290,7 +290,7 @@ export function Config() {
           </div>
           <span className="flex items-center gap-2 shrink-0 text-xs text-text-tertiary">
             {healthOpen ? t('config.health_collapse') : t('config.health_expand')}
-            <CaretDown
+            <CaretDownIcon
               size={16}
               weight="bold"
               className={`transition-transform duration-300 ${healthOpen ? 'rotate-180' : ''}`}
@@ -366,7 +366,7 @@ export function Config() {
                 className="scroll-mt-16"
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.04, duration: 0.35, ease: [0.32, 0.72, 0, 1] }}
+                transition={{ delay: i * 0.04, duration: 0.35, ease: [0.32, 0.72, 0, 1] as const }}
               >
                 <ConfigSectionCard
                   id={section.id}

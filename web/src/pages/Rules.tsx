@@ -50,7 +50,7 @@ export function Rules() {
     <motion.div
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, ease: [0.32, 0.72, 0, 1] }}
+      transition={{ duration: 0.5, ease: [0.32, 0.72, 0, 1] as const }}
       className="space-y-6"
     >
       <div className="flex items-center justify-between">
@@ -97,7 +97,7 @@ export function Rules() {
         initial={{ opacity: 0, y: 24 }}
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true, margin: '-60px' }}
-        transition={{ duration: 0.5, ease: [0.32, 0.72, 0, 1] }}
+        transition={{ duration: 0.5, ease: [0.32, 0.72, 0, 1] as const }}
       >
       <GlassCard>
         <div className="overflow-x-auto">

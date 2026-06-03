@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'motion/react'
-import { CaretDown } from '@phosphor-icons/react'
+import { CaretDownIcon } from '@phosphor-icons/react'
 import { GlassCard } from '@/components/GlassCard'
 import { cn } from '@/lib/utils'
 import { t } from '@/lib/i18n'
@@ -38,7 +38,7 @@ export function ConfigSectionCard({
         </div>
         <span className="flex items-center gap-1 shrink-0 text-xs text-text-tertiary">
           {collapsed ? t('config.section_expand') : t('config.section_collapse')}
-          <CaretDown
+          <CaretDownIcon
             size={16}
             weight="bold"
             className={cn('transition-transform duration-300', !collapsed && 'rotate-180')}
@@ -52,7 +52,7 @@ export function ConfigSectionCard({
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.25, ease: [0.32, 0.72, 0, 1] }}
+            transition={{ duration: 0.25, ease: [0.32, 0.72, 0, 1] as const }}
             className="overflow-hidden"
           >
             <div className="pt-1">{children}</div>

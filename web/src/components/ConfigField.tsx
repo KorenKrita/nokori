@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Copy, Check } from '@phosphor-icons/react'
+import { CopyIcon, CheckIcon } from '@phosphor-icons/react'
 import type { ConfigFieldSchema } from '@/lib/configTypes'
 import { t } from '@/lib/i18n'
 
@@ -119,7 +119,7 @@ export function ConfigField({
               className="shrink-0 px-3 rounded-lg border border-[var(--color-input-border)] bg-[var(--color-bg-elevated)] text-text-secondary hover:bg-[var(--color-row-hover)] transition-colors"
               onClick={() => void copyValue()}
             >
-              {copied ? <Check size={16} className="text-accent-emerald" /> : <Copy size={16} />}
+              {copied ? <CheckIcon size={16} className="text-accent-emerald" /> : <CopyIcon size={16} />}
             </button>
           )}
         </div>

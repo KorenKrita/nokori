@@ -1,4 +1,4 @@
-import { MagnifyingGlass, Funnel } from '@phosphor-icons/react'
+import { MagnifyingGlassIcon, FunnelIcon } from '@phosphor-icons/react'
 import { cn } from '@/lib/utils'
 import { t } from '@/lib/i18n'
 
@@ -13,7 +13,7 @@ export function ConfigToolbar({ search, onSearchChange, onlySetInFile, onOnlySet
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div className="relative flex-1 max-w-md">
-        <MagnifyingGlass
+        <MagnifyingGlassIcon
           size={16}
           className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary pointer-events-none"
         />
@@ -35,7 +35,7 @@ export function ConfigToolbar({ search, onSearchChange, onlySetInFile, onOnlySet
             : 'text-text-secondary hover:bg-[var(--color-pill-hover-bg)]',
         )}
       >
-        <Funnel size={14} weight={onlySetInFile ? 'fill' : 'regular'} />
+        <FunnelIcon size={14} weight={onlySetInFile ? 'fill' : 'regular'} />
         {t('config.filter_in_file')}
       </button>
     </div>

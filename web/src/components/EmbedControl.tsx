@@ -41,7 +41,7 @@ export function EmbedControl({ running, pid, onAction }: EmbedControlProps) {
         disabled={loading}
         whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.95 }}
-        transition={{ duration: 0.2, ease: [0.32, 0.72, 0, 1] }}
+        transition={{ duration: 0.2, ease: [0.32, 0.72, 0, 1] as const }}
         className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors duration-300 disabled:opacity-40 ${
           running
             ? 'bg-accent-rose/10 text-accent-rose hover:bg-accent-rose/20'

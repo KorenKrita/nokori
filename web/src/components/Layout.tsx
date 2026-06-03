@@ -1,29 +1,29 @@
 import { NavLink, Outlet } from 'react-router-dom'
-import { AnimatePresence, motion } from 'motion/react'
+import { motion } from 'motion/react'
 import { cn } from '@/lib/utils'
 import { t } from '@/lib/i18n'
 import { LocaleSwitcher } from '@/components/LocaleSwitcher'
 import { ThemeSwitcher } from '@/components/ThemeSwitcher'
 import {
-  ChartBar,
-  ListBullets,
-  MagnifyingGlass,
-  Syringe,
-  FunnelSimple,
-  ArrowsClockwise,
-  GearSix,
-  Terminal,
+  ChartBarIcon,
+  ListBulletsIcon,
+  MagnifyingGlassIcon,
+  SyringeIcon,
+  FunnelSimpleIcon,
+  ArrowsClockwiseIcon,
+  GearSixIcon,
+  TerminalIcon,
 } from '@phosphor-icons/react'
 
 const NAV_ITEMS = [
-  { to: '/', key: 'nav.dashboard', icon: ChartBar },
-  { to: '/rules', key: 'nav.rules', icon: ListBullets },
-  { to: '/retrieve', key: 'nav.retrieve', icon: MagnifyingGlass },
-  { to: '/injections', key: 'nav.injections', icon: Syringe },
-  { to: '/extract', key: 'nav.extract', icon: FunnelSimple },
-  { to: '/lifecycle', key: 'nav.lifecycle', icon: ArrowsClockwise },
-  { to: '/config', key: 'nav.config', icon: GearSix },
-  { to: '/logs', key: 'nav.logs', icon: Terminal },
+  { to: '/', key: 'nav.dashboard', icon: ChartBarIcon },
+  { to: '/rules', key: 'nav.rules', icon: ListBulletsIcon },
+  { to: '/retrieve', key: 'nav.retrieve', icon: MagnifyingGlassIcon },
+  { to: '/injections', key: 'nav.injections', icon: SyringeIcon },
+  { to: '/extract', key: 'nav.extract', icon: FunnelSimpleIcon },
+  { to: '/lifecycle', key: 'nav.lifecycle', icon: ArrowsClockwiseIcon },
+  { to: '/config', key: 'nav.config', icon: GearSixIcon },
+  { to: '/logs', key: 'nav.logs', icon: TerminalIcon },
 ]
 
 export function Layout() {
@@ -34,7 +34,7 @@ export function Layout() {
           <motion.h1
             initial={{ opacity: 0, x: -10 }}
             animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.6, ease: [0.32, 0.72, 0, 1] }}
+            transition={{ duration: 0.6, ease: [0.32, 0.72, 0, 1] as const }}
             className="text-lg font-semibold tracking-tight"
           >
             Nokori
@@ -68,7 +68,7 @@ export function Layout() {
                   <motion.div
                     initial={{ opacity: 0, x: -8 }}
                     animate={{ opacity: 1, x: 0 }}
-                    transition={{ duration: 0.4, delay: index * 0.05, ease: [0.32, 0.72, 0, 1] }}
+                    transition={{ duration: 0.4, delay: index * 0.05, ease: [0.32, 0.72, 0, 1] as const }}
                     className="relative flex items-center gap-3"
                   >
                     <Icon size={18} weight="light" />

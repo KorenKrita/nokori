@@ -68,7 +68,7 @@ export function ConfirmDialog({
         ref={dialogRef}
         initial={{ opacity: 0, scale: 0.96, y: 8 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
-        transition={{ duration: 0.25, ease: [0.32, 0.72, 0, 1] }}
+        transition={{ duration: 0.25, ease: [0.32, 0.72, 0, 1] as const }}
         className="w-full max-w-md rounded border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-5 shadow-[var(--color-card-shadow)]"
         onClick={(e) => e.stopPropagation()}
       >
