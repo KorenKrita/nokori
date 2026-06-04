@@ -310,7 +310,7 @@ def fetch_rules(
         where.append("project_scope = 'global'")
     elif project_id is not None:
         if project_scope_exact:
-            where.append("project_id = ?")
+            where.append("(project_id = ? AND project_scope != 'global')")
         else:
             where.append("(project_scope = 'global' OR project_id = ?)")
         params.append(project_id)
