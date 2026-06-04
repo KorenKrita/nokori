@@ -468,12 +468,12 @@ def _evaluate_candidate(db: Db, row, rule_version: int) -> TransitionResult:
 
     # Verify context diversity + observed_agent_miss_or_user_correction
     if has_single_session_evidence:
-        # Spec requires at least 2 distinct user intents/contexts within the session
-        unique_contexts = shadow.get("unique_contexts", 0)
-        if unique_contexts < 2:
+        # Spec requires at least 2 distinct user intents/contexts WITHIN the single session
+        best_session_contexts = shadow.get("best_single_session_contexts", 0)
+        if best_session_contexts < 2:
             return TransitionResult(
                 rule_id, old_status, None,
-                f"single_session_exception: insufficient context diversity ({unique_contexts} < 2)",
+                f"single_session_exception: insufficient per-session context diversity ({best_session_contexts} < 2)",
                 False,
             )
 
@@ -503,7 +503,7 @@ def _evaluate_candidate(db: Db, row, rule_version: int) -> TransitionResult:
             reason = (
                 f"single_session_exception: quality={admission_quality:.2f} "
                 f"strong={strong_count} would_help_high={would_help_high} "
-                f"contexts={unique_contexts}"
+                f"contexts={best_session_contexts}"
             )
             applied = _apply_transition(
                 db, rule_id, rule_version, old_status, "active", rpv, reason
@@ -623,12 +623,14 @@ def _evaluate_trusted(db: Db, row, rule_version: int) -> TransitionResult:
     irrelevant = fire.get("irrelevant", 0)
 
     # Rate-based decay requires minimum_rate_denominator (spec 3.4)
+    # Uses recent (windowed) harmful for decay check — lifetime harmful gates suppression
+    recent_harmful_for_decay = fire.get("harmful", 0)
     if (
         total_evaluated >= th.evaluated_fire_count_in_recent_window_min
         and total_evaluated >= MINIMUM_RATE_DENOMINATOR
         and observed_useful <= th.observed_useful_count_in_recent_window_max
         and irrelevant >= th.irrelevant_count_in_recent_window_min
-        and lifetime_harmful <= th.harmful_count_max
+        and recent_harmful_for_decay <= th.harmful_count_max
         and fp_rate >= th.recent_false_positive_rate_min
     ):
         reason = (

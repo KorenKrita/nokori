@@ -251,6 +251,7 @@ def evaluate_applicability(
     required_concepts_match: bool,
     excluded_context_hit: bool,
     excluded_context_override_passed: bool = False,
+    near_miss_context: bool = False,
     action_only_match: bool = False,
     search_only_match: bool = False,
     embedding_only_match: bool = False,
@@ -305,6 +306,16 @@ def evaluate_applicability(
             decision="cold",
             eligible=False,
             reason="excluded_context_hit: rule explicitly excluded",
+            trigger_evidence_passed=False,
+            penalties=penalties,
+        )
+
+    # Near-miss or explain-only context is COLD unless excluded-context override allows (spec 9.4 rule 8)
+    if near_miss_context and not excluded_context_override_passed:
+        return ApplicabilityResult(
+            decision="cold",
+            eligible=False,
+            reason="near_miss_or_explain_only_context: COLD unless override allows",
             trigger_evidence_passed=False,
             penalties=penalties,
         )

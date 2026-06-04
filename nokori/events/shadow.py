@@ -170,6 +170,8 @@ def count_shadow_evidence(
     unique_contexts = 0
     # Per-session strong counts for single-session exception
     per_session_strong: dict[str, int] = {}
+    # Per-session unique context counts for diversity check
+    per_session_contexts: dict[str, set] = {}
 
     for row in rows:
         fp = row["context_fingerprint"]
@@ -188,15 +190,27 @@ def count_shadow_evidence(
             sessions.add(sid)
             if label == "would_help_high":
                 per_session_strong[sid] = per_session_strong.get(sid, 0) + 1
+            # Track per-session distinct contexts
+            if sid not in per_session_contexts:
+                per_session_contexts[sid] = set()
+            if fp is not None:
+                per_session_contexts[sid].add(fp)
 
     # Best single-session strong count
     best_single_session_strong = max(per_session_strong.values()) if per_session_strong else 0
+
+    # Best single-session's context diversity (for single-session exception)
+    best_session_id = max(per_session_strong, key=per_session_strong.get) if per_session_strong else None
+    best_single_session_contexts = (
+        len(per_session_contexts.get(best_session_id, set())) if best_session_id else 0
+    )
 
     return {
         **counts,
         "distinct_sessions": len(sessions),
         "unique_contexts": unique_contexts,
         "best_single_session_strong": best_single_session_strong,
+        "best_single_session_contexts": best_single_session_contexts,
     }
 
 
