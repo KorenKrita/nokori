@@ -1206,7 +1206,12 @@ class TestEdgeCases:
             db.close()
 
     def test_events_outside_window_not_counted(self, tmp_path):
-        """Events older than RECENT_TIME_WINDOW_DAYS are excluded."""
+        """Non-harmful events older than RECENT_EVENT_WINDOW are excluded.
+
+        Harmful events do NOT decay by time (spec section 3.4):
+        'Harmful events do not decay below suppression thresholds merely
+        because time passes.'
+        """
         db = _fresh_db(tmp_path)
         try:
             rid = _insert_rule(db, status="active")
@@ -1214,7 +1219,7 @@ class TestEdgeCases:
             sess1 = str(uuid.uuid4())
             sess2 = str(uuid.uuid4())
 
-            # Old events (outside window)
+            # Old harmful events still count for suppression (lifetime)
             _insert_fire_event(db, rid, session_id=sess1, label="harmful",
                                reason_code="harmful_distracted",
                                days_ago=RECENT_TIME_WINDOW_DAYS + 5)
@@ -1224,7 +1229,7 @@ class TestEdgeCases:
                                reason_code="useful_prevented_error")
 
             result = evaluate_transitions(db, rid)
-            # Old harmful not counted — no suppression
-            assert result.new_status is None
+            # Harmful DOES cause suppression regardless of age (spec 3.4)
+            assert result.new_status == "suppressed"
         finally:
             db.close()

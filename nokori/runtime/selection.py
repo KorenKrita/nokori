@@ -114,10 +114,28 @@ _DIVERSITY_OVERLAP_MAX: float = 0.80
 
 
 def _has_distinct_domain(candidate: ScoredResult, selected: list[ScoredResult]) -> bool:
-    """Check if candidate has a domain/concept set distinct from all selected."""
-    candidate_domains = set(candidate.rule.domain_tags)
+    """Check if candidate has a distinct domain/required-concept set from all selected.
+
+    Spec 9.6: second HOT requires 'distinct domain/required-concept set'.
+    """
+    from nokori.db import loads_json
+
+    candidate_domains = set(candidate.rule.domain_tags) if candidate.rule.domain_tags else set()
+    candidate_groups = frozenset(
+        g.get("id", "") for g in (loads_json(candidate.rule.required_concept_groups, [])
+                                   if isinstance(candidate.rule.required_concept_groups, str)
+                                   else (candidate.rule.required_concept_groups or []))
+    )
+
     for s in selected:
-        if candidate_domains and candidate_domains == set(s.rule.domain_tags):
+        s_domains = set(s.rule.domain_tags) if s.rule.domain_tags else set()
+        s_groups = frozenset(
+            g.get("id", "") for g in (loads_json(s.rule.required_concept_groups, [])
+                                       if isinstance(s.rule.required_concept_groups, str)
+                                       else (s.rule.required_concept_groups or []))
+        )
+        # Both domain AND concept groups must differ for distinctness
+        if candidate_domains == s_domains and candidate_groups == s_groups:
             return False
     return True
 

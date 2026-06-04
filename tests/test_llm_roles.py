@@ -153,15 +153,22 @@ class TestValidateRoleOutput:
         payload = json.dumps({
             "candidates": [
                 {
-                    "trigger": "when X",
-                    "action": "do Y",
+                    "trigger_draft": "when X",
+                    "action_draft": "do Y",
+                    "behavior_draft": "behavior",
+                    "source_type": "correction",
+                    "confidence_guess": "high",
                     "evidence_quotes": ["quote"],
-                    "confidence": 0.9,
+                    "non_generalization_boundaries": [],
+                    "required_concepts_draft": ["concept"],
+                    "excluded_contexts_draft": [],
+                    "search_terms_draft": {"en": ["term"]},
+                    "trigger_variants_draft": ["variant"],
                 }
             ]
         })
         result = validate_role_output("extractor", payload)
-        assert result["candidates"][0]["trigger"] == "when X"
+        assert result["candidates"][0]["trigger_draft"] == "when X"
 
     def test_malformed_json_raises(self):
         with pytest.raises(ValueError, match="invalid JSON"):

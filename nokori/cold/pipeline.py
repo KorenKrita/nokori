@@ -126,6 +126,16 @@ def run_cold_pipeline(
     """
     candidate = extractor_output
 
+    # --- Pre-check: evidence_quotes must be non-empty (section 6.1) ---
+    evidence_quotes = candidate.get("evidence_quotes", [])
+    if not evidence_quotes:
+        return ColdPipelineResult(
+            status="rejected",
+            rule_id=None,
+            rejection_reason="no_transcript_evidence",
+            scores=None,
+        )
+
     # --- Stage a: Admission Judge ---
     admission_model = resolve_model_id("admission_judge", role_models, default_model)
     decision, scores = _run_admission_judge(db, llm, candidate, admission_model)
@@ -266,6 +276,7 @@ def run_cold_pipeline(
         adversarial_failures=adversarial_failures,
         fingerprint_conflict=fingerprint_conflict,
         merge_op=merge_op,
+        source_origin=source_origin,
     )
 
     # Determine final status
@@ -540,7 +551,7 @@ def _run_merge_planner(
     user_prompt = (
         f"<new_rule>\n{rule_text}\n</new_rule>\n\n"
         f"<existing_rules>\n{existing_text}\n</existing_rules>\n\n"
-        "Determine: insert, merge, replace, split, or no_op. "
+        "Determine relation_shape, safety, quality_winner, and operation. "
         "Consider trust levels and evidence strength of existing rules."
     )
 
@@ -563,19 +574,17 @@ def _run_merge_planner(
             existing_rules[0],
         )
         planner_output = {
-            **result,
-            "relation_shape": result.get("relation_shape")
-            or _operation_to_relation_shape(operation),
+            "relation_shape": result.get("relation_shape", "unrelated"),
             "new_rule_safety": result.get("new_rule_safety", "safe"),
             "operation_safety": result.get("operation_safety", "safe"),
-            "quality_winner": result.get("quality_winner")
-            or ("new" if operation == "replace" else "neither"),
+            "quality_winner": result.get("quality_winner", "neither"),
+            "operation": operation,
             "confidence": result.get("confidence", 0.5),
-            "reason": result.get("merge_rationale", ""),
+            "reason": result.get("reason", ""),
         }
         decision = apply_merge_policy(planner_output, existing, rule_data)
         return decision.operation, {
-            **result,
+            **planner_output,
             "merge_rationale": decision.reason,
             "target_rule_ids": [decision.target_rule_id] if decision.target_rule_id else [],
             "policy_decision": decision.operation,
@@ -607,11 +616,16 @@ def _check_cold_fast_lane(
     adversarial_failures: int,
     fingerprint_conflict: bool,
     merge_op: str,
+    source_origin: SourceOrigin = "transcript_extraction",
 ) -> bool:
     """Check all cold fast lane thresholds from policy (section 3.3).
 
     Returns True only if ALL thresholds pass for direct active insertion.
+    external_source_material CANNOT use cold fast lane (spec acceptance criteria).
     """
+    if source_origin == "external_source_material":
+        return False
+
     if not scores:
         return False
 
@@ -906,7 +920,10 @@ def _apply_merge_side_effects(
     merge_op: str,
     merge_info: dict[str, Any],
 ) -> None:
-    """Apply validated destructive merge side effects after inserting new rule."""
+    """Apply validated destructive merge side effects after inserting new rule.
+
+    Uses CAS (rule_version + status) to prevent concurrent mutation (spec section 13).
+    """
     if merge_op not in DESTRUCTIVE_MERGE_OPS:
         return
 
@@ -915,26 +932,40 @@ def _apply_merge_side_effects(
     if not target_rule_id:
         return
 
+    existing_version = existing_rule.get("rule_version")
+    existing_status = existing_rule.get("status")
+    if existing_version is None or existing_status is None:
+        return
+
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
     reason = merge_info.get("merge_rationale", merge_op)
     with db.transaction() as tx:
         if merge_op == "replace_existing":
             tx.execute(
                 "UPDATE rules SET status = 'archived', archived_reason = ?, "
-                "replacement_id = ?, updated_at = ? WHERE id = ?",
-                (reason, new_rule_id, now, target_rule_id),
+                "replacement_id = ?, rule_version = rule_version + 1, "
+                "runtime_policy_version = ?, updated_at = ? "
+                "WHERE id = ? AND rule_version = ? AND status = ?",
+                (reason, new_rule_id, RUNTIME_POLICY_VERSION, now,
+                 target_rule_id, existing_version, existing_status),
             )
         elif merge_op == "suppress_existing":
             tx.execute(
                 "UPDATE rules SET status = 'suppressed', suppressed_at = ?, "
-                "updated_at = ? WHERE id = ?",
-                (now, now, target_rule_id),
+                "rule_version = rule_version + 1, "
+                "runtime_policy_version = ?, updated_at = ? "
+                "WHERE id = ? AND rule_version = ? AND status = ?",
+                (now, RUNTIME_POLICY_VERSION, now,
+                 target_rule_id, existing_version, existing_status),
             )
         elif merge_op == "archive_existing":
             tx.execute(
                 "UPDATE rules SET status = 'archived', archived_reason = ?, "
-                "updated_at = ? WHERE id = ?",
-                (reason, now, target_rule_id),
+                "rule_version = rule_version + 1, "
+                "runtime_policy_version = ?, updated_at = ? "
+                "WHERE id = ? AND rule_version = ? AND status = ?",
+                (reason, RUNTIME_POLICY_VERSION, now,
+                 target_rule_id, existing_version, existing_status),
             )
 
     record_lineage(db, target_rule_id, new_rule_id, merge_op, reason)

@@ -81,7 +81,9 @@ def _admission_json(
     evidence_support: float = 0.93,
     trigger_specificity: float = 0.90,
     scope_control: float = 0.88,
-    actionability: float = 0.85,
+    action_clarity: float = 0.85,
+    generalization_safety: float = 0.87,
+    retrieval_readiness: float = 0.86,
 ) -> str:
     return json.dumps({
         "decision": decision,
@@ -89,8 +91,10 @@ def _admission_json(
             "overall_quality": overall_quality,
             "evidence_support": evidence_support,
             "trigger_specificity": trigger_specificity,
+            "action_clarity": action_clarity,
             "scope_control": scope_control,
-            "actionability": actionability,
+            "generalization_safety": generalization_safety,
+            "retrieval_readiness": retrieval_readiness,
         },
         "reasoning": "Test reasoning.",
     })
@@ -104,12 +108,16 @@ def _final_judge_json(decision: str) -> str:
     })
 
 
-def _merge_planner_json(operation: str = "insert") -> str:
+def _merge_planner_json(operation: str = "keep_both") -> str:
     return json.dumps({
+        "relation_shape": "unrelated",
+        "new_rule_safety": "safe",
+        "operation_safety": "safe",
+        "quality_winner": "neither",
         "operation": operation,
+        "confidence": 0.8,
+        "reason": "no overlap",
         "target_rule_ids": [],
-        "merge_rationale": "no overlap",
-        "conflict_detected": False,
     })
 
 

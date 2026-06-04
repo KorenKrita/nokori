@@ -62,7 +62,7 @@ def test_user_archive_blocks_equivalent(db):
     assert result is not None
     assert result["blocked"] is True
     assert result["archive_strength"] == "user"
-    assert result["reason"] == "user_archive_no_scope_change"
+    assert result["reason"] == "user_archive_blocks_equivalent_or_broader"
 
 
 # ---------------------------------------------------------------------------
@@ -108,7 +108,7 @@ def test_replacement_archive_blocks_exact_duplicate(db):
     assert result is not None
     assert result["blocked"] is True
     assert result["archive_strength"] == "replacement"
-    assert result["reason"] == "replacement_exact_duplicate"
+    assert result["reason"] == "replacement_blocks_equivalent_or_weaker"
 
     # Different trigger -> not blocked (different signature)
     result2 = check_fingerprint_block(

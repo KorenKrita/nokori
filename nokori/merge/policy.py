@@ -198,6 +198,7 @@ def apply_merge_policy(
     if (
         op_safety == "safe"
         and relation == "contradiction"
+        and quality_winner == "new"
         and _existing_has_weak_history(existing_rule)
     ):
         return MergeDecision(
@@ -410,11 +411,16 @@ def validate_merge_transaction(
     synthetic_passed: bool,
     fingerprint_clear: bool,
     matcher_compiled: bool,
+    final_admission_passed: bool = True,
 ) -> bool:
     """Validate that destructive merge operations meet all preconditions.
 
     Merge operations that weaken/suppress/archive/replace existing ONLY apply
-    if the proposed rule passes all checks (section 8.4 final paragraph).
+    if the proposed rule passes ALL 4 checks (section 8.4 final paragraph):
+    1. Compilation success (matcher_compiled)
+    2. Archived-fingerprint checks (fingerprint_clear)
+    3. Synthetic retrieval evaluation (synthetic_passed)
+    4. Final admission policy (final_admission_passed)
 
     Returns True if the transaction is valid and may proceed.
     """
@@ -428,7 +434,7 @@ def validate_merge_transaction(
     if merge_decision.operation not in destructive_ops:
         return True
 
-    # All three gates must pass for destructive operations.
+    # All four gates must pass for destructive operations.
     if not synthetic_passed:
         return False
 
@@ -436,6 +442,9 @@ def validate_merge_transaction(
         return False
 
     if not matcher_compiled:
+        return False
+
+    if not final_admission_passed:
         return False
 
     return True

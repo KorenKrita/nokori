@@ -11,7 +11,7 @@ import hashlib
 import uuid
 
 from ..db import Db, dumps_json, loads_json
-from ..events.fire import get_fire_events_for_session, mark_posthoc_label
+from ..events.fire import get_fire_events_for_session, mark_posthoc_label, update_first_observed_useful
 from .evaluator import run_posthoc_evaluation
 from ..utils.time import now_iso
 
@@ -122,8 +122,12 @@ def mark_posthoc_job_unclear(db: Db, job_id: str) -> None:
 
 
 def process_pending_posthoc_jobs(db: Db, llm, *, limit: int = 20) -> dict[str, int]:
-    """Evaluate pending posthoc jobs and mark each done/failed/unclear."""
+    """Evaluate pending posthoc jobs, mark done, update scores, trigger transitions."""
+    from ..lifecycle.transitions import evaluate_transitions, update_derived_scores
+
     summary = {"processed": 0, "done": 0, "unclear": 0, "failed": 0}
+    rules_to_update: set[str] = set()
+
     for job in get_pending_posthoc_jobs(db, limit=limit):
         row = db.fetchone(
             "SELECT * FROM rule_fire_events WHERE id = ?",
@@ -169,6 +173,19 @@ def process_pending_posthoc_jobs(db: Db, llm, *, limit: int = 20) -> dict[str, i
         )
         summary["processed"] += 1
         summary["done"] += 1
+
+        # Track rules that need score/lifecycle update
+        rule_id = row["rule_id"]
+        if rule_id:
+            rules_to_update.add(rule_id)
+            if label == "observed_useful":
+                update_first_observed_useful(db, rule_id)
+
+    # Update derived scores and evaluate lifecycle transitions for affected rules
+    for rule_id in rules_to_update:
+        update_derived_scores(db, rule_id)
+        evaluate_transitions(db, rule_id)
+
     return summary
 
 
@@ -186,7 +203,7 @@ def build_evaluator_input(db: Db, fire_event: dict) -> dict | None:
     Includes:
       - Injected suggestion snapshot (neutral wording)
       - Prompt context (via prompt_hash reference)
-      - Bounded transcript window reference
+      - Bounded transcript window content (loaded from posthoc_jobs or session data)
       - Decision features at injection time
 
     Excludes:
@@ -230,11 +247,13 @@ def build_evaluator_input(db: Db, fire_event: dict) -> dict | None:
     )
     feedback = [dict(r) for r in feedback_rows]
 
-    transcript_window = (
-        f"bounded_window_ref: {bounded_window_ref}"
-        if bounded_window_ref
-        else f"transcript_window_ref: {transcript_window_ref}"
+    # Load actual transcript window content from posthoc_jobs redacted_window_json
+    transcript_window_content = _load_transcript_window(
+        db, fire_event_id, bounded_window_ref, transcript_window_ref
     )
+    if transcript_window_content is None:
+        return None
+
     feedback_text = dumps_json(feedback) if feedback else None
 
     return {
@@ -242,7 +261,7 @@ def build_evaluator_input(db: Db, fire_event: dict) -> dict | None:
         "session_id": fire_event.get("session_id"),
         "injected_suggestion": suggestion_text,
         "injection_context": trigger_snapshot,
-        "transcript_window": transcript_window,
+        "transcript_window": transcript_window_content,
         "feedback": feedback_text,
         "suggestion": {
             "text": suggestion_text,
@@ -257,3 +276,39 @@ def build_evaluator_input(db: Db, fire_event: dict) -> dict | None:
         "decision_features": decision_features,
         "feedback_events": feedback,
     }
+
+
+def _load_transcript_window(
+    db: Db,
+    fire_event_id: str,
+    bounded_window_ref: str | None,
+    transcript_window_ref: str | None,
+) -> str | None:
+    """Load actual transcript window content for posthoc evaluation.
+
+    Tries in order:
+    1. posthoc_jobs.redacted_window_json for this fire event
+    2. The bounded_window_ref/transcript_window_ref as stored content
+
+    Returns None if no actual content is available (not just a hash ref).
+    """
+    # Check if we stored the window payload in posthoc_jobs
+    job_row = db.fetchone(
+        "SELECT redacted_window_json FROM posthoc_jobs WHERE fire_event_id = ?",
+        (fire_event_id,),
+    )
+    if job_row and job_row["redacted_window_json"]:
+        content = job_row["redacted_window_json"]
+        if content and len(content) > 50:
+            return content
+
+    # The bounded_window_ref may contain inline content (stored during session_end)
+    # or be a reference identifier. In either case, if it exists we use it as
+    # context for the evaluator. Short refs get wrapped with framing for the LLM.
+    ref = bounded_window_ref or transcript_window_ref
+    if ref:
+        if len(ref) > 64:
+            return ref
+        return f"[Bounded transcript window reference: {ref}]"
+
+    return None

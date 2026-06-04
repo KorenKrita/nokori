@@ -430,27 +430,29 @@ def evaluate_applicability(
     # ------------------------------------------------------------------
 
     if rule_status == "trusted":
-        # Gate: requires gate_eligible severity + tool evidence when available
+        # Gate: requires gate_eligible severity + STRONG prompt evidence + tool evidence
         if rule_severity == "gate_eligible":
-            if has_tool_input:
-                if tool_evidence_passed:
+            has_strong_for_gate = _strong_trigger_evidence(**evidence_kwargs)
+            if has_strong_for_gate:
+                if has_tool_input:
+                    if tool_evidence_passed:
+                        return ApplicabilityResult(
+                            decision="gate",
+                            eligible=True,
+                            reason="trusted + gate_eligible + strong evidence + tool evidence",
+                            trigger_evidence_passed=True,
+                            penalties=penalties,
+                        )
+                    # Tool input available but evidence did not pass -> fall to HOT
+                else:
+                    # Prompt-only gate (no tool input exists yet)
                     return ApplicabilityResult(
                         decision="gate",
                         eligible=True,
-                        reason="trusted + gate_eligible severity + tool evidence passed",
+                        reason="trusted + gate_eligible + strong evidence + prompt-only",
                         trigger_evidence_passed=True,
                         penalties=penalties,
                     )
-                # Tool input available but evidence did not pass -> fall to HOT
-            else:
-                # Prompt-only gate (no tool input exists yet)
-                return ApplicabilityResult(
-                    decision="gate",
-                    eligible=True,
-                    reason="trusted + gate_eligible severity + prompt-only (no tool input)",
-                    trigger_evidence_passed=True,
-                    penalties=penalties,
-                )
 
         # HOT for trusted
         if rule_severity == "high_risk":

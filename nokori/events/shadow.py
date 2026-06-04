@@ -208,6 +208,97 @@ def mark_shadow_label(
         )
 
 
+def get_unlabeled_shadow_events(db: Db, limit: int = 20) -> list[dict]:
+    """Fetch shadow events that have no shadow_label for counterfactual evaluation."""
+    rows = db.fetchall(
+        "SELECT * FROM rule_shadow_events "
+        "WHERE shadow_label IS NULL "
+        "ORDER BY created_at ASC LIMIT ?",
+        (limit,),
+    )
+    return [dict(r) for r in rows]
+
+
+def run_shadow_counterfactual_evaluation(
+    db: Db, llm, *, limit: int = 20
+) -> dict[str, int]:
+    """Evaluate unlabeled shadow events via LLM counterfactual analysis.
+
+    For each shadow event, determines whether the rule would have helped
+    if it had been injected. Produces shadow labels:
+    would_help_high, would_help_low, irrelevant, risky, near_miss, unclear.
+
+    This is the shadow counterfactual evaluation pipeline that enables
+    candidate promotion and suppressed recovery (spec section 10.3).
+    """
+    summary = {"processed": 0, "labeled": 0, "failed": 0}
+
+    events = get_unlabeled_shadow_events(db, limit=limit)
+    for event in events:
+        shadow_event_id = event["id"]
+        action_snapshot = event.get("shadow_action_snapshot", "")
+        trigger_snapshot = event.get("shadow_trigger_snapshot", "")
+
+        if not action_snapshot and not trigger_snapshot:
+            mark_shadow_label(db, shadow_event_id, "unclear")
+            summary["processed"] += 1
+            summary["labeled"] += 1
+            continue
+
+        suggestion_text = action_snapshot or trigger_snapshot
+
+        system_prompt = (
+            "You are a counterfactual evaluator for a rule memory system. "
+            "You will see a rule suggestion and the context where it matched "
+            "(but was NOT injected). Judge whether the suggestion WOULD HAVE "
+            "helped the assistant if it had been shown.\n\n"
+            "Labels:\n"
+            "- would_help_high: Strong evidence the suggestion would have "
+            "prevented an error or improved the outcome significantly.\n"
+            "- would_help_low: Some evidence the suggestion might have helped, "
+            "but the outcome was already acceptable.\n"
+            "- irrelevant: The suggestion does not apply to this context.\n"
+            "- risky: The suggestion could have caused harm in this context.\n"
+            "- near_miss: The context is superficially similar but the rule "
+            "trigger does not actually apply.\n"
+            "- unclear: Insufficient information to judge.\n\n"
+            "Return JSON: {\"label\": \"...\", \"reasoning\": \"...\"}"
+        )
+
+        user_prompt = (
+            f"## Rule Suggestion\n"
+            f"A prior reminder would have suggested: {suggestion_text}\n\n"
+            f"## Trigger Context\n{trigger_snapshot}\n\n"
+            f"## Match Context\n"
+            f"prompt_hash: {event.get('prompt_hash', 'unknown')}\n"
+            f"matched_level: {event.get('matched_level', 'unknown')}\n"
+        )
+
+        try:
+            import json
+            response = llm.call(
+                system=system_prompt,
+                user=user_prompt,
+                role="posthoc_evaluator",
+            )
+            data = json.loads(response)
+            label = data.get("label", "unclear")
+            valid_labels = (
+                "would_help_high", "would_help_low", "irrelevant",
+                "risky", "near_miss", "unclear",
+            )
+            if label not in valid_labels:
+                label = "unclear"
+            mark_shadow_label(db, shadow_event_id, label)
+            summary["labeled"] += 1
+        except Exception:
+            summary["failed"] += 1
+
+        summary["processed"] += 1
+
+    return summary
+
+
 def _days_ago_iso(days: int) -> str:
     dt = datetime.now(timezone.utc) - timedelta(days=days)
     return dt.isoformat(timespec="seconds").replace("+00:00", "Z")

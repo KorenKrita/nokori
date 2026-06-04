@@ -17,6 +17,8 @@ from nokori.db import Db
 CIRCUIT_BREAKER_THRESHOLD = 5  # failures in last 10 attempts
 CIRCUIT_BREAKER_COOLDOWN_SECONDS = 300
 TRANSCRIPT_INGEST_TTL_HOURS = 72
+SCHEMA_PARSE_FAILURE_CONSECUTIVE_MAX = 3
+PROVIDER_AUTH_RATE_LIMIT_ERRORS = ("auth_error", "rate_limit", "401", "429")
 
 
 # --- Helpers ---
@@ -120,21 +122,68 @@ def mark_job_failed(db: Db, job_id: str) -> None:
         )
 
 
-def is_circuit_breaker_open(db: Db, role: str) -> bool:
-    """Check if too many recent failures exist for this role.
+def is_circuit_breaker_open(db: Db, role: str, model_id: str | None = None) -> bool:
+    """Check if circuit breaker is open for role/provider/schema failures.
 
-    Counts failures in the last 10 attempts for the role.
-    If >= CIRCUIT_BREAKER_THRESHOLD, the breaker is open (paused).
+    Three breaker types (spec section 5.2):
+    1. role_failure_rate >= 0.50 over last 10 attempts -> pause role
+    2. provider_auth_or_rate_limit_error -> pause affected provider/model route
+    3. schema_parse_failure >= 3 consecutive -> pause role prompt version
     """
+    # Type 1: general role failure rate
     rows = db.fetchall(
         "SELECT status FROM llm_jobs WHERE role = ? "
         "ORDER BY updated_at DESC LIMIT 10",
         (role,),
     )
-    if not rows:
+    if rows:
+        failure_count = sum(1 for r in rows if r["status"] == "failed")
+        if failure_count >= CIRCUIT_BREAKER_THRESHOLD:
+            return True
+
+    # Type 2: provider auth/rate-limit (check by model_id if available)
+    if model_id:
+        provider_rows = db.fetchall(
+            "SELECT status, output_json FROM llm_jobs WHERE model_id = ? "
+            "ORDER BY updated_at DESC LIMIT 5",
+            (model_id,),
+        )
+        auth_failures = sum(
+            1 for r in provider_rows
+            if r["status"] == "failed" and _is_auth_rate_error(r["output_json"])
+        )
+        if auth_failures >= 2:
+            return True
+
+    # Type 3: consecutive schema parse failures for this role
+    schema_rows = db.fetchall(
+        "SELECT status, output_json FROM llm_jobs WHERE role = ? "
+        "ORDER BY updated_at DESC LIMIT ?",
+        (role, SCHEMA_PARSE_FAILURE_CONSECUTIVE_MAX),
+    )
+    if len(schema_rows) >= SCHEMA_PARSE_FAILURE_CONSECUTIVE_MAX:
+        all_schema_fails = all(
+            r["status"] == "failed" and _is_schema_parse_error(r["output_json"])
+            for r in schema_rows
+        )
+        if all_schema_fails:
+            return True
+
+    return False
+
+
+def _is_auth_rate_error(output_json: str | None) -> bool:
+    if not output_json:
         return False
-    failure_count = sum(1 for r in rows if r["status"] == "failed")
-    return failure_count >= CIRCUIT_BREAKER_THRESHOLD
+    lower = output_json.lower()
+    return any(err in lower for err in PROVIDER_AUTH_RATE_LIMIT_ERRORS)
+
+
+def _is_schema_parse_error(output_json: str | None) -> bool:
+    if not output_json:
+        return False
+    lower = output_json.lower()
+    return "schema" in lower or "invalid json" in lower or "validation failed" in lower
 
 
 # --- Transcript Ingest Job Functions ---

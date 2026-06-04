@@ -187,6 +187,26 @@ def compute_eligible_rule_set_hash(rules) -> str:
     return hashlib.sha256("|".join(ids).encode()).hexdigest()[:16]
 
 
+def compute_pool_version(
+    rules,
+    tokenizer_version: str,
+    matcher_compiler_version: str,
+    generic_token_policy_version: str,
+    concept_compiler_version: str,
+) -> str:
+    """Composite pool version that changes when any component changes (spec section 9.3).
+
+    Includes: tokenizer, matcher compiler, generic-token policy,
+    concept compiler, AND eligible rule-set hash.
+    """
+    rule_set_hash = compute_eligible_rule_set_hash(rules)
+    composite = (
+        f"{rule_set_hash}|{tokenizer_version}|{matcher_compiler_version}"
+        f"|{generic_token_policy_version}|{concept_compiler_version}"
+    )
+    return hashlib.sha256(composite.encode()).hexdigest()[:16]
+
+
 def _trigger_tokens_for_rule(rule) -> set[str]:
     """Extract tokens from trigger_canonical + trigger_variants fields only."""
     tokens: set[str] = set()
@@ -248,8 +268,13 @@ def build_idf_stats(
     dynamic_trigger_info_min = 2 * idf_10pct
     trigger_info_min = max(dynamic_trigger_info_min, absolute_trigger_info_min)
 
+    pool_version = compute_pool_version(
+        pool, tokenizer_version, matcher_compiler_version,
+        GENERIC_TOKEN_POLICY_VERSION, concept_compiler_version,
+    )
+
     return IdfPoolStats(
-        pool_version=compute_eligible_rule_set_hash(pool),
+        pool_version=pool_version,
         rule_pool_size=n,
         eligible_rule_set_hash=compute_eligible_rule_set_hash(pool),
         tokenizer_version=tokenizer_version,

@@ -113,27 +113,38 @@ def check_fingerprint_block(
             exact_row,
             scope_change_evidence=scope_change_evidence,
             exact_match=True,
+            is_narrower_scope=False,  # exact match = same scope
         )
 
     row = _find_related_fingerprint(db, trigger_canonical, action_instruction)
     if row is None:
         return None
+    # Related (non-exact) match: check if new rule is narrower scope
+    is_narrower = _is_narrower_scope(
+        trigger_canonical, action_instruction, row
+    )
     return _fingerprint_decision(
         row,
         scope_change_evidence=scope_change_evidence,
         exact_match=False,
+        is_narrower_scope=is_narrower,
     )
 
 
-def _fingerprint_decision(row, *, scope_change_evidence: str | None, exact_match: bool):
+def _fingerprint_decision(
+    row,
+    *,
+    scope_change_evidence: str | None,
+    exact_match: bool,
+    is_narrower_scope: bool = False,
+):
     strength = row["archive_strength"]
-    if strength == "replacement" and not exact_match:
-        return None
 
-    if scope_change_evidence and row["can_be_overridden_by_changed_scope"]:
-        return None
-
-    if strength == "user" and not scope_change_evidence:
+    # Replacement blocks exact duplicates and weaker replacements only (spec section 11)
+    if strength == "replacement":
+        if not exact_match:
+            return None
+        # exact_match = True means equivalent or weaker -> block
         return {
             "blocked": True,
             "fingerprint_id": row["id"],
@@ -141,11 +152,30 @@ def _fingerprint_decision(row, *, scope_change_evidence: str | None, exact_match
             "scope_summary": row["scope_summary"],
             "blocked_trigger_area": row["blocked_trigger_area"],
             "blocked_action_area": row["blocked_action_area"],
-            "reason": "user_archive_no_scope_change",
+            "reason": "replacement_blocks_equivalent_or_weaker",
+            "overridable": True,
+        }
+
+    # User archive: blocks equivalent/broader. Narrower or scope-changed rules
+    # may proceed when scope change is explicit AND can_be_overridden (spec 3.5)
+    if strength == "user":
+        if scope_change_evidence and row["can_be_overridden_by_changed_scope"]:
+            return None
+        return {
+            "blocked": True,
+            "fingerprint_id": row["id"],
+            "archive_strength": strength,
+            "scope_summary": row["scope_summary"],
+            "blocked_trigger_area": row["blocked_trigger_area"],
+            "blocked_action_area": row["blocked_action_area"],
+            "reason": "user_archive_blocks_equivalent_or_broader",
             "overridable": bool(row["can_be_overridden_by_changed_scope"]),
         }
 
+    # System archive: weak negative memory, overridable by stronger evidence + synthetic eval
     if strength == "system":
+        if scope_change_evidence and row["can_be_overridden_by_changed_scope"]:
+            return None
         return {
             "blocked": True,
             "fingerprint_id": row["id"],
@@ -154,18 +184,6 @@ def _fingerprint_decision(row, *, scope_change_evidence: str | None, exact_match
             "blocked_trigger_area": row["blocked_trigger_area"],
             "blocked_action_area": row["blocked_action_area"],
             "reason": "system_archive",
-            "overridable": True,
-        }
-
-    if strength == "replacement":
-        return {
-            "blocked": True,
-            "fingerprint_id": row["id"],
-            "archive_strength": strength,
-            "scope_summary": row["scope_summary"],
-            "blocked_trigger_area": row["blocked_trigger_area"],
-            "blocked_action_area": row["blocked_action_area"],
-            "reason": "replacement_exact_duplicate",
             "overridable": True,
         }
 
@@ -200,6 +218,31 @@ def _find_related_fingerprint(
             best = row
             best_score = score
     return best if best_score >= 0.75 else None
+
+
+def _is_narrower_scope(
+    trigger_canonical: str,
+    action_instruction: str,
+    fingerprint_row,
+) -> bool:
+    """Determine if the new rule has narrower scope than the archived fingerprint.
+
+    Narrower = the new rule's tokens are a STRICT SUBSET of the fingerprint's tokens,
+    meaning it covers less ground.
+    """
+    new_tokens = _content_tokens(f"{trigger_canonical} {action_instruction}")
+    old_tokens = _content_tokens(
+        f"{fingerprint_row['blocked_trigger_area']} {fingerprint_row['blocked_action_area']}"
+    )
+    if not new_tokens or not old_tokens:
+        return False
+    # New is narrower if it has additional specificity tokens not in old
+    # AND old covers broader area (new tokens not a superset of old)
+    new_in_old = len(new_tokens & old_tokens) / len(new_tokens) if new_tokens else 0
+    old_in_new = len(new_tokens & old_tokens) / len(old_tokens) if old_tokens else 0
+    # Narrower: new rule adds specificity (not all new tokens are in old)
+    # AND doesn't cover the full breadth of old (old is broader)
+    return new_in_old < 0.90 and old_in_new >= 0.60
 
 
 def _content_tokens(text: str) -> set[str]:

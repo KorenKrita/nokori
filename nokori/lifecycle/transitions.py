@@ -20,8 +20,10 @@ from ..policy import (
     CANDIDATE_TO_ARCHIVED,
     FALSE_POSITIVE_REASON_CODES,
     MINIMUM_RATE_DENOMINATOR,
+    RECENT_EVENT_WINDOW,
     RECENT_TIME_WINDOW_DAYS,
     RUNTIME_POLICY_VERSION,
+    SHADOW_EVENT_WINDOW,
     SUPPRESSED_TO_ACTIVE,
     SUPPRESSED_TO_ARCHIVED,
     SUPPRESSION_TTL_DAYS,
@@ -111,42 +113,57 @@ def run_all_pending_transitions(db: Db) -> list[TransitionResult]:
 
 
 def _aggregate_fire_evidence(db: Db, rule_id: str, window_days: int = 30) -> dict:
-    """Count fire event labels within window. Compute false_positive_rate."""
-    counts = count_evaluated_fire_events(db, rule_id, window_days=window_days)
+    """Count fire event labels using last-N-events window (section 3.4).
 
-    # Distinct sessions with observed_useful
-    cutoff = _days_ago_iso(window_days)
-    rows = db.fetchall(
-        "SELECT DISTINCT session_id FROM rule_fire_events "
-        "WHERE rule_id = ? AND posthoc_label = 'observed_useful' AND created_at >= ?",
-        (rule_id, cutoff),
+    Uses RECENT_EVENT_WINDOW (last 10 evaluated events) for rate-based metrics.
+    Harmful events are counted lifetime — they do NOT decay by time alone.
+    """
+    # Last N evaluated events (event-count window per spec 3.4)
+    recent_rows = db.fetchall(
+        "SELECT posthoc_label, posthoc_reason_code, session_id FROM rule_fire_events "
+        "WHERE rule_id = ? AND posthoc_label IS NOT NULL "
+        "ORDER BY created_at DESC LIMIT ?",
+        (rule_id, RECENT_EVENT_WINDOW),
     )
-    counts["distinct_observed_useful_sessions"] = len(rows)
 
-    # Count by reason_code for FP calculation
-    reason_rows = db.fetchall(
-        "SELECT posthoc_reason_code, COUNT(*) AS n FROM rule_fire_events "
-        "WHERE rule_id = ? AND posthoc_reason_code IS NOT NULL AND created_at >= ? "
-        "GROUP BY posthoc_reason_code",
-        (rule_id, cutoff),
-    )
+    counts: dict[str, int | float] = {
+        "observed_useful": 0,
+        "plausible_useful": 0,
+        "irrelevant": 0,
+        "harmful": 0,
+        "unclear": 0,
+        "total_evaluated": len(recent_rows),
+    }
     reason_counts: dict[str, int] = {}
-    for r in reason_rows:
-        reason_counts[r["posthoc_reason_code"]] = r["n"]
-    counts["reason_counts"] = reason_counts
+    useful_sessions: set[str] = set()
 
+    for r in recent_rows:
+        label = r["posthoc_label"]
+        if label in counts and label != "total_evaluated":
+            counts[label] = int(counts[label]) + 1
+        rc = r["posthoc_reason_code"]
+        if rc:
+            reason_counts[rc] = reason_counts.get(rc, 0) + 1
+        if label == "observed_useful" and r["session_id"]:
+            useful_sessions.add(r["session_id"])
+
+    counts["reason_counts"] = reason_counts  # type: ignore[assignment]
+    counts["distinct_observed_useful_sessions"] = len(useful_sessions)
     counts["false_positive_rate"] = compute_false_positive_rate(counts)
 
     # Irrelevant in last 5 evaluated fire events
-    last_5 = db.fetchall(
-        "SELECT posthoc_label FROM rule_fire_events "
-        "WHERE rule_id = ? AND posthoc_label IS NOT NULL "
-        "ORDER BY created_at DESC LIMIT 5",
+    counts["irrelevant_in_last_5"] = sum(
+        1 for r in recent_rows[:5] if r["posthoc_label"] == "irrelevant"
+    )
+
+    # CRITICAL: harmful events do NOT decay by time (section 3.4).
+    # Count ALL lifetime harmful events for suppression decisions.
+    lifetime_harmful_row = db.fetchone(
+        "SELECT COUNT(*) AS n FROM rule_fire_events "
+        "WHERE rule_id = ? AND posthoc_label = 'harmful'",
         (rule_id,),
     )
-    counts["irrelevant_in_last_5"] = sum(
-        1 for r in last_5 if r["posthoc_label"] == "irrelevant"
-    )
+    counts["lifetime_harmful"] = lifetime_harmful_row["n"] if lifetime_harmful_row else 0
 
     return counts
 
@@ -413,9 +430,18 @@ def _evaluate_candidate(db: Db, row, rule_version: int) -> TransitionResult:
         and shadow_fp_rate <= ss.shadow_false_positive_rate_max
     )
 
-    # Verify observed_agent_miss_or_user_correction if needed
+    # Verify context diversity + observed_agent_miss_or_user_correction
     if has_single_session_evidence:
-        # Check for agent miss / user correction evidence in fire events (feedback)
+        # Spec requires at least 2 distinct user intents/contexts within the session
+        unique_contexts = shadow.get("unique_contexts", 0)
+        if unique_contexts < 2:
+            return TransitionResult(
+                rule_id, old_status, None,
+                f"single_session_exception: insufficient context diversity ({unique_contexts} < 2)",
+                False,
+            )
+
+        # Check for agent miss / user correction evidence
         correction_row = db.fetchone(
             "SELECT 1 FROM rule_feedback_events f "
             "JOIN rule_fire_events e ON e.id = f.fire_event_id "
@@ -426,7 +452,8 @@ def _evaluate_candidate(db: Db, row, rule_version: int) -> TransitionResult:
         if correction_row is not None:
             reason = (
                 f"single_session_exception: quality={admission_quality:.2f} "
-                f"strong={strong_count} would_help_high={would_help_high}"
+                f"strong={strong_count} would_help_high={would_help_high} "
+                f"contexts={unique_contexts}"
             )
             applied = _apply_transition(
                 db, rule_id, rule_version, old_status, "active", rpv, reason
@@ -446,10 +473,11 @@ def _evaluate_active(db: Db, row, rule_version: int) -> TransitionResult:
     fire = _aggregate_fire_evidence(db, rule_id, window_days=RECENT_TIME_WINDOW_DAYS)
 
     # Check active -> suppressed (fast downgrade)
+    # Harmful uses lifetime count — does NOT decay by time (spec 3.4)
     sup = ACTIVE_TO_SUPPRESSED
-    harmful = fire.get("harmful", 0)
-    if harmful >= sup.harmful_count_min:
-        reason = f"harmful_count={harmful}"
+    lifetime_harmful = fire.get("lifetime_harmful", 0)
+    if lifetime_harmful >= sup.harmful_count_min:
+        reason = f"lifetime_harmful_count={lifetime_harmful}"
         applied = _apply_transition(
             db, rule_id, rule_version, old_status, "suppressed", rpv, reason
         )
@@ -482,7 +510,7 @@ def _evaluate_active(db: Db, row, rule_version: int) -> TransitionResult:
         total_evaluated >= th.evaluated_fire_count_min
         and observed_useful >= th.observed_useful_count_min
         and distinct_sessions >= th.distinct_observed_useful_sessions_min
-        and harmful <= th.harmful_count_max
+        and lifetime_harmful <= th.harmful_count_max
         and (total_evaluated < MINIMUM_RATE_DENOMINATOR or fp_rate <= th.recent_false_positive_rate_max)
     ):
         reason = (
@@ -507,10 +535,11 @@ def _evaluate_trusted(db: Db, row, rule_version: int) -> TransitionResult:
     fire = _aggregate_fire_evidence(db, rule_id, window_days=RECENT_TIME_WINDOW_DAYS)
 
     # Check trusted -> suppressed (fast downgrade)
+    # Harmful uses lifetime count — does NOT decay by time (spec 3.4)
     sup = TRUSTED_TO_SUPPRESSED
-    harmful = fire.get("harmful", 0)
-    if harmful >= sup.harmful_count_min:
-        reason = f"harmful_count={harmful}"
+    lifetime_harmful = fire.get("lifetime_harmful", 0)
+    if lifetime_harmful >= sup.harmful_count_min:
+        reason = f"lifetime_harmful_count={lifetime_harmful}"
         applied = _apply_transition(
             db, rule_id, rule_version, old_status, "suppressed", rpv, reason
         )
@@ -542,7 +571,7 @@ def _evaluate_trusted(db: Db, row, rule_version: int) -> TransitionResult:
         total_evaluated >= th.evaluated_fire_count_in_recent_window_min
         and observed_useful <= th.observed_useful_count_in_recent_window_max
         and irrelevant >= th.irrelevant_count_in_recent_window_min
-        and harmful <= th.harmful_count_max
+        and lifetime_harmful <= th.harmful_count_max
         and (total_evaluated < MINIMUM_RATE_DENOMINATOR or fp_rate >= th.recent_false_positive_rate_min)
     ):
         reason = (

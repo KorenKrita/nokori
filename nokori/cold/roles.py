@@ -69,15 +69,52 @@ EXTRACTOR_SCHEMA: dict[str, Any] = {
             "items": {
                 "type": "object",
                 "properties": {
-                    "trigger": {"type": "string"},
-                    "action": {"type": "string"},
+                    "trigger_draft": {"type": "string"},
+                    "action_draft": {"type": "string"},
+                    "behavior_draft": {"type": "string"},
+                    "source_type": {
+                        "type": "string",
+                        "enum": ["correction", "preference", "solution", "anti_pattern"],
+                    },
+                    "confidence_guess": {
+                        "type": "string",
+                        "enum": ["high", "medium", "low"],
+                    },
                     "evidence_quotes": {
                         "type": "array",
                         "items": {"type": "string"},
                     },
-                    "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+                    "non_generalization_boundaries": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                    },
+                    "required_concepts_draft": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                    },
+                    "excluded_contexts_draft": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                    },
+                    "search_terms_draft": {"type": "object"},
+                    "trigger_variants_draft": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                    },
                 },
-                "required": ["trigger", "action", "evidence_quotes", "confidence"],
+                "required": [
+                    "trigger_draft",
+                    "action_draft",
+                    "behavior_draft",
+                    "source_type",
+                    "confidence_guess",
+                    "evidence_quotes",
+                    "non_generalization_boundaries",
+                    "required_concepts_draft",
+                    "excluded_contexts_draft",
+                    "search_terms_draft",
+                    "trigger_variants_draft",
+                ],
             },
         },
     },
@@ -93,15 +130,19 @@ ADMISSION_JUDGE_SCHEMA: dict[str, Any] = {
                 "overall_quality": {"type": "number", "minimum": 0, "maximum": 1},
                 "evidence_support": {"type": "number", "minimum": 0, "maximum": 1},
                 "trigger_specificity": {"type": "number", "minimum": 0, "maximum": 1},
+                "action_clarity": {"type": "number", "minimum": 0, "maximum": 1},
                 "scope_control": {"type": "number", "minimum": 0, "maximum": 1},
-                "actionability": {"type": "number", "minimum": 0, "maximum": 1},
+                "generalization_safety": {"type": "number", "minimum": 0, "maximum": 1},
+                "retrieval_readiness": {"type": "number", "minimum": 0, "maximum": 1},
             },
             "required": [
                 "overall_quality",
                 "evidence_support",
                 "trigger_specificity",
+                "action_clarity",
                 "scope_control",
-                "actionability",
+                "generalization_safety",
+                "retrieval_readiness",
             ],
         },
         "decision": {
@@ -154,18 +195,45 @@ FINAL_JUDGE_SCHEMA: dict[str, Any] = {
 MERGE_PLANNER_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
+        "relation_shape": {
+            "type": "string",
+            "enum": [
+                "equivalent", "new_broader", "new_narrower", "overlap",
+                "complementary", "contradiction", "obsolete", "unrelated",
+                "split_required",
+            ],
+        },
+        "new_rule_safety": {
+            "type": "string",
+            "enum": ["safe", "unsafe", "uncertain"],
+        },
+        "operation_safety": {
+            "type": "string",
+            "enum": ["safe", "unsafe", "uncertain"],
+        },
+        "quality_winner": {
+            "type": "string",
+            "enum": ["new", "existing", "both", "neither"],
+        },
         "operation": {
             "type": "string",
-            "enum": ["insert", "merge", "replace", "split", "no_op"],
+            "enum": [
+                "merge_into_existing", "update_existing_fields",
+                "replace_existing", "keep_both", "reject_new",
+                "suppress_existing", "archive_existing", "split_required",
+            ],
         },
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "reason": {"type": "string"},
         "target_rule_ids": {
             "type": "array",
             "items": {"type": "string"},
         },
-        "merge_rationale": {"type": "string"},
-        "conflict_detected": {"type": "boolean"},
     },
-    "required": ["operation", "target_rule_ids", "merge_rationale", "conflict_detected"],
+    "required": [
+        "relation_shape", "new_rule_safety", "operation_safety",
+        "quality_winner", "operation", "confidence", "reason",
+    ],
 }
 
 SYNTHETIC_EVAL_GENERATOR_SCHEMA: dict[str, Any] = {
@@ -176,15 +244,22 @@ SYNTHETIC_EVAL_GENERATOR_SCHEMA: dict[str, Any] = {
             "items": {
                 "type": "object",
                 "properties": {
-                    "input_text": {"type": "string"},
-                    "expected_match": {"type": "boolean"},
+                    "prompt": {"type": "string"},
                     "case_type": {
                         "type": "string",
-                        "enum": ["positive", "near_miss", "negative", "adversarial"],
+                        "enum": ["positive", "medium_positive", "near_miss", "negative"],
+                    },
+                    "expected_min_decision": {
+                        "type": "string",
+                        "enum": ["cold", "warm", "hot", "gate"],
+                    },
+                    "expected_max_decision": {
+                        "type": "string",
+                        "enum": ["cold", "warm", "hot", "gate"],
                     },
                     "rationale": {"type": "string"},
                 },
-                "required": ["input_text", "expected_match", "case_type", "rationale"],
+                "required": ["prompt", "case_type", "expected_min_decision", "expected_max_decision", "rationale"],
             },
         },
     },
