@@ -559,6 +559,8 @@ def _run_rewriter(
             timeout=30,
         )
         return validate_role_output("rule_rewriter", response)
+    except CircuitBreakerOpenError:
+        raise
     except (ValueError, Exception):
         return None
 
@@ -601,6 +603,8 @@ def _run_final_judge(
         )
         result = validate_role_output("final_judge", response)
         return result["decision"]
+    except CircuitBreakerOpenError:
+        raise
     except (ValueError, Exception):
         # Conservative: reject on failure
         return "reject"
@@ -673,6 +677,8 @@ def _run_merge_planner(
             "existing_rule": existing,
             "lineage_record": decision.lineage_record,
         }
+    except CircuitBreakerOpenError:
+        raise
     except (ValueError, Exception):
         # Conservative: keep_both on failure (do not block insertion)
         return "keep_both", {"merge_rationale": "merge_planner_failed", "target_rule_ids": []}

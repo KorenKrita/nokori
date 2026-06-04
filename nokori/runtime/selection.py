@@ -10,7 +10,6 @@ from dataclasses import dataclass, field
 
 from nokori.models import ScoredResult
 from nokori.policy import HOT_MAX_DEFAULT, WARM_HARD_MAX
-from nokori.runtime.applicability import _strong_trigger_evidence
 
 
 # ---------------------------------------------------------------------------
@@ -210,21 +209,14 @@ def select_injection(
             u = compute_utility(sr, {}, selected_tokens_list=selected_tokens)
             if u <= 0:
                 continue
-            # Use the pre-computed strong_trigger_evidence from MatchResult
-            # (already evaluated with correct pool-size-aware thresholds)
+            # Strong evidence = Path A (strong variant + concepts) or
+            # the rule already passed HOT-level applicability
             has_strong_evidence = (
-                getattr(sr, 'strong_trigger_evidence_flag', False)
-                or sr.strong_variant_phrase_hit
-                or _strong_trigger_evidence(
-                    strong_variant_phrase_hit=sr.strong_variant_phrase_hit,
-                    required_concepts_match=True,
-                    trigger_idf_sum=sr.trigger_idf_sum,
-                    trigger_coverage=sr.trigger_coverage,
-                    distinct_trigger_terms=getattr(sr, 'distinct_trigger_terms', 1),
-                    idf_stats_available=sr.trigger_idf_sum > 0,
-                    pool_size=max(20, getattr(sr, 'pool_size', 20)),
-                    dynamic_trigger_info_min=None,
-                )
+                sr.strong_variant_phrase_hit and sr.required_concepts_match
+            ) or (
+                sr.trigger_idf_sum > 0
+                and sr.trigger_coverage >= 0.25
+                and sr.required_concepts_match
             )
             if _has_distinct_domain(sr, hot) and has_strong_evidence:
                 hot.append(sr)

@@ -74,6 +74,8 @@ def _make_scored(
         trigger_idf_sum=trigger_idf_sum,
         strong_variant_phrase_hit=strong_variant_phrase_hit,
         matched_trigger_tokens=matched_trigger_tokens or frozenset({"a", "b"}),
+        required_concepts_match=True,
+        trigger_coverage=0.5,
     )
 
 
@@ -139,19 +141,23 @@ class TestSecondHotConditions:
         sel = select_injection([r1, r2], max_injection_chars=5000)
         assert len(sel.hot) == 1
 
-    def test_second_hot_blocked_without_strong_variant(self):
+    def test_second_hot_blocked_without_strong_evidence(self):
+        """Second HOT blocked when no strong evidence (no variant, no IDF+coverage+concepts)."""
         r1 = _make_scored(
             rule_id="r1",
             trigger_idf_sum=5.0,
             domain_tags=["python"],
             matched_trigger_tokens=frozenset({"a", "b"}),
         )
-        r2 = _make_scored(
-            rule_id="r2",
+        # r2 has distinct domain but NO strong evidence:
+        # no strong_variant_phrase_hit AND required_concepts_match=False
+        r2 = ScoredResult(
+            rule=_make_rule(rule_id="r2", domain_tags=["rust"]),
             trigger_idf_sum=4.5,
-            domain_tags=["rust"],
-            strong_variant_phrase_hit=False,  # no strong evidence
+            strong_variant_phrase_hit=False,
             matched_trigger_tokens=frozenset({"c", "d"}),
+            required_concepts_match=False,  # no concepts = no strong evidence
+            trigger_coverage=0.5,
         )
         sel = select_injection([r1, r2], max_injection_chars=5000)
         assert len(sel.hot) == 1
