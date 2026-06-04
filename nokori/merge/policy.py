@@ -164,7 +164,7 @@ def apply_merge_policy(
     # --- replace_existing ---
 
     if (
-        not existing_trusted
+        existing_status in ("candidate", "active")
         and op_safety == "safe"
         and relation in ("equivalent", "obsolete")
         and quality_winner == "new"
@@ -172,7 +172,7 @@ def apply_merge_policy(
         return MergeDecision(
             operation="replace_existing",
             target_rule_id=target_id,
-            reason="new rule is quality winner; existing is not trusted",
+            reason="new rule is quality winner; existing is candidate/active",
             requires_synthetic_reeval=True,
             lineage_record=_lineage(target_id, "replace_existing", planner_reason),
         )
@@ -180,7 +180,7 @@ def apply_merge_policy(
     # --- new_broader may replace narrower (spec section 8.3) ---
 
     if (
-        not existing_trusted
+        existing_status in ("candidate", "active")
         and op_safety == "safe"
         and relation == "new_broader"
         and quality_winner == "new"

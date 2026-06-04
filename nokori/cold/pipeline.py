@@ -237,10 +237,17 @@ def _run_cold_pipeline_inner(
         )
 
     if merge_op == "split_required":
+        # Spec section 6.7: return to rewrite/split, then re-process each part
+        split_results = _handle_split_required(
+            db, llm, rule_data, role_models, default_model,
+            transcript_ref, source_origin, idf_stats, global_adversarial_cases,
+        )
+        if split_results:
+            return split_results[0]
         return ColdPipelineResult(
             status="pending_split",
             rule_id=None,
-            rejection_reason=None,
+            rejection_reason="split_rewrite_failed",
             scores=scores,
         )
 
@@ -1147,6 +1154,75 @@ def _generate_eval_cases(
         raise
     except (json.JSONDecodeError, ValueError):
         raise  # Propagate for retry (spec section 13)
+
+
+def _handle_split_required(
+    db: Db,
+    llm,
+    rule_data: dict[str, Any],
+    role_models: dict[str, str] | None,
+    default_model: str | None,
+    transcript_ref: str,
+    source_origin: SourceOrigin,
+    idf_stats: IdfPoolStats | None,
+    global_adversarial_cases: list[dict[str, Any]] | None,
+) -> list[ColdPipelineResult]:
+    """Handle split_required by invoking rewriter to produce sub-rules, then re-process each.
+
+    Spec section 6.7: 'return to rewrite/split if merge operation is split_required'.
+    The rewriter is asked to split the rule into independent sub-rules.
+    """
+    rewriter_model = resolve_model_id("rule_rewriter", role_models, default_model)
+
+    system_prompt = (
+        "You are a rule rewriter for an autonomous memory system. "
+        "This rule has been flagged as containing multiple independent triggers/actions. "
+        "Split it into separate, focused rules. Each must have its own trigger, action, "
+        "required_concept_groups, and excluded_contexts. "
+        "Output strict JSON: {\"split_rules\": [{...}, {...}]} matching rule_rewriter schema per sub-rule."
+    )
+
+    rule_text = json.dumps(rule_data, ensure_ascii=False, indent=2)
+    user_prompt = f"<rule_to_split>\n{rule_text}\n</rule_to_split>\n\nSplit into independent sub-rules."
+
+    try:
+        response = _call_llm_role(
+            db, llm, role="rule_rewriter", model_id=rewriter_model,
+            system=system_prompt, user=user_prompt,
+            max_tokens=6000, timeout=45,
+        )
+        data = json.loads(response)
+        sub_rules = data.get("split_rules", []) if isinstance(data, dict) else []
+        if not sub_rules:
+            return []
+    except (CircuitBreakerOpenError, ValueError):
+        raise
+
+    # Re-process each sub-rule through the pipeline
+    results: list[ColdPipelineResult] = []
+    for sub_rule in sub_rules[:3]:
+        sub_extractor = {
+            "trigger_draft": sub_rule.get("trigger_canonical", ""),
+            "action_draft": sub_rule.get("action_instruction", ""),
+            "behavior_draft": "",
+            "source_type": "solution",
+            "confidence_guess": "medium",
+            "evidence_quotes": rule_data.get("evidence_quotes", ["split from parent"]),
+            "non_generalization_boundaries": [],
+            "required_concepts_draft": [],
+            "excluded_contexts_draft": [],
+            "search_terms_draft": {},
+            "trigger_variants_draft": [],
+        }
+        result = run_cold_pipeline(
+            db, llm, transcript_ref, sub_extractor,
+            role_models=role_models, default_model=default_model,
+            idf_stats=idf_stats, global_adversarial_cases=global_adversarial_cases,
+            source_origin=source_origin,
+        )
+        results.append(result)
+
+    return results
 
 
 def _get_rule_data_for_fingerprint(db: Db, rule_id: str) -> dict | None:
