@@ -210,16 +210,21 @@ def select_injection(
             u = compute_utility(sr, {}, selected_tokens_list=selected_tokens)
             if u <= 0:
                 continue
-            # Rules in eligible_results already passed applicability (concepts match)
-            has_strong_evidence = _strong_trigger_evidence(
-                strong_variant_phrase_hit=sr.strong_variant_phrase_hit,
-                required_concepts_match=True,
-                trigger_idf_sum=sr.trigger_idf_sum,
-                trigger_coverage=sr.trigger_coverage,
-                distinct_trigger_terms=getattr(sr, 'distinct_trigger_terms', 1),
-                idf_stats_available=sr.trigger_idf_sum > 0,
-                pool_size=20,
-                dynamic_trigger_info_min=None,
+            # Use the pre-computed strong_trigger_evidence from MatchResult
+            # (already evaluated with correct pool-size-aware thresholds)
+            has_strong_evidence = (
+                getattr(sr, 'strong_trigger_evidence_flag', False)
+                or sr.strong_variant_phrase_hit
+                or _strong_trigger_evidence(
+                    strong_variant_phrase_hit=sr.strong_variant_phrase_hit,
+                    required_concepts_match=True,
+                    trigger_idf_sum=sr.trigger_idf_sum,
+                    trigger_coverage=sr.trigger_coverage,
+                    distinct_trigger_terms=getattr(sr, 'distinct_trigger_terms', 1),
+                    idf_stats_available=sr.trigger_idf_sum > 0,
+                    pool_size=max(20, getattr(sr, 'pool_size', 20)),
+                    dynamic_trigger_info_min=None,
+                )
             )
             if _has_distinct_domain(sr, hot) and has_strong_evidence:
                 hot.append(sr)

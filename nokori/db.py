@@ -576,6 +576,15 @@ def log_injections_batch(
                 trigger_snapshot = getattr(rule, "trigger_canonical", "") or (rule.get("trigger_canonical", "") if isinstance(rule, dict) else "")
                 action_snapshot = getattr(rule, "action_instruction", "") or (rule.get("action_instruction", "") if isinstance(rule, dict) else "")
                 rule_version = getattr(rule, "rule_version", None) or (rule.get("rule_version") if isinstance(rule, dict) else None)
+                # Build structured snapshot for version-pinned evidence
+                _concepts = getattr(rule, "concepts", None) or (rule.get("concepts") if isinstance(rule, dict) else None)
+                _groups = getattr(rule, "required_concept_groups", None) or (rule.get("required_concept_groups") if isinstance(rule, dict) else None)
+                _excluded = getattr(rule, "excluded_contexts", None) or (rule.get("excluded_contexts") if isinstance(rule, dict) else None)
+                structured_snapshot = dumps_json({
+                    "concepts": loads_json(_concepts, []) if isinstance(_concepts, str) else (_concepts or []),
+                    "required_concept_groups": loads_json(_groups, []) if isinstance(_groups, str) else (_groups or []),
+                    "excluded_contexts": loads_json(_excluded, []) if isinstance(_excluded, str) else (_excluded or []),
+                })
 
             decision_features = features_map.get(rule_id)
             features_json = dumps_json(decision_features) if decision_features else None
@@ -584,13 +593,14 @@ def log_injections_batch(
                 "INSERT INTO rule_fire_events "
                 "(id, rule_id, session_id, injected_rule_version, "
                 "injected_trigger_snapshot, injected_action_snapshot, "
+                "injected_structured_snapshot, "
                 "trigger_idf_pool_version, runtime_policy_version, "
                 "embedding_profile_version, "
                 "prompt_hash, turn_index, level, decision_features, created_at) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     event_id, rule_id, session_id, rule_version,
-                    trigger_snapshot, action_snapshot,
+                    trigger_snapshot, action_snapshot, structured_snapshot,
                     idf_pool_version, rpv, embedding_profile_version,
                     prompt_hash, turn_index, level, features_json, now,
                 ),

@@ -119,11 +119,12 @@ def _aggregate_fire_evidence(db: Db, rule_id: str, window_days: int = 30) -> dic
     Uses BOTH recent_event_window (last 10 evaluated) AND recent_time_window (30 days).
     Harmful events are counted lifetime — they do NOT decay by time alone.
     """
-    # Last N evaluated events within time window (spec 3.4: both windows apply)
+    # Last N evaluated events within time window, excluding unclear (spec 3.4)
     cutoff = _days_ago_iso(window_days)
     recent_rows = db.fetchall(
         "SELECT posthoc_label, posthoc_reason_code, session_id FROM rule_fire_events "
-        "WHERE rule_id = ? AND posthoc_label IS NOT NULL AND created_at >= ? "
+        "WHERE rule_id = ? AND posthoc_label IS NOT NULL AND posthoc_label != 'unclear' "
+        "AND created_at >= ? "
         "ORDER BY created_at DESC LIMIT ?",
         (rule_id, cutoff, RECENT_EVENT_WINDOW),
     )
