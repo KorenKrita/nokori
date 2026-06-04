@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 
-from ..archive.fingerprints import create_archived_fingerprint
 from ..config import Config
 from ..db import (
     archive_rule,
@@ -26,7 +25,6 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
 
         now = now_iso()
         archive_rule(db, rule.id, "user_archived", now)
-        create_archived_fingerprint(db, rule, strength="user")
         strip_short_id_from_all_markers(cfg, rule.short_id)
     finally:
         db.close()

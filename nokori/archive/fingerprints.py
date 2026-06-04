@@ -209,10 +209,10 @@ def _fingerprint_decision(
             "overridable": True,
         }
 
-    # User archive: blocks equivalent/broader. Narrower or scope-changed rules
-    # may proceed when scope change is explicit AND can_be_overridden (spec 3.5)
+    # User archive: blocks equivalent/broader. Only NARROWER rules may proceed
+    # when scope change evidence is explicit AND can_be_overridden (spec 3.5)
     if strength == "user":
-        if scope_change_evidence and row["can_be_overridden_by_changed_scope"]:
+        if is_narrower_scope and scope_change_evidence and row["can_be_overridden_by_changed_scope"]:
             return None
         return {
             "blocked": True,

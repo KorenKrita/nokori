@@ -126,7 +126,11 @@ def test_replacement_archive_blocks_exact_duplicate(db):
 
 
 def test_user_archive_passable_with_scope_change_evidence(db):
-    """User archive does NOT block when scope_change_evidence is provided."""
+    """User archive blocks equivalent/broader rules even with scope_change_evidence.
+
+    Only a genuinely NARROWER-scope rule (different token set) can pass.
+    Exact same trigger/action is NOT narrower so remains blocked (spec section 3.5).
+    """
     rule = _FakeRule()
     create_archived_fingerprint(db, rule, strength="user")
 
@@ -140,19 +144,29 @@ def test_user_archive_passable_with_scope_change_evidence(db):
     assert result_blocked is not None
     assert result_blocked["blocked"] is True
 
-    # With scope_change_evidence -> not blocked (returns None because
-    # the user-strength branch is skipped when evidence is provided)
-    result_pass = check_fingerprint_block(
+    # With scope_change_evidence but SAME scope (exact signature) -> still blocked
+    # because it's not narrower
+    result_same = check_fingerprint_block(
         db,
         trigger_canonical="when user asks for help",
         action_instruction="provide helpful response",
         domain_tags=["general"],
         scope_change_evidence="narrower scope: only applies to Python files",
     )
-    # When scope_change_evidence is provided, user archive does not block.
-    # The function falls through to system/replacement checks, but since
-    # the stored strength is "user" it returns None (no other branch matches).
-    assert result_pass is None
+    assert result_same is not None
+    assert result_same["blocked"] is True
+
+    # A genuinely narrower/different rule with scope_change_evidence may pass
+    # (related but non-exact match triggers the is_narrower_scope logic)
+    result_narrower = check_fingerprint_block(
+        db,
+        trigger_canonical="when user asks for help in Python specifically with pytest",
+        action_instruction="provide pytest-specific test guidance",
+        domain_tags=["python", "testing"],
+        scope_change_evidence="narrower: only pytest context, not general help",
+    )
+    # Different enough to not match the exact signature, and narrower logic applies
+    assert result_narrower is None
 
 
 # ---------------------------------------------------------------------------

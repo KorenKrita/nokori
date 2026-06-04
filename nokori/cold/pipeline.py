@@ -411,8 +411,9 @@ def _call_llm_role(
             max_tokens=max_tokens,
             timeout=timeout,
         )
-    except Exception:
-        mark_job_failed(db, job_id)
+    except Exception as exc:
+        error_info = f"{type(exc).__name__}: {exc}"
+        mark_job_failed(db, job_id, error_info=error_info)
         raise
 
     mark_job_complete(db, job_id, response)

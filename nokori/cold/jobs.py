@@ -100,8 +100,8 @@ def mark_job_complete(db: Db, job_id: str, output_json: str) -> None:
         )
 
 
-def mark_job_failed(db: Db, job_id: str) -> None:
-    """Increment retries, set next_retry_at, check circuit breaker."""
+def mark_job_failed(db: Db, job_id: str, error_info: str | None = None) -> None:
+    """Increment retries, set next_retry_at. Stores error_info in output_json for circuit breaker classification."""
     now = _now_iso()
     row = db.fetchone(
         "SELECT role, retries FROM llm_jobs WHERE id = ?", (job_id,)
@@ -118,8 +118,8 @@ def mark_job_failed(db: Db, job_id: str) -> None:
     with db.transaction() as tx:
         tx.execute(
             "UPDATE llm_jobs SET status = 'failed', retries = ?, "
-            "next_retry_at = ?, updated_at = ? WHERE id = ?",
-            (new_retries, next_retry_iso, now, job_id),
+            "next_retry_at = ?, output_json = ?, updated_at = ? WHERE id = ?",
+            (new_retries, next_retry_iso, error_info, now, job_id),
         )
 
 
