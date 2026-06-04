@@ -25,3 +25,8 @@ AGENTS.md
 web/node_modules
 .codegraph/
 .lean-ctx/
+.agents/
+.codex/
+.cursor/
+.memsearch/
+.DS_Store

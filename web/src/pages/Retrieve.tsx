@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { motion } from 'motion/react'
 import { GlassCard } from '@/components/GlassCard'
 import { StatusBadge } from '@/components/StatusBadge'
@@ -122,7 +123,9 @@ function ResultSection({ title, items, level }: { title: string; items: ScoredRe
         {items.map((sr) => (
           <div key={sr.rule.id} className="border-b border-[var(--color-border-subtle)] pb-3 last:border-0 last:pb-0">
             <div className="flex items-center gap-2">
-              <span className="font-mono text-xs text-accent-sky">{sr.rule.short_id}</span>
+              <Link to={`/rules/${sr.rule.short_id}`} className="font-mono text-xs text-accent-sky hover:underline">
+                {sr.rule.short_id}
+              </Link>
               <StatusBadge status={sr.rule.status} />
             </div>
             <p className="text-sm text-text-secondary mt-1">{sr.rule.trigger_text}</p>
