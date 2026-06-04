@@ -298,6 +298,7 @@ def fetch_rules(
     statuses: tuple[str, ...] | None = None,
     project_id: str | None = None,
     global_only: bool = False,
+    project_scope_exact: bool = False,
 ) -> list:
     where = []
     params: list = []
@@ -308,7 +309,10 @@ def fetch_rules(
     if global_only:
         where.append("project_scope = 'global'")
     elif project_id is not None:
-        where.append("(project_scope = 'global' OR project_id = ?)")
+        if project_scope_exact:
+            where.append("project_id = ?")
+        else:
+            where.append("(project_scope = 'global' OR project_id = ?)")
         params.append(project_id)
     sql = f"SELECT {RULE_COLUMNS} FROM rules"
     if where:

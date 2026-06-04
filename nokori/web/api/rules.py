@@ -67,6 +67,7 @@ def list_rules(
             statuses=statuses,
             project_id=project,
             global_only=(scope == "global"),
+            project_scope_exact=(project is not None and scope != "global"),
         )
     finally:
         db.close()
