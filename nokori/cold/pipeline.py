@@ -1067,6 +1067,20 @@ def _apply_merge_side_effects(
 
     record_lineage(db, target_rule_id, new_rule_id, merge_op, reason)
 
+    # Create replacement-strength fingerprint on replace (spec section 11)
+    if merge_op == "replace_existing":
+        rule_data = _get_rule_data_for_fingerprint(db, target_rule_id)
+        if rule_data:
+            from ..archive.fingerprints import create_archived_fingerprint_from_data
+            create_archived_fingerprint_from_data(
+                db,
+                rule_id=target_rule_id,
+                trigger_canonical=rule_data.get("trigger_canonical", ""),
+                action_instruction=rule_data.get("action_instruction", ""),
+                domain_tags=rule_data.get("domain_tags", []),
+                strength="replacement",
+            )
+
 
 def _build_trigger_data(rule_data: dict[str, Any]) -> dict[str, Any]:
     """Build trigger_data dict suitable for compile_rule from structured rule_data."""
@@ -1128,9 +1142,27 @@ def _generate_eval_cases(
             return cases
         if isinstance(cases, dict) and "cases" in cases:
             return cases["cases"]
-        return []
-    except (json.JSONDecodeError, ValueError, Exception):
-        return []
+        raise ValueError("synthetic_eval_generator returned no cases")
+    except CircuitBreakerOpenError:
+        raise
+    except (json.JSONDecodeError, ValueError):
+        raise  # Propagate for retry (spec section 13)
+
+
+def _get_rule_data_for_fingerprint(db: Db, rule_id: str) -> dict | None:
+    """Read minimal rule data needed for fingerprint creation."""
+    row = db.fetchone(
+        "SELECT trigger_canonical, action_instruction, domain_tags FROM rules WHERE id = ?",
+        (rule_id,),
+    )
+    if row is None:
+        return None
+    from ..db import loads_json
+    return {
+        "trigger_canonical": row["trigger_canonical"] or "",
+        "action_instruction": row["action_instruction"] or "",
+        "domain_tags": loads_json(row["domain_tags"], []) if row["domain_tags"] else [],
+    }
 
 
 def _apply_non_destructive_merge(

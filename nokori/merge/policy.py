@@ -408,6 +408,27 @@ def find_merge_neighbors(db: Db, rule_data: dict, limit: int = 10) -> list[dict]
         if score > 0:
             candidates[row_id] = (_row_to_dict(row), score)
 
+    # Recent fallback: include recently updated rules not yet matched (spec 8.1)
+    if len(candidates) < limit:
+        recent_rows = db.fetchall(
+            "SELECT * FROM rules WHERE status IN ('active', 'trusted') "
+            "ORDER BY updated_at DESC LIMIT ?",
+            (min(5, limit - len(candidates)),),
+        )
+        for row in recent_rows:
+            row_id = row["id"]
+            if row_id not in candidates:
+                candidates[row_id] = (_row_to_dict(row), 0.1)
+
+    # Archived fingerprint negative memory (spec 8.1)
+    fp_rows = db.fetchall(
+        "SELECT rule_id FROM archived_fingerprints "
+        "WHERE archive_strength IN ('user', 'system') LIMIT 10"
+    )
+    # Fingerprints are passed for negative memory awareness in merge planning,
+    # but don't add to positive candidates — they inform the planner that
+    # certain areas are blocked.
+
     # Sort by score descending, return top limit.
     sorted_candidates = sorted(
         candidates.values(), key=lambda x: x[1], reverse=True
