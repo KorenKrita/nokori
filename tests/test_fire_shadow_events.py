@@ -3,6 +3,7 @@
 import json
 import uuid
 from datetime import datetime, timedelta, timezone
+from dataclasses import replace
 
 import pytest
 
@@ -136,6 +137,40 @@ class TestCreateFireEvent:
             assert row["injected_rule_version"] == rule.rule_version
             assert row["injected_trigger_snapshot"] == rule.trigger_canonical
             assert row["injected_action_snapshot"] == rule.action_instruction
+        finally:
+            db.close()
+
+
+class TestCreateShadowEventMalformedJson:
+    def test_malformed_json_snapshot_fields_fall_back_to_empty_lists(self, tmp_path):
+        db = _make_db(tmp_path)
+        try:
+            rule = replace(
+                _insert_rule(db),
+                concepts="{not-json",
+                required_concept_groups="{not-json",
+                excluded_contexts="{not-json",
+            )
+
+            event_id = create_shadow_event(
+                db,
+                rule,
+                session_id="session_shadow",
+                status_at_match="candidate",
+                shadow_type="candidate_probe",
+                prompt_hash="hash_abc",
+                matched_level="warm",
+                decision_features={},
+            )
+
+            row = db.fetchone(
+                "SELECT shadow_structured_snapshot FROM rule_shadow_events WHERE id = ?",
+                (event_id,),
+            )
+            snapshot = json.loads(row["shadow_structured_snapshot"])
+            assert snapshot["concepts"] == []
+            assert snapshot["required_concept_groups"] == []
+            assert snapshot["excluded_contexts"] == []
         finally:
             db.close()
 

@@ -15,9 +15,11 @@ Pipeline invariants:
 from __future__ import annotations
 
 import json
+import hashlib
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from html import escape as html_escape
 from typing import Any
 
 from ..archive.fingerprints import check_fingerprint_block
@@ -30,8 +32,21 @@ from ..policy import (
     SourceOrigin,
     ActivationOrigin,
 )
-from ..merge.policy import apply_merge_policy
+from ..merge.policy import (
+    MergeDecision,
+    apply_merge_policy,
+    find_merge_neighbors,
+    record_lineage,
+    validate_merge_transaction,
+)
 from ..search.idf_stats import IdfPoolStats, build_idf_stats
+from .jobs import (
+    enqueue_job,
+    get_cached_output,
+    is_circuit_breaker_open,
+    mark_job_complete,
+    mark_job_failed,
+)
 from .roles import (
     PROMPT_VERSIONS,
     resolve_model_id,
@@ -44,6 +59,11 @@ from .roles import (
 # ---------------------------------------------------------------------------
 
 PIPELINE_VERSION: str = "1.0.0"
+DESTRUCTIVE_MERGE_OPS: frozenset[str] = frozenset((
+    "replace_existing",
+    "suppress_existing",
+    "archive_existing",
+))
 
 
 # ---------------------------------------------------------------------------
@@ -108,7 +128,7 @@ def run_cold_pipeline(
 
     # --- Stage a: Admission Judge ---
     admission_model = resolve_model_id("admission_judge", role_models, default_model)
-    decision, scores = _run_admission_judge(llm, candidate, admission_model)
+    decision, scores = _run_admission_judge(db, llm, candidate, admission_model)
 
     if decision == "reject":
         return ColdPipelineResult(
@@ -122,7 +142,7 @@ def run_cold_pipeline(
     rule_data: dict[str, Any]
     if decision == "revise":
         rewriter_model = resolve_model_id("rule_rewriter", role_models, default_model)
-        rewritten = _run_rewriter(llm, candidate, scores, rewriter_model)
+        rewritten = _run_rewriter(db, llm, candidate, scores, rewriter_model)
         if rewritten is None:
             return ColdPipelineResult(
                 status="rejected",
@@ -138,7 +158,7 @@ def run_cold_pipeline(
     # --- Stage c: Final Judge ---
     final_judge_model = resolve_model_id("final_judge", role_models, default_model)
     final_decision = _run_final_judge(
-        llm, rule_data, candidate.get("evidence_quotes", []), final_judge_model
+        db, llm, rule_data, candidate.get("evidence_quotes", []), final_judge_model
     )
 
     if final_decision == "reject":
@@ -215,7 +235,7 @@ def run_cold_pipeline(
         if idf_stats is None:
             idf_stats = _build_idf_stats_from_db(db)
 
-        eval_cases = _generate_eval_cases(llm, rule_data, role_models, default_model)
+        eval_cases = _generate_eval_cases(db, llm, rule_data, role_models, default_model)
         if eval_cases:
             eval_rule_data = {
                 "id": "",
@@ -259,6 +279,30 @@ def run_cold_pipeline(
             scores=scores,
         )
 
+    existing_rule = merge_info.get("existing_rule")
+    if merge_op in DESTRUCTIVE_MERGE_OPS:
+        merge_decision = MergeDecision(
+            operation=merge_op,  # type: ignore[arg-type]
+            target_rule_id=(existing_rule or {}).get("id"),
+            reason=merge_info.get("merge_rationale", ""),
+            requires_synthetic_reeval=bool(merge_info.get("requires_synthetic_reeval")),
+            lineage_record=merge_info.get("lineage_record"),
+        )
+        if not validate_merge_transaction(
+            existing_rule,
+            rule_data,
+            merge_decision,
+            synthetic_passed=synthetic_passed,
+            fingerprint_clear=not fingerprint_conflict,
+            matcher_compiled=True,
+        ):
+            return ColdPipelineResult(
+                status="rejected",
+                rule_id=None,
+                rejection_reason="merge_transaction_invalid",
+                scores=scores,
+            )
+
     if target_status == "active" and fast_lane_passed:
         final_status = "active"
         activation_origin: ActivationOrigin = "cold_fast_lane"
@@ -279,6 +323,8 @@ def run_cold_pipeline(
         scores=scores,
     )
 
+    _apply_merge_side_effects(db, rule_id, merge_op, merge_info)
+
     return ColdPipelineResult(
         status=final_status,
         rule_id=rule_id,
@@ -290,6 +336,60 @@ def run_cold_pipeline(
 # ---------------------------------------------------------------------------
 # Stage implementations
 # ---------------------------------------------------------------------------
+
+
+def _prompt_text(value: str) -> str:
+    """Escape untrusted text before embedding in XML-like prompt delimiters."""
+    return html_escape(value, quote=False)
+
+
+def _llm_input_hash(role: str, system: str, user: str) -> str:
+    payload = dumps_json({
+        "role": role,
+        "prompt_version": PROMPT_VERSIONS.get(role),
+        "system": system,
+        "user": user,
+    })
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _call_llm_role(
+    db: Db,
+    llm,
+    *,
+    role: str,
+    model_id: str,
+    system: str,
+    user: str,
+    max_tokens: int,
+    timeout: int,
+) -> str:
+    """Call an LLM role through the durable idempotency/circuit-breaker layer."""
+    prompt_version = PROMPT_VERSIONS[role]
+    input_hash = _llm_input_hash(role, system, user)
+
+    if is_circuit_breaker_open(db, role):
+        raise RuntimeError(f"circuit breaker open for role {role}")
+
+    cached = get_cached_output(db, role, model_id, prompt_version, input_hash)
+    if cached is not None:
+        return cached
+
+    job_id = enqueue_job(db, role, model_id, prompt_version, input_hash)
+    try:
+        response = llm.call(
+            model=model_id,
+            system=system,
+            user=user,
+            max_tokens=max_tokens,
+            timeout=timeout,
+        )
+    except Exception:
+        mark_job_failed(db, job_id)
+        raise
+
+    mark_job_complete(db, job_id, response)
+    return response
 
 
 def _run_extractor(llm, transcript_text: str, role_config: dict[str, Any]) -> dict | None:
@@ -314,7 +414,7 @@ def _run_extractor(llm, transcript_text: str, role_config: dict[str, Any]) -> di
         "Output strict JSON matching the extractor schema."
     )
     user_prompt = (
-        f"<transcript>\n{transcript_text}\n</transcript>\n\n"
+        f"<transcript>\n{_prompt_text(transcript_text)}\n</transcript>\n\n"
         "Extract candidate rules from this transcript. "
         "Each candidate must have direct evidence quotes from the text above."
     )
@@ -333,7 +433,7 @@ def _run_extractor(llm, transcript_text: str, role_config: dict[str, Any]) -> di
 
 
 def _run_admission_judge(
-    llm, candidate: dict[str, Any], model_id: str
+    db: Db, llm, candidate: dict[str, Any], model_id: str
 ) -> tuple[str, dict]:
     """Run admission judge on a candidate.
 
@@ -348,15 +448,18 @@ def _run_admission_judge(
         "Output strict JSON matching the admission_judge schema."
     )
 
-    candidate_text = json.dumps(candidate, ensure_ascii=False, indent=2)
+    candidate_text = _prompt_text(json.dumps(candidate, ensure_ascii=False, indent=2))
     user_prompt = (
         f"<candidate_rule>\n{candidate_text}\n</candidate_rule>\n\n"
         "Evaluate this candidate. Score each dimension 0.0-1.0 and decide: accept, revise, or reject."
     )
 
     try:
-        response = llm.call(
-            model=model_id,
+        response = _call_llm_role(
+            db,
+            llm,
+            role="admission_judge",
+            model_id=model_id,
             system=system_prompt,
             user=user_prompt,
             max_tokens=2000,
@@ -370,7 +473,7 @@ def _run_admission_judge(
 
 
 def _run_rewriter(
-    llm, candidate: dict[str, Any], judge_feedback: dict, model_id: str
+    db: Db, llm, candidate: dict[str, Any], judge_feedback: dict, model_id: str
 ) -> dict | None:
     """Run rule rewriter to improve a revisable candidate.
 
@@ -384,8 +487,8 @@ def _run_rewriter(
         "Output strict JSON matching the rule_rewriter schema."
     )
 
-    candidate_text = json.dumps(candidate, ensure_ascii=False, indent=2)
-    feedback_text = json.dumps(judge_feedback, ensure_ascii=False, indent=2)
+    candidate_text = _prompt_text(json.dumps(candidate, ensure_ascii=False, indent=2))
+    feedback_text = _prompt_text(json.dumps(judge_feedback, ensure_ascii=False, indent=2))
     user_prompt = (
         f"<candidate_rule>\n{candidate_text}\n</candidate_rule>\n\n"
         f"<judge_feedback>\n{feedback_text}\n</judge_feedback>\n\n"
@@ -393,8 +496,11 @@ def _run_rewriter(
     )
 
     try:
-        response = llm.call(
-            model=model_id,
+        response = _call_llm_role(
+            db,
+            llm,
+            role="rule_rewriter",
+            model_id=model_id,
             system=system_prompt,
             user=user_prompt,
             max_tokens=4000,
@@ -406,7 +512,7 @@ def _run_rewriter(
 
 
 def _run_final_judge(
-    llm, rule_data: dict[str, Any], original_evidence: list[str], model_id: str
+    db: Db, llm, rule_data: dict[str, Any], original_evidence: list[str], model_id: str
 ) -> str:
     """Run final judge on structured rule data.
 
@@ -421,8 +527,8 @@ def _run_final_judge(
         "Output strict JSON matching the final_judge schema."
     )
 
-    rule_text = json.dumps(rule_data, ensure_ascii=False, indent=2)
-    evidence_text = json.dumps(original_evidence, ensure_ascii=False)
+    rule_text = _prompt_text(json.dumps(rule_data, ensure_ascii=False, indent=2))
+    evidence_text = _prompt_text(json.dumps(original_evidence, ensure_ascii=False))
     user_prompt = (
         f"<structured_rule>\n{rule_text}\n</structured_rule>\n\n"
         f"<original_evidence>\n{evidence_text}\n</original_evidence>\n\n"
@@ -431,8 +537,11 @@ def _run_final_judge(
     )
 
     try:
-        response = llm.call(
-            model=model_id,
+        response = _call_llm_role(
+            db,
+            llm,
+            role="final_judge",
+            model_id=model_id,
             system=system_prompt,
             user=user_prompt,
             max_tokens=2000,
@@ -466,8 +575,8 @@ def _run_merge_planner(
         "Output strict JSON matching the merge_planner schema."
     )
 
-    rule_text = json.dumps(rule_data, ensure_ascii=False, indent=2)
-    existing_text = json.dumps(existing_rules, ensure_ascii=False, indent=2)
+    rule_text = _prompt_text(json.dumps(rule_data, ensure_ascii=False, indent=2))
+    existing_text = _prompt_text(json.dumps(existing_rules, ensure_ascii=False, indent=2))
     user_prompt = (
         f"<new_rule>\n{rule_text}\n</new_rule>\n\n"
         f"<existing_rules>\n{existing_text}\n</existing_rules>\n\n"
@@ -476,8 +585,11 @@ def _run_merge_planner(
     )
 
     try:
-        response = llm.call(
-            model=model_id,
+        response = _call_llm_role(
+            db,
+            llm,
+            role="merge_planner",
+            model_id=model_id,
             system=system_prompt,
             user=user_prompt,
             max_tokens=2000,
@@ -508,6 +620,8 @@ def _run_merge_planner(
             "target_rule_ids": [decision.target_rule_id] if decision.target_rule_id else [],
             "policy_decision": decision.operation,
             "requires_synthetic_reeval": decision.requires_synthetic_reeval,
+            "existing_rule": existing,
+            "lineage_record": decision.lineage_record,
         }
     except (ValueError, Exception):
         # Conservative: keep_both on failure (do not block insertion)
@@ -826,6 +940,46 @@ def _draft_variants(candidate: dict[str, Any]) -> list[dict[str, Any]]:
     return result
 
 
+def _apply_merge_side_effects(
+    db: Db,
+    new_rule_id: str,
+    merge_op: str,
+    merge_info: dict[str, Any],
+) -> None:
+    """Apply validated destructive merge side effects after inserting new rule."""
+    if merge_op not in DESTRUCTIVE_MERGE_OPS:
+        return
+
+    existing_rule = merge_info.get("existing_rule") or {}
+    target_rule_id = existing_rule.get("id")
+    if not target_rule_id:
+        return
+
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    reason = merge_info.get("merge_rationale", merge_op)
+    with db.transaction() as tx:
+        if merge_op == "replace_existing":
+            tx.execute(
+                "UPDATE rules SET status = 'archived', archived_reason = ?, "
+                "replacement_id = ?, updated_at = ? WHERE id = ?",
+                (reason, new_rule_id, now, target_rule_id),
+            )
+        elif merge_op == "suppress_existing":
+            tx.execute(
+                "UPDATE rules SET status = 'suppressed', suppressed_at = ?, "
+                "updated_at = ? WHERE id = ?",
+                (now, now, target_rule_id),
+            )
+        elif merge_op == "archive_existing":
+            tx.execute(
+                "UPDATE rules SET status = 'archived', archived_reason = ?, "
+                "updated_at = ? WHERE id = ?",
+                (reason, now, target_rule_id),
+            )
+
+    record_lineage(db, target_rule_id, new_rule_id, merge_op, reason)
+
+
 def _build_trigger_data(rule_data: dict[str, Any]) -> dict[str, Any]:
     """Build trigger_data dict suitable for compile_rule from structured rule_data."""
     return {
@@ -842,31 +996,15 @@ def _get_existing_rules_for_merge(db: Db, rule_data: dict[str, Any]) -> list[dic
     if not trigger:
         return []
 
-    # Query active/trusted rules; merge planner uses broad recall
-    rows = db.fetchall(
-        "SELECT id, status, severity, trigger_canonical, action_instruction, "
-        "domain_tags, quality_score, rule_version "
-        "FROM rules WHERE status IN ('active', 'trusted', 'candidate') "
-        "ORDER BY quality_score DESC LIMIT 20",
-    )
-
-    return [
-        {
-            "id": row["id"],
-            "status": row["status"],
-            "severity": row["severity"],
-            "trigger_canonical": row["trigger_canonical"],
-            "action_instruction": row["action_instruction"],
-            "domain_tags": row["domain_tags"],
-            "quality_score": row["quality_score"],
-            "rule_version": row["rule_version"],
-        }
-        for row in rows
-    ]
+    return find_merge_neighbors(db, rule_data, limit=20)
 
 
 def _generate_eval_cases(
-    llm, rule_data: dict[str, Any], role_models: dict[str, str] | None, default_model: str | None
+    db: Db,
+    llm,
+    rule_data: dict[str, Any],
+    role_models: dict[str, str] | None,
+    default_model: str | None,
 ) -> list[dict[str, Any]]:
     """Generate synthetic eval cases using the synthetic_eval_generator role."""
     from ..eval.synthetic import generate_eval_cases_prompt
@@ -887,10 +1025,13 @@ def _generate_eval_cases(
     )
 
     try:
-        response = llm.call(
-            model=model_id,
+        response = _call_llm_role(
+            db,
+            llm,
+            role="synthetic_eval_generator",
+            model_id=model_id,
             system=system_prompt,
-            user=prompt,
+            user=_prompt_text(prompt),
             max_tokens=4000,
             timeout=30,
         )

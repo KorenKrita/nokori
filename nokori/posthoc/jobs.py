@@ -149,12 +149,23 @@ def process_pending_posthoc_jobs(db: Db, llm, *, limit: int = 20) -> dict[str, i
             summary["failed"] += 1
             continue
 
+        label = result["label"]
+        reason_code = result["reason_code"]
+        attribution_weight = result.get("attribution_weight")
+        if (
+            label == "observed_useful"
+            and result.get("would_likely_have_happened_without_rule") == "yes"
+        ):
+            label = "irrelevant"
+            reason_code = "irrelevant_redundant"
+            attribution_weight = 0.0
+
         mark_posthoc_job_complete(
             db,
             job["id"],
-            result["label"],
-            result["reason_code"],
-            result.get("attribution_weight"),
+            label,
+            reason_code,
+            attribution_weight,
         )
         summary["processed"] += 1
         summary["done"] += 1

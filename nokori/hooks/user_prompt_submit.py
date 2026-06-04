@@ -110,6 +110,7 @@ def handle(payload: dict, cfg: Config, *, host: Host) -> dict:
                 session_id=session_id,
                 prompt=prompt,
                 project_id=project_id,
+                turn_index=payload.get("turn_index"),
             )
         except RetrieveFailed as e:
             log.warning("retrieve failed (%s); continuing without rules", e)

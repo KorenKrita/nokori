@@ -143,6 +143,7 @@ def _apply_runtime_applicability(
         embedding_only_match=result.embedding_only_match,
         idf_stats_available=idf_stats.rule_pool_size > 0,
         pool_size=idf_stats.rule_pool_size,
+        dynamic_trigger_info_min=idf_stats.dynamic_threshold,
         has_tool_input=False,
         observed_usefulness_score=result.rule.observed_usefulness_score,
         false_positive_score=result.rule.false_positive_score,

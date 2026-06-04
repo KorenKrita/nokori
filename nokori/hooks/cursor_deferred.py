@@ -88,6 +88,7 @@ def maybe_deferred_pre_tool_use(
                 session_id=session_id,
                 prompt=prompt_text,
                 project_id=project_id,
+                turn_index=payload.get("turn_index"),
             )
         except RetrieveFailed as e:
             log.warning("cursor deferred retrieve failed (%s); fail-open", e)

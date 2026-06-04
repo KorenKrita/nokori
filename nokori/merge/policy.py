@@ -7,10 +7,9 @@ deterministic policy disposes.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal
 
 from nokori.db import Db
-from nokori.policy import MergeOperation, RelationShape
+from nokori.policy import MergeOperation
 
 
 # ---------------------------------------------------------------------------
@@ -512,9 +511,19 @@ def _user_archived_opposite(existing_rule: dict, new_rule_data: dict) -> bool:
 def _existing_usefulness_weak_or_stale(existing_rule: dict) -> bool:
     """Check whether existing trusted rule's usefulness is weak or stale."""
     observed = float(existing_rule.get("observed_usefulness_score", 0.0))
-    # Stale: no recent observed useful event.
     first_useful = existing_rule.get("first_observed_useful_at")
     if not first_useful:
+        return True
+    try:
+        from datetime import datetime, timedelta, timezone
+
+        ts = str(first_useful).replace("Z", "+00:00")
+        first_dt = datetime.fromisoformat(ts)
+        if first_dt.tzinfo is None:
+            first_dt = first_dt.replace(tzinfo=timezone.utc)
+        if datetime.now(timezone.utc) - first_dt > timedelta(days=90):
+            return True
+    except (TypeError, ValueError):
         return True
     return observed < 0.4
 

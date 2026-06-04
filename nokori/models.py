@@ -32,7 +32,7 @@ class Rule:
     schema_version: int
     rule_version: int
     created_by_pipeline_version: str
-    runtime_policy_version: str
+    runtime_policy_version: str | None
     last_rewritten_by_role: str | None
 
     # Lifecycle

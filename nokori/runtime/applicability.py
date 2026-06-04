@@ -105,6 +105,7 @@ def _trigger_evidence_passes(
     distinct_trigger_terms: int,
     idf_stats_available: bool,
     pool_size: int,
+    dynamic_trigger_info_min: float | None = None,
 ) -> bool:
     """Evaluate trigger evidence paths (section 9.3).
 
@@ -123,7 +124,7 @@ def _trigger_evidence_passes(
         return False
 
     policy = _select_idf_policy(pool_size)
-    trigger_info_min = policy.absolute_trigger_info_min
+    trigger_info_min = _trigger_info_min(policy, dynamic_trigger_info_min)
     coverage_min = policy.trigger_coverage_min
     distinct_min = policy.distinct_trigger_terms_min
 
@@ -156,6 +157,7 @@ def _strong_trigger_evidence(
     distinct_trigger_terms: int,
     idf_stats_available: bool,
     pool_size: int,
+    dynamic_trigger_info_min: float | None = None,
 ) -> bool:
     """Strong trigger evidence required for HOT on active rules.
 
@@ -169,7 +171,7 @@ def _strong_trigger_evidence(
         return False
 
     policy = _select_idf_policy(pool_size)
-    trigger_info_min = policy.absolute_trigger_info_min
+    trigger_info_min = _trigger_info_min(policy, dynamic_trigger_info_min)
     coverage_min = policy.trigger_coverage_min
     distinct_min = policy.distinct_trigger_terms_min
 
@@ -194,6 +196,7 @@ def _high_risk_strong_evidence(
     distinct_trigger_terms: int,
     idf_stats_available: bool,
     pool_size: int,
+    dynamic_trigger_info_min: float | None = None,
 ) -> bool:
     """Stricter evidence bar for high_risk severity HOT decisions.
 
@@ -206,7 +209,7 @@ def _high_risk_strong_evidence(
         return False
 
     policy = _select_idf_policy(pool_size)
-    trigger_info_min = policy.absolute_trigger_info_min
+    trigger_info_min = _trigger_info_min(policy, dynamic_trigger_info_min)
     coverage_min = policy.trigger_coverage_min
     distinct_min = policy.distinct_trigger_terms_min
 
@@ -220,6 +223,16 @@ def _high_risk_strong_evidence(
         return True
 
     return False
+
+
+def _trigger_info_min(
+    policy: DynamicIDFPolicy,
+    dynamic_trigger_info_min: float | None,
+) -> float:
+    """Use persisted dynamic threshold when available, never below static floor."""
+    if dynamic_trigger_info_min is None:
+        return policy.absolute_trigger_info_min
+    return max(policy.absolute_trigger_info_min, dynamic_trigger_info_min)
 
 
 # ---------------------------------------------------------------------------
@@ -246,6 +259,7 @@ def evaluate_applicability(
     tool_evidence_passed: bool = False,
     observed_usefulness_score: float = 0.0,
     false_positive_score: float = 0.0,
+    dynamic_trigger_info_min: float | None = None,
 ) -> ApplicabilityResult:
     """Evaluate hard eligibility for a single rule match.
 
@@ -315,6 +329,7 @@ def evaluate_applicability(
         distinct_trigger_terms=distinct_trigger_terms,
         idf_stats_available=idf_stats_available,
         pool_size=pool_size,
+        dynamic_trigger_info_min=dynamic_trigger_info_min,
     )
 
     trigger_passed = _trigger_evidence_passes(**evidence_kwargs)

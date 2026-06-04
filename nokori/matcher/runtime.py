@@ -10,7 +10,7 @@ No LLM calls. No imports from other nokori modules. Uses only stdlib + re.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 
 from nokori.matcher.compiler import (
@@ -20,7 +20,6 @@ from nokori.matcher.compiler import (
     CompiledExcludedContext,
     CompiledMatcher,
     CompiledVariant,
-    GENERIC_TOKENS,
 )
 
 # ---------------------------------------------------------------------------
@@ -227,6 +226,9 @@ def _evaluate_excluded_context(
     text_lower: str,
     tool_input_lower: Optional[str],
     prompt_only_lower: str,
+    *,
+    trigger_anchor_tokens: frozenset[str],
+    trigger_anchor_phrases: tuple[str, ...],
 ) -> bool:
     """Check if an excluded context pattern matches within its configured scope.
 
@@ -242,14 +244,22 @@ def _evaluate_excluded_context(
     elif ctx.scope == "global":
         search_text = text_lower
     elif ctx.scope == "near_trigger_span":
-        # For near_trigger_span, we search the full text but the semantic
-        # constraint is proximity. Since we don't have span positions in this
-        # simplified evaluation, we match against the full combined text.
-        # A more advanced implementation could use token position windows.
-        search_text = text_lower
+        search_texts = _near_trigger_window_texts(
+            text_lower,
+            window_tokens=ctx.window_tokens,
+            trigger_anchor_tokens=trigger_anchor_tokens,
+            trigger_anchor_phrases=trigger_anchor_phrases,
+        )
+        if not search_texts:
+            return False
+        return any(_excluded_context_matches(ctx, search_text) for search_text in search_texts)
     else:
         search_text = text_lower
 
+    return _excluded_context_matches(ctx, search_text)
+
+
+def _excluded_context_matches(ctx: CompiledExcludedContext, search_text: str) -> bool:
     # Match based on mode
     if ctx.match_mode == "regex":
         for pattern in ctx.compiled_patterns:
@@ -265,6 +275,53 @@ def _evaluate_excluded_context(
                 return True
 
     return False
+
+
+def _near_trigger_window_texts(
+    text_lower: str,
+    *,
+    window_tokens: int,
+    trigger_anchor_tokens: frozenset[str],
+    trigger_anchor_phrases: tuple[str, ...],
+) -> tuple[str, ...]:
+    """Return token windows around matched trigger anchors.
+
+    near_trigger_span suppressors are intentionally scoped to proximity. We
+    derive trigger positions from matched anchor tokens and phrases, then only
+    evaluate exclusions inside +/- window_tokens around those positions.
+    """
+    tokens = _tokenize(text_lower)
+    if not tokens:
+        return ()
+
+    trigger_positions: set[int] = {
+        idx for idx, tok in enumerate(tokens) if tok in trigger_anchor_tokens
+    }
+
+    for phrase in trigger_anchor_phrases:
+        phrase_tokens = _tokenize(phrase)
+        if not phrase_tokens:
+            continue
+        width = len(phrase_tokens)
+        for idx in range(0, len(tokens) - width + 1):
+            if tokens[idx : idx + width] == phrase_tokens:
+                trigger_positions.update(range(idx, idx + width))
+
+    if not trigger_positions:
+        return ()
+
+    radius = max(0, int(window_tokens))
+    windows: list[str] = []
+    seen: set[tuple[int, int]] = set()
+    for pos in sorted(trigger_positions):
+        start = max(0, pos - radius)
+        end = min(len(tokens), pos + radius + 1)
+        span = (start, end)
+        if span in seen:
+            continue
+        seen.add(span)
+        windows.append(" ".join(tokens[start:end]))
+    return tuple(windows)
 
 
 def _compute_trigger_coverage(
@@ -372,12 +429,19 @@ def evaluate_match(
 
     # 4. Evaluate excluded contexts
     excluded_context_hits: list[str] = []
+    anchor_tokens = matcher.trigger_anchors.anchor_tokens
+    anchor_phrases = matcher.trigger_anchors.anchor_phrases
     for ctx in matcher.excluded_contexts:
         if _evaluate_excluded_context(
-            ctx, combined_lower, tool_input_lower, text_lower
+            ctx,
+            combined_lower,
+            tool_input_lower,
+            text_lower,
+            trigger_anchor_tokens=anchor_tokens,
+            trigger_anchor_phrases=anchor_phrases,
         ):
             # Check if override is allowed and override_requires are met
-            if ctx.override_allowed and ctx.override_requires:
+            if ctx.override_allowed:
                 # All override_requires must be present for the override
                 all_overrides_met = all(
                     _text_contains_phrase(combined_lower, req.lower())

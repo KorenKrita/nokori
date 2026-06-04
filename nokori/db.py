@@ -15,10 +15,10 @@ _SCHEMA_DDL = """
 CREATE TABLE IF NOT EXISTS rules (
     id TEXT PRIMARY KEY,
     short_id TEXT UNIQUE NOT NULL,
-    schema_version INTEGER NOT NULL DEFAULT 1,
+    schema_version INTEGER NOT NULL DEFAULT 6,
     rule_version INTEGER NOT NULL DEFAULT 1,
     created_by_pipeline_version TEXT,
-    runtime_policy_version TEXT,
+    runtime_policy_version TEXT DEFAULT '1.0.0',
     last_rewritten_by_role TEXT,
     status TEXT NOT NULL DEFAULT 'candidate' CHECK(status IN ('candidate','active','trusted','suppressed','archived')),
     severity TEXT NOT NULL DEFAULT 'reminder' CHECK(severity IN ('reminder','high_risk','gate_eligible')),
@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS rules (
     first_observed_useful_at TEXT,
     trusted_at TEXT,
     suppressed_at TEXT,
-    project_scope TEXT NOT NULL DEFAULT 'project' CHECK(project_scope IN ('project','global')),
+    project_scope TEXT NOT NULL DEFAULT 'global' CHECK(project_scope IN ('project','global')),
     project_id TEXT,
     archived_reason TEXT,
     replacement_id TEXT,
@@ -254,11 +254,17 @@ CREATE INDEX IF NOT EXISTS idx_rules_status ON rules(status);
 CREATE INDEX IF NOT EXISTS idx_rules_project ON rules(project_scope, project_id);
 CREATE INDEX IF NOT EXISTS idx_fire_events_rule ON rule_fire_events(rule_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_fire_events_session ON rule_fire_events(session_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_fire_events_rule_label_created ON rule_fire_events(rule_id, posthoc_label, created_at);
+CREATE INDEX IF NOT EXISTS idx_fire_events_created ON rule_fire_events(created_at);
+CREATE INDEX IF NOT EXISTS idx_fire_events_session_prompt ON rule_fire_events(session_id, prompt_hash);
 CREATE INDEX IF NOT EXISTS idx_shadow_events_rule ON rule_shadow_events(rule_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_shadow_events_fingerprint ON rule_shadow_events(rule_id, context_fingerprint);
+CREATE INDEX IF NOT EXISTS idx_shadow_events_rule_label ON rule_shadow_events(rule_id, shadow_label);
+CREATE INDEX IF NOT EXISTS idx_feedback_events_fire ON rule_feedback_events(fire_event_id);
 CREATE INDEX IF NOT EXISTS idx_archived_fp_signature ON archived_fingerprints(signature);
 CREATE INDEX IF NOT EXISTS idx_llm_jobs_status ON llm_jobs(status, next_retry_at);
 CREATE INDEX IF NOT EXISTS idx_posthoc_jobs_status ON posthoc_jobs(status);
+CREATE INDEX IF NOT EXISTS idx_posthoc_jobs_fire ON posthoc_jobs(fire_event_id);
 """
 
 

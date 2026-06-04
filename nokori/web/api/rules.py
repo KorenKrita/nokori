@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from nokori.db import (
     archive_rule,
@@ -10,7 +10,7 @@ from nokori.db import (
     open_db,
 )
 from nokori.utils.time import now_iso
-from nokori.web.deps import get_config
+from nokori.web.deps import get_config, require_write_auth
 from nokori.web.models import RuleResponse
 
 router = APIRouter()
@@ -120,7 +120,7 @@ def show_rule(short_id: str):
     return {"data": _rule_to_response(rule)}
 
 
-@router.post("/rules/{short_id}/archive")
+@router.post("/rules/{short_id}/archive", dependencies=[Depends(require_write_auth)])
 def archive_rule_endpoint(short_id: str):
     """Archive a rule (user-initiated). No manual promote/trust/suppress allowed."""
     cfg = get_config()
@@ -138,7 +138,7 @@ def archive_rule_endpoint(short_id: str):
         db.close()
 
 
-@router.post("/rules/{short_id}/dismiss")
+@router.post("/rules/{short_id}/dismiss", dependencies=[Depends(require_write_auth)])
 def dismiss_rule(short_id: str):
     """Dismiss a rule (alias for archive with dismiss reason)."""
     cfg = get_config()

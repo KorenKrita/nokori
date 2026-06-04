@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from nokori.config import Config
 from nokori.config_editor import get_editor_state, save_editor
 from nokori.errors import ConfigError
-from nokori.web.deps import get_config, set_config
+from nokori.web.deps import get_config, require_write_auth, set_config
 
 router = APIRouter()
 
@@ -51,7 +51,7 @@ class ConfigEditorSave(BaseModel):
     set_keys: list[str] = Field(default_factory=list)
 
 
-@router.put("/config/editor")
+@router.put("/config/editor", dependencies=[Depends(require_write_auth)])
 def config_editor_put(body: ConfigEditorSave):
     cfg = get_config()
     try:

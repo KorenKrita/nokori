@@ -16,10 +16,7 @@ Covers:
 from __future__ import annotations
 
 import argparse
-import json
 from dataclasses import replace
-from io import StringIO
-from unittest.mock import patch
 
 import pytest
 
@@ -29,8 +26,6 @@ from fastapi.testclient import TestClient
 
 from nokori.config import Config
 from nokori.db import open_db
-from nokori.models import Rule, ScoredResult
-from nokori.utils.time import now_iso
 from nokori.web.app import create_app
 
 
@@ -324,7 +319,11 @@ class TestCliListCommand:
         assert "ghi3" in out
         # archived rule not shown in default view
         lines = out.strip().split("\n")
-        short_ids_in_output = [l.split()[0] for l in lines if l.strip() and not l.startswith(" ")]
+        short_ids_in_output = [
+            line.split()[0]
+            for line in lines
+            if line.strip() and not line.startswith(" ")
+        ]
         assert "def2" not in short_ids_in_output
 
     def test_list_shows_scores(self, cfg, db_with_rules, capsys):
@@ -636,13 +635,18 @@ class TestWebRulesApi:
 
 
 class TestArchiveDismissExposed:
+    def _authorize(self, client):
+        client.get("/api/config")
+
     def test_web_archive_endpoint_works(self, client):
+        self._authorize(client)
         resp = client.post("/api/rules/abc1/archive")
         assert resp.status_code == 200
         rule = resp.json()["data"]
         assert rule["status"] == "archived"
 
     def test_web_dismiss_endpoint_works(self, client):
+        self._authorize(client)
         # Use ghi3 (trusted) for dismiss test
         resp = client.post("/api/rules/ghi3/dismiss")
         assert resp.status_code == 200
@@ -650,14 +654,17 @@ class TestArchiveDismissExposed:
         assert rule["status"] == "archived"
 
     def test_web_archive_404_for_unknown(self, client):
+        self._authorize(client)
         resp = client.post("/api/rules/zzz999/archive")
         assert resp.status_code == 404
 
     def test_web_dismiss_404_for_unknown(self, client):
+        self._authorize(client)
         resp = client.post("/api/rules/zzz999/dismiss")
         assert resp.status_code == 404
 
     def test_web_archive_idempotent_on_already_archived(self, client):
+        self._authorize(client)
         # def2 is already archived
         resp = client.post("/api/rules/def2/archive")
         assert resp.status_code == 200

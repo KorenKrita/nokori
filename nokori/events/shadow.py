@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from ..db import Db, dumps_json
+from ..db import Db, dumps_json, loads_json
 from ..utils.time import now_iso
 
 
@@ -48,9 +47,9 @@ def create_shadow_event(
 
     # Snapshot the rule at time of shadow match
     structured_snapshot = dumps_json({
-        "concepts": rule.concepts if isinstance(rule.concepts, list) else json.loads(rule.concepts or "[]"),
-        "required_concept_groups": rule.required_concept_groups if isinstance(rule.required_concept_groups, list) else json.loads(rule.required_concept_groups or "[]"),
-        "excluded_contexts": rule.excluded_contexts if isinstance(rule.excluded_contexts, list) else json.loads(rule.excluded_contexts or "[]"),
+        "concepts": rule.concepts if isinstance(rule.concepts, list) else loads_json(rule.concepts, []),
+        "required_concept_groups": rule.required_concept_groups if isinstance(rule.required_concept_groups, list) else loads_json(rule.required_concept_groups, []),
+        "excluded_contexts": rule.excluded_contexts if isinstance(rule.excluded_contexts, list) else loads_json(rule.excluded_contexts, []),
         "domain_tags": rule.domain_tags,
         "tool_tags": rule.tool_tags,
         "path_patterns": rule.path_patterns,

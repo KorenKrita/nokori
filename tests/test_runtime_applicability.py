@@ -4,8 +4,6 @@ Covers sections 9.4-9.5 of the autonomous rule quality flywheel plan:
 state permissions, trigger evidence paths, severity constraints.
 """
 
-import pytest
-
 from nokori.policy import (
     DYNAMIC_IDF_NORMAL,
     DYNAMIC_IDF_SMALL_POOL,
@@ -422,6 +420,20 @@ class TestPathB:
             pool_size=SMALL_POOL_THRESHOLD,
         )
         assert r.trigger_evidence_passed is False
+
+    def test_dynamic_threshold_overrides_static_absolute_minimum(self):
+        policy = DYNAMIC_IDF_NORMAL
+        r = _eval(
+            strong_variant_phrase_hit=False,
+            trigger_idf_sum=policy.absolute_trigger_info_min + 0.1,
+            trigger_coverage=policy.trigger_coverage_min,
+            distinct_trigger_terms=policy.distinct_trigger_terms_min,
+            idf_stats_available=True,
+            pool_size=SMALL_POOL_THRESHOLD,
+            dynamic_trigger_info_min=policy.absolute_trigger_info_min + 1.0,
+        )
+        assert r.trigger_evidence_passed is False
+        assert r.eligible is False
 
 
 # ---------------------------------------------------------------------------

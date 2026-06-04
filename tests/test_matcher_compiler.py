@@ -59,6 +59,8 @@ def _excluded_context(
     scope: str = "global",
     match_mode: str = "phrase",
     window_tokens: int = 12,
+    override_allowed: bool = False,
+    override_requires: list[str] | None = None,
 ) -> dict:
     return {
         "id": id,
@@ -67,6 +69,8 @@ def _excluded_context(
         "scope": scope,
         "match_mode": match_mode,
         "window_tokens": window_tokens,
+        "override_allowed": override_allowed,
+        "override_requires": override_requires or [],
     }
 
 
@@ -333,6 +337,49 @@ class TestExcludedContextScopes:
         # prompt_only scope checks only the prompt text, not tool_input
         assert "ex_prompt" not in result.excluded_context_hits
 
+    def test_empty_override_requires_means_override_allowed(self):
+        concepts = [_concept("c1", [_alias("secret key")])]
+        groups = [_group("g1", ["c1"])]
+        excluded = [
+            _excluded_context(
+                "ex_override",
+                ["sandbox example"],
+                override_allowed=True,
+                override_requires=[],
+            )
+        ]
+        matcher = compile_rule(
+            _trigger_data(concepts=concepts, groups=groups, excluded_contexts=excluded)
+        )
+
+        result = evaluate_match(matcher, "secret key sandbox example")
+
+        assert "ex_override" not in result.excluded_context_hits
+
+    def test_near_trigger_span_ignores_far_away_exclusion(self):
+        concepts = [_concept("c1", [_alias("secret key")])]
+        groups = [_group("g1", ["c1"])]
+        excluded = [
+            _excluded_context(
+                "ex_far",
+                ["sandbox example"],
+                scope="near_trigger_span",
+                window_tokens=2,
+            )
+        ]
+        matcher = compile_rule(
+            _trigger_data(concepts=concepts, groups=groups, excluded_contexts=excluded)
+        )
+
+        result = evaluate_match(
+            matcher,
+            "sandbox example "
+            "alpha beta gamma delta epsilon zeta eta theta iota kappa "
+            "secret key",
+        )
+
+        assert "ex_far" not in result.excluded_context_hits
+
 
 # ---------------------------------------------------------------------------
 # 7. Near-miss examples don't suppress at runtime
@@ -552,6 +599,14 @@ class TestTriggerCoverage:
             "injection sanitize sql payload attack vector",
         )
         assert 0.0 <= result.trigger_coverage <= 1.0
+
+    def test_weak_recall_variant_does_not_contribute_trigger_coverage(self, coverage_matcher):
+        result = evaluate_match(
+            coverage_matcher,
+            "sql payload attack vector only",
+        )
+        assert result.weak_variant_hits == ("sql payload attack",)
+        assert result.trigger_coverage == 0.0
 
 
 # ---------------------------------------------------------------------------

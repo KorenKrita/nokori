@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class Meta(BaseModel):
@@ -240,7 +240,7 @@ class RuleEdit(BaseModel):
 
 
 class RetrieveRequest(BaseModel):
-    prompt: str
+    prompt: str = Field(max_length=20000)
     project_id: str | None = None
     use_embedding: bool = True
 

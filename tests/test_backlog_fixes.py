@@ -2,6 +2,7 @@
 import json
 import subprocess
 import sys
+from types import SimpleNamespace
 
 from nokori.config import Config
 from nokori.db import open_db
@@ -147,3 +148,59 @@ def test_no_gate_marker_when_injection_empty(monkeypatch, tmp_path):
     out = handle({"session_id": "sess-empty", "prompt": "hello"}, cfg, host=Host.CLAUDE)
     assert out == {"continue": True}
     assert marker_io.read_latest_marker(cfg, "sess-empty") is None
+
+
+def test_decision_features_include_decision_reason():
+    from nokori.hooks.prompt_inject import _build_decision_features
+
+    features = _build_decision_features(
+        SimpleNamespace(
+            trigger_idf_sum=1.2,
+            trigger_coverage=0.5,
+            distinct_trigger_terms=2,
+            strong_variant_phrase_hit=False,
+            required_concepts_match=True,
+            excluded_context_hit=False,
+            bm25_score=3.0,
+            cosine=None,
+            rrf_score=0.1,
+            decision_reason="active with observed useful + strong trigger evidence",
+        )
+    )
+
+    assert features["decision_reason"] == (
+        "active with observed useful + strong trigger evidence"
+    )
+
+
+def test_record_fire_events_passes_turn_index(monkeypatch):
+    from nokori.hooks import prompt_inject as pinject
+
+    captured = {}
+
+    def fake_create_fire_event(*_args, **kwargs):
+        captured["turn_index"] = kwargs.get("turn_index")
+        return "event-1"
+
+    monkeypatch.setattr(pinject, "create_fire_event", fake_create_fire_event)
+    result = SimpleNamespace(
+        rule=SimpleNamespace(id="rule-1"),
+        trigger_idf_sum=0.0,
+        trigger_coverage=0.0,
+        distinct_trigger_terms=0,
+        strong_variant_phrase_hit=False,
+        required_concepts_match=True,
+        excluded_context_hit=False,
+        bm25_score=0.0,
+        cosine=None,
+        rrf_score=0.0,
+        decision_reason="test",
+        trigger_idf_pool_version="idf",
+        embedding_profile_version=None,
+    )
+
+    pinject._record_fire_events(
+        SimpleNamespace(), "session-1", "prompt-hash", [result], "warm", turn_index=7
+    )
+
+    assert captured["turn_index"] == 7

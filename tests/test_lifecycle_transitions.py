@@ -9,17 +9,13 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-import pytest
-
 from nokori.db import open_db, Db
 from nokori.lifecycle.transitions import (
-    TransitionResult,
     compute_false_positive_rate,
     evaluate_transitions,
     update_derived_scores,
 )
 from nokori.policy import (
-    MINIMUM_RATE_DENOMINATOR,
     RECENT_TIME_WINDOW_DAYS,
     RUNTIME_POLICY_VERSION,
     SUPPRESSION_TTL_DAYS,
@@ -418,6 +414,48 @@ class TestActiveToTrusted:
             row = db.fetchone("SELECT status, trusted_at FROM rules WHERE id = ?", (rid,))
             assert row["status"] == "trusted"
             assert row["trusted_at"] is not None
+        finally:
+            db.close()
+
+    def test_null_runtime_policy_version_does_not_lock_transition(self, tmp_path):
+        db = _fresh_db(tmp_path)
+        try:
+            rid = _insert_rule(db, status="active", runtime_policy_version=None)
+
+            sess1 = str(uuid.uuid4())
+            sess2 = str(uuid.uuid4())
+
+            _insert_fire_event(
+                db, rid, session_id=sess1, label="observed_useful",
+                reason_code="useful_prevented_error"
+            )
+            _insert_fire_event(
+                db, rid, session_id=sess1, label="observed_useful",
+                reason_code="useful_improved_quality"
+            )
+            _insert_fire_event(
+                db, rid, session_id=sess2, label="observed_useful",
+                reason_code="useful_followed_preference"
+            )
+            _insert_fire_event(
+                db, rid, session_id=sess1, label="plausible_useful",
+                reason_code="useful_improved_quality"
+            )
+            _insert_fire_event(
+                db, rid, session_id=sess2, label="plausible_useful",
+                reason_code="useful_prevented_error"
+            )
+
+            result = evaluate_transitions(db, rid)
+
+            assert result.new_status == "trusted"
+            assert result.applied is True
+            row = db.fetchone(
+                "SELECT status, runtime_policy_version FROM rules WHERE id = ?",
+                (rid,),
+            )
+            assert row["status"] == "trusted"
+            assert row["runtime_policy_version"] == RUNTIME_POLICY_VERSION
         finally:
             db.close()
 
@@ -859,7 +897,6 @@ class TestCAS:
             )
 
             sess1 = str(uuid.uuid4())
-            sess2 = str(uuid.uuid4())
             _insert_fire_event(db, rid, session_id=sess1, label="harmful",
                                reason_code="harmful_distracted")
 

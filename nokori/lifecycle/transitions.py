@@ -229,7 +229,7 @@ def _apply_transition(
     rule_version: int,
     old_status: str,
     new_status: str,
-    runtime_policy_version: str,
+    runtime_policy_version: str | None,
     reason: str,
 ) -> bool:
     """CAS update: only succeeds if rule_version and status match expectations.
@@ -247,23 +247,32 @@ def _apply_transition(
         extra_sets = ", trusted_at = ?"
         extra_params.append(now)
 
+    if runtime_policy_version is None:
+        policy_where = "runtime_policy_version IS NULL"
+        policy_params: tuple = ()
+    else:
+        policy_where = "runtime_policy_version = ?"
+        policy_params = (runtime_policy_version,)
+
     with db.transaction() as tx:
         cur = tx.execute(
             "UPDATE rules SET "
             "status = ?, "
             "rule_version = rule_version + 1, "
+            "runtime_policy_version = ?, "
             "updated_at = ?"
             f"{extra_sets} "
             "WHERE id = ? AND rule_version = ? AND status = ? "
-            "AND runtime_policy_version = ?",
+            f"AND {policy_where}",
             (
                 new_status,
+                RUNTIME_POLICY_VERSION,
                 now,
                 *extra_params,
                 rule_id,
                 rule_version,
                 old_status,
-                runtime_policy_version,
+                *policy_params,
             ),
         )
         applied = cur.rowcount == 1
@@ -295,7 +304,7 @@ def _apply_transition(
 def _evaluate_candidate(db: Db, row, rule_version: int) -> TransitionResult:
     rule_id = row["id"]
     old_status = "candidate"
-    rpv = row["runtime_policy_version"] or RUNTIME_POLICY_VERSION
+    rpv = row["runtime_policy_version"]
 
     shadow = _aggregate_shadow_evidence(db, rule_id, rule_version)
 
@@ -432,7 +441,7 @@ def _evaluate_candidate(db: Db, row, rule_version: int) -> TransitionResult:
 def _evaluate_active(db: Db, row, rule_version: int) -> TransitionResult:
     rule_id = row["id"]
     old_status = "active"
-    rpv = row["runtime_policy_version"] or RUNTIME_POLICY_VERSION
+    rpv = row["runtime_policy_version"]
 
     fire = _aggregate_fire_evidence(db, rule_id, window_days=RECENT_TIME_WINDOW_DAYS)
 
@@ -493,7 +502,7 @@ def _evaluate_active(db: Db, row, rule_version: int) -> TransitionResult:
 def _evaluate_trusted(db: Db, row, rule_version: int) -> TransitionResult:
     rule_id = row["id"]
     old_status = "trusted"
-    rpv = row["runtime_policy_version"] or RUNTIME_POLICY_VERSION
+    rpv = row["runtime_policy_version"]
 
     fire = _aggregate_fire_evidence(db, rule_id, window_days=RECENT_TIME_WINDOW_DAYS)
 
@@ -553,7 +562,7 @@ def _evaluate_trusted(db: Db, row, rule_version: int) -> TransitionResult:
 def _evaluate_suppressed(db: Db, row, rule_version: int) -> TransitionResult:
     rule_id = row["id"]
     old_status = "suppressed"
-    rpv = row["runtime_policy_version"] or RUNTIME_POLICY_VERSION
+    rpv = row["runtime_policy_version"]
 
     shadow = _aggregate_shadow_evidence(db, rule_id, rule_version)
 

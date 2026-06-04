@@ -481,7 +481,8 @@ def _build_trigger_anchors(
     """Build the set of trigger anchors from compiled concepts and variants.
 
     Anchors are concept alias tokens (non-generic, from required concepts)
-    plus variant phrase tokens. These form the denominator for trigger_coverage.
+    plus strong-anchor variant phrase tokens. Weak-recall variants are recall
+    hints only and must not raise trigger_coverage.
     """
     anchor_tokens: set[str] = set()
     anchor_phrases: list[str] = []
@@ -496,8 +497,10 @@ def _build_trigger_anchors(
                 if tok not in GENERIC_TOKENS:
                     anchor_tokens.add(tok)
 
-    # Collect variant phrase anchors
+    # Collect strong variant phrase anchors only.
     for variant in variants:
+        if variant.kind != "strong_anchor":
+            continue
         anchor_phrases.append(variant.text_lower)
         tokens = _tokenize(variant.text)
         for tok in tokens:

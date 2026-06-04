@@ -5,13 +5,12 @@ import uuid
 
 import pytest
 
-from nokori.db import open_db, dumps_json
-from nokori.events.fire import create_fire_event, get_fire_events_for_session
+from nokori.db import open_db
+from nokori.events.fire import create_fire_event
 from nokori.models import Rule
 from nokori.posthoc.evaluator import (
     ATTRIBUTION_ANSWERS,
     POSTHOC_LABELS,
-    POSTHOC_REASON_CODES,
     compute_attribution_weight,
     parse_posthoc_output,
 )
@@ -21,6 +20,7 @@ from nokori.posthoc.jobs import (
     get_pending_posthoc_jobs,
     mark_posthoc_job_complete,
     mark_posthoc_job_unclear,
+    process_pending_posthoc_jobs,
 )
 from nokori.utils.time import now_iso
 
@@ -484,8 +484,8 @@ class TestPendingJobsRetrievable:
             rule = _insert_rule(db)
             session = "session_8"
 
-            eid1 = _create_fire_event_with_window(db, rule, session)
-            eid2 = _create_fire_event_with_window(db, rule, session)
+            _create_fire_event_with_window(db, rule, session)
+            _create_fire_event_with_window(db, rule, session)
 
             enqueue_posthoc_for_session(db, session)
             jobs = get_pending_posthoc_jobs(db, limit=10)
@@ -586,5 +586,39 @@ class TestCompletedJobsMarkFireEvents:
             )
             assert row1["posthoc_label"] == "observed_useful"
             assert row2["posthoc_label"] == "irrelevant"
+        finally:
+            db.close()
+
+    def test_process_redundant_observed_useful_stores_irrelevant_redundant(
+        self, tmp_path, monkeypatch
+    ):
+        db = _make_db(tmp_path)
+        try:
+            rule = _insert_rule(db)
+            session = "session_redundant"
+            eid = _create_fire_event_with_window(db, rule, session)
+            enqueue_posthoc_for_session(db, session)
+
+            monkeypatch.setattr(
+                "nokori.posthoc.jobs.run_posthoc_evaluation",
+                lambda _llm, _inp: {
+                    "label": "observed_useful",
+                    "reason_code": "useful_prevented_error",
+                    "would_likely_have_happened_without_rule": "yes",
+                    "attribution_weight": 0.0,
+                },
+            )
+
+            summary = process_pending_posthoc_jobs(db, object())
+
+            assert summary["done"] == 1
+            row = db.fetchone(
+                "SELECT posthoc_label, posthoc_reason_code, posthoc_score "
+                "FROM rule_fire_events WHERE id = ?",
+                (eid,),
+            )
+            assert row["posthoc_label"] == "irrelevant"
+            assert row["posthoc_reason_code"] == "irrelevant_redundant"
+            assert row["posthoc_score"] == pytest.approx(0.0)
         finally:
             db.close()

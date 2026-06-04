@@ -7,12 +7,26 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 
 from nokori.config import Config
 
-from .deps import set_config
+from .deps import WRITE_AUTH_COOKIE, new_write_auth_token, set_config
 
 
 def create_app(cfg: Config) -> FastAPI:
     set_config(cfg)
     app = FastAPI(title="Nokori", docs_url=None, redoc_url=None)
+    app.state.write_auth_token = new_write_auth_token()
+
+    @app.middleware("http")
+    async def write_auth_cookie(request: Request, call_next):
+        response = await call_next(request)
+        if request.method in {"GET", "HEAD"} and not request.cookies.get(WRITE_AUTH_COOKIE):
+            response.set_cookie(
+                WRITE_AUTH_COOKIE,
+                app.state.write_auth_token,
+                httponly=True,
+                samesite="strict",
+                secure=request.url.scheme == "https",
+            )
+        return response
 
     from .api import (
         config_api,
@@ -45,11 +59,13 @@ def create_app(cfg: Config) -> FastAPI:
         app.mount("/assets", StaticFiles(directory=str(static_dir / "assets")), name="assets")
 
         index_html = static_dir / "index.html"
+        static_root = static_dir.resolve()
 
         @app.get("/{path:path}")
         async def spa_fallback(request: Request, path: str) -> Response:
-            file_path = static_dir / path
-            if file_path.is_file() and not path.startswith("api"):
+            file_path = (static_dir / path).resolve()
+            inside_static = file_path.is_relative_to(static_root)
+            if inside_static and file_path.is_file() and not path.startswith("api"):
                 return FileResponse(file_path)
             return FileResponse(index_html)
     else:

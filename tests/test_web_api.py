@@ -6,7 +6,6 @@ import pytest
 pytest.importorskip("httpx")
 
 from dataclasses import replace
-from pathlib import Path
 
 from fastapi.testclient import TestClient
 
@@ -116,12 +115,18 @@ class TestRules:
         resp = client_with_rule.get("/api/rules/zzz")
         assert resp.status_code == 404
 
+    def test_archive_requires_write_auth(self, client_with_rule):
+        resp = client_with_rule.post("/api/rules/abc/archive")
+        assert resp.status_code == 403
+
     def test_archive_rule(self, client_with_rule):
+        client_with_rule.get("/api/config")
         resp = client_with_rule.post("/api/rules/abc/archive")
         assert resp.status_code == 200
         assert resp.json()["data"]["status"] == "archived"
 
     def test_dismiss_rule(self, client_with_rule):
+        client_with_rule.get("/api/config")
         resp = client_with_rule.post("/api/rules/abc/dismiss")
         assert resp.status_code == 200
         assert resp.json()["data"]["status"] == "archived"
@@ -147,6 +152,12 @@ class TestRetrieve:
         assert resp.status_code == 200
         data = resp.json()["data"]
         assert len(data["hot"]) + len(data["warm"]) > 0
+
+    def test_prompt_rejects_excessive_length(self, client_with_rule):
+        resp = client_with_rule.post(
+            "/api/retrieve", json={"prompt": "x" * 20001, "use_embedding": False}
+        )
+        assert resp.status_code == 422
 
 
 # --- Injections ---
@@ -198,6 +209,16 @@ class TestConfig:
         data = resp.json()["data"]
         assert "data_dir" in data
         assert "gate_enabled" in data
+
+    def test_config_editor_put_requires_write_auth(self, client):
+        resp = client.put("/api/config/editor", json={"values": {}, "set_keys": []})
+        assert resp.status_code == 403
+
+
+class TestStaticFiles:
+    def test_spa_fallback_rejects_path_traversal(self, client):
+        resp = client.get("/%2E%2E/app.py")
+        assert resp.status_code != 200 or "def create_app" not in resp.text
 
 
 # --- Health ---

@@ -62,6 +62,7 @@ def _build_decision_features(r) -> dict:
         "strong_variant_phrase_hit": r.strong_variant_phrase_hit,
         "required_concepts_match": r.required_concepts_match,
         "excluded_context_hit": r.excluded_context_hit,
+        "decision_reason": getattr(r, "decision_reason", ""),
         "bm25_score": r.bm25_score,
         "cosine": r.cosine,
         "rrf_score": r.rrf_score,
@@ -69,7 +70,13 @@ def _build_decision_features(r) -> dict:
 
 
 def _record_fire_events(
-    db: Db, session_id: str, ph: str, results: list, level: str
+    db: Db,
+    session_id: str,
+    ph: str,
+    results: list,
+    level: str,
+    *,
+    turn_index: int | None = None,
 ) -> None:
     """Create fire events for injected WARM/HOT rules."""
     for r in results:
@@ -79,6 +86,7 @@ def _record_fire_events(
                 r.rule,
                 session_id=session_id,
                 prompt_hash=ph,
+                turn_index=turn_index,
                 level=level,
                 decision_features=_build_decision_features(r),
                 idf_pool_version=getattr(r, "trigger_idf_pool_version", None),
@@ -131,6 +139,7 @@ def inject_for_prompt(
     session_id: str,
     prompt: str,
     project_id: str | None,
+    turn_index: int | None = None,
     record_injections: bool = True,
     record_shadow_hits: bool = True,
 ) -> PromptInjectOutcome | None:
@@ -158,8 +167,8 @@ def inject_for_prompt(
 
     # Record fire events for injected rules
     if record_injections:
-        _record_fire_events(db, session_id, ph, hot, "hot")
-        _record_fire_events(db, session_id, ph, warm, "warm")
+        _record_fire_events(db, session_id, ph, hot, "hot", turn_index=turn_index)
+        _record_fire_events(db, session_id, ph, warm, "warm", turn_index=turn_index)
 
     # Record shadow events for candidate/suppressed matches (fingerprint dedup)
     if record_shadow_hits and project_id:
