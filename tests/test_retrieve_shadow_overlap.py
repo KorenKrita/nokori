@@ -52,16 +52,27 @@ def test_shadow_hot_excludes_formal_overlap(monkeypatch, tmp_path):
             bm25_score=1.0,
             matched_trigger_tokens=frozenset({"git"}),
         )
-        mocked = RetrievalResult(
-            hot=[hot_shared, hot_shadow_only],
-            warm=[],
-            bm25_matches=2,
-            embed_mode="off",
-        )
+        def fake_retrieve(_prompt, rules, _db, _cfg, **_kwargs):
+            rule_ids = {r.id for r in rules}
+            if rule_ids == {"shared-rule-id"}:
+                return RetrievalResult(
+                    hot=[hot_shared],
+                    warm=[],
+                    bm25_matches=1,
+                    embed_mode="off",
+                )
+            if rule_ids == {"shadow-only"}:
+                return RetrievalResult(
+                    hot=[hot_shadow_only],
+                    warm=[],
+                    bm25_matches=1,
+                    embed_mode="off",
+                )
+            return RetrievalResult(hot=[], warm=[], bm25_matches=0, embed_mode="off")
 
         with patch(
             "nokori.search.retrieve.retrieve_and_tier",
-            return_value=mocked,
+            side_effect=fake_retrieve,
         ):
             formal_result, shadow_hot, _shadow_warm = retrieve_formal_and_shadow(
                 "git push --force",
@@ -74,5 +85,51 @@ def test_shadow_hot_excludes_formal_overlap(monkeypatch, tmp_path):
         assert [r.rule.id for r in formal_result.hot] == ["shared-rule-id"]
         assert [r.rule.id for r in shadow_hot] == ["shadow-only"]
         assert "shared-rule-id" not in {r.rule.id for r in shadow_hot}
+    finally:
+        db.close()
+
+
+def test_shadow_selection_does_not_consume_formal_hot_slot(monkeypatch, tmp_path):
+    """Shadow-only candidates cannot starve formal rules from their injection slots."""
+    monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+    cfg = Config.from_env()
+    db = open_db(cfg.db_path)
+    try:
+        formal = _rule("formal-rule", project_id="my-proj")
+        shadow = _rule("shadow-rule", project_id="my-proj")
+        formal_hit = ScoredResult(
+            rule=formal,
+            rrf_score=0.02,
+            bm25_score=1.5,
+            matched_trigger_tokens=frozenset({"git", "force"}),
+        )
+        shadow_hit = ScoredResult(
+            rule=shadow,
+            rrf_score=0.03,
+            bm25_score=2.0,
+            matched_trigger_tokens=frozenset({"git", "force", "push"}),
+        )
+
+        def fake_retrieve(_prompt, rules, _db, _cfg, **_kwargs):
+            rule_ids = {r.id for r in rules}
+            if rule_ids == {"formal-rule", "shadow-rule"}:
+                return RetrievalResult(hot=[shadow_hit], warm=[], bm25_matches=2, embed_mode="off")
+            if rule_ids == {"formal-rule"}:
+                return RetrievalResult(hot=[formal_hit], warm=[], bm25_matches=1, embed_mode="off")
+            if rule_ids == {"shadow-rule"}:
+                return RetrievalResult(hot=[shadow_hit], warm=[], bm25_matches=1, embed_mode="off")
+            return RetrievalResult(hot=[], warm=[], bm25_matches=0, embed_mode="off")
+
+        with patch("nokori.search.retrieve.retrieve_and_tier", side_effect=fake_retrieve):
+            formal_result, shadow_hot, _shadow_warm = retrieve_formal_and_shadow(
+                "git push --force",
+                [formal],
+                [shadow],
+                db,
+                cfg,
+            )
+
+        assert [r.rule.id for r in formal_result.hot] == ["formal-rule"]
+        assert [r.rule.id for r in shadow_hot] == ["shadow-rule"]
     finally:
         db.close()

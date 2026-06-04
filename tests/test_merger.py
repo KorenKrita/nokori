@@ -1,9 +1,8 @@
 import json
 
-import pytest
-
 from nokori.config import Config
-from nokori.db import open_db, fetch_rules
+from nokori.db import SCHEMA_VERSION, loads_json, open_db, fetch_rules
+from nokori.policy import RUNTIME_POLICY_VERSION
 from nokori.extract.extractor import Candidate
 from nokori.extract.merger import _normalize_merge_verdict, merge_candidate
 
@@ -60,6 +59,30 @@ def test_merge_inserts_when_no_neighbors(monkeypatch, tmp_path):
         db.close()
 
 
+def test_merge_persists_current_v6_schema(monkeypatch, tmp_path):
+    monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+    cfg = Config.from_env()
+    db = open_db(cfg.db_path)
+    try:
+        merge_candidate(
+            _cand(
+                "never force push shared branches",
+                "use force-with-lease",
+                variants=["git push --force"],
+            ),
+            db,
+            FakeMergeLLM("[]"),
+        )
+
+        rule = fetch_rules(db, statuses=("active", "candidate"))[0]
+        assert rule.schema_version == SCHEMA_VERSION
+        assert rule.runtime_policy_version == RUNTIME_POLICY_VERSION
+        assert loads_json(rule.concepts, [])
+        assert loads_json(rule.required_concept_groups, [])
+    finally:
+        db.close()
+
+
 def test_merge_unrelated_inserts_independent(monkeypatch, tmp_path):
     monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
     cfg = Config.from_env()
@@ -109,7 +132,7 @@ def test_merge_same_activates_candidate(monkeypatch, tmp_path):
     db = open_db(cfg.db_path)
     try:
         # First insert as a medium candidate
-        outcome = merge_candidate(
+        merge_candidate(
             _cand(conf="medium", source="solution"), db, FakeMergeLLM("[]")
         )
         rules = fetch_rules(db, statuses=("candidate",))

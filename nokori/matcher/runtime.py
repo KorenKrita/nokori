@@ -441,7 +441,7 @@ def evaluate_match(
             trigger_anchor_phrases=anchor_phrases,
         ):
             # Check if override is allowed and override_requires are met
-            if ctx.override_allowed:
+            if ctx.override_allowed and ctx.override_requires:
                 # All override_requires must be present for the override
                 all_overrides_met = all(
                     _text_contains_phrase(combined_lower, req.lower())

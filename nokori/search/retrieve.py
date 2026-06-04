@@ -262,7 +262,7 @@ def retrieve_formal_and_shadow(
     pool_size: int | None = None,
     interaction: InteractionKind = "hook",
 ) -> tuple[RetrievalResult, list[ScoredResult], list[ScoredResult]]:
-    """One BM25/RRF pass over formal+shadow; split tiers by pool membership after selection."""
+    """Retrieve formal and shadow pools without letting shadow consume formal slots."""
     formal_ids = {r.id for r in formal_rules}
     shadow_only = [r for r in shadow_rules if r.id not in formal_ids]
     combined = list(formal_rules) + shadow_only
@@ -270,24 +270,23 @@ def retrieve_formal_and_shadow(
         empty = RetrievalResult([], [], 0, "off")
         return empty, [], []
 
-    shadow_ids = {r.id for r in shadow_only}
     effective_pool = pool_size if pool_size is not None else len(combined)
-    result = retrieve_and_tier(
+    formal_result = retrieve_and_tier(
         prompt,
-        combined,
+        formal_rules,
         db,
         cfg,
         top_k=10,
         interaction=interaction,
         pool_size=effective_pool,
     )
-    formal_hot = [r for r in result.hot if r.rule.id in formal_ids]
-    formal_warm = [r for r in result.warm if r.rule.id in formal_ids]
-    shadow_hot = [r for r in result.hot if r.rule.id in shadow_ids]
-    shadow_warm = [r for r in result.warm if r.rule.id in shadow_ids]
-    formal_bm25_matches = sum(1 for rid in result.bm25_rule_ids if rid in formal_ids)
-    formal_bm25_ids = frozenset(rid for rid in result.bm25_rule_ids if rid in formal_ids)
-    formal_result = RetrievalResult(
-        formal_hot, formal_warm, formal_bm25_matches, result.embed_mode, formal_bm25_ids
+    shadow_result = retrieve_and_tier(
+        prompt,
+        shadow_only,
+        db,
+        cfg,
+        top_k=10,
+        interaction=interaction,
+        pool_size=effective_pool,
     )
-    return formal_result, shadow_hot, shadow_warm
+    return formal_result, shadow_result.hot, shadow_result.warm

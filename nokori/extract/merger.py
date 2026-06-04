@@ -1,15 +1,15 @@
 from __future__ import annotations
 
 import dataclasses
-import json
 from dataclasses import dataclass
 
-from ..db import Db, RULE_COLUMNS, dumps_json, fetch_short_ids, row_to_rule
+from ..db import Db, RULE_COLUMNS, SCHEMA_VERSION, dumps_json, fetch_short_ids, row_to_rule
 from ..lifecycle.evidence import add_evidence, should_activate_pure_ai
 from ..llm.adapter import LLMAdapter
 from ..llm.json_payload import parse_json_payload
 from ..llm.prompts import MERGE_SYSTEM, format_merge_user
 from ..models import Rule
+from ..policy import RUNTIME_POLICY_VERSION
 from ..search import bm25
 from ..search.embedding import index_rule_if_enabled
 from ..utils.ids import new_uuid, short_id_for
@@ -68,6 +68,25 @@ def _initial_status(cand: Candidate) -> str:
     return "candidate"
 
 
+def _trigger_structure(cand: Candidate) -> tuple[list[dict], list[dict]]:
+    concept_id = "merger_trigger"
+    aliases = [{"text": cand.trigger, "strength": "strong"}]
+    aliases.extend(
+        {"text": variant, "strength": "strong"}
+        for variant in cand.trigger_variants
+        if variant
+    )
+    concepts = [{
+        "id": concept_id,
+        "label": cand.trigger[:80] or "trigger",
+        "aliases": aliases,
+        "match_mode": "phrase",
+        "required": True,
+    }]
+    groups = [{"id": "merger_primary", "all_of": [concept_id]}]
+    return concepts, groups
+
+
 def _persist_new(db: Db, cand: Candidate, project_id: str | None, cfg=None) -> Rule:
     now = now_iso()
     rid = new_uuid()
@@ -81,24 +100,28 @@ def _persist_new(db: Db, cand: Candidate, project_id: str | None, cfg=None) -> R
         scope, pid = "global", None
     severity = "reminder"
     activation_origin = "cold_fast_lane" if is_user_correction else None
+    concepts, groups = _trigger_structure(cand)
     with db.transaction() as tx:
         tx.execute(
             "INSERT INTO rules (id, short_id, schema_version, rule_version, "
             "created_by_pipeline_version, runtime_policy_version, "
             "status, severity, "
             "trigger_canonical, trigger_canonical_zh, "
+            "concepts, required_concept_groups, "
             "trigger_variants, trigger_variants_zh, search_terms, "
             "action_instruction, action_instruction_zh, "
             "evidence_support_score, "
             "source_origin, activation_origin, "
             "project_scope, project_id, "
             "created_at, updated_at) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
-                rid, sid, 1, 1,
-                "merger_v1", "policy_v1",
+                rid, sid, SCHEMA_VERSION, 1,
+                "merger_v1", RUNTIME_POLICY_VERSION,
                 status, severity,
                 cand.trigger, cand.trigger_text_zh,
+                dumps_json(concepts),
+                dumps_json(groups),
                 dumps_json(cand.trigger_variants),
                 dumps_json(cand.trigger_variants_zh),
                 dumps_json(cand.search_terms),

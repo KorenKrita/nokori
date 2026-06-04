@@ -118,6 +118,15 @@ class TestRules:
     def test_archive_requires_write_auth(self, client_with_rule):
         resp = client_with_rule.post("/api/rules/abc/archive")
         assert resp.status_code == 403
+        assert resp.json()["detail"] == "write authentication required"
+
+    @pytest.mark.parametrize("action", ["promote", "trust", "suppress"])
+    def test_manual_lifecycle_rejections_require_write_auth_first(
+        self, client_with_rule, action
+    ):
+        resp = client_with_rule.post(f"/api/rules/abc/{action}")
+        assert resp.status_code == 403
+        assert resp.json()["detail"] == "write authentication required"
 
     def test_archive_rule(self, client_with_rule):
         client_with_rule.get("/api/config")
@@ -130,6 +139,14 @@ class TestRules:
         resp = client_with_rule.post("/api/rules/abc/dismiss")
         assert resp.status_code == 200
         assert resp.json()["data"]["status"] == "archived"
+
+
+class TestEmbedAuth:
+    @pytest.mark.parametrize("path", ["/api/embed/start", "/api/embed/stop"])
+    def test_embed_mutations_require_write_auth(self, client, path):
+        resp = client.post(path)
+        assert resp.status_code == 403
+        assert resp.json()["detail"] == "write authentication required"
 
 
 # --- Retrieve ---

@@ -679,6 +679,7 @@ class TestArchiveDismissExposed:
 
 class TestManualLifecycleRejected:
     def test_web_promote_rejected(self, client):
+        client.get("/api/config")
         resp = client.post("/api/rules/abc1/promote")
         assert resp.status_code == 403
         detail = resp.json()["detail"]
@@ -686,12 +687,14 @@ class TestManualLifecycleRejected:
         assert "flywheel" in detail.lower() or "autonomously" in detail.lower()
 
     def test_web_trust_rejected(self, client):
+        client.get("/api/config")
         resp = client.post("/api/rules/abc1/trust")
         assert resp.status_code == 403
         detail = resp.json()["detail"]
         assert "Manual trust is not supported" in detail
 
     def test_web_suppress_rejected(self, client):
+        client.get("/api/config")
         resp = client.post("/api/rules/abc1/suppress")
         assert resp.status_code == 403
         detail = resp.json()["detail"]
@@ -699,6 +702,7 @@ class TestManualLifecycleRejected:
 
     def test_rejected_endpoints_do_not_mutate(self, client):
         """Rejected manual lifecycle calls must NOT change rule status."""
+        client.get("/api/config")
         # Get current state
         before = client.get("/api/rules/abc1").json()["data"]
         assert before["status"] == "active"

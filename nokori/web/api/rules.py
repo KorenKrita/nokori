@@ -161,7 +161,7 @@ def dismiss_rule(short_id: str):
 # ---------------------------------------------------------------------------
 
 
-@router.post("/rules/{short_id}/promote")
+@router.post("/rules/{short_id}/promote", dependencies=[Depends(require_write_auth)])
 def reject_promote(short_id: str):
     """Manual promote is not allowed. Lifecycle transitions are autonomous."""
     raise HTTPException(
@@ -171,7 +171,7 @@ def reject_promote(short_id: str):
     )
 
 
-@router.post("/rules/{short_id}/trust")
+@router.post("/rules/{short_id}/trust", dependencies=[Depends(require_write_auth)])
 def reject_trust(short_id: str):
     """Manual trust is not allowed. Trust is earned through observed usefulness."""
     raise HTTPException(
@@ -181,7 +181,7 @@ def reject_trust(short_id: str):
     )
 
 
-@router.post("/rules/{short_id}/suppress")
+@router.post("/rules/{short_id}/suppress", dependencies=[Depends(require_write_auth)])
 def reject_suppress(short_id: str):
     """Manual suppress is not allowed. Suppression is evidence-driven."""
     raise HTTPException(

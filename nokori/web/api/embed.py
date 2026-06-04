@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import time
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from nokori.search import embed_ipc
-from nokori.web.deps import get_config
+from nokori.web.deps import get_config, require_write_auth
 
 router = APIRouter()
 
@@ -31,7 +31,7 @@ def embed_status():
     }
 
 
-@router.post("/embed/start")
+@router.post("/embed/start", dependencies=[Depends(require_write_auth)])
 def embed_start():
     cfg = get_config()
     st = embed_ipc.server_status(cfg)
@@ -69,7 +69,7 @@ def embed_start():
     return {"data": {"action": "starting", "pid": None}}
 
 
-@router.post("/embed/stop")
+@router.post("/embed/stop", dependencies=[Depends(require_write_auth)])
 def embed_stop():
     cfg = get_config()
     st = embed_ipc.server_status(cfg)
