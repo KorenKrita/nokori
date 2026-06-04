@@ -177,6 +177,22 @@ def apply_merge_policy(
             lineage_record=_lineage(target_id, "replace_existing", planner_reason),
         )
 
+    # --- new_broader may replace narrower (spec section 8.3) ---
+
+    if (
+        not existing_trusted
+        and op_safety == "safe"
+        and relation == "new_broader"
+        and quality_winner == "new"
+    ):
+        return MergeDecision(
+            operation="replace_existing",
+            target_rule_id=target_id,
+            reason="broader rule replaces narrower; transcript evidence supports broader scope",
+            requires_synthetic_reeval=True,
+            lineage_record=_lineage(target_id, "replace_existing", planner_reason),
+        )
+
     # Trusted replacement requires higher bar.
     if (
         existing_trusted

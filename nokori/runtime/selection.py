@@ -198,7 +198,8 @@ def select_injection(
         hot.append(sr)
         selected_tokens.append(sr.matched_trigger_tokens)
 
-    # Allow second HOT only if distinct domain and strong trigger evidence
+    # Allow second HOT only if distinct domain/concept set AND strong trigger evidence
+    # Strong = Path A (strong_variant_phrase_hit) OR strong trigger_idf_sum (Path B)
     if len(hot) == 1 and len(scored_with_utility) > 1:
         for _initial_utility, sr in scored_with_utility:
             if sr is hot[0]:
@@ -208,7 +209,12 @@ def select_injection(
             u = compute_utility(sr, {}, selected_tokens_list=selected_tokens)
             if u <= 0:
                 continue
-            if _has_distinct_domain(sr, hot) and sr.strong_variant_phrase_hit:
+            has_strong_evidence = (
+                sr.strong_variant_phrase_hit
+                or (sr.trigger_idf_sum > 0 and sr.trigger_coverage >= 0.25
+                    and sr.required_concepts_match)
+            )
+            if _has_distinct_domain(sr, hot) and has_strong_evidence:
                 hot.append(sr)
                 selected_tokens.append(sr.matched_trigger_tokens)
                 break

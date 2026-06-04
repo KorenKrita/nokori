@@ -125,20 +125,23 @@ def count_shadow_evidence(
     rule_id: str,
     rule_version: int,
     window_days: int = 30,
+    event_limit: int = 10,
 ) -> dict:
     """Count shadow labels for version-compatible events with fingerprint dedup.
 
-    Returns counts by label plus distinct_sessions and unique_contexts.
+    Uses SHADOW_EVENT_WINDOW (last N evaluated events) per spec section 3.4.
+    Returns counts by label plus distinct_sessions, unique_contexts, and per_session_counts.
     """
     cutoff = _days_ago_iso(window_days)
 
-    # Use DISTINCT context_fingerprint to deduplicate repeated matches for same context.
-    # NULL fingerprints are counted individually (each is unique).
+    # SHADOW_EVENT_WINDOW: use last N events (spec 3.4)
     rows = db.fetchall(
         "SELECT shadow_label, session_id, context_fingerprint "
         "FROM rule_shadow_events "
-        "WHERE rule_id = ? AND shadow_rule_version = ? AND created_at >= ?",
-        (rule_id, rule_version, cutoff),
+        "WHERE rule_id = ? AND shadow_rule_version = ? "
+        "AND shadow_label IS NOT NULL AND created_at >= ? "
+        "ORDER BY created_at DESC LIMIT ?",
+        (rule_id, rule_version, cutoff, event_limit),
     )
 
     # Deduplicate by context_fingerprint
@@ -153,6 +156,8 @@ def count_shadow_evidence(
     }
     sessions: set[str] = set()
     unique_contexts = 0
+    # Per-session strong counts for single-session exception
+    per_session_strong: dict[str, int] = {}
 
     for row in rows:
         fp = row["context_fingerprint"]
@@ -169,11 +174,17 @@ def count_shadow_evidence(
         sid = row["session_id"]
         if sid:
             sessions.add(sid)
+            if label in ("would_help_high", "would_help_low"):
+                per_session_strong[sid] = per_session_strong.get(sid, 0) + 1
+
+    # Best single-session strong count
+    best_single_session_strong = max(per_session_strong.values()) if per_session_strong else 0
 
     return {
         **counts,
         "distinct_sessions": len(sessions),
         "unique_contexts": unique_contexts,
+        "best_single_session_strong": best_single_session_strong,
     }
 
 

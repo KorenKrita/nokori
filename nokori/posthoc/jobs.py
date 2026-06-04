@@ -175,8 +175,9 @@ def process_pending_posthoc_jobs(db: Db, llm, *, limit: int = 20) -> dict[str, i
         summary["done"] += 1
 
         # Track rules that need score/lifecycle update
+        # Spec 10.3: unclear = no state update
         rule_id = row["rule_id"]
-        if rule_id:
+        if rule_id and label != "unclear":
             rules_to_update.add(rule_id)
             if label == "observed_useful":
                 update_first_observed_useful(db, rule_id)
@@ -187,6 +188,69 @@ def process_pending_posthoc_jobs(db: Db, llm, *, limit: int = 20) -> dict[str, i
         evaluate_transitions(db, rule_id)
 
     return summary
+
+
+def submit_feedback(
+    db: Db,
+    fire_event_id: str,
+    source: str,
+    label: str,
+    confidence: float,
+    evidence: str,
+    session_id: str | None = None,
+) -> str | None:
+    """Submit agent/CLI feedback tied to a recent fire event (spec section 10.4).
+
+    Constraints:
+    - Must reference a fire event from the current or recent session.
+    - Cannot change rule text.
+    - Cannot promote to trusted by itself.
+    - High-confidence harmful feedback can trigger suppression after posthoc confirmation.
+
+    Returns feedback event id, or None if validation fails.
+    """
+    # Validate fire event exists and is recent
+    fire_row = db.fetchone(
+        "SELECT rule_id, session_id, created_at FROM rule_fire_events WHERE id = ?",
+        (fire_event_id,),
+    )
+    if fire_row is None:
+        return None
+
+    # Validate label
+    valid_labels = ("helped", "irrelevant", "harmful", "unclear")
+    if label not in valid_labels:
+        return None
+
+    # Validate confidence range
+    if not (0.0 <= confidence <= 1.0):
+        return None
+
+    # Validate source
+    valid_sources = ("agent_cli", "agent_miss", "user_correction")
+    if source not in valid_sources:
+        return None
+
+    # Recency check: fire event must be from this session or within 24h
+    if session_id and fire_row["session_id"] != session_id:
+        from datetime import datetime, timedelta, timezone
+        from ..utils.time import parse_iso
+
+        fire_time = parse_iso(fire_row["created_at"])
+        if fire_time and (datetime.now(timezone.utc) - fire_time) > timedelta(hours=24):
+            return None
+
+    feedback_id = str(uuid.uuid4())
+    now = now_iso()
+    with db.transaction() as tx:
+        tx.execute(
+            "INSERT INTO rule_feedback_events "
+            "(id, fire_event_id, source, label, confidence, evidence, created_at) "
+            "VALUES (?,?,?,?,?,?,?)",
+            (feedback_id, fire_event_id, source, label, confidence, evidence, now),
+        )
+
+    return feedback_id
 
 
 def compute_window_payload_hash(

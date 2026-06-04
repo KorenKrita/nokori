@@ -269,27 +269,42 @@ SYNTHETIC_EVAL_GENERATOR_SCHEMA: dict[str, Any] = {
 POSTHOC_EVALUATOR_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
-        "outcome": {
+        "label": {
             "type": "string",
             "enum": [
                 "observed_useful",
                 "plausible_useful",
-                "irrelevant_redundant",
-                "irrelevant_not_applicable",
-                "harmful_wrong_scope",
-                "harmful_blocked_valid_action",
-                "harmful_distracted",
+                "irrelevant",
+                "harmful",
                 "unclear",
             ],
         },
-        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
-        "evidence_summary": {"type": "string"},
-        "attribution_strength": {
+        "reason_code": {
             "type": "string",
-            "enum": ["strong", "moderate", "weak"],
+            "enum": [
+                "useful_prevented_error",
+                "useful_improved_quality",
+                "useful_followed_preference",
+                "irrelevant_not_applicable",
+                "irrelevant_redundant",
+                "irrelevant_unused",
+                "harmful_distracted",
+                "harmful_wrong_scope",
+                "harmful_blocked_valid_action",
+            ],
+        },
+        "rule_application_evidence": {"type": "string"},
+        "would_likely_have_happened_without_rule": {
+            "type": "string",
+            "enum": ["yes", "no", "unclear"],
         },
     },
-    "required": ["outcome", "confidence", "evidence_summary", "attribution_strength"],
+    "required": [
+        "label",
+        "reason_code",
+        "rule_application_evidence",
+        "would_likely_have_happened_without_rule",
+    ],
 }
 
 ROLE_SCHEMAS: dict[str, dict[str, Any]] = {

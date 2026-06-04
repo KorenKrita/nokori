@@ -250,12 +250,13 @@ def evaluate_applicability(
     strong_variant_phrase_hit: bool,
     required_concepts_match: bool,
     excluded_context_hit: bool,
-    action_only_match: bool,
-    search_only_match: bool,
-    embedding_only_match: bool,
-    idf_stats_available: bool,
-    pool_size: int,
-    has_tool_input: bool,
+    excluded_context_override_passed: bool = False,
+    action_only_match: bool = False,
+    search_only_match: bool = False,
+    embedding_only_match: bool = False,
+    idf_stats_available: bool = True,
+    pool_size: int = 0,
+    has_tool_input: bool = False,
     tool_evidence_passed: bool = False,
     observed_usefulness_score: float = 0.0,
     false_positive_score: float = 0.0,
@@ -299,7 +300,7 @@ def evaluate_applicability(
             penalties=penalties,
         )
 
-    if excluded_context_hit:
+    if excluded_context_hit and not excluded_context_override_passed:
         return ApplicabilityResult(
             decision="cold",
             eligible=False,
@@ -460,7 +461,9 @@ def evaluate_applicability(
         else:
             has_strong = _strong_trigger_evidence(**evidence_kwargs)
 
-        if has_strong and false_positive_score == 0.0:
+        if has_strong:
+            if false_positive_score > 0.0:
+                penalties.append(f"recent_fp_penalty={false_positive_score:.2f}")
             return ApplicabilityResult(
                 decision="hot",
                 eligible=True,

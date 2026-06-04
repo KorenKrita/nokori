@@ -6,6 +6,7 @@ CAS-style updates to prevent stale-state races.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
@@ -412,18 +413,18 @@ def _evaluate_candidate(db: Db, row, rule_version: int) -> TransitionResult:
     )
     admission_quality = 0.0
     if quality_row and quality_row["scores"]:
-        import json
-
         try:
             scores = json.loads(quality_row["scores"])
             admission_quality = scores.get("overall_quality", 0.0)
         except (json.JSONDecodeError, TypeError):
             pass
 
-    # Check if there is a session with enough strong matches
+    # Spec requires strong matches within ONE session, not across all sessions
+    best_single_session_strong = shadow.get("best_single_session_strong", 0)
+
     has_single_session_evidence = (
         admission_quality >= ss.admission_overall_quality_min
-        and strong_count >= ss.shadow_strong_match_count_min
+        and best_single_session_strong >= ss.shadow_strong_match_count_min
         and evaluated_count >= ss.evaluated_shadow_match_count_min
         and would_help_high >= ss.counterfactual_would_help_high_min
         and risky_harmful <= ss.risky_or_near_miss_shadow_count_max
@@ -506,12 +507,14 @@ def _evaluate_active(db: Db, row, rule_version: int) -> TransitionResult:
     total_evaluated = fire.get("total_evaluated", 0)
     distinct_sessions = fire.get("distinct_observed_useful_sessions", 0)
 
+    # Rate-based promotion NOT allowed below minimum_rate_denominator (spec 3.4)
     if (
         total_evaluated >= th.evaluated_fire_count_min
+        and total_evaluated >= MINIMUM_RATE_DENOMINATOR
         and observed_useful >= th.observed_useful_count_min
         and distinct_sessions >= th.distinct_observed_useful_sessions_min
         and lifetime_harmful <= th.harmful_count_max
-        and (total_evaluated < MINIMUM_RATE_DENOMINATOR or fp_rate <= th.recent_false_positive_rate_max)
+        and fp_rate <= th.recent_false_positive_rate_max
     ):
         reason = (
             f"trusted_promotion: useful={observed_useful} "

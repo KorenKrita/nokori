@@ -155,19 +155,23 @@ def is_circuit_breaker_open(db: Db, role: str, model_id: str | None = None) -> b
         if auth_failures >= 2:
             return True
 
-    # Type 3: consecutive schema parse failures for this role
-    schema_rows = db.fetchall(
-        "SELECT status, output_json FROM llm_jobs WHERE role = ? "
-        "ORDER BY updated_at DESC LIMIT ?",
-        (role, SCHEMA_PARSE_FAILURE_CONSECUTIVE_MAX),
-    )
-    if len(schema_rows) >= SCHEMA_PARSE_FAILURE_CONSECUTIVE_MAX:
-        all_schema_fails = all(
-            r["status"] == "failed" and _is_schema_parse_error(r["output_json"])
-            for r in schema_rows
+    # Type 3: consecutive schema parse failures for this role+prompt_version
+    from .roles import PROMPT_VERSIONS
+    prompt_version = PROMPT_VERSIONS.get(role)
+    if prompt_version:
+        schema_rows = db.fetchall(
+            "SELECT status, output_json FROM llm_jobs "
+            "WHERE role = ? AND prompt_version = ? "
+            "ORDER BY updated_at DESC LIMIT ?",
+            (role, prompt_version, SCHEMA_PARSE_FAILURE_CONSECUTIVE_MAX),
         )
-        if all_schema_fails:
-            return True
+        if len(schema_rows) >= SCHEMA_PARSE_FAILURE_CONSECUTIVE_MAX:
+            all_schema_fails = all(
+                r["status"] == "failed" and _is_schema_parse_error(r["output_json"])
+                for r in schema_rows
+            )
+            if all_schema_fails:
+                return True
 
     return False
 
