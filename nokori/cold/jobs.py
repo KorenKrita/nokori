@@ -14,7 +14,8 @@ from nokori.db import Db
 
 # --- Constants ---
 
-CIRCUIT_BREAKER_THRESHOLD = 5  # failures in last 10 attempts
+CIRCUIT_BREAKER_RATE_THRESHOLD = 0.50  # role_failure_rate >= 0.50 trips breaker (spec 5.2)
+CIRCUIT_BREAKER_SAMPLE_SIZE = 10  # last N attempts to evaluate
 CIRCUIT_BREAKER_COOLDOWN_SECONDS = 300
 TRANSCRIPT_INGEST_TTL_HOURS = 72
 SCHEMA_PARSE_FAILURE_CONSECUTIVE_MAX = 3
@@ -130,17 +131,17 @@ def is_circuit_breaker_open(db: Db, role: str, model_id: str | None = None) -> b
     2. provider_auth_or_rate_limit_error -> pause affected provider/model route
     3. schema_parse_failure >= 3 consecutive -> pause role prompt version
     """
-    # Type 1: role_failure_rate >= 0.50 over last 10 attempts -> pause
+    # Type 1: role_failure_rate >= 0.50 over last 10 attempts -> pause (spec 5.2)
     rows = db.fetchall(
         "SELECT status, updated_at FROM llm_jobs WHERE role = ? "
-        "ORDER BY updated_at DESC LIMIT 10",
-        (role,),
+        "ORDER BY updated_at DESC LIMIT ?",
+        (role, CIRCUIT_BREAKER_SAMPLE_SIZE),
     )
     if rows:
         failure_count = sum(1 for r in rows if r["status"] == "failed")
         total = len(rows)
         failure_rate = failure_count / total if total > 0 else 0.0
-        if failure_rate >= 0.50 and failure_count >= 2:
+        if failure_rate >= CIRCUIT_BREAKER_RATE_THRESHOLD:
             # Check cooldown: if most recent failure is within cooldown, breaker open
             most_recent = rows[0]["updated_at"] if rows else None
             if most_recent:

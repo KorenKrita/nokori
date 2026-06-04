@@ -25,7 +25,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from nokori.cold.jobs import (
-    CIRCUIT_BREAKER_THRESHOLD,
+    CIRCUIT_BREAKER_SAMPLE_SIZE,
     enqueue_job,
     enqueue_transcript_ingest,
     expire_stale_ingest_jobs,
@@ -201,7 +201,7 @@ class TestCircuitBreaker:
         assert is_circuit_breaker_open(db, "extractor") is False
 
     def test_breaker_opens_after_threshold_failures(self, db: Db):
-        for i in range(CIRCUIT_BREAKER_THRESHOLD):
+        for i in range(CIRCUIT_BREAKER_SAMPLE_SIZE):
             job_id = enqueue_job(db, "extractor", "model-a", "1.0.0", f"fail_{i}")
             mark_job_failed(db, job_id)
 

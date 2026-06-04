@@ -307,6 +307,9 @@ def _apply_transition(
             new_status,
             reason,
         )
+        # System-automated archival creates system-strength negative fingerprint (spec section 11)
+        if new_status == "archived":
+            _create_system_archive_fingerprint(db, rule_id)
     else:
         log.debug(
             "stale transition rule=%s %s->%s (CAS failed)",
@@ -316,6 +319,27 @@ def _apply_transition(
         )
 
     return applied
+
+
+def _create_system_archive_fingerprint(db: Db, rule_id: str) -> None:
+    """Create a system-strength archived fingerprint for automated archival."""
+    row = db.fetchone(
+        "SELECT trigger_canonical, action_instruction, domain_tags FROM rules WHERE id = ?",
+        (rule_id,),
+    )
+    if row is None:
+        return
+    from ..archive.fingerprints import create_archived_fingerprint_from_data
+    from ..db import loads_json
+    domain_tags = loads_json(row["domain_tags"], []) if row["domain_tags"] else []
+    create_archived_fingerprint_from_data(
+        db,
+        rule_id=rule_id,
+        trigger_canonical=row["trigger_canonical"] or "",
+        action_instruction=row["action_instruction"] or "",
+        domain_tags=domain_tags,
+        strength="system",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -370,6 +394,7 @@ def _evaluate_candidate(db: Db, row, rule_version: int) -> TransitionResult:
     th = CANDIDATE_TO_ACTIVE
     strong_count = shadow.get("would_help_high", 0) + shadow.get("would_help_low", 0)
     would_help_high = shadow.get("would_help_high", 0)
+    # Denominator excludes 'unclear' per spec section 3.4
     evaluated_count = (
         shadow.get("would_help_high", 0)
         + shadow.get("would_help_low", 0)
@@ -379,11 +404,13 @@ def _evaluate_candidate(db: Db, row, rule_version: int) -> TransitionResult:
     )
     distinct_sessions = shadow.get("distinct_sessions", 0)
 
-    # Shadow FP rate: irrelevant / evaluated (excluding unclear)
-    shadow_fp_denom = evaluated_count
+    # Shadow FP: numerator = irrelevant + risky (scope errors); denominator = evaluated (no unclear)
+    # Spec: false_positive_event = irrelevant_not_applicable OR harmful_wrong_scope etc.
+    # For shadow events: 'irrelevant' and 'near_miss' map to false positives
+    shadow_fp_numerator = shadow.get("irrelevant", 0) + shadow.get("near_miss", 0)
     shadow_fp_rate = (
-        shadow.get("irrelevant", 0) / max(1, shadow_fp_denom)
-        if shadow_fp_denom > 0
+        shadow_fp_numerator / max(1, evaluated_count)
+        if evaluated_count > 0
         else 0.0
     )
 

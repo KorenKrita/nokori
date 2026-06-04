@@ -488,6 +488,8 @@ def evaluate_match(
     if idf_stats and matched_anchors:
         pool_size = idf_stats.get("pool_size", 0)
         df_by_token = idf_stats.get("df_by_token", {})
+        is_shadow = idf_stats.get("is_shadow", False)
+        idf_max = idf_stats.get("idf_max", 3.0)
         if pool_size > 0:
             import math
             seen_terms: set[str] = set()
@@ -496,7 +498,14 @@ def evaluate_match(
                     continue
                 seen_terms.add(token)
                 df_t = df_by_token.get(token, 0)
-                if df_t > 0:
+                if is_shadow:
+                    # Shadow IDF: df_effective = max(1, df), cap at idf_max (spec 9.3)
+                    df_effective = max(1, df_t)
+                    raw_idf = math.log(
+                        1 + (pool_size - df_effective + 0.5) / (df_effective + 0.5)
+                    )
+                    trigger_idf_sum += min(raw_idf, idf_max)
+                elif df_t > 0:
                     trigger_idf_sum += math.log(
                         1 + (pool_size - df_t + 0.5) / (df_t + 0.5)
                     )
