@@ -127,14 +127,16 @@ def count_shadow_evidence(
     window_days: int = 30,
     event_limit: int = 10,
     shadow_type: str | None = None,
+    since_iso: str | None = None,
 ) -> dict:
     """Count shadow labels for version-compatible events with fingerprint dedup.
 
     Uses SHADOW_EVENT_WINDOW (last N evaluated events) per spec section 3.4.
     Optionally filters by shadow_type (candidate_probe or suppression_recovery).
+    Optionally filters to events created after since_iso (for recovery evidence).
     Returns counts by label plus distinct_sessions, unique_contexts, and per_session_counts.
     """
-    cutoff = _days_ago_iso(window_days)
+    cutoff = since_iso if since_iso else _days_ago_iso(window_days)
 
     # SHADOW_EVENT_WINDOW: use last N events (spec 3.4)
     type_filter = ""

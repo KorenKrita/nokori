@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 
 from nokori.models import ScoredResult
 from nokori.policy import HOT_MAX_DEFAULT, WARM_HARD_MAX
+from nokori.runtime.applicability import _strong_trigger_evidence
 
 
 # ---------------------------------------------------------------------------
@@ -209,11 +210,16 @@ def select_injection(
             u = compute_utility(sr, {}, selected_tokens_list=selected_tokens)
             if u <= 0:
                 continue
-            has_strong_evidence = (
-                sr.strong_variant_phrase_hit
-                or (sr.trigger_idf_sum >= 2.0 and sr.trigger_coverage >= 0.25
-                    and sr.required_concepts_match
-                    and getattr(sr, 'distinct_trigger_terms', 1) >= 1)
+            # Rules in eligible_results already passed applicability (concepts match)
+            has_strong_evidence = _strong_trigger_evidence(
+                strong_variant_phrase_hit=sr.strong_variant_phrase_hit,
+                required_concepts_match=True,
+                trigger_idf_sum=sr.trigger_idf_sum,
+                trigger_coverage=sr.trigger_coverage,
+                distinct_trigger_terms=getattr(sr, 'distinct_trigger_terms', 1),
+                idf_stats_available=sr.trigger_idf_sum > 0,
+                pool_size=20,
+                dynamic_trigger_info_min=None,
             )
             if _has_distinct_domain(sr, hot) and has_strong_evidence:
                 hot.append(sr)

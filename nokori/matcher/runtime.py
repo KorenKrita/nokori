@@ -505,9 +505,11 @@ def evaluate_match(
                         1 + (pool_size - df_effective + 0.5) / (df_effective + 0.5)
                     )
                     trigger_idf_sum += min(raw_idf, idf_max)
-                elif df_t > 0:
+                else:
+                    # Normal IDF: df=0 means novel term (very rare = highest IDF)
+                    df_effective = max(1, df_t)
                     trigger_idf_sum += math.log(
-                        1 + (pool_size - df_t + 0.5) / (df_t + 0.5)
+                        1 + (pool_size - df_effective + 0.5) / (df_effective + 0.5)
                     )
             distinct_trigger_terms = len(seen_terms)
 

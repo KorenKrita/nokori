@@ -173,10 +173,12 @@ def _aggregate_fire_evidence(db: Db, rule_id: str, window_days: int = 30) -> dic
 def _aggregate_shadow_evidence(
     db: Db, rule_id: str, rule_version: int, window_days: int = 30,
     shadow_type: str | None = None,
+    since_iso: str | None = None,
 ) -> dict:
     """Count shadow labels with fingerprint dedup, distinct sessions."""
     return count_shadow_evidence(
         db, rule_id, rule_version, window_days=window_days, shadow_type=shadow_type,
+        since_iso=since_iso,
     )
 
 
@@ -392,7 +394,8 @@ def _evaluate_candidate(db: Db, row, rule_version: int) -> TransitionResult:
 
     # Check candidate -> active (normal path)
     th = CANDIDATE_TO_ACTIVE
-    strong_count = shadow.get("would_help_high", 0) + shadow.get("would_help_low", 0)
+    # shadow_strong_match_count = would_help_high only (spec: strong match)
+    strong_count = shadow.get("would_help_high", 0)
     would_help_high = shadow.get("would_help_high", 0)
     # Denominator excludes 'unclear' per spec section 3.4
     evaluated_count = (
@@ -643,7 +646,9 @@ def _evaluate_suppressed(db: Db, row, rule_version: int) -> TransitionResult:
     old_status = "suppressed"
     rpv = row["runtime_policy_version"]
 
-    shadow = _aggregate_shadow_evidence(db, rule_id, rule_version)
+    # Only count shadow evidence AFTER suppression (recovery evidence only)
+    suppressed_at_iso = row["suppressed_at"]
+    shadow = _aggregate_shadow_evidence(db, rule_id, rule_version, since_iso=suppressed_at_iso)
 
     # Check suppressed -> archived (fast downgrade)
     risky_harmful = shadow.get("risky", 0) + shadow.get("near_miss", 0)
