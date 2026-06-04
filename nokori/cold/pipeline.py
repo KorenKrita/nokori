@@ -144,6 +144,14 @@ def run_cold_pipeline(
             rejection_reason=f"circuit_breaker_pending: {e}",
             scores=None,
         )
+    except (RuntimeError, OSError, TimeoutError, ConnectionError) as e:
+        # Spec section 13: transient failures leave jobs pending for retry
+        return ColdPipelineResult(
+            status="pending",
+            rule_id=None,
+            rejection_reason=f"transient_failure_pending: {type(e).__name__}: {e}",
+            scores=None,
+        )
 
 
 def _run_cold_pipeline_inner(
@@ -495,7 +503,7 @@ def _run_admission_judge(
         return decision, scores
     except CircuitBreakerOpenError:
         raise  # Propagate: job should remain pending, not rejected
-    except (ValueError, Exception):
+    except ValueError:
         # Conservative: reject on judge failure
         return "reject", {}
 
@@ -561,7 +569,7 @@ def _run_rewriter(
         return validate_role_output("rule_rewriter", response)
     except CircuitBreakerOpenError:
         raise
-    except (ValueError, Exception):
+    except ValueError:
         return None
 
 
@@ -605,7 +613,7 @@ def _run_final_judge(
         return result["decision"]
     except CircuitBreakerOpenError:
         raise
-    except (ValueError, Exception):
+    except ValueError:
         # Conservative: reject on failure
         return "reject"
 
@@ -679,7 +687,7 @@ def _run_merge_planner(
         }
     except CircuitBreakerOpenError:
         raise
-    except (ValueError, Exception):
+    except ValueError:
         # Conservative: keep_both on failure (do not block insertion)
         return "keep_both", {"merge_rationale": "merge_planner_failed", "target_rule_ids": []}
 

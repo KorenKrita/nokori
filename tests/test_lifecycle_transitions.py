@@ -855,6 +855,60 @@ class TestSuppressedToArchived:
 
 
 # ---------------------------------------------------------------------------
+# 9b. Counterfactual/plausible_useful cannot promote to trusted
+# ---------------------------------------------------------------------------
+
+
+class TestCounterfactualCannotPromoteToTrusted:
+    def test_plausible_useful_cannot_promote_active_to_trusted(self, tmp_path):
+        """plausible_useful events cannot promote active to trusted (spec 3.3)."""
+        db = _fresh_db(tmp_path)
+        try:
+            rid = _insert_rule(db, status="active")
+            sess1 = str(uuid.uuid4())
+            sess2 = str(uuid.uuid4())
+
+            # Insert many plausible_useful (not observed_useful)
+            for _ in range(5):
+                _insert_fire_event(db, rid, session_id=sess1,
+                                   label="plausible_useful", reason_code="useful_prevented_error")
+            for _ in range(3):
+                _insert_fire_event(db, rid, session_id=sess2,
+                                   label="plausible_useful", reason_code="useful_improved_quality")
+
+            result = evaluate_transitions(db, rid)
+            # Should NOT promote to trusted (only observed_useful counts)
+            assert result.new_status != "trusted"
+        finally:
+            db.close()
+
+    def test_only_observed_useful_promotes_to_trusted(self, tmp_path):
+        """Only observed_useful (not plausible) can promote active to trusted."""
+        db = _fresh_db(tmp_path)
+        try:
+            rid = _insert_rule(db, status="active")
+            sess1 = str(uuid.uuid4())
+            sess2 = str(uuid.uuid4())
+
+            # 3 observed_useful across 2 sessions with 5+ evaluated total
+            _insert_fire_event(db, rid, session_id=sess1,
+                               label="observed_useful", reason_code="useful_prevented_error")
+            _insert_fire_event(db, rid, session_id=sess1,
+                               label="observed_useful", reason_code="useful_improved_quality")
+            _insert_fire_event(db, rid, session_id=sess2,
+                               label="observed_useful", reason_code="useful_followed_preference")
+            _insert_fire_event(db, rid, session_id=sess1,
+                               label="plausible_useful", reason_code="useful_prevented_error")
+            _insert_fire_event(db, rid, session_id=sess2,
+                               label="plausible_useful", reason_code="useful_improved_quality")
+
+            result = evaluate_transitions(db, rid)
+            assert result.new_status == "trusted"
+        finally:
+            db.close()
+
+
+# ---------------------------------------------------------------------------
 # 10. CAS: stale job doesn't apply
 # ---------------------------------------------------------------------------
 

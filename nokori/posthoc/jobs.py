@@ -265,22 +265,28 @@ def submit_feedback(
             (feedback_id, fire_event_id, source, label, confidence, evidence, now),
         )
 
-    # High-confidence harmful feedback triggers immediate suppression (spec 10.4)
+    # High-confidence harmful feedback: suppress ONLY after posthoc confirmation
+    # or direct deterministic harm evidence (spec 10.4).
+    # Check if posthoc already confirmed harmful for this fire event.
     if label == "harmful" and confidence >= 0.9 and rule_id:
-        from ..lifecycle.transitions import _apply_transition
-        from ..policy import RUNTIME_POLICY_VERSION
-
-        rule_row_full = db.fetchone(
-            "SELECT rule_version, status, runtime_policy_version FROM rules WHERE id = ?",
-            (rule_id,),
+        posthoc_confirmed = db.fetchone(
+            "SELECT posthoc_label FROM rule_fire_events WHERE id = ? AND posthoc_label = 'harmful'",
+            (fire_event_id,),
         )
-        if rule_row_full and rule_row_full["status"] in ("active", "trusted"):
-            _apply_transition(
-                db, rule_id, rule_row_full["rule_version"],
-                rule_row_full["status"], "suppressed",
-                rule_row_full["runtime_policy_version"],
-                f"high_confidence_harmful_feedback (confidence={confidence:.2f})",
+        if posthoc_confirmed:
+            from ..lifecycle.transitions import _apply_transition
+
+            rule_row_full = db.fetchone(
+                "SELECT rule_version, status, runtime_policy_version FROM rules WHERE id = ?",
+                (rule_id,),
             )
+            if rule_row_full and rule_row_full["status"] in ("active", "trusted"):
+                _apply_transition(
+                    db, rule_id, rule_row_full["rule_version"],
+                    rule_row_full["status"], "suppressed",
+                    rule_row_full["runtime_policy_version"],
+                    f"harmful_feedback_with_posthoc_confirmation (confidence={confidence:.2f})",
+                )
 
     return feedback_id
 
