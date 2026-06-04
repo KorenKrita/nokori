@@ -53,6 +53,8 @@ class MatchResult:
     trigger_coverage: float
     trigger_idf_sum: float = 0.0
     distinct_trigger_terms: int = 0
+    trigger_evidence_passed: bool = False
+    strong_trigger_evidence: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -483,6 +485,8 @@ def evaluate_match(
     search_only_match = search_term_hit and not has_trigger_evidence
 
     # 7. Compute trigger IDF sum and distinct trigger terms if idf_stats provided
+    # (idf_stats dict keys: pool_size, df_by_token, is_shadow, idf_max,
+    #  dynamic_threshold, trigger_coverage_min, distinct_trigger_terms_min)
     trigger_idf_sum = 0.0
     distinct_trigger_terms = 0
     if idf_stats and matched_anchors:
@@ -520,6 +524,24 @@ def evaluate_match(
                         )
             distinct_trigger_terms = len(seen_terms)
 
+    # 8. Evaluate trigger evidence pass/fail (spec section 9.3)
+    trigger_evidence_passed = _evaluate_trigger_evidence(
+        strong_variant_phrase_hit=bool(strong_variant_hits),
+        required_concepts_match=required_concepts_match,
+        trigger_idf_sum=trigger_idf_sum,
+        trigger_coverage=trigger_coverage,
+        distinct_trigger_terms=distinct_trigger_terms,
+        idf_stats=idf_stats,
+    )
+    strong_evidence = _evaluate_strong_trigger_evidence(
+        strong_variant_phrase_hit=bool(strong_variant_hits),
+        required_concepts_match=required_concepts_match,
+        trigger_idf_sum=trigger_idf_sum,
+        trigger_coverage=trigger_coverage,
+        distinct_trigger_terms=distinct_trigger_terms,
+        idf_stats=idf_stats,
+    )
+
     return MatchResult(
         matched_concept_ids=matched_concept_ids,
         matched_group_ids=matched_group_ids,
@@ -533,4 +555,130 @@ def evaluate_match(
         trigger_coverage=trigger_coverage,
         trigger_idf_sum=trigger_idf_sum,
         distinct_trigger_terms=distinct_trigger_terms,
+        trigger_evidence_passed=trigger_evidence_passed,
+        strong_trigger_evidence=strong_evidence,
     )
+
+
+# ---------------------------------------------------------------------------
+# Trigger evidence pass/fail evaluation (spec section 9.3)
+# ---------------------------------------------------------------------------
+
+_SMALL_POOL_THRESHOLD = 20
+_SMALL_POOL_COVERAGE_MIN = 0.40
+_SMALL_POOL_ABSOLUTE_MIN = 2.40
+_SMALL_POOL_DISTINCT_MIN = 2
+_NORMAL_COVERAGE_MIN = 0.25
+_NORMAL_ABSOLUTE_MIN = 1.20
+_NORMAL_DISTINCT_MIN = 1
+
+
+def _evaluate_trigger_evidence(
+    *,
+    strong_variant_phrase_hit: bool,
+    required_concepts_match: bool,
+    trigger_idf_sum: float,
+    trigger_coverage: float,
+    distinct_trigger_terms: int,
+    idf_stats: Optional[dict],
+) -> bool:
+    """Evaluate whether trigger evidence passes (spec section 9.3 paths A/B/C).
+
+    Path A: strong_variant_phrase_hit AND required_concepts_match
+    Path B: trigger_idf_sum >= threshold AND coverage >= min AND concepts AND distinct >= min
+    Path C: trigger_idf_sum >= 1.5 * threshold AND concepts AND distinct >= min
+
+    N=0: only Path A available (dynamic IDF unavailable).
+    N<20: stricter thresholds. Require strong_variant OR concepts in addition to IDF.
+    """
+    # Path A is always available
+    if strong_variant_phrase_hit and required_concepts_match:
+        return True
+
+    if idf_stats is None:
+        return False
+
+    pool_size = idf_stats.get("pool_size", 0)
+    if pool_size == 0:
+        return False
+
+    # Determine thresholds based on pool size
+    dynamic_threshold = idf_stats.get("dynamic_threshold")
+    if pool_size < _SMALL_POOL_THRESHOLD:
+        coverage_min = _SMALL_POOL_COVERAGE_MIN
+        distinct_min = _SMALL_POOL_DISTINCT_MIN
+        absolute_min = _SMALL_POOL_ABSOLUTE_MIN
+    else:
+        coverage_min = _NORMAL_COVERAGE_MIN
+        distinct_min = _NORMAL_DISTINCT_MIN
+        absolute_min = _NORMAL_ABSOLUTE_MIN
+
+    trigger_info_min = max(dynamic_threshold, absolute_min) if dynamic_threshold else absolute_min
+
+    # Small pool additionally requires strong_variant OR concepts
+    if pool_size < _SMALL_POOL_THRESHOLD:
+        if not (strong_variant_phrase_hit or required_concepts_match):
+            return False
+
+    # Path B
+    if (
+        trigger_idf_sum >= trigger_info_min
+        and trigger_coverage >= coverage_min
+        and required_concepts_match
+        and distinct_trigger_terms >= distinct_min
+    ):
+        return True
+
+    # Path C (relaxed coverage, stricter IDF)
+    if (
+        trigger_idf_sum >= 1.5 * trigger_info_min
+        and required_concepts_match
+        and distinct_trigger_terms >= distinct_min
+    ):
+        return True
+
+    return False
+
+
+def _evaluate_strong_trigger_evidence(
+    *,
+    strong_variant_phrase_hit: bool,
+    required_concepts_match: bool,
+    trigger_idf_sum: float,
+    trigger_coverage: float,
+    distinct_trigger_terms: int,
+    idf_stats: Optional[dict],
+) -> bool:
+    """Strong trigger evidence = Path A or full Path B (not relaxed Path C)."""
+    if strong_variant_phrase_hit and required_concepts_match:
+        return True
+
+    if idf_stats is None:
+        return False
+
+    pool_size = idf_stats.get("pool_size", 0)
+    if pool_size == 0:
+        return False
+
+    dynamic_threshold = idf_stats.get("dynamic_threshold")
+    if pool_size < _SMALL_POOL_THRESHOLD:
+        coverage_min = _SMALL_POOL_COVERAGE_MIN
+        distinct_min = _SMALL_POOL_DISTINCT_MIN
+        absolute_min = _SMALL_POOL_ABSOLUTE_MIN
+    else:
+        coverage_min = _NORMAL_COVERAGE_MIN
+        distinct_min = _NORMAL_DISTINCT_MIN
+        absolute_min = _NORMAL_ABSOLUTE_MIN
+
+    trigger_info_min = max(dynamic_threshold, absolute_min) if dynamic_threshold else absolute_min
+
+    # Strong = only Path B (full thresholds, not relaxed Path C)
+    if (
+        trigger_idf_sum >= trigger_info_min
+        and trigger_coverage >= coverage_min
+        and required_concepts_match
+        and distinct_trigger_terms >= distinct_min
+    ):
+        return True
+
+    return False
