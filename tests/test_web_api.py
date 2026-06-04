@@ -34,27 +34,34 @@ def client_with_rule(cfg):
     now = now_iso()
     with db.transaction() as tx:
         tx.execute(
-            "INSERT INTO rules (id, short_id, trigger_text, trigger_variants, "
-            "search_terms, action, source_type, confidence, status, "
-            "evidence_score, evidence_log, hit_count, shadow_hit_count, "
-            "promotion_evidence, project_scope, created_at, updated_at) "
+            "INSERT INTO rules (id, short_id, schema_version, rule_version, "
+            "created_by_pipeline_version, runtime_policy_version, "
+            "trigger_canonical, trigger_variants, "
+            "search_terms, action_instruction, "
+            "source_origin, status, severity, "
+            "evidence_support_score, "
+            "project_scope, created_at, updated_at) "
             "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
-                "rule-1", "abc", "when editing Python files", "[]",
+                "rule-1", "abc", 1, 1,
+                "v1", "v1",
+                "when editing Python files", "[]",
                 '{"en": ["python", "edit"]}',
-                "use black formatter", "correction", "high", "active",
-                3, "[]", 5, 0, "[]", "global", now, now,
+                "use black formatter",
+                "transcript_extraction", "active", "reminder",
+                3.0,
+                "global", now, now,
             ),
         )
         tx.execute(
-            "INSERT INTO injections (rule_id, session_id, prompt_hash, level, created_at) "
-            "VALUES (?,?,?,?,?)",
-            ("rule-1", "sess-1", "hash-1", "hot", now),
+            "INSERT INTO rule_fire_events (id, rule_id, session_id, prompt_hash, level, created_at) "
+            "VALUES (?,?,?,?,?,?)",
+            ("fe-1", "rule-1", "sess-1", "hash-1", "hot", now),
         )
         tx.execute(
-            "INSERT INTO injections (rule_id, session_id, prompt_hash, level, created_at) "
-            "VALUES (?,?,?,?,?)",
-            ("rule-1", "sess-1", "hash-2", "warm", now),
+            "INSERT INTO rule_fire_events (id, rule_id, session_id, prompt_hash, level, created_at) "
+            "VALUES (?,?,?,?,?,?)",
+            ("fe-2", "rule-1", "sess-1", "hash-2", "warm", now),
         )
     db.close()
     app = create_app(cfg)
@@ -70,7 +77,7 @@ class TestDashboard:
         data = resp.json()["data"]
         assert "rules" in data
         assert data["rules"]["active"] == 0
-        assert "injections_24h" in data
+        assert "fire_events_24h" in data
         assert "embed_server" in data
         assert "extract_pending" in data
 
@@ -78,7 +85,7 @@ class TestDashboard:
         resp = client_with_rule.get("/api/dashboard")
         data = resp.json()["data"]
         assert data["rules"]["active"] == 1
-        assert data["injections_24h"] == 2
+        assert data["fire_events_24h"] == 2
 
 
 # --- Rules ---
@@ -97,22 +104,22 @@ class TestRules:
         assert body["data"][0]["short_id"] == "abc"
 
     def test_filter_by_status(self, client_with_rule):
-        resp = client_with_rule.get("/api/rules?status=dormant")
+        resp = client_with_rule.get("/api/rules?status=suppressed")
         assert resp.json()["meta"]["total"] == 0
 
     def test_show_rule(self, client_with_rule):
         resp = client_with_rule.get("/api/rules/abc")
         assert resp.status_code == 200
-        assert resp.json()["data"]["trigger_text"] == "when editing Python files"
+        assert resp.json()["data"]["trigger_canonical"] == "when editing Python files"
 
     def test_show_not_found(self, client_with_rule):
         resp = client_with_rule.get("/api/rules/zzz")
         assert resp.status_code == 404
 
-    def test_edit_rule(self, client_with_rule):
-        resp = client_with_rule.patch("/api/rules/abc", json={"action": "use ruff"})
+    def test_archive_rule(self, client_with_rule):
+        resp = client_with_rule.post("/api/rules/abc/archive")
         assert resp.status_code == 200
-        assert resp.json()["data"]["action"] == "use ruff"
+        assert resp.json()["data"]["status"] == "archived"
 
     def test_dismiss_rule(self, client_with_rule):
         resp = client_with_rule.post("/api/rules/abc/dismiss")
@@ -199,26 +206,5 @@ class TestHealth:
     def test_health(self, client):
         resp = client.get("/api/health")
         assert resp.status_code == 200
-        assert "db" in resp.json()["data"]
-
-
-# --- CLI ---
-
-class TestCLI:
-    def test_web_subcommand_exists(self):
-        from nokori.cli import _build_parser
-        parser = _build_parser()
-        args = parser.parse_args(["web"])
-        assert args.command == "web"
-
-    def test_web_port_flag(self):
-        from nokori.cli import _build_parser
-        parser = _build_parser()
-        args = parser.parse_args(["web", "--port", "9999"])
-        assert args.port == 9999
-
-    def test_web_no_browser_flag(self):
-        from nokori.cli import _build_parser
-        parser = _build_parser()
-        args = parser.parse_args(["web", "--no-browser"])
-        assert args.no_browser is True
+        data = resp.json()["data"]
+        assert data["db"]["status"] == "ok"

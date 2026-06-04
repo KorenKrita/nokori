@@ -13,6 +13,23 @@ def _utcnow_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
+def _insert_rule(db, *, id_, trigger, short_id=None):
+    now = _utcnow_iso()
+    sid = short_id or id_.replace("-", "")[:6]
+    with db.transaction() as tx:
+        tx.execute(
+            "INSERT INTO rules (id, short_id, schema_version, rule_version, "
+            "created_by_pipeline_version, runtime_policy_version, "
+            "trigger_canonical, action_instruction, "
+            "source_origin, status, severity, "
+            "project_scope, project_id, created_at, updated_at) "
+            "VALUES (?,?,1,1,'v1','v1',?,?,?,?,?,?,?,?,?)",
+            (id_, sid, trigger, "use lease",
+             "transcript_extraction", "active", "reminder",
+             "global", None, now, now),
+        )
+
+
 def test_prompt_hash_matches():
     from nokori.gate.marker import Marker
 
@@ -28,7 +45,7 @@ def test_prompt_hash_matches():
 
 
 def test_pre_tool_use_fail_open_when_marker_only_no_injection(monkeypatch, tmp_path):
-    """Orphan marker without injections hash anchor must not block (fail-open)."""
+    """Orphan marker without fire events hash anchor must not block (fail-open)."""
     monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
     cfg = Config.from_env()
     sess = "s-marker-only"
@@ -37,7 +54,7 @@ def test_pre_tool_use_fail_open_when_marker_only_no_injection(monkeypatch, tmp_p
         cfg,
         sess,
         "git push --force the branch",
-        [MarkerRule("rule01", "use lease", "correction", "rationale")],
+        [MarkerRule("rule01", "use lease", "transcript_extraction", "rationale")],
         ph=ph,
     )
     from nokori.hooks.pre_tool_use import handle
@@ -55,31 +72,21 @@ def test_pre_tool_use_skips_block_on_stale_prompt_hash(monkeypatch, tmp_path):
     sess = "s-phash"
     try:
         now = _utcnow_iso()
-        with db.transaction() as tx:
-            tx.execute(
-                "INSERT INTO rules (id, short_id, trigger_text, action, "
-                "source_type, confidence, status, project_scope, project_id, "
-                "created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-                (
-                    "rule-1", "rule01", "git push force remote",
-                    "use lease", "correction", "high", "active", "global",
-                    None, now, now,
-                ),
-            )
+        _insert_rule(db, id_="rule-1", trigger="git push force remote", short_id="rule01")
         ph_old = prompt_hash("git push --force the branch")
         ph_new = prompt_hash("unrelated weather question")
         marker_io.write(
             cfg,
             sess,
             "git push --force the branch",
-            [MarkerRule("rule01", "use lease", "correction", "rationale")],
+            [MarkerRule("rule01", "use lease", "transcript_extraction", "rationale")],
             ph=ph_old,
         )
         with db.transaction() as tx:
             tx.execute(
-                "INSERT INTO injections (rule_id, session_id, prompt_hash, level, created_at) "
-                "VALUES (?,?,?,?,?)",
-                ("rule-1", sess, ph_new, "hot", now),
+                "INSERT INTO rule_fire_events (id, rule_id, session_id, prompt_hash, level, created_at) "
+                "VALUES (?,?,?,?,?,?)",
+                ("fe-1", "rule-1", sess, ph_new, "hot", now),
             )
         from nokori.hooks.pre_tool_use import handle
 
@@ -101,39 +108,27 @@ def test_per_prompt_hash_markers_do_not_overwrite(monkeypatch, tmp_path):
     db = open_db(cfg.db_path)
     try:
         now = _utcnow_iso()
+        _insert_rule(db, id_="rule-a", trigger="deploy trigger", short_id="aaaaaa")
+        _insert_rule(db, id_="rule-b", trigger="test trigger", short_id="bbbbbb")
         with db.transaction() as tx:
             tx.execute(
-                "INSERT INTO rules (id, short_id, trigger_text, action, "
-                "source_type, confidence, status, project_scope, project_id, "
-                "created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-                ("rule-a", "aaaaaa", "deploy trigger", "action a",
-                 "correction", "high", "active", "global", None, now, now),
+                "INSERT INTO rule_fire_events (id, rule_id, session_id, prompt_hash, level, created_at) "
+                "VALUES (?,?,?,?,?,?)",
+                ("fe-a", "rule-a", sess, ph_a, "hot", now),
             )
             tx.execute(
-                "INSERT INTO rules (id, short_id, trigger_text, action, "
-                "source_type, confidence, status, project_scope, project_id, "
-                "created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-                ("rule-b", "bbbbbb", "test trigger", "action b",
-                 "correction", "high", "active", "global", None, now, now),
-            )
-            tx.execute(
-                "INSERT INTO injections (rule_id, session_id, prompt_hash, level, created_at) "
-                "VALUES (?,?,?,?,?)",
-                ("rule-a", sess, ph_a, "hot", now),
-            )
-            tx.execute(
-                "INSERT INTO injections (rule_id, session_id, prompt_hash, level, created_at) "
-                "VALUES (?,?,?,?,?)",
-                ("rule-b", sess, ph_b, "hot", now),
+                "INSERT INTO rule_fire_events (id, rule_id, session_id, prompt_hash, level, created_at) "
+                "VALUES (?,?,?,?,?,?)",
+                ("fe-b", "rule-b", sess, ph_b, "hot", now),
             )
 
         marker_io.write(
             cfg, sess, "prompt A about deploy",
-            [MarkerRule("aaaaaa", "action a", "correction")], ph=ph_a,
+            [MarkerRule("aaaaaa", "action a")], ph=ph_a,
         )
         marker_io.write(
             cfg, sess, "prompt B about tests",
-            [MarkerRule("bbbbbb", "action b", "correction")], ph=ph_b,
+            [MarkerRule("bbbbbb", "action b")], ph=ph_b,
         )
         assert cfg.marker_path(sess, ph_a).exists()
         assert cfg.marker_path(sess, ph_b).exists()

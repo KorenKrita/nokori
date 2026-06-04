@@ -23,7 +23,7 @@ def prompt_hash(prompt: str) -> str:
 class MarkerRule:
     short_id: str
     action: str
-    source_type: str
+    source_type: str = "transcript_extraction"
     rationale: str | None = None
 
 
@@ -217,7 +217,7 @@ def read_latest_marker(cfg: Config, session_id: str) -> Marker | None:
 
 def injection_exists(db: Db, session_id: str, ph: str) -> bool:
     row = db.fetchone(
-        "SELECT 1 FROM injections WHERE session_id = ? AND prompt_hash = ? LIMIT 1",
+        "SELECT 1 FROM rule_fire_events WHERE session_id = ? AND prompt_hash = ? LIMIT 1",
         (session_id, ph),
     )
     return row is not None
@@ -242,7 +242,7 @@ def resolve_current_prompt_hash(
     if db is None:
         return None
     row = db.fetchone(
-        "SELECT prompt_hash FROM injections WHERE session_id = ? "
+        "SELECT prompt_hash FROM rule_fire_events WHERE session_id = ? "
         "ORDER BY created_at DESC LIMIT 1",
         (session_id,),
     )

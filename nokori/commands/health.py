@@ -163,7 +163,7 @@ def _check_rule_count(cfg: Config) -> tuple[str, str]:
     if embed_on and count >= RULE_COUNT_EMBED_WARN:
         return (
             "warn",
-            f"{count} searchable rules (active+dormant) — UserPromptSubmit embed "
+            f"{count} searchable rules (active+trusted) — UserPromptSubmit embed "
             f"threshold uses per-prompt pool size; SessionStart warmup uses this "
             f"full count; consider fewer rules or disable embed above "
             f"~{RULE_COUNT_EMBED_WARN}",
@@ -182,7 +182,7 @@ def _check_embedding_index_gaps(cfg: Config) -> tuple[str, str]:
             return ("skip", "embedding not enabled for this library size")
         row = db.fetchone(
             "SELECT COUNT(*) AS n FROM rules r "
-            "WHERE r.status IN ('active', 'dormant') "
+            "WHERE r.status IN ('active', 'trusted') "
             "AND NOT EXISTS (SELECT 1 FROM rule_embeddings e WHERE e.rule_id = r.id)"
         )
         missing = int(row["n"]) if row else 0
@@ -191,7 +191,7 @@ def _check_embedding_index_gaps(cfg: Config) -> tuple[str, str]:
     if missing:
         return (
             "warn",
-            f"{missing} active/dormant rule(s) have no embedding rows — "
+            f"{missing} active/trusted rule(s) have no embedding rows — "
             "RRF uses BM25-only for those; run nokori extract or nokori edit to refresh",
         )
     return ("ok", "all searchable rules have embedding rows")

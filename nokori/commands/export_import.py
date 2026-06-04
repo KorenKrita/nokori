@@ -21,12 +21,10 @@ from ..search.embedding import index_rule_if_enabled
 from ..utils.ids import new_uuid, short_id_for
 from ..utils.time import now_iso
 
-_COMPATIBLE_IMPORT_VERSIONS = frozenset({2, 3, 4, 5})
+_COMPATIBLE_IMPORT_VERSIONS = frozenset({6})
 
 _MAX_TRIGGER_TEXT = 16_384
 _MAX_ACTION = 8_192
-_MAX_RATIONALE = 4_096
-_MAX_BEHAVIOR = 4_096
 _MAX_SHORT_ID = 64
 _MAX_VARIANTS = 32
 _MAX_VARIANT_LEN = 512
@@ -34,9 +32,7 @@ _MAX_SEARCH_LANGS = 16
 _MAX_TERMS_PER_LANG = 64
 _MAX_TERM_LEN = 256
 _MAX_IMPORT_FILE_BYTES = 100 * 1024 * 1024
-_SOURCE_TYPES = frozenset({"correction", "preference", "solution", "anti_pattern"})
-_CONFIDENCE = frozenset({"high", "medium", "low"})
-_STATUSES = frozenset({"candidate", "active", "merged", "archived", "dormant"})
+_STATUSES = frozenset({"candidate", "active", "trusted", "suppressed", "archived"})
 _PROJECT_SCOPES = frozenset({"project", "global"})
 _HEX_SHORT_ID = re.compile(r"^[a-f0-9]{6,32}$", re.IGNORECASE)
 
@@ -52,21 +48,15 @@ def _str_len(value: object, field: str, limit: int) -> str | None:
 
 
 def _validate_import_record(rec: dict) -> str | None:
-    trigger = rec.get("trigger_text")
+    trigger = rec.get("trigger_canonical")
     if trigger is not None and not str(trigger).strip():
-        return "trigger_text must not be empty"
-    action = rec.get("action")
+        return "trigger_canonical must not be empty"
+    action = rec.get("action_instruction")
     if action is not None and not str(action).strip():
-        return "action must not be empty"
+        return "action_instruction must not be empty"
     for field, limit in (
-        ("trigger_text", _MAX_TRIGGER_TEXT),
-        ("action", _MAX_ACTION),
-        ("rationale", _MAX_RATIONALE),
-        ("behavior", _MAX_BEHAVIOR),
-        ("trigger_text_zh", _MAX_TRIGGER_TEXT),
-        ("action_zh", _MAX_ACTION),
-        ("rationale_zh", _MAX_RATIONALE),
-        ("behavior_zh", _MAX_BEHAVIOR),
+        ("trigger_canonical", _MAX_TRIGGER_TEXT),
+        ("action_instruction", _MAX_ACTION),
         ("short_id", _MAX_SHORT_ID),
     ):
         err = _str_len(rec.get(field), field, limit)
@@ -81,37 +71,11 @@ def _validate_import_record(rec: dict) -> str | None:
         err = _str_len(v, f"trigger_variants[{i}]", _MAX_VARIANT_LEN)
         if err:
             return err
-    variants_zh = rec.get("trigger_variants_zh") or []
-    if not isinstance(variants_zh, list):
-        return "trigger_variants_zh must be a list"
-    if len(variants_zh) > _MAX_VARIANTS:
-        return f"trigger_variants_zh exceeds {_MAX_VARIANTS} entries"
-    for i, v in enumerate(variants_zh):
-        err = _str_len(v, f"trigger_variants_zh[{i}]", _MAX_VARIANT_LEN)
-        if err:
-            return err
     terms = rec.get("search_terms") or {}
     if not isinstance(terms, dict):
         return "search_terms must be an object"
     if len(terms) > _MAX_SEARCH_LANGS:
         return f"search_terms exceeds {_MAX_SEARCH_LANGS} languages"
-    for lang, lang_terms in terms.items():
-        if not isinstance(lang, str) or len(lang) > 32:
-            return "search_terms language key invalid"
-        if not isinstance(lang_terms, list):
-            return f"search_terms[{lang!r}] must be a list"
-        if len(lang_terms) > _MAX_TERMS_PER_LANG:
-            return f"search_terms[{lang!r}] exceeds {_MAX_TERMS_PER_LANG} terms"
-        for j, term in enumerate(lang_terms):
-            err = _str_len(term, f"search_terms[{lang!r}][{j}]", _MAX_TERM_LEN)
-            if err:
-                return err
-    st = rec.get("source_type", "correction")
-    if st not in _SOURCE_TYPES:
-        return f"source_type must be one of {sorted(_SOURCE_TYPES)}"
-    conf = rec.get("confidence", "medium")
-    if conf not in _CONFIDENCE:
-        return f"confidence must be one of {sorted(_CONFIDENCE)}"
     status = rec.get("status", "candidate")
     if status not in _STATUSES:
         return f"status must be one of {sorted(_STATUSES)}"
@@ -127,12 +91,6 @@ def _validate_import_record(rec: dict) -> str | None:
     sid = rec.get("short_id")
     if sid is not None and not _HEX_SHORT_ID.match(str(sid)):
         return "short_id must be 6-32 hexadecimal characters"
-    for field in ("evidence_score", "hit_count", "shadow_hit_count"):
-        val = rec.get(field, 0)
-        if val is None:
-            continue
-        if not isinstance(val, int) or isinstance(val, bool):
-            return f"{field} must be an integer"
     return None
 
 
@@ -152,32 +110,26 @@ def run_export(args: argparse.Namespace, cfg: Config) -> int:
             {
                 "id": r.id,
                 "short_id": r.short_id,
-                "trigger_text": r.trigger_text,
-                "trigger_variants": r.trigger_variants,
-                "search_terms": r.search_terms,
-                "behavior": r.behavior,
-                "action": r.action,
-                "rationale": r.rationale,
-                "source_type": r.source_type,
-                "confidence": r.confidence,
+                "schema_version": r.schema_version,
+                "rule_version": r.rule_version,
+                "created_by_pipeline_version": r.created_by_pipeline_version,
+                "runtime_policy_version": r.runtime_policy_version,
                 "status": r.status,
-                "evidence_score": r.evidence_score,
-                "evidence_log": r.evidence_log,
-                "hit_count": r.hit_count,
-                "last_hit": r.last_hit,
-                "shadow_hit_count": r.shadow_hit_count,
-                "promotion_evidence": r.promotion_evidence,
+                "severity": r.severity,
+                "trigger_canonical": r.trigger_canonical,
+                "trigger_canonical_zh": r.trigger_canonical_zh,
+                "trigger_variants": r.trigger_variants,
+                "trigger_variants_zh": r.trigger_variants_zh,
+                "search_terms": r.search_terms,
+                "action_instruction": r.action_instruction,
+                "action_instruction_zh": r.action_instruction_zh,
+                "source_origin": r.source_origin,
                 "project_scope": r.project_scope,
                 "project_id": r.project_id,
-                "superseded_by": r.superseded_by,
                 "archived_reason": r.archived_reason,
+                "replacement_id": r.replacement_id,
                 "created_at": r.created_at,
                 "updated_at": r.updated_at,
-                "trigger_text_zh": r.trigger_text_zh,
-                "behavior_zh": r.behavior_zh,
-                "action_zh": r.action_zh,
-                "rationale_zh": r.rationale_zh,
-                "trigger_variants_zh": r.trigger_variants_zh,
             }
             for r in rules
         ],
@@ -186,7 +138,7 @@ def run_export(args: argparse.Namespace, cfg: Config) -> int:
     tmp = target.with_suffix(target.suffix + ".tmp")
     tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     os.replace(tmp, target)
-    print(f"exported {len(rules)} rules → {target}")
+    print(f"exported {len(rules)} rules -> {target}")
     return 0
 
 
@@ -248,55 +200,49 @@ def run_import(args: argparse.Namespace, cfg: Config) -> int:
             existing_ids.add(rid)
             pending.append((
                 rid, sid,
-                rec.get("trigger_text", ""),
+                rec.get("schema_version", 1),
+                rec.get("rule_version", 1),
+                rec.get("created_by_pipeline_version", "import_v1"),
+                rec.get("runtime_policy_version", "policy_v1"),
+                rec.get("trigger_canonical", ""),
+                rec.get("trigger_canonical_zh"),
                 dumps_json(rec.get("trigger_variants") or []),
+                dumps_json(rec.get("trigger_variants_zh") or []),
                 dumps_json(rec.get("search_terms") or {}),
-                rec.get("behavior"),
-                rec.get("action", ""),
-                rec.get("rationale"),
-                rec.get("source_type", "correction"),
-                rec.get("confidence", "medium"),
+                rec.get("action_instruction", ""),
+                rec.get("action_instruction_zh"),
                 rec.get("status", "candidate"),
-                rec.get("evidence_score", 0),
-                dumps_json(rec.get("evidence_log") or []),
-                rec.get("hit_count", 0),
-                rec.get("last_hit"),
-                rec.get("shadow_hit_count", 0),
-                dumps_json(rec.get("promotion_evidence") or []),
+                rec.get("severity", "reminder"),
+                rec.get("source_origin", "transcript_extraction"),
                 rec.get("project_scope", "project"),
                 rec.get("project_id"),
-                rec.get("superseded_by"),
                 rec.get("archived_reason"),
+                rec.get("replacement_id"),
                 rec.get("created_at") or now_iso(),
                 rec.get("updated_at") or now_iso(),
-                rec.get("trigger_text_zh"),
-                rec.get("behavior_zh"),
-                rec.get("action_zh"),
-                rec.get("rationale_zh"),
-                dumps_json(rec.get("trigger_variants_zh") or []),
             ))
             inserted_sids.append(sid)
         if pending:
             with db.transaction() as tx:
                 for row in pending:
                     tx.execute(
-                        "INSERT INTO rules (id, short_id, trigger_text, trigger_variants, "
-                        "search_terms, behavior, action, rationale, source_type, confidence, "
-                        "status, evidence_score, evidence_log, hit_count, last_hit, "
-                        "shadow_hit_count, promotion_evidence, project_scope, project_id, "
-                        "superseded_by, archived_reason, "
-                        "created_at, updated_at, "
-                        "trigger_text_zh, behavior_zh, action_zh, rationale_zh, "
-                        "trigger_variants_zh) "
-                        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                        "INSERT INTO rules (id, short_id, schema_version, rule_version, "
+                        "created_by_pipeline_version, runtime_policy_version, "
+                        "trigger_canonical, trigger_canonical_zh, "
+                        "trigger_variants, trigger_variants_zh, search_terms, "
+                        "action_instruction, action_instruction_zh, "
+                        "status, severity, source_origin, "
+                        "project_scope, project_id, "
+                        "archived_reason, replacement_id, "
+                        "created_at, updated_at) "
+                        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                         row,
                     )
             inserted = len(pending)
-        for sid in inserted_sids:
-            rule = fetch_rule_by_short_id(db, sid)
-            if rule and rule.status in ("active", "dormant"):
-                index_rule_if_enabled(db, rule, cfg)
     finally:
         db.close()
-    print(f"imported {inserted} rules; skipped {skipped} (already present)")
+
+    print(f"imported {inserted} rules (skipped {skipped} duplicates)")
+    if inserted_sids:
+        print(f"  new: {', '.join(inserted_sids[:10])}")
     return 0

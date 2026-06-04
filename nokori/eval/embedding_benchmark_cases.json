@@ -1,0 +1,902 @@
+[
+  {
+    "id": "git_shell_001",
+    "bucket": "git_shell",
+    "rule_trigger": "force push without checking if remote has new commits from collaborators",
+    "positive": [
+      "git push --force to shared branch without pulling first",
+      "overwriting remote history on main branch after coworker pushed",
+      "force pushing to origin/main without verifying upstream changes"
+    ],
+    "medium_positive": [
+      "pushing to a remote branch that might have been updated",
+      "using git push -f on a feature branch others are working on",
+      "overwriting git history on a collaborative branch"
+    ],
+    "near_miss": [
+      "git push --force-with-lease to personal feature branch",
+      "rebasing local commits before pushing to own branch",
+      "git reset --hard on a local-only branch"
+    ],
+    "negative": [
+      "running npm install in the project directory",
+      "writing a README file for the repository",
+      "creating a new React component"
+    ]
+  },
+  {
+    "id": "git_shell_002",
+    "bucket": "git_shell",
+    "rule_trigger": "running git clean -fdx without checking for untracked files worth keeping",
+    "positive": [
+      "git clean -fdx wiping out local env files and build artifacts",
+      "cleaning all untracked files recursively without preview",
+      "force removing untracked directories with git clean"
+    ],
+    "medium_positive": [
+      "removing all untracked content from working tree",
+      "cleaning git working directory of unstaged files",
+      "wiping build output and local configuration files"
+    ],
+    "near_miss": [
+      "git clean -n to preview which files would be removed",
+      "git clean -fd in a subdirectory with only generated files",
+      "removing .gitignored files from build folder"
+    ],
+    "negative": [
+      "setting up CI pipeline configuration",
+      "reviewing a pull request diff",
+      "configuring ESLint rules for the project"
+    ]
+  },
+  {
+    "id": "git_shell_003",
+    "bucket": "git_shell",
+    "rule_trigger": "deleting a remote branch that other developers are actively using",
+    "positive": [
+      "git push origin --delete feature-branch while team is still working on it",
+      "removing a shared development branch from remote without notifying collaborators",
+      "deleting origin/staging branch during active sprint work"
+    ],
+    "medium_positive": [
+      "cleaning up remote branches that might still be referenced",
+      "removing branches from origin before confirming they are merged",
+      "deleting a branch others might have checked out locally"
+    ],
+    "near_miss": [
+      "deleting a fully merged feature branch after PR completion",
+      "pruning stale remote-tracking references locally",
+      "removing your own abandoned feature branch from remote"
+    ],
+    "negative": [
+      "creating a new branch for a feature",
+      "running database migrations",
+      "deploying to staging environment"
+    ]
+  },
+  {
+    "id": "database_001",
+    "bucket": "database",
+    "rule_trigger": "running ALTER TABLE on a large production table without testing lock duration",
+    "positive": [
+      "adding a column to a multi-million row table in production without estimating lock time",
+      "ALTER TABLE users ADD COLUMN on production during peak traffic",
+      "modifying schema of a hot table without testing migration time on a copy"
+    ],
+    "medium_positive": [
+      "schema migration on production database during business hours",
+      "adding an index to a large table without concurrent option",
+      "running DDL changes on a table with active write traffic"
+    ],
+    "near_miss": [
+      "running ALTER TABLE on a dev database with synthetic data",
+      "using pt-online-schema-change for zero-downtime migration",
+      "adding a nullable column with CREATE INDEX CONCURRENTLY"
+    ],
+    "negative": [
+      "querying a small lookup table for config values",
+      "writing a unit test for a data model",
+      "updating application code to use a new column"
+    ]
+  },
+  {
+    "id": "database_002",
+    "bucket": "database",
+    "rule_trigger": "dropping a table or column without verifying no active code references it",
+    "positive": [
+      "DROP TABLE users without checking if any service still queries it",
+      "removing a column that the ORM still maps in production",
+      "dropping a database table referenced by a running microservice"
+    ],
+    "medium_positive": [
+      "removing a database column during a refactoring sprint",
+      "deleting a table that was marked deprecated but might still be read",
+      "dropping a column without searching all code repositories for usage"
+    ],
+    "near_miss": [
+      "dropping a temporary table created during a batch job",
+      "removing a column after verifying all code references are removed",
+      "dropping a staging-only table not present in production"
+    ],
+    "negative": [
+      "creating a new migration file",
+      "reading from a database view",
+      "updating the connection pool configuration"
+    ]
+  },
+  {
+    "id": "database_003",
+    "bucket": "database",
+    "rule_trigger": "running a migration without a rollback plan or down migration",
+    "positive": [
+      "deploying an irreversible schema migration with no down step",
+      "running migrate up without writing the corresponding rollback SQL",
+      "applying a one-way data transformation with no undo path"
+    ],
+    "medium_positive": [
+      "creating a migration that only has an up function",
+      "schema change that would be difficult to reverse",
+      "migration that transforms data in a lossy way"
+    ],
+    "near_miss": [
+      "running a reversible additive migration in development",
+      "applying a migration with a tested down step",
+      "adding a new table with a corresponding drop in the down migration"
+    ],
+    "negative": [
+      "writing a SQL query for a report",
+      "configuring database connection settings",
+      "setting up a local development database"
+    ]
+  },
+  {
+    "id": "publish_release_001",
+    "bucket": "publish_release",
+    "rule_trigger": "publishing an npm package without running the test suite first",
+    "positive": [
+      "npm publish without running npm test beforehand",
+      "publishing to registry with failing tests in the suite",
+      "releasing a new version to npm without CI verification"
+    ],
+    "medium_positive": [
+      "pushing a release to npm after only running partial tests",
+      "publishing a package update without full integration tests",
+      "releasing to registry with untested dependency updates"
+    ],
+    "near_miss": [
+      "publishing after full CI pipeline passes including all tests",
+      "npm publish --dry-run to preview what would be published",
+      "releasing a documentation-only update with no code changes"
+    ],
+    "negative": [
+      "installing npm dependencies locally",
+      "adding a new dev dependency to package.json",
+      "running npm audit to check for vulnerabilities"
+    ]
+  },
+  {
+    "id": "publish_release_002",
+    "bucket": "publish_release",
+    "rule_trigger": "publishing a pip package with hardcoded credentials in source",
+    "positive": [
+      "twine upload with API keys embedded in the source code",
+      "publishing to PyPI while secrets are in a committed config file",
+      "pip package release containing hardcoded database passwords"
+    ],
+    "medium_positive": [
+      "releasing a Python package without scanning for secrets",
+      "uploading to PyPI without checking .env files are excluded",
+      "publishing a wheel that might include local configuration"
+    ],
+    "near_miss": [
+      "publishing after running secret scanning and fixing all findings",
+      "releasing with all credentials properly moved to environment variables",
+      "uploading a package with .gitignore properly excluding secret files"
+    ],
+    "negative": [
+      "installing a package from PyPI",
+      "writing a setup.py for a library",
+      "creating a virtual environment for development"
+    ]
+  },
+  {
+    "id": "publish_release_003",
+    "bucket": "publish_release",
+    "rule_trigger": "bumping version and publishing without updating the changelog",
+    "positive": [
+      "npm version patch && npm publish without adding changelog entry",
+      "releasing v2.0.0 with no documentation of breaking changes",
+      "publishing a new major version without updating CHANGELOG.md"
+    ],
+    "medium_positive": [
+      "releasing with only auto-generated commit messages as changelog",
+      "version bump without describing user-facing changes",
+      "publishing a release with outdated release notes"
+    ],
+    "near_miss": [
+      "publishing a pre-release alpha without formal changelog",
+      "releasing an internal-only package without public changelog",
+      "bumping a patch version for a typo fix with inline note"
+    ],
+    "negative": [
+      "editing the README to fix a typo",
+      "adding a new section to project documentation",
+      "configuring CI to run on pull requests"
+    ]
+  },
+  {
+    "id": "code_review_001",
+    "bucket": "code_review",
+    "rule_trigger": "labeling a real bug as a nit or style issue in code review",
+    "positive": [
+      "commenting 'nit: consider renaming' on a null pointer dereference",
+      "marking a race condition as a minor style suggestion",
+      "labeling an off-by-one error as a cosmetic naming issue"
+    ],
+    "medium_positive": [
+      "downplaying a potential crash as a minor suggestion",
+      "treating a logic error as optional cleanup",
+      "giving a soft suggestion for what should be a blocking review comment"
+    ],
+    "near_miss": [
+      "labeling a genuine style preference as a nit",
+      "marking an optional refactoring as non-blocking",
+      "suggesting a naming improvement as low priority"
+    ],
+    "negative": [
+      "writing a new test for an untested function",
+      "implementing a feature from a spec",
+      "refactoring a function for readability"
+    ]
+  },
+  {
+    "id": "code_review_002",
+    "bucket": "code_review",
+    "rule_trigger": "approving a PR without reading the test changes or verifying coverage",
+    "positive": [
+      "LGTM on a PR that removes test cases without explanation",
+      "approving a large refactor without checking if tests still pass",
+      "stamping approval on code with no test file changes for new logic"
+    ],
+    "medium_positive": [
+      "quick approval without verifying test adequacy",
+      "approving changes that add complex logic but no new tests",
+      "rubber-stamping a PR from a senior developer without review"
+    ],
+    "near_miss": [
+      "approving a well-tested PR after thorough review",
+      "approving a documentation-only change without test requirements",
+      "approving a config change that has integration test coverage"
+    ],
+    "negative": [
+      "opening a new pull request for review",
+      "rebasing a feature branch onto main",
+      "writing commit messages for changes"
+    ]
+  },
+  {
+    "id": "code_review_003",
+    "bucket": "code_review",
+    "rule_trigger": "blocking a PR for style preferences not in the project style guide",
+    "positive": [
+      "requesting changes because of brace style when project has no style rule",
+      "blocking merge over personal preference for arrow functions vs named",
+      "rejecting a PR for import ordering not specified in any linting config"
+    ],
+    "medium_positive": [
+      "leaving blocking comments about subjective code style",
+      "requiring rewrites for formatting not enforced by linter",
+      "holding up a PR for naming conventions not documented anywhere"
+    ],
+    "near_miss": [
+      "requesting a style fix that violates the configured eslint rules",
+      "asking to fix formatting that breaks the project prettier config",
+      "blocking on a naming issue covered by the project style guide"
+    ],
+    "negative": [
+      "setting up a linter for the project",
+      "adding prettier configuration",
+      "writing a style guide document"
+    ]
+  },
+  {
+    "id": "test_strategy_001",
+    "bucket": "test_strategy",
+    "rule_trigger": "writing only unit tests for code that primarily does I/O or integration work",
+    "positive": [
+      "testing a database repository class with only mocked DB calls",
+      "unit testing an HTTP client by mocking every network call",
+      "testing a file processing pipeline without any real file I/O tests"
+    ],
+    "medium_positive": [
+      "relying solely on mocks for testing integration-heavy code",
+      "testing only individual functions of an API handler without integration",
+      "writing fast unit tests but skipping end-to-end scenarios"
+    ],
+    "near_miss": [
+      "writing unit tests for pure business logic functions",
+      "testing a utility math function with property-based tests",
+      "mocking external APIs in unit tests while having separate integration suite"
+    ],
+    "negative": [
+      "deploying a new microservice",
+      "configuring database connection pooling",
+      "writing API documentation"
+    ]
+  },
+  {
+    "id": "test_strategy_002",
+    "bucket": "test_strategy",
+    "rule_trigger": "testing implementation details instead of behavior and contracts",
+    "positive": [
+      "asserting internal method call count instead of output correctness",
+      "testing that a specific private function was called in order",
+      "verifying internal state mutations rather than observable behavior"
+    ],
+    "medium_positive": [
+      "writing tests tightly coupled to implementation structure",
+      "testing internal data structures instead of public interface",
+      "asserting on intermediate values rather than final output"
+    ],
+    "near_miss": [
+      "testing that a public method returns the correct result",
+      "verifying observable side effects like database writes",
+      "testing the contract of an interface implementation"
+    ],
+    "negative": [
+      "designing an API endpoint",
+      "writing user-facing documentation",
+      "reviewing a database schema"
+    ]
+  },
+  {
+    "id": "test_strategy_003",
+    "bucket": "test_strategy",
+    "rule_trigger": "skipping edge case tests for functions that handle user input",
+    "positive": [
+      "not testing empty string input for a user-facing form validator",
+      "missing boundary value tests for a quantity input field",
+      "no test for special characters in a username validation function"
+    ],
+    "medium_positive": [
+      "minimal happy-path-only tests for input parsing code",
+      "testing user input handling without null/undefined cases",
+      "only testing typical values without extremes for user-provided data"
+    ],
+    "near_miss": [
+      "skipping edge cases for an internal helper that receives validated data",
+      "minimal tests for a function only called with pre-validated input",
+      "not testing extremes for an internal config constant reader"
+    ],
+    "negative": [
+      "creating a new component layout",
+      "writing CSS for a responsive design",
+      "configuring webpack build settings"
+    ]
+  },
+  {
+    "id": "frontend_001",
+    "bucket": "frontend",
+    "rule_trigger": "mutating component state directly instead of using the setState mechanism",
+    "positive": [
+      "this.state.count = 5 instead of this.setState({count: 5})",
+      "directly modifying a ref's value object properties in React",
+      "pushing to a state array without creating a new array reference"
+    ],
+    "medium_positive": [
+      "modifying state object properties in place within a handler",
+      "appending to a state array with push instead of spread",
+      "reassigning a property on the state object directly"
+    ],
+    "near_miss": [
+      "using useState setter with a new object spread",
+      "creating a new array with concat for state update",
+      "using immer produce to handle complex state updates"
+    ],
+    "negative": [
+      "writing a backend API endpoint",
+      "configuring database migrations",
+      "setting up CI/CD pipeline"
+    ]
+  },
+  {
+    "id": "frontend_002",
+    "bucket": "frontend",
+    "rule_trigger": "using inline styles for layout that should be in a shared stylesheet or design token",
+    "positive": [
+      "style={{marginTop: 16, padding: 8}} for consistent spacing values",
+      "hardcoding color hex values in JSX instead of using theme tokens",
+      "inline width/height values that should come from a design system"
+    ],
+    "medium_positive": [
+      "repeating the same inline style across multiple components",
+      "using magic number pixels instead of spacing scale values",
+      "hardcoding responsive breakpoints in inline styles"
+    ],
+    "near_miss": [
+      "inline style for a one-off animation transform",
+      "dynamic style based on runtime calculation like position",
+      "conditional opacity inline style toggled by interaction state"
+    ],
+    "negative": [
+      "writing a SQL migration script",
+      "configuring server-side caching",
+      "setting up authentication middleware"
+    ]
+  },
+  {
+    "id": "frontend_003",
+    "bucket": "frontend",
+    "rule_trigger": "fetching data inside a render loop or on every re-render without memoization",
+    "positive": [
+      "calling fetch inside the component body without useEffect",
+      "making API calls in render that fire on every state change",
+      "querying an endpoint in a map loop over rendered items"
+    ],
+    "medium_positive": [
+      "data fetching without dependency array to prevent re-execution",
+      "API call in useEffect with missing or empty dependency array causing loops",
+      "fetching in a component that re-renders frequently without caching"
+    ],
+    "near_miss": [
+      "fetching data in useEffect with proper dependency array",
+      "using React Query with caching for data fetching",
+      "SWR hook with appropriate revalidation settings"
+    ],
+    "negative": [
+      "writing a server-side batch processing script",
+      "configuring a message queue consumer",
+      "setting up a cron job for data cleanup"
+    ]
+  },
+  {
+    "id": "security_001",
+    "bucket": "security",
+    "rule_trigger": "committing API keys or secrets directly in source code",
+    "positive": [
+      "const API_KEY = 'sk-abc123...' hardcoded in the source file",
+      "pushing a .env file with production database password to git",
+      "embedding AWS secret access key in a configuration module"
+    ],
+    "medium_positive": [
+      "storing credentials in a config file tracked by version control",
+      "including a service account JSON key file in the repository",
+      "hardcoding a JWT signing secret in application code"
+    ],
+    "near_miss": [
+      "referencing process.env.API_KEY without exposing the value",
+      "using a secrets manager SDK to fetch credentials at runtime",
+      "documenting the required env vars without showing real values"
+    ],
+    "negative": [
+      "writing a function to parse JSON data",
+      "implementing a sorting algorithm",
+      "creating a React component for a form"
+    ]
+  },
+  {
+    "id": "security_002",
+    "bucket": "security",
+    "rule_trigger": "using user input directly in SQL queries without parameterization",
+    "positive": [
+      "f\"SELECT * FROM users WHERE id = {user_input}\" without binding",
+      "string concatenation to build a SQL WHERE clause from request params",
+      "template literal SQL query with unescaped user-provided values"
+    ],
+    "medium_positive": [
+      "building dynamic SQL queries from request parameters",
+      "constructing WHERE clauses from user-controlled filter strings",
+      "using format strings for database queries with external input"
+    ],
+    "near_miss": [
+      "using parameterized queries with ? placeholders",
+      "ORM query builder with properly escaped values",
+      "prepared statements with bound parameters"
+    ],
+    "negative": [
+      "creating a CSS animation",
+      "writing a sorting function",
+      "configuring a build tool"
+    ]
+  },
+  {
+    "id": "security_003",
+    "bucket": "security",
+    "rule_trigger": "disabling TLS certificate verification in production HTTP clients",
+    "positive": [
+      "requests.get(url, verify=False) in production code",
+      "setting NODE_TLS_REJECT_UNAUTHORIZED=0 in production environment",
+      "configuring HTTP client to skip SSL certificate validation"
+    ],
+    "medium_positive": [
+      "ignoring certificate errors in API client configuration",
+      "disabling hostname verification for HTTPS connections",
+      "using insecure HTTP for internal service-to-service calls"
+    ],
+    "near_miss": [
+      "disabling TLS verification in a local development test script",
+      "skipping cert check in a CI environment with self-signed certs",
+      "using verify=False only in a clearly-marked test fixture"
+    ],
+    "negative": [
+      "implementing a cache invalidation strategy",
+      "writing pagination logic for an API",
+      "designing a database schema"
+    ]
+  },
+  {
+    "id": "project_instructions_001",
+    "bucket": "project_instructions",
+    "rule_trigger": "ignoring the project's commit message format when committing changes",
+    "positive": [
+      "writing 'fixed stuff' instead of following conventional commits format",
+      "committing with a message that doesn't match the required type: description pattern",
+      "using free-form commit messages when project requires semantic commits"
+    ],
+    "medium_positive": [
+      "using inconsistent commit message capitalization against project rules",
+      "omitting the scope in commit messages when project requires it",
+      "writing commit messages without the required issue reference"
+    ],
+    "near_miss": [
+      "using conventional commit format as specified in project CONTRIBUTING.md",
+      "following the team's commit template exactly",
+      "writing descriptive commit messages that happen to differ in style from convention"
+    ],
+    "negative": [
+      "implementing a new API endpoint",
+      "writing tests for a utility function",
+      "updating package dependencies"
+    ]
+  },
+  {
+    "id": "project_instructions_002",
+    "bucket": "project_instructions",
+    "rule_trigger": "adding a dependency not listed in the project's approved packages",
+    "positive": [
+      "npm install lodash when project explicitly uses only native utilities",
+      "adding moment.js when project mandates date-fns for date handling",
+      "installing a new ORM when project documents which database library to use"
+    ],
+    "medium_positive": [
+      "adding a utility library without checking if project has a preferred alternative",
+      "introducing a new test framework alongside the existing one",
+      "installing a package that overlaps with existing project dependencies"
+    ],
+    "near_miss": [
+      "installing a package already listed in the project's recommended tools",
+      "adding a dev dependency for tooling that project docs encourage",
+      "upgrading an existing approved dependency to a newer version"
+    ],
+    "negative": [
+      "writing a function using only standard library",
+      "refactoring code to remove an unused dependency",
+      "reading the project's dependency documentation"
+    ]
+  },
+  {
+    "id": "project_instructions_003",
+    "bucket": "project_instructions",
+    "rule_trigger": "creating files in wrong directory structure against project conventions",
+    "positive": [
+      "putting a React component in /lib when project uses /components",
+      "creating a test file next to source when project uses __tests__ directory",
+      "adding a utility in /helpers when project convention is /utils"
+    ],
+    "medium_positive": [
+      "placing a new module in an unconventional location",
+      "creating a file without following the project's naming convention",
+      "adding code outside the established directory structure"
+    ],
+    "near_miss": [
+      "creating a file in the correct directory following project conventions",
+      "adding a component in the designated components folder",
+      "placing tests according to the documented project structure"
+    ],
+    "negative": [
+      "reading a configuration file",
+      "running the application locally",
+      "viewing git log history"
+    ]
+  },
+  {
+    "id": "zh_001",
+    "bucket": "zh",
+    "rule_trigger": "在生产环境直接执行未经审查的 SQL 语句",
+    "positive": [
+      "直接在生产数据库运行手写的 DELETE 语句没有 WHERE 限制",
+      "在线上环境执行未经 DBA 审核的 DDL 变更",
+      "生产数据库直接跑临时查询修改数据"
+    ],
+    "medium_positive": [
+      "在生产环境手动执行数据修复脚本",
+      "不经过发布流程直接改线上数据库",
+      "跳过审批流程在生产执行 SQL 变更"
+    ],
+    "near_miss": [
+      "在测试环境执行 SQL 语句验证逻辑",
+      "通过审批流程在生产执行已审核的迁移脚本",
+      "使用 ORM 的迁移工具执行版本化的数据库变更"
+    ],
+    "negative": [
+      "编写前端组件的样式代码",
+      "配置本地开发环境",
+      "阅读项目文档"
+    ]
+  },
+  {
+    "id": "zh_002",
+    "bucket": "zh",
+    "rule_trigger": "在代码审查中把严重缺陷标记为建议级别",
+    "positive": [
+      "把空指针风险标注为 nit 级别的小建议",
+      "将并发竞争条件标记为 optional 可选修复",
+      "对内存泄漏问题只写了 '可以考虑优化'"
+    ],
+    "medium_positive": [
+      "把逻辑错误标记为低优先级改进",
+      "对安全漏洞给出温和的建议语气",
+      "将可能导致数据丢失的问题标为 minor"
+    ],
+    "near_miss": [
+      "将真正的代码风格问题标记为 nit",
+      "对可选的性能优化给出建议级别评论",
+      "将纯粹的命名偏好标为 suggestion"
+    ],
+    "negative": [
+      "创建新的 API 接口",
+      "编写单元测试",
+      "更新项目依赖版本"
+    ]
+  },
+  {
+    "id": "zh_003",
+    "bucket": "zh",
+    "rule_trigger": "发布前没有更新版本号和变更日志",
+    "positive": [
+      "直接 npm publish 但 package.json 版本号没改",
+      "发布新功能到生产但 CHANGELOG 没有记录",
+      "推了 tag 但忘记更新版本号文件"
+    ],
+    "medium_positive": [
+      "版本号更新了但变更日志只写了一行",
+      "发布时跳过了更新 release notes 的步骤",
+      "匆忙发版没有整理本次包含的变更列表"
+    ],
+    "near_miss": [
+      "发布前完整更新了 CHANGELOG 和版本号",
+      "使用 standard-version 自动管理版本和日志",
+      "发布内部开发版时只更新了预发布版本号"
+    ],
+    "negative": [
+      "修复一个 CSS 样式问题",
+      "添加新的工具函数",
+      "配置开发环境变量"
+    ]
+  },
+  {
+    "id": "mixed_001",
+    "bucket": "mixed",
+    "rule_trigger": "git push --force without checking 远程分支是否有其他人的 commit",
+    "positive": [
+      "force push 到 main 分支之前没看 remote 有没有新的 commit",
+      "git push -f origin dev when 同事刚 push 了代码",
+      "强推覆盖了 collaborator 的 changes on shared branch"
+    ],
+    "medium_positive": [
+      "在共享分支上 force push 没通知其他 developer",
+      "push --force 到 feature branch 时没 pull 最新",
+      "强制推送到别人正在用的 branch"
+    ],
+    "near_miss": [
+      "force push 到自己的 personal branch 没有影响",
+      "git push --force-with-lease 确保不覆盖他人代码",
+      "在 rebase 后 force push 到只有自己在用的分支"
+    ],
+    "negative": [
+      "写一个新的 React component",
+      "配置 webpack 打包设置",
+      "阅读 API documentation"
+    ]
+  },
+  {
+    "id": "mixed_002",
+    "bucket": "mixed",
+    "rule_trigger": "deploy to production 没有经过 staging 验证",
+    "positive": [
+      "直接把代码 deploy 到 prod 跳过了 staging environment",
+      "production deployment without staging test 直接上线",
+      "跳过预发环境验证直接 push to production"
+    ],
+    "medium_positive": [
+      "hotfix 直接上 production 没走完整 pipeline",
+      "紧急修复直接 deploy 没在 staging 验证 regression",
+      "代码改动只在 local 测过就推到了 production"
+    ],
+    "near_miss": [
+      "在 staging 充分验证后按流程 deploy to production",
+      "经过 canary release 逐步推到 production",
+      "hotfix 在 staging 快速验证后按审批流程上线"
+    ],
+    "negative": [
+      "编写数据库 schema 设计文档",
+      "创建 Jira ticket 跟踪 bug",
+      "review 同事的 pull request"
+    ]
+  },
+  {
+    "id": "mixed_003",
+    "bucket": "mixed",
+    "rule_trigger": "hardcode secret key 在 source code 里并 commit 到 repository",
+    "positive": [
+      "把 API_KEY = 'sk-xxx' 写在代码里然后 commit 了",
+      "AWS credentials hardcoded in config.py pushed to git repo",
+      "数据库密码写在源码里提交到了 version control"
+    ],
+    "medium_positive": [
+      "credentials 写在配置文件里但文件被 git track 了",
+      "把 service account key JSON 放在 repo 里",
+      "token 值 hardcode 在 test file 里但 test 被 commit 了"
+    ],
+    "near_miss": [
+      "用 environment variable 引用 secret 不暴露值",
+      "使用 vault 或 secrets manager 管理 credentials",
+      "在 .gitignore 里排除了包含 secret 的文件"
+    ],
+    "negative": [
+      "writing a utility function",
+      "配置 CI 的 build step",
+      "创建新的 React component"
+    ]
+  },
+  {
+    "id": "code_or_cli_001",
+    "bucket": "code_or_cli",
+    "rule_trigger": "rm -rf / or rm -rf /* without safeguards in a shell script",
+    "positive": [
+      "rm -rf $VARIABLE/ where VARIABLE might be empty yielding rm -rf /",
+      "rm -rf ${DIR}/* without checking if DIR is set and non-empty",
+      "shell script with rm -rf $1/ where argument might not be provided"
+    ],
+    "medium_positive": [
+      "recursive delete with a variable path that has no guard",
+      "rm -rf in a script without set -u to catch unset variables",
+      "destructive cleanup command without confirming target directory"
+    ],
+    "near_miss": [
+      "rm -rf ./build/ with a hardcoded safe relative path",
+      "rm -rf \"${DIR:?}\" using parameter expansion to fail on empty",
+      "guarded deletion: [ -n \"$DIR\" ] && rm -rf \"$DIR/tmp\""
+    ],
+    "negative": [
+      "creating a new directory with mkdir -p",
+      "listing files with ls -la",
+      "reading a file with cat"
+    ]
+  },
+  {
+    "id": "code_or_cli_002",
+    "bucket": "code_or_cli",
+    "rule_trigger": "using eval() or exec() on untrusted input in Python/JavaScript",
+    "positive": [
+      "eval(request.body) to dynamically execute user-submitted code",
+      "exec(user_input) in a Python web handler",
+      "new Function(userString)() in a Node.js API endpoint"
+    ],
+    "medium_positive": [
+      "eval() on data received from an external API without validation",
+      "exec() on strings constructed from database values",
+      "dynamic code execution from a config file that users can modify"
+    ],
+    "near_miss": [
+      "eval() in a build script on developer-authored template strings",
+      "exec() in a test harness with controlled test fixtures",
+      "JSON.parse() instead of eval() for parsing structured data"
+    ],
+    "negative": [
+      "parsing JSON with json.loads()",
+      "using ast.literal_eval for safe Python literal parsing",
+      "calling a predefined function by name from a safe mapping"
+    ]
+  },
+  {
+    "id": "code_or_cli_003",
+    "bucket": "code_or_cli",
+    "rule_trigger": "chmod 777 on files in a production deployment",
+    "positive": [
+      "chmod 777 /var/www/app/* in a deploy script",
+      "setting world-writable permissions on production config files",
+      "chmod -R 777 on the entire application directory in production"
+    ],
+    "medium_positive": [
+      "overly permissive file permissions in a deployment script",
+      "chmod 666 on files that contain sensitive configuration",
+      "setting write-all permissions on server directories"
+    ],
+    "near_miss": [
+      "chmod 755 for executable scripts in production",
+      "chmod 600 for private key files",
+      "chmod 777 in a Docker build layer with a non-root final stage"
+    ],
+    "negative": [
+      "reading file permissions with ls -l",
+      "checking the current umask value",
+      "creating a new file with default permissions"
+    ]
+  },
+  {
+    "id": "explain_only_001",
+    "bucket": "explain_only",
+    "rule_trigger": "explaining how SQL injection works as an educational example",
+    "positive": [
+      "here is how SQL injection works: SELECT * FROM users WHERE id = '1 OR 1=1'",
+      "for educational purposes, this shows the vulnerability: input = \"'; DROP TABLE--\"",
+      "explaining the concept: an attacker could craft input like ' UNION SELECT..."
+    ],
+    "medium_positive": [
+      "demonstrating injection patterns in a security training context",
+      "showing students what a malicious SQL payload looks like",
+      "walking through a CTF challenge involving SQL injection"
+    ],
+    "near_miss": [
+      "actually constructing a SQL query with unsanitized user input",
+      "writing production code that concatenates user values into SQL",
+      "building a real query string from request parameters"
+    ],
+    "negative": [
+      "writing a parameterized database query",
+      "using an ORM to fetch records safely",
+      "configuring database connection pooling"
+    ]
+  },
+  {
+    "id": "explain_only_002",
+    "bucket": "explain_only",
+    "rule_trigger": "discussing why force-push is dangerous in a hypothetical scenario",
+    "positive": [
+      "imagine if someone did git push --force to main, it would overwrite history",
+      "hypothetically, force pushing without lease could destroy coworker commits",
+      "in theory, if you force push to a shared branch, others lose their work"
+    ],
+    "medium_positive": [
+      "explaining the risks of force push in a team setting",
+      "describing what would happen if force push hit a branch with pending PRs",
+      "teaching a junior developer about the dangers of rewriting shared history"
+    ],
+    "near_miss": [
+      "actually running git push --force on a shared branch",
+      "executing a force push to overwrite remote history",
+      "about to force push without checking collaborator commits"
+    ],
+    "negative": [
+      "pushing a new commit to a feature branch normally",
+      "creating a pull request",
+      "merging a branch after approval"
+    ]
+  },
+  {
+    "id": "explain_only_003",
+    "bucket": "explain_only",
+    "rule_trigger": "quoting a dangerous command in documentation without executing it",
+    "positive": [
+      "documenting: 'WARNING: never run rm -rf / as root, it deletes everything'",
+      "in the README: 'The --force flag (e.g. git push -f) overwrites remote history'",
+      "writing docs that say 'avoid chmod 777 in production because...'"
+    ],
+    "medium_positive": [
+      "explaining shell dangers in a tutorial with example commands",
+      "writing a wiki article about common destructive CLI mistakes",
+      "blog post listing dangerous commands developers should avoid"
+    ],
+    "near_miss": [
+      "actually running a destructive command being documented",
+      "executing the dangerous example while writing the warning",
+      "copy-pasting the documented dangerous command into a terminal"
+    ],
+    "negative": [
+      "running a safe build command",
+      "executing unit tests",
+      "starting the development server"
+    ]
+  }
+]

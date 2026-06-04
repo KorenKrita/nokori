@@ -10,8 +10,9 @@ from ..utils.text import split_csv
 from ..utils.time import now_iso
 
 _EDITABLE_COLUMNS = frozenset({
-    "trigger_text", "action", "rationale", "confidence", "status",
-    "archived_reason", "superseded_by", "trigger_variants", "search_terms",
+    "trigger_canonical", "action_instruction", "status",
+    "severity", "archived_reason", "replacement_id",
+    "trigger_variants", "search_terms",
 })
 
 
@@ -22,22 +23,20 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
         if rule is None:
             raise NokoriError(f"no rule with short_id {args.short_id!r}")
 
-        updates: list[tuple[str, str | int]] = []
+        updates: list[tuple[str, str | int | None]] = []
         if args.trigger is not None:
-            updates.append(("trigger_text", args.trigger))
+            updates.append(("trigger_canonical", args.trigger))
         if args.action is not None:
-            updates.append(("action", args.action))
-        if args.rationale is not None:
-            updates.append(("rationale", args.rationale))
-        if args.confidence is not None:
-            updates.append(("confidence", args.confidence))
+            updates.append(("action_instruction", args.action))
+        if getattr(args, "severity", None) is not None:
+            updates.append(("severity", args.severity))
         if args.status is not None:
             new_status = args.status
             allowed = {
                 "candidate": {"active", "archived"},
-                "active": {"dormant", "archived"},
-                "dormant": {"active", "archived"},
-                "merged": {"archived"},
+                "active": {"trusted", "suppressed", "archived"},
+                "trusted": {"active", "suppressed", "archived"},
+                "suppressed": {"active", "archived"},
                 "archived": set(),
             }
             if new_status not in allowed.get(rule.status, set()):
@@ -47,7 +46,7 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
             updates.append(("status", new_status))
             if new_status == "active":
                 updates.append(("archived_reason", None))
-                updates.append(("superseded_by", None))
+                updates.append(("replacement_id", None))
             elif new_status == "archived":
                 updates.append(("archived_reason", "manual_edit"))
         if args.variants is not None:
@@ -78,13 +77,14 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
             )
         print(f"updated {rule.short_id}: {', '.join(c for c, _ in updates)}")
         reindex_cols = {
-            "trigger_text", "trigger_variants", "search_terms",
-            "action", "rationale",
+            "trigger_canonical", "trigger_variants", "search_terms",
+            "action_instruction",
         }
         if reindex_cols & {col for col, _ in updates}:
             updated_rule = fetch_rule_by_short_id(db, args.short_id)
-            if updated_rule and updated_rule.status not in ("archived", "merged"):
+            if updated_rule and updated_rule.status not in ("archived", "suppressed"):
                 index_rule_if_enabled(db, updated_rule, cfg)
     finally:
         db.close()
+
     return 0

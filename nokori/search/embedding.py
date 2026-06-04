@@ -19,8 +19,21 @@ from ..models import Rule, ScoredResult
 from ..utils.logging import get_logger
 from ..utils.sql_batch import batched
 from ..utils.time import now_iso
+from .embedding_profiles import is_known_profile, load_profile
 
 log = get_logger("nokori.search.embedding")
+
+
+def _detect_profile_bucket(rule: Rule) -> str | None:
+    """Infer embedding profile bucket from rule's domain_tags."""
+    tags = {t.lower() for t in rule.domain_tags}
+    if tags & {"code", "cli", "shell", "terminal"}:
+        return "code_or_cli"
+    if tags & {"zh", "chinese", "mandarin"}:
+        return "zh"
+    if tags & {"mixed", "multilingual", "bilingual"}:
+        return "mixed"
+    return None
 
 
 def _serialize(vec: Sequence[float]) -> bytes:
@@ -79,16 +92,12 @@ def _chunk_text(text: str, chunk_size: int, chunk_count: int) -> list[str]:
 
 
 def _rule_text(rule: Rule) -> str:
-    parts = [rule.trigger_text]
-    if rule.trigger_text_zh:
-        parts.append(rule.trigger_text_zh)
-    parts.append(rule.action)
-    if rule.action_zh:
-        parts.append(rule.action_zh)
-    if rule.rationale:
-        parts.append(rule.rationale)
-    if rule.rationale_zh:
-        parts.append(rule.rationale_zh)
+    parts = [rule.trigger_canonical]
+    if rule.trigger_canonical_zh:
+        parts.append(rule.trigger_canonical_zh)
+    parts.append(rule.action_instruction)
+    if rule.action_instruction_zh:
+        parts.append(rule.action_instruction_zh)
     parts.extend(rule.trigger_variants)
     parts.extend(rule.trigger_variants_zh)
     for items in rule.search_terms.values():
@@ -221,6 +230,11 @@ def _search_impl(
             continue
         by_rule.setdefault(row["rule_id"], []).append(vec)
 
+    # Profile awareness: look up once per search call.
+    profile = load_profile(model_version)
+    profile_known = is_known_profile(model_version)
+    profile_version = profile.profile_version if profile else None
+
     qnorm = sum(x * x for x in qvec) ** 0.5
     results: list[ScoredResult] = []
     for rule in rules:
@@ -228,7 +242,22 @@ def _search_impl(
         if not embeddings:
             continue
         best = max(_cosine_with_norm(qnorm, qvec, emb) for emb in embeddings)
-        results.append(ScoredResult(rule=rule, cosine=best))
+        bucket = _detect_profile_bucket(rule)
+
+        # For unknown profiles: force embedding_only_match=True so that
+        # runtime applicability knows embedding cannot influence WARM/HOT/Gate.
+        force_embedding_only = not profile_known
+
+        results.append(
+            ScoredResult(
+                rule=rule,
+                cosine=best,
+                embedding_only_match=force_embedding_only,
+                embedding_profile_bucket=bucket,
+                embedding_profile_version=profile_version,
+                embedding_profile_unknown=not profile_known,
+            )
+        )
     results.sort(key=lambda r: r.cosine or 0.0, reverse=True)
     return results[:top_k]
 

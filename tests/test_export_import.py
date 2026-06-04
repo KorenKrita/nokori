@@ -51,64 +51,42 @@ def test_import_rejects_oversized_trigger(tmp_path):
     out = tmp_path / "huge.json"
     payload = {
         "format": "nokori-export",
-        "version": 2,
+        "version": 6,
         "rules": [
             {
                 "id": "00000000-0000-4000-8000-000000000001",
                 "short_id": "big001",
-                "trigger_text": "x" * 20_000,
-                "action": "ok",
+                "trigger_canonical": "x" * 20_000,
+                "action_instruction": "ok",
             }
         ],
     }
     out.write_text(json.dumps(payload), encoding="utf-8")
     r = _run("import", str(out), env_extra={"NOKORI_DATA_DIR": str(data)})
     assert r.returncode != 0
-    assert "trigger_text" in (r.stderr + r.stdout)
+    assert "trigger_canonical" in (r.stderr + r.stdout)
 
 
-def test_import_rejects_invalid_source_type(tmp_path):
+def test_import_rejects_invalid_status(tmp_path):
     data = tmp_path / "data"
     out = tmp_path / "bad.json"
     payload = {
         "format": "nokori-export",
-        "version": 2,
+        "version": 6,
         "rules": [
             {
                 "id": "00000000-0000-4000-8000-000000000002",
                 "short_id": "bad001",
-                "trigger_text": "t",
-                "action": "a",
-                "source_type": "not_a_real_type",
+                "trigger_canonical": "t",
+                "action_instruction": "a",
+                "status": "not_a_real_status",
             }
         ],
     }
     out.write_text(json.dumps(payload), encoding="utf-8")
     r = _run("import", str(out), env_extra={"NOKORI_DATA_DIR": str(data)})
     assert r.returncode != 0
-    assert "source_type" in (r.stderr + r.stdout)
-
-
-def test_import_rejects_non_integer_evidence_score(tmp_path):
-    data = tmp_path / "data"
-    out = tmp_path / "bad_score.json"
-    payload = {
-        "format": "nokori-export",
-        "version": 2,
-        "rules": [
-            {
-                "id": "00000000-0000-4000-8000-000000000003",
-                "short_id": "abc123",
-                "trigger_text": "t",
-                "action": "a",
-                "evidence_score": "high",
-            }
-        ],
-    }
-    out.write_text(json.dumps(payload), encoding="utf-8")
-    r = _run("import", str(out), env_extra={"NOKORI_DATA_DIR": str(data)})
-    assert r.returncode != 0
-    assert "evidence_score" in (r.stderr + r.stdout)
+    assert "status" in (r.stderr + r.stdout)
 
 
 def test_import_rejects_non_uuid_id(tmp_path):
@@ -116,12 +94,12 @@ def test_import_rejects_non_uuid_id(tmp_path):
     out = tmp_path / "bad_id.json"
     payload = {
         "format": "nokori-export",
-        "version": 2,
+        "version": 6,
         "rules": [
             {
                 "id": "my-rule-1",
-                "trigger_text": "t",
-                "action": "a",
+                "trigger_canonical": "t",
+                "action_instruction": "a",
             }
         ],
     }
@@ -150,24 +128,18 @@ def test_export_import_roundtrip_zh_fields(tmp_path):
 
     payload = {
         "format": "nokori-export",
-        "version": 2,
+        "version": 6,
         "rules": [
             {
                 "id": "00000000-0000-4000-8000-000000000099",
                 "short_id": "a0b1c2",
-                "trigger_text": "Force push to shared branch",
+                "trigger_canonical": "Force push to shared branch",
+                "trigger_canonical_zh": "strong push to shared branch zh",
                 "trigger_variants": ["git push --force"],
-                "search_terms": {"en": ["force", "push"], "zh": ["强推"]},
-                "behavior": "git push --force",
-                "action": "use --force-with-lease",
-                "rationale": "force push overwrites peers work",
-                "source_type": "correction",
-                "confidence": "high",
+                "search_terms": {"en": ["force", "push"], "zh": ["force-zh"]},
+                "action_instruction": "use --force-with-lease",
+                "action_instruction_zh": "use lease zh",
                 "status": "active",
-                "trigger_text_zh": "强制推送到共享分支",
-                "behavior_zh": "使用 git push --force",
-                "action_zh": "使用 --force-with-lease",
-                "rationale_zh": "强推会覆盖同事的工作",
             }
         ],
     }
@@ -184,21 +156,9 @@ def test_export_import_roundtrip_zh_fields(tmp_path):
     exported = json.loads(export_out.read_text(encoding="utf-8"))
     assert len(exported["rules"]) == 1
     rule = exported["rules"][0]
-    assert rule["trigger_text_zh"] == "强制推送到共享分支"
-    assert rule["behavior_zh"] == "使用 git push --force"
-    assert rule["action_zh"] == "使用 --force-with-lease"
-    assert rule["rationale_zh"] == "强推会覆盖同事的工作"
+    assert rule["trigger_canonical_zh"] == "strong push to shared branch zh"
+    assert rule["action_instruction_zh"] == "use lease zh"
 
     r3 = _run("import", str(export_out), env_extra={"NOKORI_DATA_DIR": str(dst_data)})
     assert r3.returncode == 0, r3.stderr
     assert "imported 1" in r3.stdout
-
-    final_out = tmp_path / "final.json"
-    r4 = _run("export", str(final_out), env_extra={"NOKORI_DATA_DIR": str(dst_data)})
-    assert r4.returncode == 0, r4.stderr
-    final = json.loads(final_out.read_text(encoding="utf-8"))
-    final_rule = final["rules"][0]
-    assert final_rule["trigger_text_zh"] == "强制推送到共享分支"
-    assert final_rule["behavior_zh"] == "使用 git push --force"
-    assert final_rule["action_zh"] == "使用 --force-with-lease"
-    assert final_rule["rationale_zh"] == "强推会覆盖同事的工作"

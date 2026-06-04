@@ -37,6 +37,7 @@ def _add_rule(
     *,
     source_type: str = "correction",
     confidence: str = "high",
+    severity: str = "gate_eligible",
     variants=None,
 ):
     args = [
@@ -44,6 +45,7 @@ def _add_rule(
         "--action", action,
         "--source-type", source_type,
         "--confidence", confidence,
+        "--severity", severity,
     ]
     if variants:
         args.extend(["--variants", ",".join(variants)])
@@ -53,7 +55,12 @@ def _add_rule(
 
 
 def _add_high_active(tmp_path, trigger, action, variants=None):
-    return _add_rule(tmp_path, trigger, action, variants=variants)
+    short = _add_rule(tmp_path, trigger, action, variants=variants)
+    # Promote to trusted — gate now requires trusted + gate_eligible
+    r = _run("edit", short, "--status", "trusted",
+             env_extra={"NOKORI_DATA_DIR": str(tmp_path)})
+    assert r.returncode == 0, r.stderr
+    return short
 
 
 def test_user_prompt_injects(tmp_path):
@@ -157,9 +164,9 @@ def test_dismiss_cli(tmp_path, monkeypatch):
         row = db.fetchone("SELECT id FROM rules WHERE short_id = ?", (short,))
         with db.transaction() as tx:
             tx.execute(
-                "INSERT INTO injections (rule_id, session_id, prompt_hash, level, created_at) "
-                "VALUES (?,?,?,?,?)",
-                (row["id"], "sess-dismiss-cli", "ph1", "hot", now),
+                "INSERT INTO rule_fire_events (id, rule_id, session_id, prompt_hash, level, created_at) "
+                "VALUES (?,?,?,?,?,?)",
+                ("fe-dismiss", row["id"], "sess-dismiss-cli", "ph1", "hot", now),
             )
     finally:
         db.close()
@@ -250,6 +257,7 @@ def test_solution_hot_injects_without_gate(monkeypatch, tmp_path):
         "Never force push to a shared branch",
         "use --force-with-lease",
         source_type="solution",
+        severity="reminder",
         variants=["git push --force"],
     )
     env_extra = {"NOKORI_DATA_DIR": str(tmp_path)}

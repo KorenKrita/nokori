@@ -122,6 +122,28 @@ def _effective_values(cfg: Config) -> dict[str, Any]:
         "hot_cache.enabled": cfg.hot_cache_enabled,
         "session.idle_seconds": cfg.session_idle_seconds,
         "promotion.enabled": cfg.promotion_enabled,
+        # Per-role model configuration
+        "models.extractor": cfg.role_models.get("extractor", ""),
+        "models.admission_judge": cfg.role_models.get("admission_judge", ""),
+        "models.rule_rewriter": cfg.role_models.get("rule_rewriter", ""),
+        "models.final_judge": cfg.role_models.get("final_judge", ""),
+        "models.merge_planner": cfg.role_models.get("merge_planner", ""),
+        "models.synthetic_eval_generator": cfg.role_models.get("synthetic_eval_generator", ""),
+        "models.posthoc_evaluator": cfg.role_models.get("posthoc_evaluator", ""),
+        "models.limits.extractor_max_tokens": cfg.role_max_tokens.get("extractor", 4000),
+        "models.limits.admission_judge_max_tokens": cfg.role_max_tokens.get("admission_judge", 2000),
+        "models.limits.rule_rewriter_max_tokens": cfg.role_max_tokens.get("rule_rewriter", 4000),
+        "models.limits.final_judge_max_tokens": cfg.role_max_tokens.get("final_judge", 2000),
+        "models.limits.merge_planner_max_tokens": cfg.role_max_tokens.get("merge_planner", 3000),
+        "models.limits.synthetic_eval_generator_max_tokens": cfg.role_max_tokens.get("synthetic_eval_generator", 4000),
+        "models.limits.posthoc_evaluator_max_tokens": cfg.role_max_tokens.get("posthoc_evaluator", 3000),
+        "models.timeouts.extractor_timeout": cfg.role_timeouts.get("extractor", 60),
+        "models.timeouts.admission_judge_timeout": cfg.role_timeouts.get("admission_judge", 30),
+        "models.timeouts.rule_rewriter_timeout": cfg.role_timeouts.get("rule_rewriter", 60),
+        "models.timeouts.final_judge_timeout": cfg.role_timeouts.get("final_judge", 30),
+        "models.timeouts.merge_planner_timeout": cfg.role_timeouts.get("merge_planner", 45),
+        "models.timeouts.synthetic_eval_generator_timeout": cfg.role_timeouts.get("synthetic_eval_generator", 60),
+        "models.timeouts.posthoc_evaluator_timeout": cfg.role_timeouts.get("posthoc_evaluator", 45),
     }
 
 

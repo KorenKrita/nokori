@@ -19,8 +19,9 @@ def test_open_db_creates_schema(tmp_path):
         for required in (
             "rules",
             "rule_embeddings",
+            "rule_fire_events",
+            "rule_shadow_events",
             "extract_state",
-            "injections",
             "maintenance_meta",
         ):
             assert required in names
@@ -45,18 +46,24 @@ def test_check_constraints(tmp_path):
     try:
         with db.transaction() as tx:
             tx.execute(
-                "INSERT INTO rules (id, short_id, trigger_text, action, source_type, "
-                "confidence, status, project_scope, created_at, updated_at) "
-                "VALUES ('a', 'aaaaaa', 't', 'a', 'correction', 'high', 'active', "
-                "'project', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')"
+                "INSERT INTO rules (id, short_id, schema_version, rule_version, "
+                "created_by_pipeline_version, runtime_policy_version, "
+                "trigger_canonical, action_instruction, "
+                "status, severity, project_scope, created_at, updated_at) "
+                "VALUES ('a', 'aaaaaa', 1, 1, 'v1', 'v1', 't', 'a', "
+                "'active', 'reminder', 'project', "
+                "'2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')"
             )
         try:
             with db.transaction() as tx:
                 tx.execute(
-                    "INSERT INTO rules (id, short_id, trigger_text, action, source_type, "
-                    "confidence, status, project_scope, created_at, updated_at) "
-                    "VALUES ('b', 'bbbbbb', 't', 'a', 'NOT_VALID', 'high', 'active', "
-                    "'project', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')"
+                    "INSERT INTO rules (id, short_id, schema_version, rule_version, "
+                    "created_by_pipeline_version, runtime_policy_version, "
+                    "trigger_canonical, action_instruction, "
+                    "status, severity, project_scope, created_at, updated_at) "
+                    "VALUES ('b', 'bbbbbb', 1, 1, 'v1', 'v1', 't', 'a', "
+                    "'NOT_VALID_STATUS', 'reminder', 'project', "
+                    "'2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')"
                 )
             assert False, "expected CHECK violation"
         except sqlite3.IntegrityError:

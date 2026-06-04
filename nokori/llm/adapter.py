@@ -31,6 +31,18 @@ class LLMAdapter:
         """Single user message (legacy). Prefer complete_messages for extract/merge."""
         return self.complete_messages(None, prompt, max_tokens=max_tokens, timeout=timeout)
 
+    def complete_role(self, role: str, system: str, user: str, *, max_tokens: int | None = None, timeout: int | None = None) -> str | None:
+        if os.environ.get("NOKORI_EXTRACTING") == "1":
+            log.warning("recursion guard tripped; skipping LLM call for role=%s", role)
+            return None
+        model_id = self.cfg.role_models.get(role) or self.cfg.llm_model
+        effective_max = max_tokens or self.cfg.role_max_tokens.get(role, 2000)
+        effective_timeout = timeout or self.cfg.role_timeouts.get(role, 30)
+        log.info("LLM role call: role=%s model=%s", role, model_id or "claude-cli")
+        if model_id and self.cfg.llm_base_url:
+            return self._call_openai_compatible(system, user, effective_max, effective_timeout, model_id=model_id)
+        return self._fallback_claude_cli(system, user, effective_timeout)
+
     def complete_messages(
         self,
         system: str | None,
@@ -55,13 +67,15 @@ class LLMAdapter:
         user: str,
         max_tokens: int,
         timeout: int,
+        *,
+        model_id: str | None = None,
     ) -> str | None:
         messages: list[dict[str, str]] = []
         if system:
             messages.append({"role": "system", "content": system})
         messages.append({"role": "user", "content": user})
         payload = {
-            "model": self.cfg.llm_model,
+            "model": model_id or self.cfg.llm_model,
             "messages": messages,
             "max_tokens": max_tokens,
         }

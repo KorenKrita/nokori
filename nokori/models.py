@@ -4,62 +4,139 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 
+TurnRole = Literal["human", "assistant", "tool_use", "tool_result"]
+
+Status = Literal["candidate", "active", "trusted", "suppressed", "archived"]
+Severity = Literal["reminder", "high_risk", "gate_eligible"]
 SourceType = Literal["correction", "preference", "solution", "anti_pattern"]
 Confidence = Literal["high", "medium", "low"]
-Status = Literal["candidate", "active", "merged", "archived", "dormant"]
+SourceOrigin = Literal["transcript_extraction", "external_source_material"]
+ActivationOrigin = Literal[
+    "cold_fast_lane",
+    "shadow_promotion",
+    "merge_replacement",
+    "external_shadow_promotion",
+]
+InjectionLevel = Literal["hot", "warm", "gate"]
 ProjectScope = Literal["project", "global"]
-InjectionLevel = Literal["hot", "warm"]
-TurnRole = Literal["human", "assistant", "tool_use", "tool_result"]
 
 
 @dataclass(frozen=True)
 class Rule:
-    """Persistent rule row.
-
-    shadow_hit_count: total shadow HOT events (per project:day deduped in
-    promotion_evidence). Global promotion threshold uses distinct project_ids
-    in promotion_evidence, not this counter alone.
-    """
+    """Persistent rule row for the autonomous quality flywheel."""
 
     id: str
     short_id: str
-    trigger_text: str
-    trigger_variants: list[str]
-    search_terms: dict[str, list[str]]
-    behavior: str | None
-    action: str
-    rationale: str | None
-    source_type: SourceType
-    confidence: Confidence
+
+    # Versioning
+    schema_version: int
+    rule_version: int
+    created_by_pipeline_version: str
+    runtime_policy_version: str
+    last_rewritten_by_role: str | None
+
+    # Lifecycle
     status: Status
-    evidence_score: int
-    evidence_log: list[dict]
-    hit_count: int
-    last_hit: str | None
-    shadow_hit_count: int
-    promotion_evidence: list[dict]
-    project_scope: ProjectScope
-    project_id: str | None
-    superseded_by: str | None
-    archived_reason: str | None
-    created_at: str
-    updated_at: str
-    trigger_text_zh: str | None = None
-    behavior_zh: str | None = None
-    action_zh: str | None = None
-    rationale_zh: str | None = None
+    severity: Severity
+
+    # Trigger
+    trigger_canonical: str
+    trigger_canonical_zh: str | None = None
+    concepts: str = "[]"  # JSON list[str]
+    required_concept_groups: str = "[]"  # JSON list[str]
+    excluded_contexts: str = "[]"  # JSON list[str]
+    near_miss_examples: list[str] = field(default_factory=list)
+    trigger_variants: list[str] = field(default_factory=list)
     trigger_variants_zh: list[str] = field(default_factory=list)
+    search_terms: dict[str, list[str]] = field(default_factory=dict)
+
+    # Action
+    action_instruction: str = ""
+    action_instruction_zh: str | None = None
+    allowed_behavior: list[str] = field(default_factory=list)
+    forbidden_behavior: list[str] = field(default_factory=list)
+
+    # Scope
+    domain_tags: list[str] = field(default_factory=list)
+    tool_tags: list[str] = field(default_factory=list)
+    path_patterns: list[str] = field(default_factory=list)
+
+    # Quality scores
+    quality_score: float = 0.0
+    evidence_support_score: float = 0.0
+    specificity_score: float = 0.0
+    retrieval_readiness_score: float = 0.0
+
+    # Usefulness scores
+    observed_usefulness_score: float = 0.0
+    plausible_usefulness_score: float = 0.0
+    false_positive_score: float = 0.0
+    harmful_score: float = 0.0
+
+    # Origin
+    source_origin: SourceOrigin = "transcript_extraction"
+    activation_origin: ActivationOrigin | None = None
+    first_observed_useful_at: str | None = None
+
+    # State timestamps
+    trusted_at: str | None = None
+    suppressed_at: str | None = None
+
+    # Project scope
+    project_scope: ProjectScope = "global"
+    project_id: str | None = None
+
+    # Archive / lineage
+    archived_reason: str | None = None
+    replacement_id: str | None = None
+
+    # Timestamps
+    created_at: str = ""
+    updated_at: str = ""
 
 
 @dataclass(frozen=True)
 class ScoredResult:
+    """Fielded retrieval evidence for a matched rule."""
+
     rule: Rule
+
+    # Core retrieval scores
     bm25_score: float = 0.0
     cosine: float | None = None
     rrf_score: float = 0.0
-    matched_tokens: frozenset[str] = field(default_factory=frozenset)
-    has_trigger_variant_match: bool = False
-    retrieval_hot: bool = False
+
+    # Trigger evidence primitives
+    trigger_idf_sum: float = 0.0
+    trigger_coverage: float = 0.0
+    distinct_trigger_terms: int = 0
+
+    # Variant evidence
+    strong_variant_phrase_hit: bool = False
+    weak_variant_recall_hit: bool = False
+
+    # Concept / context evidence
+    required_concepts_match: bool = False
+    excluded_context_hit: bool = False
+
+    # Match source flags
+    action_only_match: bool = False
+    search_only_match: bool = False
+    embedding_only_match: bool = False
+
+    # Explanation metadata
+    matched_trigger_tokens: frozenset[str] = field(default_factory=frozenset)
+    matched_variant_tokens: frozenset[str] = field(default_factory=frozenset)
+    matched_action_tokens: frozenset[str] = field(default_factory=frozenset)
+    matched_search_tokens: frozenset[str] = field(default_factory=frozenset)
+    embedding_profile_bucket: str | None = None
+    embedding_profile_version: str | None = None
+    embedding_profile_unknown: bool = False
+
+    # Ranking
+    ranking_utility: float = 0.0
+    decision_reason: str = ""
+    level: InjectionLevel | None = None
 
 
 @dataclass(frozen=True)

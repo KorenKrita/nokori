@@ -1,7 +1,5 @@
 """Tests for shadow pool, async extract, and local embedding features."""
 import json
-import subprocess
-import sys
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
@@ -18,89 +16,98 @@ def _utcnow_iso(delta_days: int = 0) -> str:
     return dt.isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
-def _make_rule(db, *, id_, status="active", source_type="correction",
-               confidence="high", project_id=None, project_scope="project"):
+def _make_rule(db, *, id_, status="active", source_origin="transcript_extraction",
+               project_id=None, project_scope="project"):
     short = id_[:6]
     now = _utcnow_iso()
     with db.transaction() as tx:
         tx.execute(
-            "INSERT INTO rules (id, short_id, trigger_text, action, source_type, "
-            "confidence, status, project_scope, project_id, created_at, updated_at) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO rules (id, short_id, schema_version, rule_version, "
+            "created_by_pipeline_version, runtime_policy_version, "
+            "trigger_canonical, action_instruction, "
+            "source_origin, status, severity, "
+            "project_scope, project_id, created_at, updated_at) "
+            "VALUES (?,?,1,1,'v1','v1',?,?,?,?,?,?,?,?,?)",
             (id_, short, f"trigger {id_}", f"action {id_}",
-             source_type, confidence, status, project_scope, project_id, now, now),
+             source_origin, status, "reminder",
+             project_scope, project_id, now, now),
         )
 
 
 # --- Shadow Pool Tests ---
 
 class TestFetchShadowRules:
-    def test_returns_other_project_high_confidence_active(self, monkeypatch, tmp_path):
+    def test_returns_candidate_rules_for_project(self, monkeypatch, tmp_path):
+        """Shadow pool contains candidate rules visible to the project."""
         monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
         cfg = Config.from_env()
         db = open_db(cfg.db_path)
         try:
-            _make_rule(db, id_="rule-mine", project_id="my-proj")
-            _make_rule(db, id_="rule-other", project_id="other-proj")
+            _make_rule(db, id_="rule-cand", status="candidate", project_id="my-proj")
+            _make_rule(db, id_="rule-active", status="active", project_id="my-proj")
             results = fetch_shadow_rules(db, project_id="my-proj")
             ids = [r.id for r in results]
-            assert "rule-other" in ids
-            assert "rule-mine" not in ids
+            assert "rule-cand" in ids
+            assert "rule-active" not in ids
         finally:
             db.close()
 
-    def test_excludes_preference(self, monkeypatch, tmp_path):
+    def test_returns_suppressed_rules(self, monkeypatch, tmp_path):
+        """Shadow pool includes suppressed rules (suppression_recovery)."""
         monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
         cfg = Config.from_env()
         db = open_db(cfg.db_path)
         try:
-            _make_rule(db, id_="pref-other", project_id="other-proj",
-                       source_type="preference")
+            _make_rule(db, id_="rule-supp", status="suppressed", project_id="my-proj")
+            results = fetch_shadow_rules(db, project_id="my-proj")
+            ids = [r.id for r in results]
+            assert "rule-supp" in ids
+        finally:
+            db.close()
+
+    def test_excludes_active_rules(self, monkeypatch, tmp_path):
+        """Active rules are not in shadow pool (they are in formal pool)."""
+        monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+        cfg = Config.from_env()
+        db = open_db(cfg.db_path)
+        try:
+            _make_rule(db, id_="rule-active", status="active", project_id="my-proj")
             results = fetch_shadow_rules(db, project_id="my-proj")
             assert len(results) == 0
         finally:
             db.close()
 
-    def test_excludes_medium_confidence(self, monkeypatch, tmp_path):
+    def test_excludes_archived_rules(self, monkeypatch, tmp_path):
+        """Archived rules are not in shadow pool."""
         monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
         cfg = Config.from_env()
         db = open_db(cfg.db_path)
         try:
-            _make_rule(db, id_="med-other", project_id="other-proj",
-                       confidence="medium")
-            results = fetch_shadow_rules(db, project_id="my-proj")
-            assert len(results) == 0
-        finally:
-            db.close()
-
-    def test_excludes_global_scope(self, monkeypatch, tmp_path):
-        monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
-        cfg = Config.from_env()
-        db = open_db(cfg.db_path)
-        try:
-            _make_rule(db, id_="glob-other", project_id="other-proj",
-                       project_scope="global")
+            _make_rule(db, id_="rule-arch", status="archived", project_id="my-proj")
             results = fetch_shadow_rules(db, project_id="my-proj")
             assert len(results) == 0
         finally:
             db.close()
 
     def test_returns_empty_when_no_project_id(self, monkeypatch, tmp_path):
+        """Without project_id, returns all candidate/suppressed rules."""
         monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
         cfg = Config.from_env()
         db = open_db(cfg.db_path)
         try:
-            _make_rule(db, id_="rule-x", project_id="proj-x")
+            _make_rule(db, id_="rule-x", status="candidate", project_id="proj-x")
             results = fetch_shadow_rules(db, project_id=None)
-            assert results == []
+            # project_id=None returns all candidate/suppressed regardless of project
+            ids = [r.id for r in results]
+            assert "rule-x" in ids
         finally:
             db.close()
 
 
 class TestShadowPoolHotTier:
     def test_shadow_pool_records_warm_matches(self, monkeypatch, tmp_path):
+        """Shadow pool candidate rules get matched via BM25 and recorded as shadow events."""
         monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
-        monkeypatch.setenv("NOKORI_PROMOTION_ENABLED", "1")
         cfg = Config.from_env()
         db = open_db(cfg.db_path)
         try:
@@ -111,12 +118,16 @@ class TestShadowPoolHotTier:
             ):
                 with db.transaction() as tx:
                     tx.execute(
-                        "INSERT INTO rules (id, short_id, trigger_text, action, "
-                        "source_type, confidence, status, project_scope, project_id, "
-                        "created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                        "INSERT INTO rules (id, short_id, schema_version, rule_version, "
+                        "created_by_pipeline_version, runtime_policy_version, "
+                        "trigger_canonical, action_instruction, "
+                        "source_origin, status, severity, "
+                        "project_scope, project_id, created_at, updated_at) "
+                        "VALUES (?,?,1,1,'v1','v1',?,?,?,?,?,?,?,?,?)",
                         (
                             rid, rid[:6], trig, f"action {rid}",
-                            "correction", "high", "active", "project", "other-proj",
+                            "transcript_extraction", "candidate", "reminder",
+                            "project", "my-proj",
                             now, now,
                         ),
                     )
@@ -124,36 +135,42 @@ class TestShadowPoolHotTier:
 
             proj = tmp_path / "my-proj"
             proj.mkdir()
-            handle({
-                "session_id": "s-shadow-warm",
-                "prompt": "deploy prisma schema",
-                "cwd": str(proj),
-            }, cfg, host=Host.CLAUDE)
-            for rid in ("rule-a", "rule-b"):
-                row = db.fetchone(
-                    "SELECT shadow_hit_count FROM rules WHERE id = ?", (rid,)
-                )
-                assert row["shadow_hit_count"] >= 1
+            with patch("nokori.utils.sessions.resolve_project_id_for_session",
+                       return_value="my-proj"):
+                handle({
+                    "session_id": "s-shadow-warm",
+                    "prompt": "deploy prisma schema",
+                    "cwd": str(proj),
+                }, cfg, host=Host.CLAUDE)
+            # Shadow events should be recorded in rule_shadow_events
+            events = db.fetchall(
+                "SELECT rule_id FROM rule_shadow_events WHERE rule_id IN ('rule-a','rule-b')"
+            )
+            assert len(events) >= 1
         finally:
             db.close()
 
     def test_shadow_pool_records_dominant_hot(self, monkeypatch, tmp_path):
+        """A dominant shadow match creates a shadow event."""
         monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
-        monkeypatch.setenv("NOKORI_PROMOTION_ENABLED", "1")
         cfg = Config.from_env()
         db = open_db(cfg.db_path)
         try:
             now = _utcnow_iso()
             with db.transaction() as tx:
                 tx.execute(
-                    "INSERT INTO rules (id, short_id, trigger_text, action, "
-                    "source_type, confidence, status, project_scope, project_id, "
-                    "created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                    "INSERT INTO rules (id, short_id, schema_version, rule_version, "
+                    "created_by_pipeline_version, runtime_policy_version, "
+                    "trigger_canonical, action_instruction, "
+                    "source_origin, status, severity, "
+                    "project_scope, project_id, created_at, updated_at) "
+                    "VALUES (?,?,1,1,'v1','v1',?,?,?,?,?,?,?,?,?)",
                     (
                         "rule-strong", "rst001",
                         "never git force push remote",
                         "use regular push",
-                        "correction", "high", "active", "project", "other-proj",
+                        "transcript_extraction", "candidate", "reminder",
+                        "project", "my-proj",
                         now, now,
                     ),
                 )
@@ -161,111 +178,86 @@ class TestShadowPoolHotTier:
 
             proj = tmp_path / "my-proj"
             proj.mkdir()
-            handle({
-                "session_id": "s-shadow-hot",
-                "prompt": "git push force remote branch",
-                "cwd": str(proj),
-            }, cfg, host=Host.CLAUDE)
-            row = db.fetchone(
-                "SELECT shadow_hit_count, evidence_score FROM rules WHERE id = ?",
-                ("rule-strong",),
+            with patch("nokori.utils.sessions.resolve_project_id_for_session",
+                       return_value="my-proj"):
+                handle({
+                    "session_id": "s-shadow-hot",
+                    "prompt": "git push force remote branch",
+                    "cwd": str(proj),
+                }, cfg, host=Host.CLAUDE)
+            events = db.fetchall(
+                "SELECT rule_id FROM rule_shadow_events WHERE rule_id = 'rule-strong'"
             )
-            assert row["shadow_hit_count"] == 1
-            assert row["evidence_score"] == 1
+            assert len(events) >= 1
         finally:
             db.close()
 
 
 class TestShadowHitEvidence:
     def test_shadow_hit_adds_evidence(self, monkeypatch, tmp_path):
+        """promotion.record_shadow_hit is now a no-op (returns False)."""
         monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
         cfg = Config.from_env()
         db = open_db(cfg.db_path)
         try:
             _make_rule(db, id_="rule-ev", project_id="proj-A")
             from nokori.lifecycle.promotion import record_shadow_hit
-            record_shadow_hit(db, "rule-ev", "proj-B")
-            row = db.fetchone(
-                "SELECT evidence_score, evidence_log FROM rules WHERE id = ?",
-                ("rule-ev",),
-            )
-            assert row["evidence_score"] == 1
-            log_entries = json.loads(row["evidence_log"])
-            assert len(log_entries) == 1
-            assert log_entries[0]["kind"] == "shadow_hot"
+            result = record_shadow_hit(db, "rule-ev", "proj-B")
+            assert result is False
         finally:
             db.close()
 
 
-# --- Async Extract Tests ---
+# --- Session End / Posthoc Enqueue Tests ---
 
-class TestAsyncExtract:
-    def test_async_mode_spawns_subprocess(self, monkeypatch, tmp_path):
+class TestSessionEndPosthoc:
+    def test_session_end_enqueues_posthoc(self, monkeypatch, tmp_path):
+        """session_end.handle enqueues posthoc jobs and returns continue."""
         monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
-        monkeypatch.setenv("NOKORI_EXTRACT_MODE", "async")
         cfg = Config.from_env()
-
-        transcript = tmp_path / "session.jsonl"
-        transcript.write_text(json.dumps({"type": "user", "message": "hi"}) + "\n")
 
         payload = {
             "session_id": "s-async-1",
             "cwd": str(tmp_path),
-            "transcript_path": str(transcript),
         }
 
-        with patch("nokori.hooks.session_end.subprocess.Popen") as mock_popen, \
-             patch("nokori.utils.project.subprocess.run", return_value=type("R", (), {"returncode": 1, "stdout": ""})()) as _:
+        with patch("nokori.hooks.session_end.enqueue_posthoc_for_session") as mock_enqueue:
             from nokori.hooks.session_end import handle
             result = handle(payload, cfg, host=Host.CLAUDE)
 
         assert result == {"continue": True}
-        mock_popen.assert_called_once()
-        call_args = mock_popen.call_args
-        assert call_args[0][0] == [sys.executable, "-m", "nokori", "extract"]
-        env = call_args[1]["env"]
-        assert env.get("NOKORI_EXTRACTING") != "1"
-        assert env["NOKORI_DATA_DIR"] == str(tmp_path)
+        mock_enqueue.assert_called_once()
 
-    def test_manual_mode_does_not_spawn(self, monkeypatch, tmp_path):
+    def test_session_end_disabled_does_not_enqueue(self, monkeypatch, tmp_path):
+        """When disabled, session_end returns early without enqueuing."""
         monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
-        monkeypatch.setenv("NOKORI_EXTRACT_MODE", "manual")
+        monkeypatch.setenv("NOKORI_DISABLED", "1")
         cfg = Config.from_env()
-
-        transcript = tmp_path / "session.jsonl"
-        transcript.write_text(json.dumps({"type": "user", "message": "hi"}) + "\n")
 
         payload = {
             "session_id": "s-manual-1",
             "cwd": str(tmp_path),
-            "transcript_path": str(transcript),
         }
 
-        with patch("nokori.hooks.session_end.subprocess.Popen") as mock_popen, \
-             patch("nokori.utils.project.subprocess.run", return_value=type("R", (), {"returncode": 1, "stdout": ""})()) as _:
+        with patch("nokori.hooks.session_end.enqueue_posthoc_for_session") as mock_enqueue:
             from nokori.hooks.session_end import handle
             result = handle(payload, cfg, host=Host.CLAUDE)
 
         assert result == {"continue": True}
-        mock_popen.assert_not_called()
+        mock_enqueue.assert_not_called()
 
-    def test_async_spawn_failure_does_not_crash(self, monkeypatch, tmp_path):
+    def test_session_end_enqueue_failure_does_not_crash(self, monkeypatch, tmp_path):
+        """If posthoc enqueue raises, session_end still returns continue."""
         monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
-        monkeypatch.setenv("NOKORI_EXTRACT_MODE", "async")
         cfg = Config.from_env()
-
-        transcript = tmp_path / "session.jsonl"
-        transcript.write_text(json.dumps({"type": "user", "message": "hi"}) + "\n")
 
         payload = {
             "session_id": "s-async-fail",
             "cwd": str(tmp_path),
-            "transcript_path": str(transcript),
         }
 
-        with patch("nokori.hooks.session_end.subprocess.Popen",
-                   side_effect=OSError("no such file")), \
-             patch("nokori.utils.project.subprocess.run", return_value=type("R", (), {"returncode": 1, "stdout": ""})()) as _:
+        with patch("nokori.hooks.session_end.enqueue_posthoc_for_session",
+                   side_effect=RuntimeError("db error")):
             from nokori.hooks.session_end import handle
             result = handle(payload, cfg, host=Host.CLAUDE)
 

@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import os
 from pathlib import Path
 
+from ..cold.jobs import enqueue_transcript_ingest, get_pending_ingest_jobs, expire_stale_ingest_jobs
+from ..cold.pipeline import run_cold_pipeline
+from ..cold.roles import PROMPT_VERSIONS
 from ..config import Config
 from ..constants import TRANSCRIPT_MTIME_EPSILON_SEC
 from ..db import open_db
@@ -11,8 +15,6 @@ from ..extract import jobs as job_io
 from ..extract.lock import acquire as extract_lock
 from ..extract.compressor import compress
 from ..extract.extractor import extract as extract_candidates
-from ..extract import checkpoint as merge_checkpoint
-from ..extract.merger import merge_candidate
 from ..extract.reader import read_after, read_tail_user_turns
 from ..lifecycle.hot_cache import load_last_byte_offset, mark_extracted
 from ..llm.adapter import LLMAdapter
@@ -25,6 +27,30 @@ log = get_logger("nokori.commands.extract")
 _CONTEXT_TURNS = 2
 
 
+class _ColdLLMAdapter:
+    """Adapts LLMAdapter to the cold pipeline's llm.call() interface."""
+
+    def __init__(self, llm: LLMAdapter):
+        self._llm = llm
+
+    def call(
+        self,
+        model: str,
+        system: str,
+        user: str,
+        max_tokens: int = 2000,
+        timeout: int = 30,
+    ) -> str:
+        result = self._llm._call_openai_compatible(
+            system, user, max_tokens, timeout, model_id=model
+        ) if self._llm.configured() else self._llm._fallback_claude_cli(
+            system, user, timeout
+        )
+        if result is None:
+            raise RuntimeError("LLM call returned None")
+        return result
+
+
 def _safe_mtime(path: Path) -> float:
     try:
         return path.stat().st_mtime
@@ -32,8 +58,16 @@ def _safe_mtime(path: Path) -> float:
         return 0.0
 
 
+def _segment_hash(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
+
+
 def _process_path(path: Path, project_id: str | None, cfg: Config,
                   *, dry_run: bool) -> tuple[int, int, bool]:
+    """Read transcript, extract candidates, enqueue through cold pipeline.
+
+    Returns (candidates_found, rules_created, finished).
+    """
     db = open_db(cfg.db_path)
     try:
         prev_offset = load_last_byte_offset(db, path)
@@ -57,31 +91,62 @@ def _process_path(path: Path, project_id: str | None, cfg: Config,
         if dry_run:
             return (len(candidates), 0, False)
 
-        merged = 0
-        merge_ok = True
-        done_keys = merge_checkpoint.load_merged_keys(cfg, path)
+        # Route each candidate through the cold pipeline
+        cold_llm = _ColdLLMAdapter(llm)
+        rules_created = 0
+        all_ok = True
+
         for cand in candidates:
-            if merge_checkpoint.candidate_keys(cand) & done_keys:
-                continue
-            outcome = merge_candidate(cand, db, llm, project_id, cfg=cfg)
-            if not outcome.merge_ok:
-                merge_ok = False
-                log.warning(
-                    "extract merge stopped at candidate, checkpoint preserved: %s",
-                    path,
+            # Build extractor_output dict matching cold pipeline's expected format
+            extractor_output = {
+                "trigger": cand.trigger,
+                "trigger_draft": cand.trigger,
+                "action": cand.action,
+                "action_draft": cand.action,
+                "evidence_quotes": [],
+                "confidence": 0.7 if cand.confidence == "medium" else (
+                    0.9 if cand.confidence == "high" else 0.5
+                ),
+                "trigger_variants_draft": cand.trigger_variants,
+                "search_terms_draft": cand.search_terms,
+                "domain_tags": [],
+                "tool_tags": [],
+                "path_patterns": [],
+            }
+
+            # Enqueue transcript ingest job for auditability
+            segment_text = f"{cand.trigger}::{cand.action}"
+            seg_hash = _segment_hash(segment_text)
+            transcript_ref = str(path)
+
+            enqueue_transcript_ingest(
+                db,
+                transcript_ref=transcript_ref,
+                segment_hash=seg_hash,
+                extractor_prompt_version=PROMPT_VERSIONS["extractor"],
+            )
+
+            # Run through cold pipeline
+            try:
+                result = run_cold_pipeline(
+                    db,
+                    cold_llm,
+                    transcript_ref=transcript_ref,
+                    extractor_output=extractor_output,
                 )
-                break
-            merge_checkpoint.record_candidate_merged(cfg, path, cand, done_keys)
-            done_keys |= merge_checkpoint.candidate_keys(cand)
-            merged += outcome.inserted + outcome.activated + outcome.superseded
-        if merge_ok:
+                if result.rule_id is not None:
+                    rules_created += 1
+            except Exception as exc:
+                log.warning("cold pipeline failed for candidate: %s (%s)", cand.trigger[:60], exc)
+                all_ok = False
+
+        if all_ok:
             mark_extracted(db, path, _safe_mtime(path), new_offset)
-            merge_checkpoint.clear(cfg, path)
         else:
-            log.warning("extract merge incomplete, transcript not marked extracted: %s", path)
+            log.warning("extract incomplete (cold pipeline errors), transcript not marked: %s", path)
     finally:
         db.close()
-    return (len(candidates), merged, merge_ok)
+    return (len(candidates), rules_created, all_ok)
 
 
 def run(args: argparse.Namespace, cfg: Config) -> int:
@@ -112,6 +177,13 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
             if not args.dry_run:
                 print(f"applied:    {applied}")
             return 0
+
+        # Expire stale ingest jobs before processing
+        db = open_db(cfg.db_path)
+        try:
+            expire_stale_ingest_jobs(db)
+        finally:
+            db.close()
 
         pending = job_io.list_jobs(cfg)
         if not pending:

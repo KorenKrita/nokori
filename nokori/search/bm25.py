@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 from collections import Counter, OrderedDict
 from collections.abc import Iterable, Mapping
+from dataclasses import dataclass
 
 from ..models import Rule, ScoredResult
 from .tokenizer import tokenize
@@ -20,31 +21,82 @@ def clear_index_cache() -> None:
     _INDEX_CACHE.clear()
 
 
-def _rule_doc_tokens(rule: Rule) -> list[str]:
+# ---------------------------------------------------------------------------
+# Fielded token extraction
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class _FieldedDoc:
+    rule: Rule
+    trigger_tokens: frozenset[str]
+    action_tokens: frozenset[str]
+    search_tokens: frozenset[str]
+    variant_tokens: frozenset[str]
+    variant_phrases: list[list[str]]  # tokenized full phrases for exact match
+    all_tf: Counter  # term frequency across all fields
+    doc_len: int
+
+
+def _tokenize_trigger(rule: Rule) -> list[str]:
     pieces: list[str] = []
-    pieces.extend(tokenize(rule.trigger_text))
-    if rule.trigger_text_zh:
-        pieces.extend(tokenize(rule.trigger_text_zh))
-    pieces.extend(tokenize(rule.action))
-    if rule.action_zh:
-        pieces.extend(tokenize(rule.action_zh))
-    for v in rule.trigger_variants:
-        pieces.extend(tokenize(v))
-    for v in rule.trigger_variants_zh:
-        pieces.extend(tokenize(v))
+    pieces.extend(tokenize(rule.trigger_canonical))
+    if rule.trigger_canonical_zh:
+        pieces.extend(tokenize(rule.trigger_canonical_zh))
+    return pieces
+
+
+def _tokenize_action(rule: Rule) -> list[str]:
+    pieces: list[str] = []
+    pieces.extend(tokenize(rule.action_instruction))
+    if rule.action_instruction_zh:
+        pieces.extend(tokenize(rule.action_instruction_zh))
+    return pieces
+
+
+def _tokenize_search(rule: Rule) -> list[str]:
+    pieces: list[str] = []
     for terms in rule.search_terms.values():
         for t in terms:
             pieces.extend(tokenize(t))
     return pieces
 
 
-def _variant_tokens(rule: Rule) -> set[str]:
-    tokens: set[str] = set()
+def _tokenize_variants(rule: Rule) -> tuple[list[str], list[list[str]]]:
+    pieces: list[str] = []
+    phrases: list[list[str]] = []
     for v in rule.trigger_variants:
-        tokens.update(tokenize(v))
+        toks = tokenize(v)
+        pieces.extend(toks)
+        if toks:
+            phrases.append(toks)
     for v in rule.trigger_variants_zh:
-        tokens.update(tokenize(v))
-    return tokens
+        toks = tokenize(v)
+        pieces.extend(toks)
+        if toks:
+            phrases.append(toks)
+    return pieces, phrases
+
+
+def _build_fielded_doc(rule: Rule) -> _FieldedDoc:
+    trigger_toks = _tokenize_trigger(rule)
+    action_toks = _tokenize_action(rule)
+    search_toks = _tokenize_search(rule)
+    variant_toks, variant_phrases = _tokenize_variants(rule)
+
+    all_tokens = trigger_toks + action_toks + search_toks + variant_toks
+    all_tf = Counter(all_tokens)
+
+    return _FieldedDoc(
+        rule=rule,
+        trigger_tokens=frozenset(trigger_toks),
+        action_tokens=frozenset(action_toks),
+        search_tokens=frozenset(search_toks),
+        variant_tokens=frozenset(variant_toks),
+        variant_phrases=variant_phrases,
+        all_tf=all_tf,
+        doc_len=len(all_tokens),
+    )
 
 
 def _index_key(rules_list: list[Rule]) -> tuple:
@@ -55,36 +107,30 @@ def _index_key(rules_list: list[Rule]) -> tuple:
         )
         return (
             r.id,
-            r.trigger_text,
-            r.action,
+            r.trigger_canonical,
+            r.action_instruction,
             tuple(r.trigger_variants),
             tuple(r.trigger_variants_zh),
             terms,
-            r.trigger_text_zh,
-            r.action_zh,
-            r.behavior_zh,
-            r.rationale_zh,
+            r.trigger_canonical_zh,
+            r.action_instruction_zh,
         )
 
     return tuple(_rule_key(r) for r in sorted(rules_list, key=lambda r: r.id))
 
 
 def _build_index(rules_list: list[Rule]):
-    raw_docs = [(rule, _rule_doc_tokens(rule), _variant_tokens(rule)) for rule in rules_list]
-    n_docs = len(raw_docs)
-    avgdl = sum(len(d) for _, d, _ in raw_docs) / max(n_docs, 1)
+    fielded_docs = [_build_fielded_doc(rule) for rule in rules_list]
+    n_docs = len(fielded_docs)
+    avgdl = sum(d.doc_len for d in fielded_docs) / max(n_docs, 1)
     df: Counter[str] = Counter()
-    docs = []
-    for rule, doc_tokens, var_tokens in raw_docs:
-        tf = Counter(doc_tokens)
-        token_set = frozenset(tf)
-        df.update(token_set)
-        docs.append((rule, tf, token_set, len(doc_tokens), var_tokens))
+    for doc in fielded_docs:
+        df.update(frozenset(doc.all_tf))
     idf: Mapping[str, float] = {
         term: math.log(1 + (n_docs - count + 0.5) / (count + 0.5))
         for term, count in df.items()
     }
-    return docs, idf, avgdl
+    return fielded_docs, idf, avgdl
 
 
 def _cached_index(rules_list: list[Rule]):
@@ -99,6 +145,20 @@ def _cached_index(rules_list: list[Rule]):
     return cached
 
 
+def _check_phrase_hit(query_tokens: list[str], phrases: list[list[str]]) -> bool:
+    """True if any full variant phrase appears as a contiguous subsequence in query."""
+    if not phrases:
+        return False
+    for phrase in phrases:
+        plen = len(phrase)
+        if plen == 0:
+            continue
+        for i in range(len(query_tokens) - plen + 1):
+            if query_tokens[i : i + plen] == phrase:
+                return True
+    return False
+
+
 def search(
     query: str, rules: Iterable[Rule], top_k: int = 5
 ) -> list[ScoredResult]:
@@ -110,14 +170,16 @@ def search(
     if not query_tokens:
         return []
 
-    docs, idf, avgdl = _cached_index(rules_list)
+    fielded_docs, idf, avgdl = _cached_index(rules_list)
 
     qset = frozenset(query_tokens)
     scored: list[ScoredResult] = []
-    for rule, tf, token_set, dl, var_tokens in docs:
-        if not tf:
+    for doc in fielded_docs:
+        if not doc.all_tf:
             continue
         score = 0.0
+        tf = doc.all_tf
+        dl = doc.doc_len
         for term in qset:
             f = tf.get(term, 0)
             if f == 0:
@@ -127,14 +189,32 @@ def search(
             score += idf.get(term, 0.0) * (num / denom)
         if score <= 0:
             continue
-        matched = qset & token_set
-        variant_match = bool(qset & var_tokens)
+
+        # Fielded token matching
+        matched_trigger = qset & doc.trigger_tokens
+        matched_action = qset & doc.action_tokens
+        matched_search = qset & doc.search_tokens
+        matched_variant = qset & doc.variant_tokens
+
+        # Phrase-level variant hit
+        strong_variant = _check_phrase_hit(query_tokens, doc.variant_phrases)
+
+        # Match source flags
+        has_trigger = bool(matched_trigger)
+        action_only = bool(matched_action) and not has_trigger and not bool(matched_variant)
+        search_only = bool(matched_search) and not has_trigger and not bool(matched_variant) and not bool(matched_action)
+
         scored.append(
             ScoredResult(
-                rule=rule,
+                rule=doc.rule,
                 bm25_score=score,
-                matched_tokens=frozenset(matched),
-                has_trigger_variant_match=variant_match,
+                matched_trigger_tokens=frozenset(matched_trigger),
+                matched_action_tokens=frozenset(matched_action),
+                matched_search_tokens=frozenset(matched_search),
+                matched_variant_tokens=frozenset(matched_variant),
+                strong_variant_phrase_hit=strong_variant,
+                action_only_match=action_only,
+                search_only_match=search_only,
             )
         )
 

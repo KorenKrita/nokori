@@ -53,7 +53,7 @@ def format_injection(
     sorted_hot = sorted(
         hot,
         key=lambda r: (
-            0 if r.rule.source_type == "correction" else 1,
+            0 if r.rule.severity == "high_risk" else 1,
             -r.rrf_score,
         ),
     )
@@ -63,11 +63,9 @@ def format_injection(
     logged: list[tuple[str, str]] = []
     for r in sorted_hot:
         block = (
-            f"\n[HOT {r.rule.short_id}] {r.rule.trigger_text}\n"
-            f"  do: {r.rule.action}"
+            f"\n[HOT {r.rule.short_id}] {r.rule.trigger_canonical}\n"
+            f"  do: {r.rule.action_instruction}"
         )
-        if r.rule.rationale:
-            block += f"\n  why: {r.rule.rationale}"
         if used + len(block) > budget:
             spillover.append(r)
             continue
@@ -77,7 +75,7 @@ def format_injection(
         logged.append((r.rule.id, "hot"))
 
     for r in spillover + list(warm):
-        line = f"\n[warm {r.rule.short_id}] {r.rule.trigger_text} — {r.rule.action}"
+        line = f"\n[warm {r.rule.short_id}] {r.rule.trigger_canonical} — {r.rule.action_instruction}"
         if used + len(line) > budget:
             break
         parts.append(line)
@@ -144,13 +142,12 @@ def select_gate_rules(hot):
     """HOT rules that trigger PreToolUse block (not the same as injection).
 
     Injection uses all formal-pool HOT/WARM tiers. Gate is narrower:
-    high + active + source_type in (correction, anti_pattern) only.
+    trusted + gate_eligible severity only.
     solution / preference may still appear as HOT/WARM context but never block tools.
     """
     return [
         r
         for r in hot
-        if r.rule.confidence == "high"
-        and r.rule.status == "active"
-        and r.rule.source_type in ("correction", "anti_pattern")
+        if r.rule.status == "trusted"
+        and r.rule.severity == "gate_eligible"
     ]

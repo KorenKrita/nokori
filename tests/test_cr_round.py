@@ -63,33 +63,27 @@ def test_bm25_index_cache_ignores_updated_at(monkeypatch, tmp_path):
     rule = Rule(
         id="r1",
         short_id="abc123",
-        trigger_text="git push force",
+        schema_version=1,
+        rule_version=1,
+        created_by_pipeline_version="v1",
+        runtime_policy_version="v1",
+        last_rewritten_by_role=None,
+        status="active",
+        severity="reminder",
+        trigger_canonical="git push force",
         trigger_variants=["force push"],
         search_terms={},
-        behavior=None,
-        action="use lease",
-        rationale=None,
-        source_type="correction",
-        confidence="high",
-        status="active",
-        evidence_score=0,
-        evidence_log=[],
-        hit_count=0,
-        last_hit=None,
-        shadow_hit_count=0,
-        promotion_evidence=[],
+        action_instruction="use lease",
         project_scope="global",
         project_id=None,
-        superseded_by=None,
         archived_reason=None,
         created_at=now,
         updated_at=now,
     )
     bm25.search("git push", [rule])
     assert len(bm25._INDEX_CACHE) == 1
-    bumped = Rule(
-        **{**rule.__dict__, "updated_at": "2099-01-01T00:00:00Z", "hit_count": 99}
-    )
+    from dataclasses import replace as dreplace
+    bumped = dreplace(rule, updated_at="2099-01-01T00:00:00Z")
     bm25.search("git push", [bumped])
     assert len(bm25._INDEX_CACHE) == 1
 
@@ -102,11 +96,14 @@ def test_export_atomic_replace(tmp_path, monkeypatch):
         now = now_iso()
         with db.transaction() as tx:
             tx.execute(
-                "INSERT INTO rules (id, short_id, trigger_text, action, "
-                "source_type, confidence, status, project_scope, project_id, "
-                "created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                "INSERT INTO rules (id, short_id, schema_version, rule_version, "
+                "created_by_pipeline_version, runtime_policy_version, "
+                "trigger_canonical, action_instruction, "
+                "status, severity, project_scope, project_id, "
+                "created_at, updated_at) "
+                "VALUES (?,?,1,1,'v1','v1',?,?,?,?,?,?,?,?)",
                 (
-                    "id1", "abcd12", "t", "a", "correction", "high", "active",
+                    "id1", "abcd12", "t", "a", "active", "reminder",
                     "global", None, now, now,
                 ),
             )
@@ -123,25 +120,30 @@ def test_export_atomic_replace(tmp_path, monkeypatch):
         db.close()
 
 
-def test_hot_injection_updates_hit_count_same_turn(monkeypatch, tmp_path):
+def test_hot_injection_creates_fire_event(monkeypatch, tmp_path):
+    """log_injections_batch creates fire events (replaced old hit_count logic)."""
     monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
     db = open_db(Config.from_env().db_path)
     try:
         now = now_iso()
         with db.transaction() as tx:
             tx.execute(
-                "INSERT INTO rules (id, short_id, trigger_text, action, "
-                "source_type, confidence, status, project_scope, project_id, "
-                "created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                "INSERT INTO rules (id, short_id, schema_version, rule_version, "
+                "created_by_pipeline_version, runtime_policy_version, "
+                "trigger_canonical, action_instruction, "
+                "status, severity, project_scope, project_id, "
+                "created_at, updated_at) "
+                "VALUES (?,?,1,1,'v1','v1',?,?,?,?,?,?,?,?)",
                 (
-                    "id1", "abcd12", "t", "a", "correction", "high", "active",
+                    "id1", "abcd12", "t", "a", "active", "reminder",
                     "global", None, now, now,
                 ),
             )
         log_injections_batch(db, "sess", "phash", [("id1", "hot")], now)
-        row = db.fetchone("SELECT hit_count, last_hit FROM rules WHERE id = 'id1'")
-        assert row["hit_count"] == 1
-        assert row["last_hit"] == now
+        row = db.fetchone(
+            "SELECT COUNT(*) AS n FROM rule_fire_events WHERE rule_id = 'id1'"
+        )
+        assert row["n"] >= 1
     finally:
         db.close()
 
@@ -160,7 +162,8 @@ def test_corrupt_extract_job_quarantined(monkeypatch, tmp_path):
     assert (cfg.jobs_dir / "bad" / "extract-deadbeef.json").exists()
 
 
-def test_dormant_reactivates_same_session(monkeypatch, tmp_path):
+def test_active_rule_retrieval_in_same_session(monkeypatch, tmp_path):
+    """An active rule retrieves correctly when prompted in the same session."""
     monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
     cfg = Config.from_env()
     db = open_db(cfg.db_path)
@@ -168,26 +171,27 @@ def test_dormant_reactivates_same_session(monkeypatch, tmp_path):
         now = now_iso()
         with db.transaction() as tx:
             tx.execute(
-                "INSERT INTO rules (id, short_id, trigger_text, action, "
-                "source_type, confidence, status, project_scope, project_id, "
-                "created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                "INSERT INTO rules (id, short_id, schema_version, rule_version, "
+                "created_by_pipeline_version, runtime_policy_version, "
+                "trigger_canonical, action_instruction, "
+                "status, severity, project_scope, project_id, "
+                "created_at, updated_at) "
+                "VALUES (?,?,1,1,'v1','v1',?,?,?,?,?,?,?,?)",
                 (
                     "d1", "dorm01", "git push force remote",
-                    "use lease", "correction", "high", "dormant",
+                    "use lease", "active", "reminder",
                     "global", None, now, now,
                 ),
             )
         from nokori.hooks.user_prompt_submit import handle
-
         from nokori.utils.host import Host
 
         handle({
-            "session_id": "s-dorm",
+            "session_id": "s-test",
             "prompt": "git push force remote branch please",
             "cwd": str(tmp_path),
         }, cfg, host=Host.CLAUDE)
-        row = db.fetchone("SELECT status, last_hit FROM rules WHERE id = 'd1'")
+        row = db.fetchone("SELECT status FROM rules WHERE id = 'd1'")
         assert row["status"] == "active"
-        assert row["last_hit"] is not None
     finally:
         db.close()

@@ -9,8 +9,6 @@ from ..utils.time import iso_of, now_iso, parse_iso
 
 log = get_logger("nokori.lifecycle.maintenance")
 
-DORMANT_AFTER_DAYS = 30
-DORMANT_SCAN_INTERVAL_DAYS = 7
 # Calendar days since created_at (not evidence active-days).
 CANDIDATE_TTL_DAYS = 20
 ANTI_PATTERN_TTL_DAYS = 40
@@ -19,6 +17,8 @@ UNMERGE_INTERVAL_DAYS = 90
 # Dismiss looks back 24h; keep extra history for gate hash / debugging.
 INJECTION_RETENTION_DAYS = 30
 INJECTION_CLEANUP_INTERVAL_DAYS = 7
+# Transition evaluation interval
+TRANSITION_EVAL_INTERVAL_DAYS = 1
 
 
 def _now() -> datetime:
@@ -52,45 +52,15 @@ def _due(db: Db, key: str, interval_days: int) -> bool:
     return age is None or age >= interval_days
 
 
-def run_dormant_scan(db: Db) -> int:
-    if not _due(db, "dormant_scan", DORMANT_SCAN_INTERVAL_DAYS):
-        return 0
-    rows = db.fetchall(
-        "SELECT id, last_hit, created_at FROM rules WHERE status = 'active'"
-    )
-    cutoff_days = DORMANT_AFTER_DAYS
-    ts = now_iso()
-    to_dormant: list[str] = []
-    for r in rows:
-        last_seen = r["last_hit"] or r["created_at"]
-        age = _days_since_iso(last_seen)
-        if age is not None and age >= cutoff_days:
-            to_dormant.append(r["id"])
-    moved = len(to_dormant)
-    if to_dormant:
-        with db.transaction() as tx:
-            for batch in batched(to_dormant):
-                placeholders = ",".join("?" * len(batch))
-                tx.execute(
-                    f"UPDATE rules SET status = 'dormant', updated_at = ? "
-                    f"WHERE id IN ({placeholders})",
-                    (ts, *batch),
-                )
-    _set_last_run(db, "dormant_scan")
-    if moved:
-        log.info("dormant_scan moved=%d", moved)
-    return moved
-
-
 def run_candidate_cleanup(db: Db) -> int:
     if not _due(db, "candidate_cleanup", CANDIDATE_CLEANUP_INTERVAL_DAYS):
         return 0
     rows = db.fetchall(
-        "SELECT id, source_type, created_at FROM rules WHERE status = 'candidate'"
+        "SELECT id, source_origin, created_at FROM rules WHERE status = 'candidate'"
     )
     deleted = 0
     for r in rows:
-        ttl = ANTI_PATTERN_TTL_DAYS if r["source_type"] == "anti_pattern" else CANDIDATE_TTL_DAYS
+        ttl = ANTI_PATTERN_TTL_DAYS if r["source_origin"] == "external_source_material" else CANDIDATE_TTL_DAYS
         age = _days_since_iso(r["created_at"])
         if age is not None and age >= ttl:
             with db.transaction() as tx:
@@ -105,29 +75,29 @@ def run_candidate_cleanup(db: Db) -> int:
     _set_last_run(db, "candidate_cleanup")
     if deleted:
         log.info("candidate_cleanup deleted=%d", deleted)
-        restored = _unmerge_orphan_merged(db)
+        restored = _unmerge_orphan_replaced(db)
         if restored:
             log.info("candidate_cleanup unmerge_orphans restored=%d", restored)
     return deleted
 
 
-def _unmerge_orphan_merged(db: Db) -> int:
-    """Restore merged rules whose superseded_by target no longer exists."""
+def _unmerge_orphan_replaced(db: Db) -> int:
+    """Restore archived rules whose replacement_id target no longer exists."""
     rows = db.fetchall(
-        "SELECT id, superseded_by FROM rules WHERE status = 'merged' "
-        "AND superseded_by IS NOT NULL"
+        "SELECT id, replacement_id FROM rules WHERE status = 'archived' "
+        "AND replacement_id IS NOT NULL"
     )
     restored = 0
     ts = now_iso()
     for r in rows:
         target = db.fetchone(
-            "SELECT status FROM rules WHERE id = ?", (r["superseded_by"],)
+            "SELECT status FROM rules WHERE id = ?", (r["replacement_id"],)
         )
         if target is None:
             with db.transaction() as tx:
                 tx.execute(
-                    "UPDATE rules SET status = 'dormant', superseded_by = NULL, "
-                    "updated_at = ? WHERE id = ?",
+                    "UPDATE rules SET status = 'candidate', replacement_id = NULL, "
+                    "archived_reason = NULL, updated_at = ? WHERE id = ?",
                     (ts, r["id"]),
                 )
             restored += 1
@@ -135,19 +105,32 @@ def _unmerge_orphan_merged(db: Db) -> int:
 
 
 def run_injection_cleanup(db: Db) -> int:
+    """Cleanup old fire events (replaces legacy injections table cleanup)."""
     if not _due(db, "injection_cleanup", INJECTION_CLEANUP_INTERVAL_DAYS):
         return 0
     cutoff = _now() - timedelta(days=INJECTION_RETENTION_DAYS)
     cutoff_iso = iso_of(cutoff)
     with db.transaction() as tx:
+        # Delete feedback events referencing old fire events
+        tx.execute(
+            "DELETE FROM rule_feedback_events WHERE fire_event_id IN "
+            "(SELECT id FROM rule_fire_events WHERE created_at < ?)",
+            (cutoff_iso,),
+        )
+        # Delete posthoc jobs referencing old fire events
+        tx.execute(
+            "DELETE FROM posthoc_jobs WHERE fire_event_id IN "
+            "(SELECT id FROM rule_fire_events WHERE created_at < ?)",
+            (cutoff_iso,),
+        )
         cur = tx.execute(
-            "DELETE FROM injections WHERE created_at < ?",
+            "DELETE FROM rule_fire_events WHERE created_at < ?",
             (cutoff_iso,),
         )
         deleted = cur.rowcount if cur.rowcount is not None else 0
     _set_last_run(db, "injection_cleanup")
     if deleted:
-        log.info("injection_cleanup deleted=%d", deleted)
+        log.info("fire_event_cleanup deleted=%d", deleted)
     return deleted
 
 
@@ -155,29 +138,29 @@ def run_unmerge_check(db: Db) -> int:
     if not _due(db, "unmerge_check", UNMERGE_INTERVAL_DAYS):
         return 0
     rows = db.fetchall(
-        "SELECT id, superseded_by FROM rules WHERE status = 'merged' "
-        "AND superseded_by IS NOT NULL"
+        "SELECT id, replacement_id FROM rules WHERE status = 'archived' "
+        "AND replacement_id IS NOT NULL"
     )
     restored = 0
     ts = now_iso()
     for r in rows:
         target = db.fetchone(
-            "SELECT status FROM rules WHERE id = ?", (r["superseded_by"],)
+            "SELECT status FROM rules WHERE id = ?", (r["replacement_id"],)
         )
         if target is None:
             with db.transaction() as tx:
                 tx.execute(
-                    "UPDATE rules SET status = 'dormant', superseded_by = NULL, "
-                    "updated_at = ? WHERE id = ?",
+                    "UPDATE rules SET status = 'candidate', replacement_id = NULL, "
+                    "archived_reason = NULL, updated_at = ? WHERE id = ?",
                     (ts, r["id"]),
                 )
             restored += 1
             continue
-        if target["status"] in ("dormant", "archived"):
+        if target["status"] in ("suppressed", "archived"):
             with db.transaction() as tx:
                 tx.execute(
-                    "UPDATE rules SET status = 'dormant', superseded_by = NULL, "
-                    "updated_at = ? WHERE id = ?",
+                    "UPDATE rules SET status = 'candidate', replacement_id = NULL, "
+                    "archived_reason = NULL, updated_at = ? WHERE id = ?",
                     (ts, r["id"]),
                 )
             restored += 1
@@ -187,15 +170,36 @@ def run_unmerge_check(db: Db) -> int:
     return restored
 
 
+def run_maintenance(db: Db, cfg=None) -> dict:
+    """Run all due maintenance tasks, delegating transitions to lifecycle.transitions."""
+    from .transitions import run_all_pending_transitions
+
+    transition_results: list = []
+    if _due(db, "transition_eval", TRANSITION_EVAL_INTERVAL_DAYS):
+        transition_results = run_all_pending_transitions(db)
+        _set_last_run(db, "transition_eval")
+        applied = sum(1 for r in transition_results if r.applied)
+        if applied:
+            log.info("transition_eval applied=%d total=%d", applied, len(transition_results))
+
+    return run_due_jobs(db, cfg, transition_results)
+
+
+def run_dormant_scan(db: Db) -> int:
+    """No-op. Dormant status no longer exists; transitions handle state changes.
+
+    .. deprecated::
+        Dormant was removed in favor of suppressed/archived via transitions.py.
+    """
+    return 0
+
+
 def reactivate_dormant_on_retrieval_hot(db: Db, rule_id: str) -> None:
-    ts = now_iso()
-    with db.transaction() as tx:
-        tx.execute(
-            "UPDATE rules SET status = 'active', last_hit = ?, "
-            "hit_count = hit_count + 1, updated_at = ? "
-            "WHERE id = ? AND status = 'dormant'",
-            (ts, ts, rule_id),
-        )
+    """No-op. Dormant status no longer exists; transitions are handled by transitions.py.
+
+    .. deprecated::
+        Retained for backward compat with tests referencing this function.
+    """
 
 
 def run_session_file_cleanup(cfg) -> int:
@@ -204,7 +208,7 @@ def run_session_file_cleanup(cfg) -> int:
     return sessions.prune_ended_session_files(cfg)
 
 
-def run_due_jobs(db: Db, cfg=None) -> dict:
+def run_due_jobs(db: Db, cfg=None, transition_results=None) -> dict:
     session_cleanup = 0
     coalesce_cleanup = 0
     prompt_ack_cleanup = 0
@@ -217,11 +221,16 @@ def run_due_jobs(db: Db, cfg=None) -> dict:
         session_cleanup = run_session_file_cleanup(cfg)
         coalesce_cleanup = prune_stale_claims(cfg)
         prompt_ack_cleanup = prompt_ack.prune_stale(cfg)
+
+    transitions_applied = 0
+    if transition_results:
+        transitions_applied = sum(1 for r in transition_results if r.applied)
+
     summary = {
-        "dormant_scan": run_dormant_scan(db),
         "candidate_cleanup": run_candidate_cleanup(db),
         "injection_cleanup": run_injection_cleanup(db),
         "unmerge_check": run_unmerge_check(db),
+        "transitions_applied": transitions_applied,
         "session_cleanup": session_cleanup,
         "coalesce_cleanup": coalesce_cleanup,
         "prompt_ack_cleanup": prompt_ack_cleanup,

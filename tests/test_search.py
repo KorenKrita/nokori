@@ -1,42 +1,32 @@
 from datetime import datetime, timezone
 
 from nokori.models import Rule
+from nokori.runtime.applicability import meets_min_evidence
+from nokori.runtime.selection import tier_results
 from nokori.search import bm25, ranker
 
 
 def _rule(short, trigger, *, variants=(), terms_zh=(), action="do x", status="active",
-          conf="high", source_type="correction",
-          trigger_text_zh=None, action_zh=None,
-          behavior_zh=None, rationale_zh=None):
+          trigger_canonical_zh=None, action_instruction_zh=None):
     now = datetime.now(timezone.utc).isoformat()
     return Rule(
         id=f"id-{short}",
         short_id=short,
-        trigger_text=trigger,
+        schema_version=1,
+        rule_version=1,
+        created_by_pipeline_version="test",
+        runtime_policy_version="test",
+        last_rewritten_by_role=None,
+        status=status,
+        severity="reminder",
+        trigger_canonical=trigger,
+        trigger_canonical_zh=trigger_canonical_zh,
         trigger_variants=list(variants),
         search_terms={"zh": list(terms_zh)} if terms_zh else {},
-        behavior=None,
-        action=action,
-        rationale=None,
-        source_type=source_type,
-        confidence=conf,
-        status=status,
-        evidence_score=0,
-        evidence_log=[],
-        hit_count=0,
-        last_hit=None,
-        shadow_hit_count=0,
-        promotion_evidence=[],
-        project_scope="project",
-        project_id=None,
-        superseded_by=None,
-        archived_reason=None,
+        action_instruction=action,
+        action_instruction_zh=action_instruction_zh,
         created_at=now,
         updated_at=now,
-        trigger_text_zh=trigger_text_zh,
-        action_zh=action_zh,
-        behavior_zh=behavior_zh,
-        rationale_zh=rationale_zh,
     )
 
 
@@ -63,8 +53,8 @@ def test_bm25_returns_empty_for_no_overlap():
 def test_bm25_matched_tokens_populated():
     rules = [_rule("aaa111", "force push to main", action="use lease")]
     results = bm25.search("force push", rules)
-    assert "force" in results[0].matched_tokens
-    assert "push" in results[0].matched_tokens
+    assert "force" in results[0].matched_trigger_tokens
+    assert "push" in results[0].matched_trigger_tokens
 
 
 def test_tier_hot_when_top1_dominant():
@@ -75,12 +65,12 @@ def test_tier_hot_when_top1_dominant():
     ]
     bm = bm25.search("git push --force my branch", rules)
     fused = ranker.rrf_fuse(bm, [])
-    hot, warm = ranker.tier_results(fused)
+    hot, warm = tier_results(fused)
     assert hot
     assert hot[0].rule.short_id == "aaa111"
 
 
-def test_tier_dormant_promotes_warm_with_retrieval_hot():
+def test_tier_dormant_appears_in_results():
     rules = [
         _rule("aaa111", "force push", variants=("git push --force",),
               action="use lease", status="dormant"),
@@ -88,10 +78,9 @@ def test_tier_dormant_promotes_warm_with_retrieval_hot():
     ]
     bm = bm25.search("git push --force", rules)
     fused = ranker.rrf_fuse(bm, [])
-    hot, warm = ranker.tier_results(fused)
-    assert hot == []
-    if warm:
-        assert any(w.retrieval_hot for w in warm if w.rule.short_id == "aaa111")
+    hot, warm = tier_results(fused)
+    all_results = hot + warm
+    assert any(r.rule.short_id == "aaa111" for r in all_results)
 
 
 def test_tier_min_evidence_blocks_single_token_match():
@@ -101,7 +90,8 @@ def test_tier_min_evidence_blocks_single_token_match():
     ]
     bm = bm25.search("thing", rules)
     fused = ranker.rrf_fuse(bm, [])
-    hot, warm = ranker.tier_results(fused)
+    eligible = [r for r in fused if meets_min_evidence(r)]
+    hot, warm = tier_results(eligible)
     assert hot == []
     assert warm == []
 
@@ -140,15 +130,15 @@ def test_perf_500_rules_under_50ms():
 
 
 def test_bm25_matches_chinese_trigger_zh():
-    """trigger_text_zh content is indexed and searchable via BM25."""
+    """trigger_canonical_zh content is indexed and searchable via BM25."""
     bm25.clear_index_cache()
     rules = [
         _rule("zh001", "Force push to shared branch",
-              trigger_text_zh="强制推送到共享分支",
-              action="use --force-with-lease", action_zh="使用 --force-with-lease"),
+              trigger_canonical_zh="强制推送到共享分支",
+              action="use --force-with-lease", action_instruction_zh="使用 --force-with-lease"),
         _rule("zh002", "Update database schema",
-              trigger_text_zh="更新数据库模式",
-              action="run migration first", action_zh="先运行迁移"),
+              trigger_canonical_zh="更新数据库模式",
+              action="run migration first", action_instruction_zh="先运行迁移"),
     ]
     results = bm25.search("强制推送", rules)
     assert len(results) > 0

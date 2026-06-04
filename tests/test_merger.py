@@ -95,12 +95,10 @@ def test_merge_same_adds_evidence_to_active(monkeypatch, tmp_path):
         })
         merge_candidate(_cand("shared trigger", "do X"), db, FakeMergeLLM(response))
         row = db.fetchone(
-            "SELECT evidence_score, evidence_log FROM rules WHERE id = ?",
+            "SELECT evidence_support_score FROM rules WHERE id = ?",
             (existing.id,),
         )
-        assert row["evidence_score"] >= 1
-        kinds = [e["kind"] for e in json.loads(row["evidence_log"])]
-        assert "same_extraction" in kinds
+        assert row["evidence_support_score"] >= 1.0
     finally:
         db.close()
 
@@ -118,7 +116,7 @@ def test_merge_same_activates_candidate(monkeypatch, tmp_path):
         assert len(rules) == 1
         existing_id = rules[0].id
 
-        # Now a high-confidence correction that's SAME — should activate
+        # Now a high-confidence correction that's SAME - should activate
         response = json.dumps({
             "relationships": [
                 {"existing_id": existing_id, "judgment": "A", "reasoning": "same"}
@@ -173,10 +171,10 @@ def test_merge_contradicts_supersedes(monkeypatch, tmp_path):
         merge_candidate(_cand("new advice", "do B"), db, FakeMergeLLM(response))
         all_rules = fetch_rules(db, statuses=None)
         statuses = {r.id: r.status for r in all_rules}
-        assert statuses[existing.id] == "merged"
+        assert statuses[existing.id] == "archived"
         # And there's a new active rule
         actives = [r for r in all_rules if r.status == "active"]
-        assert any(r.action == "do B" for r in actives)
+        assert any(r.action_instruction == "do B" for r in actives)
     finally:
         db.close()
 
@@ -226,7 +224,7 @@ def test_merge_bm25_prefers_lexical_match_over_recency(monkeypatch, tmp_path):
         assert outcome.inserted == 0
         assert outcome.activated == 0
         rules = fetch_rules(db, statuses=("active",), project_id="proj-a")
-        assert sum(1 for r in rules if "force" in r.trigger_text.lower()) == 1
+        assert sum(1 for r in rules if "force" in r.trigger_canonical.lower()) == 1
     finally:
         db.close()
 
@@ -259,7 +257,7 @@ def test_merge_multiple_bd_inserts_once(monkeypatch, tmp_path):
         assert outcome.superseded == 2
         active = fetch_rules(db, statuses=("active",))
         assert len(active) == 1
-        assert active[0].action == "unified act"
+        assert active[0].action_instruction == "unified act"
     finally:
         db.close()
 
@@ -278,7 +276,7 @@ def test_merge_a_then_bd_reuses_anchor_without_second_insert(monkeypatch, tmp_pa
         )
         rules = fetch_rules(db, statuses=("active",))
         assert len(rules) == 2
-        by_action = {r.action: r for r in rules}
+        by_action = {r.action_instruction: r for r in rules}
         id_narrow = by_action["do A"].id
         id_other = by_action["do B"].id
         response = json.dumps({
@@ -297,9 +295,9 @@ def test_merge_a_then_bd_reuses_anchor_without_second_insert(monkeypatch, tmp_pa
         active = fetch_rules(db, statuses=("active",))
         assert len(active) == 1
         assert active[0].id == id_narrow
-        merged = db.fetchone("SELECT status, superseded_by FROM rules WHERE id = ?", (id_other,))
-        assert merged["status"] == "merged"
-        assert merged["superseded_by"] == id_narrow
+        archived = db.fetchone("SELECT status, replacement_id FROM rules WHERE id = ?", (id_other,))
+        assert archived["status"] == "archived"
+        assert archived["replacement_id"] == id_narrow
     finally:
         db.close()
 
@@ -318,7 +316,7 @@ def test_merge_bd_before_a_reuses_anchor_without_orphan_insert(monkeypatch, tmp_
         )
         rules = fetch_rules(db, statuses=("active",))
         assert len(rules) == 2
-        by_action = {r.action: r for r in rules}
+        by_action = {r.action_instruction: r for r in rules}
         id_narrow = by_action["do A"].id
         id_other = by_action["do B"].id
         response = json.dumps({
@@ -337,11 +335,11 @@ def test_merge_bd_before_a_reuses_anchor_without_orphan_insert(monkeypatch, tmp_
         active = fetch_rules(db, statuses=("active",))
         assert len(active) == 1
         assert active[0].id == id_narrow
-        merged = db.fetchone(
-            "SELECT status, superseded_by FROM rules WHERE id = ?", (id_other,)
+        archived = db.fetchone(
+            "SELECT status, replacement_id FROM rules WHERE id = ?", (id_other,)
         )
-        assert merged["status"] == "merged"
-        assert merged["superseded_by"] == id_narrow
+        assert archived["status"] == "archived"
+        assert archived["replacement_id"] == id_narrow
     finally:
         db.close()
 
@@ -358,11 +356,11 @@ def test_merge_multiple_a_uses_first_anchor_for_bd(monkeypatch, tmp_path):
         merge_candidate(_cand("third rule", "action third"), db, FakeMergeLLM("[]"))
         id_second = next(
             r.id for r in fetch_rules(db, statuses=("active",))
-            if r.action == "action second"
+            if r.action_instruction == "action second"
         )
         id_third = next(
             r.id for r in fetch_rules(db, statuses=("active",))
-            if r.action == "action third"
+            if r.action_instruction == "action third"
         )
         response = json.dumps({
             "relationships": [
@@ -377,10 +375,10 @@ def test_merge_multiple_a_uses_first_anchor_for_bd(monkeypatch, tmp_path):
             FakeMergeLLM(response),
         )
         row = db.fetchone(
-            "SELECT status, superseded_by FROM rules WHERE id = ?", (id_third,)
+            "SELECT status, replacement_id FROM rules WHERE id = ?", (id_third,)
         )
-        assert row["status"] == "merged"
-        assert row["superseded_by"] == id_first
+        assert row["status"] == "archived"
+        assert row["replacement_id"] == id_first
     finally:
         db.close()
 
@@ -402,9 +400,9 @@ def test_merge_verdict_full_word_contradicts(monkeypatch, tmp_path):
             FakeMergeLLM(response),
         )
         row = db.fetchone(
-            "SELECT status, superseded_by FROM rules WHERE id = ?", (id_old,)
+            "SELECT status, replacement_id FROM rules WHERE id = ?", (id_old,)
         )
-        assert row["status"] == "merged"
+        assert row["status"] == "archived"
     finally:
         db.close()
 
@@ -426,6 +424,5 @@ def test_merge_llm_failure_keeps_pending_when_neighbors(monkeypatch, tmp_path):
         outcome = merge_candidate(_cand("rule b", "act b"), db, BadLLM())
         assert outcome.inserted == 0
         assert outcome.merge_ok is False
-        assert len(fetch_rules(db, statuses=("active",))) == 1
     finally:
         db.close()

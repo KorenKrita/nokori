@@ -25,7 +25,8 @@ def _run(*args, env_extra=None):
     )
 
 
-def test_cli_dismiss_requires_recent_injection(tmp_path, monkeypatch):
+def test_cli_dismiss_archives_directly(tmp_path, monkeypatch):
+    """Dismiss no longer requires a recent injection - archives directly."""
     monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
     r = _run(
         "add",
@@ -42,11 +43,12 @@ def test_cli_dismiss_requires_recent_injection(tmp_path, monkeypatch):
     assert r.returncode == 0, r.stderr
     short = r.stdout.split()[1]
     r2 = _run("dismiss", short, env_extra={"NOKORI_DATA_DIR": str(tmp_path)})
-    assert r2.returncode != 0
-    assert "24 hours" in (r2.stderr + r2.stdout)
+    assert r2.returncode == 0
+    assert "archived" in r2.stdout
 
 
-def test_cli_dismiss_after_injection(tmp_path, monkeypatch):
+def test_cli_dismiss_after_fire_event(tmp_path, monkeypatch):
+    """Dismiss works when fire events exist for the rule."""
     monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
     env = {"NOKORI_DATA_DIR": str(tmp_path)}
     r = _run(
@@ -73,9 +75,9 @@ def test_cli_dismiss_after_injection(tmp_path, monkeypatch):
         row = db.fetchone("SELECT id FROM rules WHERE short_id = ?", (short,))
         with db.transaction() as tx:
             tx.execute(
-                "INSERT INTO injections (rule_id, session_id, prompt_hash, level, created_at) "
-                "VALUES (?,?,?,?,?)",
-                (row["id"], "sess-cli", "ph1", "hot", now),
+                "INSERT INTO rule_fire_events (id, rule_id, session_id, prompt_hash, level, created_at) "
+                "VALUES (?,?,?,?,?,?)",
+                ("fe-1", row["id"], "sess-cli", "ph1", "hot", now),
             )
     finally:
         db.close()

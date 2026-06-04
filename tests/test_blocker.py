@@ -1,36 +1,25 @@
 """Gate injection text budget."""
 from nokori.gate.blocker import format_injection
-from nokori.models import Rule
-from nokori.search.ranker import ScoredResult
+from nokori.models import Rule, ScoredResult
 
 
 def _scored(rule: Rule, score: float = 1.0) -> ScoredResult:
-    return ScoredResult(rule=rule, rrf_score=score, retrieval_hot=True)
+    return ScoredResult(rule=rule, rrf_score=score)
 
 
 def test_format_injection_includes_footer_within_max_chars():
     rule = Rule(
         id="r1",
         short_id="abcd12",
-        trigger_text="deploy prisma",
-        trigger_variants=[],
-        search_terms={},
-        behavior=None,
-        action="use migrate deploy",
-        rationale=None,
-        source_type="correction",
-        confidence="high",
+        schema_version=1,
+        rule_version=1,
+        created_by_pipeline_version="test",
+        runtime_policy_version="test",
+        last_rewritten_by_role=None,
         status="active",
-        evidence_score=0,
-        evidence_log=[],
-        hit_count=0,
-        last_hit=None,
-        shadow_hit_count=0,
-        promotion_evidence=[],
-        project_scope="global",
-        project_id=None,
-        superseded_by=None,
-        archived_reason=None,
+        severity="reminder",
+        trigger_canonical="deploy prisma",
+        action_instruction="use migrate deploy",
         created_at="2026-01-01T00:00:00Z",
         updated_at="2026-01-01T00:00:00Z",
     )

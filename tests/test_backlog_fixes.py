@@ -88,9 +88,9 @@ def test_dismiss_strips_gate_marker(tmp_path, monkeypatch):
         now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
         with db.transaction() as tx:
             tx.execute(
-                "INSERT INTO injections (rule_id, session_id, prompt_hash, level, created_at) "
-                "VALUES (?,?,?,?,?)",
-                (rule["id"], "sess-x", ph, "hot", now),
+                "INSERT INTO rule_fire_events (id, rule_id, session_id, prompt_hash, level, created_at) "
+                "VALUES (?,?,?,?,?,?)",
+                ("fe-backlog", rule["id"], "sess-x", ph, "hot", now),
             )
     finally:
         db.close()
@@ -117,29 +117,20 @@ def test_no_gate_marker_when_injection_empty(monkeypatch, tmp_path):
     rule = Rule(
         id="r1",
         short_id="r1abcd",
-        trigger_text="trigger",
-        trigger_variants=[],
-        search_terms={},
-        behavior=None,
-        action="do something important",
-        rationale=None,
-        source_type="correction",
-        confidence="high",
+        schema_version=1,
+        rule_version=1,
+        created_by_pipeline_version="1.0.0",
+        runtime_policy_version="1.0.0",
+        last_rewritten_by_role=None,
         status="active",
-        evidence_score=5,
-        evidence_log=[],
-        hit_count=0,
-        last_hit=None,
-        shadow_hit_count=0,
-        promotion_evidence=[],
+        severity="reminder",
+        trigger_canonical="trigger",
+        action_instruction="do something important",
         project_scope="global",
-        project_id=None,
-        superseded_by=None,
-        archived_reason=None,
         created_at=now,
         updated_at=now,
     )
-    hot = ScoredResult(rule=rule, retrieval_hot=True)
+    hot = ScoredResult(rule=rule, strong_variant_phrase_hit=True, required_concepts_match=True)
 
     def fake_retrieve(*_a, **_k):
         return RetrievalResult([hot], [], 1, "off"), [], []

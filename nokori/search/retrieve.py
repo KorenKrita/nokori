@@ -7,6 +7,8 @@ from typing import Literal
 from ..config import Config
 from ..db import Db
 from ..models import Rule, ScoredResult
+from ..runtime.applicability import meets_min_evidence
+from ..runtime.selection import SelectionResult, select_injection
 from . import bm25, ranker
 from . import embedding as embedding_search
 
@@ -32,7 +34,7 @@ def retrieve_and_tier(
     interaction: InteractionKind = "cli",
     pool_size: int | None = None,
 ) -> RetrievalResult:
-    """BM25 + optional embedding RRF, then HOT/WARM tiering (formal + shadow pools).
+    """BM25 + optional embedding RRF, then applicability + selection tiering.
 
     Local embedding uses a shared embed server (one loaded model for all hooks).
     Remote embed uses a shorter timeout on hook path (cfg.embed_hook_timeout_seconds).
@@ -76,7 +78,17 @@ def retrieve_and_tier(
             embed_mode = "remote"
 
     fused = ranker.rrf_fuse(bm25_results, embed_results)
-    hot, warm = ranker.tier_results(fused)
+
+    # Applicability gate: filter to eligible results
+    eligible = [r for r in fused if meets_min_evidence(r)]
+
+    # Selection: split into HOT/WARM via utility + diversity
+    selection: SelectionResult = select_injection(
+        eligible, max_injection_chars=cfg.max_injection_chars
+    )
+    hot = selection.hot
+    warm = selection.warm
+
     bm25_ids = frozenset(r.rule.id for r in bm25_results)
     return RetrievalResult(hot, warm, len(bm25_results), embed_mode, bm25_ids)
 
@@ -91,7 +103,7 @@ def retrieve_formal_and_shadow(
     pool_size: int | None = None,
     interaction: InteractionKind = "hook",
 ) -> tuple[RetrievalResult, list[ScoredResult], list[ScoredResult]]:
-    """One BM25/RRF pass over formal∪shadow; split tiers by pool membership."""
+    """One BM25/RRF pass over formal+shadow; split tiers by pool membership after selection."""
     formal_ids = {r.id for r in formal_rules}
     shadow_only = [r for r in shadow_rules if r.id not in formal_ids]
     combined = list(formal_rules) + shadow_only

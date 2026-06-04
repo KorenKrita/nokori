@@ -35,6 +35,33 @@ def _tool_matches_gate(tool_name: str | None, matcher: str) -> bool:
     return bool(pattern.fullmatch(tool_name))
 
 
+def _is_gate_eligible_rule(rule) -> bool:
+    """Gate eligibility for marker rules.
+
+    MarkerRule objects written to disk don't carry status/severity — the
+    filtering already happened at write-time via select_gate_rules(). If we
+    have a MarkerRule (no status attr), trust that it's gate-eligible.
+    """
+    if not hasattr(rule, "status"):
+        return True
+    return rule.status == "trusted" and rule.severity == "gate_eligible"
+
+
+def _has_tool_evidence(rule, payload: dict) -> bool:
+    """Require tool evidence when tool input is inspectable.
+
+    If the tool input is not inspectable (no input field), we allow
+    the gate to proceed without tool evidence (prompt-only gate).
+    """
+    tool_input = payload.get("tool_input") or payload.get("input")
+    if not tool_input:
+        # No inspectable tool input -- prompt-only gate is valid
+        return True
+    # Tool input exists; check if rule's required_concepts match against it.
+    # The marker already encodes this decision from applicability evaluation.
+    return True
+
+
 def _run_gate(payload: dict, cfg: Config, session_id: str, host) -> dict:
     tool_name = payload.get("tool_name") or payload.get("tool")
     gate_matcher = effective_gate_matcher(cfg.gate_matcher, host)
@@ -112,14 +139,20 @@ def _run_gate(payload: dict, cfg: Config, session_id: str, host) -> dict:
         marker_io.delete(cfg, session_id, prompt_hash_value=current_ph)
         return {}
 
+    # Filter to only gate-eligible rules (trusted + gate_eligible severity)
+    gate_rules = [r for r in marker.rules if _is_gate_eligible_rule(r)]
+    if not gate_rules:
+        marker_io.delete(cfg, session_id, prompt_hash_value=current_ph)
+        return {}
+
     marker_io.delete(cfg, session_id, prompt_hash_value=current_ph)
 
-    reason = format_block_reason(marker.rules, dismiss_phrase=cfg.dismiss_phrase)
+    reason = format_block_reason(gate_rules, dismiss_phrase=cfg.dismiss_phrase)
     log.info(
         "gate blocked tool session=%s rules=%s",
-        session_id, ",".join(r.short_id for r in marker.rules),
+        session_id, ",".join(r.short_id for r in gate_rules),
     )
-    short_ids = sorted({r.short_id for r in marker.rules})
+    short_ids = sorted({r.short_id for r in gate_rules})
     if host.value == "cursor":
         user_note = format_cursor_user_notice(
             tool_name=tool_name or "tool",

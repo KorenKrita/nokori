@@ -9,38 +9,54 @@ from pathlib import Path
 
 from .errors import DbError
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 _SCHEMA_DDL = """
 CREATE TABLE IF NOT EXISTS rules (
     id TEXT PRIMARY KEY,
     short_id TEXT UNIQUE NOT NULL,
-    trigger_text TEXT NOT NULL,
+    schema_version INTEGER NOT NULL DEFAULT 1,
+    rule_version INTEGER NOT NULL DEFAULT 1,
+    created_by_pipeline_version TEXT,
+    runtime_policy_version TEXT,
+    last_rewritten_by_role TEXT,
+    status TEXT NOT NULL DEFAULT 'candidate' CHECK(status IN ('candidate','active','trusted','suppressed','archived')),
+    severity TEXT NOT NULL DEFAULT 'reminder' CHECK(severity IN ('reminder','high_risk','gate_eligible')),
+    trigger_canonical TEXT NOT NULL,
+    trigger_canonical_zh TEXT,
+    concepts TEXT NOT NULL DEFAULT '[]',
+    required_concept_groups TEXT NOT NULL DEFAULT '[]',
+    excluded_contexts TEXT NOT NULL DEFAULT '[]',
+    near_miss_examples TEXT NOT NULL DEFAULT '[]',
     trigger_variants TEXT NOT NULL DEFAULT '[]',
+    trigger_variants_zh TEXT NOT NULL DEFAULT '[]',
     search_terms TEXT NOT NULL DEFAULT '{}',
-    behavior TEXT,
-    action TEXT NOT NULL,
-    rationale TEXT,
-    source_type TEXT NOT NULL CHECK(source_type IN ('correction','preference','solution','anti_pattern')),
-    confidence TEXT NOT NULL CHECK(confidence IN ('high','medium','low')),
-    status TEXT NOT NULL DEFAULT 'candidate' CHECK(status IN ('candidate','active','merged','archived','dormant')),
-    evidence_score INTEGER NOT NULL DEFAULT 0,
-    evidence_log TEXT NOT NULL DEFAULT '[]',
-    hit_count INTEGER NOT NULL DEFAULT 0,
-    last_hit TEXT,
-    shadow_hit_count INTEGER NOT NULL DEFAULT 0,
-    promotion_evidence TEXT NOT NULL DEFAULT '[]',
+    action_instruction TEXT NOT NULL,
+    action_instruction_zh TEXT,
+    allowed_behavior TEXT NOT NULL DEFAULT '[]',
+    forbidden_behavior TEXT NOT NULL DEFAULT '[]',
+    domain_tags TEXT NOT NULL DEFAULT '[]',
+    tool_tags TEXT NOT NULL DEFAULT '[]',
+    path_patterns TEXT NOT NULL DEFAULT '[]',
+    quality_score REAL NOT NULL DEFAULT 0.0,
+    evidence_support_score REAL NOT NULL DEFAULT 0.0,
+    specificity_score REAL NOT NULL DEFAULT 0.0,
+    retrieval_readiness_score REAL NOT NULL DEFAULT 0.0,
+    observed_usefulness_score REAL NOT NULL DEFAULT 0.0,
+    plausible_usefulness_score REAL NOT NULL DEFAULT 0.0,
+    false_positive_score REAL NOT NULL DEFAULT 0.0,
+    harmful_score REAL NOT NULL DEFAULT 0.0,
+    source_origin TEXT NOT NULL DEFAULT 'transcript_extraction' CHECK(source_origin IN ('transcript_extraction','external_source_material')),
+    activation_origin TEXT,
+    first_observed_useful_at TEXT,
+    trusted_at TEXT,
+    suppressed_at TEXT,
     project_scope TEXT NOT NULL DEFAULT 'project' CHECK(project_scope IN ('project','global')),
     project_id TEXT,
-    superseded_by TEXT,
     archived_reason TEXT,
+    replacement_id TEXT,
     created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    trigger_text_zh TEXT,
-    behavior_zh TEXT,
-    action_zh TEXT,
-    rationale_zh TEXT,
-    trigger_variants_zh TEXT NOT NULL DEFAULT '[]'
+    updated_at TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS rule_embeddings (
@@ -52,6 +68,175 @@ CREATE TABLE IF NOT EXISTS rule_embeddings (
     PRIMARY KEY (rule_id, chunk_index)
 );
 
+CREATE TABLE IF NOT EXISTS rule_reviews (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    role TEXT,
+    model_id TEXT,
+    prompt_version TEXT,
+    input_hash TEXT,
+    output_json TEXT,
+    scores TEXT,
+    decision TEXT,
+    rule_id TEXT REFERENCES rules(id),
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS rule_synthetic_evals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    rule_id TEXT REFERENCES rules(id),
+    rule_version INTEGER,
+    runtime_policy_version TEXT,
+    tokenizer_version TEXT,
+    matcher_compiler_version TEXT,
+    concept_compiler_version TEXT,
+    embedding_profile_version TEXT,
+    trigger_idf_pool_version TEXT,
+    benchmark_version TEXT,
+    eval_cases TEXT,
+    eval_results TEXT,
+    expected_decisions TEXT,
+    passed INTEGER,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS embedding_benchmark_profiles (
+    model_id TEXT PRIMARY KEY,
+    profile_version TEXT,
+    dimension INTEGER,
+    normalization TEXT,
+    bucket_thresholds TEXT,
+    benchmark_summary TEXT,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS trigger_idf_stats (
+    pool_version TEXT PRIMARY KEY,
+    rule_pool_size INTEGER,
+    eligible_rule_set_hash TEXT,
+    tokenizer_version TEXT,
+    matcher_compiler_version TEXT,
+    generic_token_policy_version TEXT,
+    concept_compiler_version TEXT,
+    df_by_token TEXT,
+    dynamic_threshold REAL,
+    built_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS rule_fire_events (
+    id TEXT PRIMARY KEY,
+    rule_id TEXT REFERENCES rules(id),
+    session_id TEXT,
+    injected_rule_version INTEGER,
+    injected_trigger_snapshot TEXT,
+    injected_action_snapshot TEXT,
+    injected_structured_snapshot TEXT,
+    trigger_idf_pool_version TEXT,
+    runtime_policy_version TEXT,
+    embedding_profile_version TEXT,
+    prompt_hash TEXT,
+    transcript_window_ref TEXT,
+    turn_index INTEGER,
+    level TEXT CHECK(level IN ('hot','warm','gate')),
+    decision_features TEXT,
+    bounded_window_ref TEXT,
+    posthoc_label TEXT,
+    posthoc_reason_code TEXT,
+    posthoc_score REAL,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS rule_shadow_events (
+    id TEXT PRIMARY KEY,
+    rule_id TEXT REFERENCES rules(id),
+    session_id TEXT,
+    shadow_rule_version INTEGER,
+    shadow_trigger_snapshot TEXT,
+    shadow_action_snapshot TEXT,
+    shadow_structured_snapshot TEXT,
+    status_at_match TEXT CHECK(status_at_match IN ('candidate','suppressed')),
+    shadow_type TEXT CHECK(shadow_type IN ('candidate_probe','suppression_recovery')),
+    prompt_hash TEXT,
+    transcript_window_ref TEXT,
+    bounded_window_ref TEXT,
+    matched_level TEXT,
+    decision_features TEXT,
+    trigger_idf_pool_version TEXT,
+    runtime_policy_version TEXT,
+    embedding_profile_version TEXT,
+    shadow_label TEXT,
+    evaluator_model_id TEXT,
+    context_fingerprint TEXT,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS rule_feedback_events (
+    id TEXT PRIMARY KEY,
+    fire_event_id TEXT REFERENCES rule_fire_events(id),
+    source TEXT,
+    label TEXT,
+    confidence REAL,
+    evidence TEXT,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS rule_lineage (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    old_rule_id TEXT,
+    new_rule_id TEXT,
+    operation TEXT,
+    reason TEXT,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS archived_fingerprints (
+    id TEXT PRIMARY KEY,
+    signature TEXT NOT NULL,
+    scope_summary TEXT,
+    blocked_trigger_area TEXT,
+    blocked_action_area TEXT,
+    archive_strength TEXT CHECK(archive_strength IN ('user','system','replacement')),
+    can_be_overridden_by_changed_scope INTEGER NOT NULL DEFAULT 0,
+    rule_id TEXT,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS llm_jobs (
+    id TEXT PRIMARY KEY,
+    role TEXT NOT NULL,
+    model_id TEXT,
+    prompt_version TEXT,
+    input_hash TEXT,
+    status TEXT NOT NULL DEFAULT 'pending',
+    output_json TEXT,
+    retries INTEGER DEFAULT 0,
+    next_retry_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS transcript_ingest_jobs (
+    id TEXT PRIMARY KEY,
+    transcript_segment_ref TEXT,
+    segment_hash TEXT,
+    status TEXT NOT NULL DEFAULT 'pending',
+    ttl_expires_at TEXT,
+    extractor_prompt_version TEXT,
+    retries INTEGER DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS posthoc_jobs (
+    id TEXT PRIMARY KEY,
+    fire_event_id TEXT REFERENCES rule_fire_events(id),
+    window_payload_hash TEXT,
+    redacted_window_json TEXT,
+    status TEXT NOT NULL DEFAULT 'pending',
+    retries INTEGER DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS extract_state (
     transcript_path TEXT PRIMARY KEY,
     transcript_mtime REAL NOT NULL,
@@ -60,25 +245,20 @@ CREATE TABLE IF NOT EXISTS extract_state (
     last_byte_offset INTEGER NOT NULL DEFAULT 0
 );
 
-CREATE TABLE IF NOT EXISTS injections (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    rule_id TEXT NOT NULL REFERENCES rules(id),
-    session_id TEXT NOT NULL,
-    prompt_hash TEXT NOT NULL,
-    level TEXT NOT NULL CHECK(level IN ('hot','warm')),
-    created_at TEXT NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_injections_session ON injections(session_id, created_at);
-CREATE INDEX IF NOT EXISTS idx_injections_rule ON injections(rule_id);
-
-CREATE INDEX IF NOT EXISTS idx_rules_status ON rules(status);
-CREATE INDEX IF NOT EXISTS idx_rules_project ON rules(project_scope, project_id);
-CREATE INDEX IF NOT EXISTS idx_rules_shadow ON rules(status, confidence, source_type, project_scope);
-
 CREATE TABLE IF NOT EXISTS maintenance_meta (
     key TEXT PRIMARY KEY,
     last_run TEXT NOT NULL
 );
+
+CREATE INDEX IF NOT EXISTS idx_rules_status ON rules(status);
+CREATE INDEX IF NOT EXISTS idx_rules_project ON rules(project_scope, project_id);
+CREATE INDEX IF NOT EXISTS idx_fire_events_rule ON rule_fire_events(rule_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_fire_events_session ON rule_fire_events(session_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_shadow_events_rule ON rule_shadow_events(rule_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_shadow_events_fingerprint ON rule_shadow_events(rule_id, context_fingerprint);
+CREATE INDEX IF NOT EXISTS idx_archived_fp_signature ON archived_fingerprints(signature);
+CREATE INDEX IF NOT EXISTS idx_llm_jobs_status ON llm_jobs(status, next_retry_at);
+CREATE INDEX IF NOT EXISTS idx_posthoc_jobs_status ON posthoc_jobs(status);
 """
 
 
@@ -177,40 +357,10 @@ def _migrate(conn: sqlite3.Connection) -> None:
             f"PRAGMA user_version = {int(SCHEMA_VERSION)};\n"
             "COMMIT;\n"
         )
-    elif current == 2:
-        script = (
-            "BEGIN;\n"
-            "ALTER TABLE extract_state ADD COLUMN last_byte_offset INTEGER NOT NULL DEFAULT 0;\n"
-            "ALTER TABLE rules ADD COLUMN trigger_text_zh TEXT;\n"
-            "ALTER TABLE rules ADD COLUMN behavior_zh TEXT;\n"
-            "ALTER TABLE rules ADD COLUMN action_zh TEXT;\n"
-            "ALTER TABLE rules ADD COLUMN rationale_zh TEXT;\n"
-            "ALTER TABLE rules ADD COLUMN trigger_variants_zh TEXT NOT NULL DEFAULT '[]';\n"
-            f"PRAGMA user_version = {int(SCHEMA_VERSION)};\n"
-            "COMMIT;\n"
-        )
-    elif current == 3:
-        script = (
-            "BEGIN;\n"
-            "ALTER TABLE rules ADD COLUMN trigger_text_zh TEXT;\n"
-            "ALTER TABLE rules ADD COLUMN behavior_zh TEXT;\n"
-            "ALTER TABLE rules ADD COLUMN action_zh TEXT;\n"
-            "ALTER TABLE rules ADD COLUMN rationale_zh TEXT;\n"
-            "ALTER TABLE rules ADD COLUMN trigger_variants_zh TEXT NOT NULL DEFAULT '[]';\n"
-            f"PRAGMA user_version = {int(SCHEMA_VERSION)};\n"
-            "COMMIT;\n"
-        )
-    elif current == 4:
-        script = (
-            "BEGIN;\n"
-            "ALTER TABLE rules ADD COLUMN trigger_variants_zh TEXT NOT NULL DEFAULT '[]';\n"
-            f"PRAGMA user_version = {int(SCHEMA_VERSION)};\n"
-            "COMMIT;\n"
-        )
     else:
         raise DbError(
-            "rules.db format is not compatible with this nokori; "
-            "use a fresh NOKORI_DATA_DIR or nokori export + reset"
+            "rules.db schema version is incompatible with this nokori (v6 redesign). "
+            "Use a fresh NOKORI_DATA_DIR or export rules and reinitialize."
         )
     try:
         conn.executescript(script)
@@ -245,49 +395,75 @@ def row_to_rule(row):
     return Rule(
         id=row["id"],
         short_id=row["short_id"],
-        trigger_text=row["trigger_text"],
-        trigger_variants=loads_json(row["trigger_variants"], []),
-        search_terms=loads_json(row["search_terms"], {}),
-        behavior=row["behavior"],
-        action=row["action"],
-        rationale=row["rationale"],
-        source_type=row["source_type"],
-        confidence=row["confidence"],
+        schema_version=row["schema_version"],
+        rule_version=row["rule_version"],
+        created_by_pipeline_version=row["created_by_pipeline_version"],
+        runtime_policy_version=row["runtime_policy_version"],
+        last_rewritten_by_role=row["last_rewritten_by_role"],
         status=row["status"],
-        evidence_score=row["evidence_score"],
-        evidence_log=loads_json(row["evidence_log"], []),
-        hit_count=row["hit_count"],
-        last_hit=row["last_hit"],
-        shadow_hit_count=row["shadow_hit_count"],
-        promotion_evidence=loads_json(row["promotion_evidence"], []),
+        severity=row["severity"],
+        trigger_canonical=row["trigger_canonical"],
+        trigger_canonical_zh=row["trigger_canonical_zh"],
+        concepts=row["concepts"],
+        required_concept_groups=row["required_concept_groups"],
+        excluded_contexts=row["excluded_contexts"],
+        near_miss_examples=loads_json(row["near_miss_examples"], []),
+        trigger_variants=loads_json(row["trigger_variants"], []),
+        trigger_variants_zh=loads_json(row["trigger_variants_zh"], []),
+        search_terms=loads_json(row["search_terms"], {}),
+        action_instruction=row["action_instruction"],
+        action_instruction_zh=row["action_instruction_zh"],
+        allowed_behavior=loads_json(row["allowed_behavior"], []),
+        forbidden_behavior=loads_json(row["forbidden_behavior"], []),
+        domain_tags=loads_json(row["domain_tags"], []),
+        tool_tags=loads_json(row["tool_tags"], []),
+        path_patterns=loads_json(row["path_patterns"], []),
+        quality_score=row["quality_score"],
+        evidence_support_score=row["evidence_support_score"],
+        specificity_score=row["specificity_score"],
+        retrieval_readiness_score=row["retrieval_readiness_score"],
+        observed_usefulness_score=row["observed_usefulness_score"],
+        plausible_usefulness_score=row["plausible_usefulness_score"],
+        false_positive_score=row["false_positive_score"],
+        harmful_score=row["harmful_score"],
+        source_origin=row["source_origin"],
+        activation_origin=row["activation_origin"],
+        first_observed_useful_at=row["first_observed_useful_at"],
+        trusted_at=row["trusted_at"],
+        suppressed_at=row["suppressed_at"],
         project_scope=row["project_scope"],
         project_id=row["project_id"],
-        superseded_by=row["superseded_by"],
         archived_reason=row["archived_reason"],
+        replacement_id=row["replacement_id"],
         created_at=row["created_at"],
         updated_at=row["updated_at"],
-        trigger_text_zh=row["trigger_text_zh"],
-        behavior_zh=row["behavior_zh"],
-        action_zh=row["action_zh"],
-        rationale_zh=row["rationale_zh"],
-        trigger_variants_zh=loads_json(row["trigger_variants_zh"], []),
     )
 
 
 RULE_COLUMNS = (
-    "id, short_id, trigger_text, trigger_variants, search_terms, behavior, action, "
-    "rationale, source_type, confidence, status, evidence_score, evidence_log, "
-    "hit_count, last_hit, shadow_hit_count, promotion_evidence, project_scope, "
-    "project_id, superseded_by, archived_reason, "
-    "created_at, updated_at, "
-    "trigger_text_zh, behavior_zh, action_zh, rationale_zh, trigger_variants_zh"
+    "id, short_id, schema_version, rule_version, "
+    "created_by_pipeline_version, runtime_policy_version, last_rewritten_by_role, "
+    "status, severity, "
+    "trigger_canonical, trigger_canonical_zh, "
+    "concepts, required_concept_groups, excluded_contexts, "
+    "near_miss_examples, trigger_variants, trigger_variants_zh, search_terms, "
+    "action_instruction, action_instruction_zh, "
+    "allowed_behavior, forbidden_behavior, "
+    "domain_tags, tool_tags, path_patterns, "
+    "quality_score, evidence_support_score, specificity_score, retrieval_readiness_score, "
+    "observed_usefulness_score, plausible_usefulness_score, false_positive_score, harmful_score, "
+    "source_origin, activation_origin, first_observed_useful_at, "
+    "trusted_at, suppressed_at, "
+    "project_scope, project_id, "
+    "archived_reason, replacement_id, "
+    "created_at, updated_at"
 )
 
 
 def total_rule_count(db: "Db") -> int:
-    """Rules in searchable pools (active + dormant); used for embedding auto-enable."""
+    """Rules in injection pool (active + trusted)."""
     row = db.fetchone(
-        "SELECT COUNT(*) AS n FROM rules WHERE status IN ('active', 'dormant')"
+        "SELECT COUNT(*) AS n FROM rules WHERE status IN ('active', 'trusted')"
     )
     return int(row["n"]) if row else 0
 
@@ -333,6 +509,25 @@ def fetch_short_ids(db: "Db") -> set[str]:
     return {r["short_id"] for r in rows}
 
 
+def fetch_shadow_rules(db: "Db", *, project_id: str | None) -> list:
+    """Fetch shadow pool: candidate and suppressed rules for shadow matching."""
+    if project_id is None:
+        rows = db.fetchall(
+            f"SELECT {RULE_COLUMNS} FROM rules "
+            "WHERE status IN ('candidate','suppressed') "
+            "ORDER BY updated_at DESC",
+        )
+    else:
+        rows = db.fetchall(
+            f"SELECT {RULE_COLUMNS} FROM rules "
+            "WHERE status IN ('candidate','suppressed') "
+            "AND (project_scope = 'global' OR project_id = ?) "
+            "ORDER BY updated_at DESC",
+            (project_id,),
+        )
+    return [row_to_rule(r) for r in rows]
+
+
 def log_injections_batch(
     db: "Db",
     session_id: str,
@@ -340,44 +535,45 @@ def log_injections_batch(
     entries: list[tuple[str, str]],
     now: str,
 ) -> None:
+    """Log fire events for injected rules.
+
+    entries: list of (rule_id, level) tuples.
+    """
     if not entries:
         return
+    import uuid
+
     with db.transaction() as tx:
         for rule_id, level in entries:
+            event_id = str(uuid.uuid4())
             tx.execute(
-                "INSERT INTO injections (rule_id, session_id, prompt_hash, level, created_at) "
-                "VALUES (?,?,?,?,?)",
-                (rule_id, session_id, prompt_hash, level, now),
+                "INSERT INTO rule_fire_events "
+                "(id, rule_id, session_id, prompt_hash, level, created_at) "
+                "VALUES (?,?,?,?,?,?)",
+                (event_id, rule_id, session_id, prompt_hash, level, now),
             )
-            if level == "hot":
-                tx.execute(
-                    "UPDATE rules SET hit_count = hit_count + 1, last_hit = ?, "
-                    "updated_at = ? WHERE id = ?",
-                    (now, now, rule_id),
-                )
-            elif level == "warm":
-                tx.execute(
-                    "UPDATE rules SET last_hit = ?, updated_at = ? WHERE id = ?",
-                    (now, now, rule_id),
-                )
+            tx.execute(
+                "UPDATE rules SET updated_at = ? WHERE id = ?",
+                (now, rule_id),
+            )
 
 
 def find_rule_id_by_injection(
     db: "Db", short_id: str, since_iso: str, *, session_id: str | None = None
 ) -> str | None:
-    """Find rule by short_id injected since cutoff, optionally scoped to session."""
+    """Find rule by short_id fired since cutoff, optionally scoped to session."""
     if session_id is not None:
         row = db.fetchone(
-            "SELECT r.id AS id FROM injections i JOIN rules r ON r.id = i.rule_id "
-            "WHERE i.session_id = ? AND r.short_id = ? AND i.created_at >= ? "
-            "ORDER BY i.created_at DESC LIMIT 1",
+            "SELECT r.id AS id FROM rule_fire_events e JOIN rules r ON r.id = e.rule_id "
+            "WHERE e.session_id = ? AND r.short_id = ? AND e.created_at >= ? "
+            "ORDER BY e.created_at DESC LIMIT 1",
             (session_id, short_id, since_iso),
         )
     else:
         row = db.fetchone(
-            "SELECT r.id AS id FROM injections i JOIN rules r ON r.id = i.rule_id "
-            "WHERE r.short_id = ? AND i.created_at >= ? "
-            "ORDER BY i.created_at DESC LIMIT 1",
+            "SELECT r.id AS id FROM rule_fire_events e JOIN rules r ON r.id = e.rule_id "
+            "WHERE r.short_id = ? AND e.created_at >= ? "
+            "ORDER BY e.created_at DESC LIMIT 1",
             (short_id, since_iso),
         )
     return row["id"] if row else None
@@ -395,23 +591,6 @@ def find_rule_id_injected_since(
     return find_rule_id_by_injection(db, short_id, since_iso)
 
 
-def fetch_shadow_rules(db: "Db", *, project_id: str | None) -> list:
-    """Fetch shadow pool rules: other projects' high-confidence active rules
-    with source_type in (correction, anti_pattern, solution)."""
-    if project_id is None:
-        return []
-    rows = db.fetchall(
-        f"SELECT {RULE_COLUMNS} FROM rules "
-        "WHERE status = 'active' AND confidence = 'high' "
-        "AND source_type IN ('correction','anti_pattern','solution') "
-        "AND project_scope = 'project' "
-        "AND project_id IS NOT NULL AND project_id != ? "
-        "ORDER BY updated_at DESC",
-        (project_id,),
-    )
-    return [row_to_rule(r) for r in rows]
-
-
 def archive_rule(db: "Db", rule_id: str, reason: str, now: str) -> None:
     with db.transaction() as tx:
         tx.execute(
@@ -423,8 +602,19 @@ def archive_rule(db: "Db", rule_id: str, reason: str, now: str) -> None:
 
 def _delete_rule_cascade_tx(tx, rule_id: str) -> None:
     """Remove rule and dependent rows within an existing transaction cursor."""
-    tx.execute("DELETE FROM injections WHERE rule_id = ?", (rule_id,))
+    # Delete children of fire_events first (they reference fire_event_id)
+    tx.execute("DELETE FROM rule_feedback_events WHERE fire_event_id IN "
+               "(SELECT id FROM rule_fire_events WHERE rule_id = ?)", (rule_id,))
+    tx.execute("DELETE FROM posthoc_jobs WHERE fire_event_id IN "
+               "(SELECT id FROM rule_fire_events WHERE rule_id = ?)", (rule_id,))
+    # Then fire/shadow events themselves
+    tx.execute("DELETE FROM rule_fire_events WHERE rule_id = ?", (rule_id,))
+    tx.execute("DELETE FROM rule_shadow_events WHERE rule_id = ?", (rule_id,))
+    # Other direct dependents
+    tx.execute("DELETE FROM rule_reviews WHERE rule_id = ?", (rule_id,))
+    tx.execute("DELETE FROM rule_synthetic_evals WHERE rule_id = ?", (rule_id,))
     tx.execute("DELETE FROM rule_embeddings WHERE rule_id = ?", (rule_id,))
+    # Finally the rule itself
     tx.execute("DELETE FROM rules WHERE id = ?", (rule_id,))
 
 

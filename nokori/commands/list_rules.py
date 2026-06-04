@@ -8,7 +8,7 @@ from ..db import fetch_rules, open_db
 
 def run(args: argparse.Namespace, cfg: Config) -> int:
     statuses: tuple[str, ...] | None
-    statuses = None if args.all else ("active", "dormant")
+    statuses = None if args.all else ("active", "trusted", "candidate")
 
     db = open_db(cfg.db_path)
     try:
@@ -23,9 +23,12 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
     for r in rules:
         scope = "global" if r.project_scope == "global" else (r.project_id or "-")
         print(
-            f"{r.short_id}  {r.status:<9} {r.source_type:<11} {r.confidence:<6} "
-            f"hits={r.hit_count:<3} scope={scope}"
+            f"{r.short_id}  {r.status:<11} {r.severity:<14} "
+            f"useful={r.observed_usefulness_score:.2f}  "
+            f"fp={r.false_positive_score:.2f}  "
+            f"harmful={r.harmful_score:.2f}  "
+            f"scope={scope}"
         )
-        print(f"  trigger: {(r.trigger_text or '')[:60]}")
-        print(f"  action : {(r.action or '')[:80]}")
+        print(f"  trigger: {(r.trigger_canonical or '')[:60]}")
+        print(f"  action : {(r.action_instruction or '')[:80]}")
     return 0

@@ -11,7 +11,7 @@ from nokori.lifecycle.maintenance import _days_since_iso
 from nokori.lifecycle.promotion import record_shadow_hit
 from nokori.lifecycle import transcript_index
 from nokori.models import Rule, ScoredResult
-from nokori.search.ranker import tier_results
+from nokori.runtime.selection import tier_results
 
 
 def test_days_since_iso_clamps_negative():
@@ -84,30 +84,19 @@ def test_format_injection_truncation_logs_subset():
                 rule=Rule(
                     id=f"id{i}",
                     short_id=f"sid{i:02d}",
-                    trigger_text=f"trigger {i}",
-                    trigger_variants=[],
-                    search_terms={},
-                    behavior=None,
-                    action=f"action {i}" * 20,
-                    rationale=None,
-                    source_type="correction",
-                    confidence="high",
+                    schema_version=1,
+                    rule_version=1,
+                    created_by_pipeline_version="test",
+                    runtime_policy_version="test",
+                    last_rewritten_by_role=None,
                     status="active",
-                    evidence_score=0,
-                    evidence_log=[],
-                    hit_count=0,
-                    last_hit=None,
-                    shadow_hit_count=0,
-                    promotion_evidence=[],
-                    project_scope="global",
-                    project_id=None,
-                    superseded_by=None,
-                    archived_reason=None,
+                    severity="reminder",
+                    trigger_canonical=f"trigger {i}",
+                    action_instruction=f"action {i}" * 20,
                     created_at=now,
                     updated_at=now,
                 ),
                 rrf_score=0.5 - i * 0.01,
-                retrieval_hot=True,
             )
         )
     text, logged = format_injection(rules[:1], rules[1:], max_chars=400)
@@ -121,30 +110,20 @@ def test_tier_singleton_requires_strong_match():
         rule=Rule(
             id="r1",
             short_id="abcd12",
-            trigger_text="t",
-            trigger_variants=[],
-            search_terms={},
-            behavior=None,
-            action="a",
-            rationale=None,
-            source_type="correction",
-            confidence="high",
+            schema_version=1,
+            rule_version=1,
+            created_by_pipeline_version="test",
+            runtime_policy_version="test",
+            last_rewritten_by_role=None,
             status="active",
-            evidence_score=0,
-            evidence_log=[],
-            hit_count=0,
-            last_hit=None,
-            shadow_hit_count=0,
-            promotion_evidence=[],
-            project_scope="global",
-            project_id=None,
-            superseded_by=None,
-            archived_reason=None,
+            severity="reminder",
+            trigger_canonical="t",
+            action_instruction="a",
             created_at=now,
             updated_at=now,
         ),
         rrf_score=0.008,
-        matched_tokens=frozenset({"ab", "cd"}),
+        matched_trigger_tokens=frozenset({"ab", "cd"}),
     )
     hot, warm = tier_results([weak])
     assert hot == []

@@ -12,71 +12,69 @@ def _utcnow_iso(delta_days: int = 0) -> str:
     return dt.isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
-def _make_rule(db, *, id_, status, last_hit_days_ago=None, source_type="correction",
+def _make_rule(db, *, id_, status, last_hit_days_ago=None,
+               source_origin="transcript_extraction",
                project_id=None, project_scope="project"):
-    last_hit = _utcnow_iso(-last_hit_days_ago) if last_hit_days_ago is not None else None
     created = _utcnow_iso(-(last_hit_days_ago or 0))
     short = id_[:6]
     with db.transaction() as tx:
         tx.execute(
-            "INSERT INTO rules (id, short_id, trigger_text, action, source_type, "
-            "confidence, status, project_scope, project_id, created_at, updated_at, "
-            "last_hit) VALUES (?,?,?,?,?,'high',?,?,?,?,?,?)",
+            "INSERT INTO rules (id, short_id, schema_version, rule_version, "
+            "created_by_pipeline_version, runtime_policy_version, "
+            "trigger_canonical, action_instruction, "
+            "source_origin, status, severity, "
+            "project_scope, project_id, created_at, updated_at) "
+            "VALUES (?,?,1,1,'v1','v1',?,?,?,?,?,?,?,?,?)",
             (id_, short, f"trigger {id_}", f"action {id_}",
-             source_type, status, project_scope, project_id, created, created, last_hit),
+             source_origin, status, "reminder",
+             project_scope, project_id, created, created),
         )
 
 
-def test_dormant_scan_moves_old_active(monkeypatch, tmp_path):
+def test_dormant_scan_is_noop(monkeypatch, tmp_path):
+    """run_dormant_scan is now a no-op (dormant status removed)."""
     monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
     cfg = Config.from_env()
     db = open_db(cfg.db_path)
     try:
         _make_rule(db, id_="aaa-old", status="active", last_hit_days_ago=45)
-        _make_rule(db, id_="bbb-fresh", status="active", last_hit_days_ago=5)
         moved = maintenance.run_dormant_scan(db)
-        assert moved == 1
-        old = db.fetchone("SELECT status FROM rules WHERE id = 'aaa-old'")
-        fresh = db.fetchone("SELECT status FROM rules WHERE id = 'bbb-fresh'")
-        assert old["status"] == "dormant"
-        assert fresh["status"] == "active"
+        assert moved == 0
     finally:
         db.close()
 
 
-def test_dormant_scan_respects_interval(monkeypatch, tmp_path):
+def test_dormant_scan_always_returns_zero(monkeypatch, tmp_path):
+    """Dormant scan is deprecated, always returns 0."""
     monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
     cfg = Config.from_env()
     db = open_db(cfg.db_path)
     try:
         _make_rule(db, id_="zzz-old", status="active", last_hit_days_ago=45)
-        maintenance.run_dormant_scan(db)
-        # Add another stale rule. Without interval gating, this would also move.
-        _make_rule(db, id_="yyy-old", status="active", last_hit_days_ago=45)
-        moved_again = maintenance.run_dormant_scan(db)
-        assert moved_again == 0  # interval not yet elapsed
+        moved = maintenance.run_dormant_scan(db)
+        assert moved == 0
     finally:
         db.close()
 
 
-def test_candidate_cleanup_deletes_injections(monkeypatch, tmp_path):
+def test_candidate_cleanup_deletes_fire_events(monkeypatch, tmp_path):
     monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
     cfg = Config.from_env()
     db = open_db(cfg.db_path)
     try:
         _make_rule(db, id_="cand-fk", status="candidate",
-                   last_hit_days_ago=30, source_type="correction")
+                   last_hit_days_ago=30, source_origin="transcript_extraction")
         with db.transaction() as tx:
             tx.execute(
-                "INSERT INTO injections (rule_id, session_id, prompt_hash, level, created_at) "
+                "INSERT INTO rule_fire_events (id, rule_id, session_id, level, created_at) "
                 "VALUES (?,?,?,?,?)",
-                ("cand-fk", "s1", "abc", "hot", _utcnow_iso()),
+                ("fe-1", "cand-fk", "s1", "hot", _utcnow_iso()),
             )
         deleted = maintenance.run_candidate_cleanup(db)
         assert deleted >= 1
         assert db.fetchone("SELECT 1 FROM rules WHERE id = 'cand-fk'") is None
         assert db.fetchone(
-            "SELECT 1 FROM injections WHERE rule_id = 'cand-fk'"
+            "SELECT 1 FROM rule_fire_events WHERE rule_id = 'cand-fk'"
         ) is None
     finally:
         db.close()
@@ -91,9 +89,9 @@ def test_evidence_concurrent_append(monkeypatch, tmp_path):
         evidence.add_evidence(db, "ev-1", "same_extraction", 1)
         evidence.add_evidence(db, "ev-1", "same_extraction", 1)
         row = db.fetchone(
-            "SELECT evidence_score FROM rules WHERE id = 'ev-1'"
+            "SELECT evidence_support_score FROM rules WHERE id = 'ev-1'"
         )
-        assert row["evidence_score"] == 2
+        assert row["evidence_support_score"] == 2.0
     finally:
         db.close()
 
@@ -104,11 +102,11 @@ def test_candidate_cleanup_removes_old(monkeypatch, tmp_path):
     db = open_db(cfg.db_path)
     try:
         _make_rule(db, id_="cand-1", status="candidate",
-                   last_hit_days_ago=30, source_type="correction")
+                   last_hit_days_ago=30, source_origin="transcript_extraction")
         _make_rule(db, id_="anti-1", status="candidate",
-                   last_hit_days_ago=30, source_type="anti_pattern")
+                   last_hit_days_ago=30, source_origin="external_source_material")
         deleted = maintenance.run_candidate_cleanup(db)
-        # Default cand TTL=20 days; anti_pattern TTL=40
+        # Default cand TTL=20 days; external_source_material TTL=40
         assert deleted == 1
         rows = {r["id"] for r in db.fetchall("SELECT id FROM rules")}
         assert "cand-1" not in rows
@@ -117,18 +115,17 @@ def test_candidate_cleanup_removes_old(monkeypatch, tmp_path):
         db.close()
 
 
-def test_dormant_reactivation(monkeypatch, tmp_path):
+def test_dormant_reactivation_is_noop(monkeypatch, tmp_path):
+    """reactivate_dormant_on_retrieval_hot is now a no-op."""
     monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
     cfg = Config.from_env()
     db = open_db(cfg.db_path)
     try:
-        _make_rule(db, id_="dormant-1", status="dormant", last_hit_days_ago=5)
-        maintenance.reactivate_dormant_on_retrieval_hot(db, "dormant-1")
-        row = db.fetchone(
-            "SELECT status, last_hit FROM rules WHERE id = 'dormant-1'"
-        )
-        assert row["status"] == "active"
-        assert row["last_hit"] is not None
+        _make_rule(db, id_="suppressed-1", status="suppressed", last_hit_days_ago=5)
+        maintenance.reactivate_dormant_on_retrieval_hot(db, "suppressed-1")
+        row = db.fetchone("SELECT status FROM rules WHERE id = 'suppressed-1'")
+        # No-op - status unchanged
+        assert row["status"] == "suppressed"
     finally:
         db.close()
 
@@ -138,20 +135,18 @@ def test_unmerge_restores_when_superseder_deleted(monkeypatch, tmp_path):
     cfg = Config.from_env()
     db = open_db(cfg.db_path)
     try:
-        from datetime import datetime, timezone
-
-        now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace(
-            "+00:00", "Z"
-        )
+        now = _utcnow_iso()
         with db.transaction() as tx:
             tx.execute(
-                "INSERT INTO rules (id, short_id, trigger_text, action, source_type, "
-                "confidence, status, project_scope, created_at, updated_at, superseded_by) "
-                "VALUES ('old-1','old001','t','a','correction','high','merged','global',?,?, 'gone-1')",
+                "INSERT INTO rules (id, short_id, schema_version, rule_version, "
+                "created_by_pipeline_version, runtime_policy_version, "
+                "trigger_canonical, action_instruction, "
+                "status, severity, project_scope, replacement_id, "
+                "archived_reason, created_at, updated_at) "
+                "VALUES ('old-1','old001',1,1,'v1','v1','t','a',"
+                "'archived','reminder','global','gone-1','superseded',?,?)",
                 (now, now),
             )
-        with db.transaction() as tx:
-            tx.execute("DELETE FROM rules WHERE id = 'gone-1'")
         with db.transaction() as tx:
             tx.execute(
                 "INSERT INTO maintenance_meta (key, last_run) VALUES ('unmerge_check', '2000-01-01T00:00:00Z') "
@@ -159,9 +154,9 @@ def test_unmerge_restores_when_superseder_deleted(monkeypatch, tmp_path):
             )
         restored = maintenance.run_unmerge_check(db)
         assert restored == 1
-        row = db.fetchone("SELECT status, superseded_by FROM rules WHERE id='old-1'")
-        assert row["status"] == "dormant"
-        assert row["superseded_by"] is None
+        row = db.fetchone("SELECT status, replacement_id FROM rules WHERE id='old-1'")
+        assert row["status"] == "candidate"
+        assert row["replacement_id"] is None
     finally:
         db.close()
 
@@ -177,7 +172,8 @@ def test_unique_promotion_project_ids_dedupes():
     assert unique_promotion_project_ids(raw) == ["proj-b", "proj-c"]
 
 
-def test_promotion_after_three_projects(monkeypatch, tmp_path):
+def test_promotion_record_shadow_hit_is_noop(monkeypatch, tmp_path):
+    """promotion.record_shadow_hit is now a no-op returning False."""
     monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
     monkeypatch.setenv("NOKORI_PROMOTION_ENABLED", "1")
     cfg = Config.from_env()
@@ -185,33 +181,67 @@ def test_promotion_after_three_projects(monkeypatch, tmp_path):
     try:
         _make_rule(db, id_="rule-A", status="active", project_id="proj-A",
                    last_hit_days_ago=1)
-        # Three different projects record shadow hits.
-        promo1 = promotion.record_shadow_hit(db, "rule-A", "proj-B")
-        promo2 = promotion.record_shadow_hit(db, "rule-A", "proj-C")
-        promo3 = promotion.record_shadow_hit(db, "rule-A", "proj-D")
-        assert promo1 is False
-        assert promo2 is False
-        assert promo3 is True
-        row = db.fetchone("SELECT project_scope FROM rules WHERE id = 'rule-A'")
-        assert row["project_scope"] == "global"
+        result = promotion.record_shadow_hit(db, "rule-A", "proj-B")
+        assert result is False
     finally:
         db.close()
 
 
 def test_promotion_skips_preference(monkeypatch, tmp_path):
+    """promotion.record_shadow_hit is now a no-op."""
     monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
     monkeypatch.setenv("NOKORI_PROMOTION_ENABLED", "1")
     cfg = Config.from_env()
     db = open_db(cfg.db_path)
     try:
         _make_rule(db, id_="pref-1", status="active", project_id="proj-A",
-                   source_type="preference", last_hit_days_ago=1)
-        promotion.record_shadow_hit(db, "pref-1", "proj-B")
-        promotion.record_shadow_hit(db, "pref-1", "proj-C")
-        promotion.record_shadow_hit(db, "pref-1", "proj-D")
-        row = db.fetchone("SELECT project_scope, shadow_hit_count FROM rules WHERE id='pref-1'")
+                   source_origin="transcript_extraction", last_hit_days_ago=1)
+        result = promotion.record_shadow_hit(db, "pref-1", "proj-B")
+        assert result is False
+        row = db.fetchone("SELECT project_scope FROM rules WHERE id='pref-1'")
         assert row["project_scope"] == "project"
-        assert row["shadow_hit_count"] == 0
+    finally:
+        db.close()
+
+
+def test_unmerge_check_restores_when_replacement_target_suppressed(monkeypatch, tmp_path):
+    monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+    cfg = Config.from_env()
+    db = open_db(cfg.db_path)
+    try:
+        now = _utcnow_iso()
+        with db.transaction() as tx:
+            tx.execute(
+                "INSERT INTO rules (id, short_id, schema_version, rule_version, "
+                "created_by_pipeline_version, runtime_policy_version, "
+                "trigger_canonical, action_instruction, "
+                "status, severity, project_scope, created_at, updated_at) "
+                "VALUES ('new-1', 'new111', 1, 1, 'v1', 'v1', 'new trigger', 'new action', "
+                "'suppressed', 'reminder', 'project', ?, ?)",
+                (now, now),
+            )
+            tx.execute(
+                "INSERT INTO rules (id, short_id, schema_version, rule_version, "
+                "created_by_pipeline_version, runtime_policy_version, "
+                "trigger_canonical, action_instruction, "
+                "status, severity, project_scope, replacement_id, archived_reason, "
+                "created_at, updated_at) "
+                "VALUES ('old-1', 'old111', 1, 1, 'v1', 'v1', 'old trigger', 'old action', "
+                "'archived', 'reminder', 'project', 'new-1', 'superseded', ?, ?)",
+                (now, now),
+            )
+        with db.transaction() as tx:
+            tx.execute(
+                "INSERT INTO maintenance_meta (key, last_run) VALUES ('unmerge_check', '2000-01-01T00:00:00Z') "
+                "ON CONFLICT(key) DO UPDATE SET last_run = excluded.last_run"
+            )
+        restored = maintenance.run_unmerge_check(db)
+        assert restored == 1
+        row = db.fetchone(
+            "SELECT status, replacement_id FROM rules WHERE id = 'old-1'"
+        )
+        assert row["status"] == "candidate"
+        assert row["replacement_id"] is None
     finally:
         db.close()
 
@@ -231,38 +261,6 @@ def test_hot_cache_returns_none_when_no_path(monkeypatch, tmp_path):
     db = open_db(cfg.db_path)
     try:
         assert hot_cache.maybe_inject({}, cfg, db) is None
-    finally:
-        db.close()
-
-
-def test_unmerge_check_restores_when_superseded_target_dormant(monkeypatch, tmp_path):
-    monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
-    cfg = Config.from_env()
-    db = open_db(cfg.db_path)
-    try:
-        now = _utcnow_iso()
-        with db.transaction() as tx:
-            tx.execute(
-                "INSERT INTO rules (id, short_id, trigger_text, action, source_type, "
-                "confidence, status, project_scope, created_at, updated_at) "
-                "VALUES ('new-1', 'new111', 'new trigger', 'new action', 'correction', "
-                "'high', 'dormant', 'project', ?, ?)",
-                (now, now),
-            )
-            tx.execute(
-                "INSERT INTO rules (id, short_id, trigger_text, action, source_type, "
-                "confidence, status, project_scope, superseded_by, created_at, updated_at) "
-                "VALUES ('old-1', 'old111', 'old trigger', 'old action', 'correction', "
-                "'high', 'merged', 'project', 'new-1', ?, ?)",
-                (now, now),
-            )
-        restored = maintenance.run_unmerge_check(db)
-        assert restored == 1
-        row = db.fetchone(
-            "SELECT status, superseded_by FROM rules WHERE id = 'old-1'"
-        )
-        assert row["status"] == "dormant"
-        assert row["superseded_by"] is None
     finally:
         db.close()
 

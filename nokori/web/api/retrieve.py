@@ -7,46 +7,70 @@ from fastapi import APIRouter
 from nokori.db import fetch_rules, fetch_shadow_rules, open_db
 from nokori.search.retrieve import retrieve_formal_and_shadow
 from nokori.web.deps import get_config
-from nokori.web.models import RetrieveRequest, RuleOut
+from nokori.web.models import RetrieveRequest
 
 router = APIRouter()
 
 
 def _scored_to_dict(sr) -> dict:
-    rule_dict = RuleOut(
-        id=sr.rule.id,
-        short_id=sr.rule.short_id,
-        trigger_text=sr.rule.trigger_text,
-        trigger_variants=sr.rule.trigger_variants,
-        trigger_variants_zh=sr.rule.trigger_variants_zh,
-        search_terms=sr.rule.search_terms,
-        behavior=sr.rule.behavior,
-        action=sr.rule.action,
-        rationale=sr.rule.rationale,
-        source_type=sr.rule.source_type,
-        confidence=sr.rule.confidence,
-        status=sr.rule.status,
-        evidence_score=sr.rule.evidence_score,
-        evidence_log=sr.rule.evidence_log,
-        hit_count=sr.rule.hit_count,
-        last_hit=sr.rule.last_hit,
-        shadow_hit_count=sr.rule.shadow_hit_count,
-        promotion_evidence=sr.rule.promotion_evidence,
-        project_scope=sr.rule.project_scope,
-        project_id=sr.rule.project_id,
-        superseded_by=sr.rule.superseded_by,
-        archived_reason=sr.rule.archived_reason,
-        created_at=sr.rule.created_at,
-        updated_at=sr.rule.updated_at,
-    ).model_dump()
+    """Convert a ScoredResult to a dict with fielded evidence and eligibility."""
+    rule = sr.rule
+
+    rule_dict = {
+        "id": rule.id,
+        "short_id": rule.short_id,
+        "schema_version": rule.schema_version,
+        "rule_version": rule.rule_version,
+        "status": rule.status,
+        "severity": rule.severity,
+        "trigger_canonical": rule.trigger_canonical,
+        "action_instruction": rule.action_instruction,
+        "project_scope": rule.project_scope,
+        "project_id": rule.project_id,
+        "quality_score": rule.quality_score,
+        "observed_usefulness_score": rule.observed_usefulness_score,
+        "false_positive_score": rule.false_positive_score,
+    }
+
+    # Fielded evidence (decision features)
+    decision_features = {
+        "trigger_idf_sum": sr.trigger_idf_sum,
+        "trigger_coverage": sr.trigger_coverage,
+        "distinct_trigger_terms": sr.distinct_trigger_terms,
+        "strong_variant_phrase_hit": sr.strong_variant_phrase_hit,
+        "weak_variant_recall_hit": sr.weak_variant_recall_hit,
+        "required_concepts_match": sr.required_concepts_match,
+        "excluded_context_hit": sr.excluded_context_hit,
+        "action_only_match": sr.action_only_match,
+        "search_only_match": sr.search_only_match,
+        "embedding_only_match": sr.embedding_only_match,
+        "matched_trigger_tokens": sorted(sr.matched_trigger_tokens),
+        "matched_variant_tokens": sorted(sr.matched_variant_tokens),
+        "matched_action_tokens": sorted(sr.matched_action_tokens),
+        "matched_search_tokens": sorted(sr.matched_search_tokens),
+    }
+    if sr.cosine is not None:
+        decision_features["embedding_cosine"] = sr.cosine
+    if sr.embedding_profile_bucket is not None:
+        decision_features["embedding_profile_bucket"] = sr.embedding_profile_bucket
+
+    # Eligibility result
+    level = sr.level  # already computed by retrieve pipeline
+    eligibility = {
+        "decision": level if level else "cold",
+        "eligible": level is not None and level != "cold",
+        "reason": sr.decision_reason,
+    }
+
     return {
         "rule": rule_dict,
         "bm25_score": sr.bm25_score,
         "cosine": sr.cosine,
         "rrf_score": sr.rrf_score,
-        "matched_tokens": list(sr.matched_tokens),
-        "has_trigger_variant_match": sr.has_trigger_variant_match,
-        "retrieval_hot": sr.retrieval_hot,
+        "ranking_utility": sr.ranking_utility,
+        "decision_reason": sr.decision_reason,
+        "decision_features": decision_features,
+        "eligibility": eligibility,
     }
 
 
@@ -72,7 +96,7 @@ def retrieve(body: RetrieveRequest):
     db = open_db(cfg.db_path)
     try:
         formal = fetch_rules(
-            db, statuses=("active", "dormant"), project_id=body.project_id
+            db, statuses=("active", "trusted"), project_id=body.project_id
         )
         shadow = (
             fetch_shadow_rules(db, project_id=body.project_id)

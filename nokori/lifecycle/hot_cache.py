@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from ..config import Config
@@ -12,6 +13,8 @@ from ..utils.transcript import is_path_allowed, resolve_transcript_path, transcr
 
 HOT_CACHE_BUDGET_CHARS = 500
 HOT_CACHE_RECENT_TURNS = 3
+# Include trusted rules that fired in the last N days
+TRUSTED_RECENT_WINDOW_DAYS = 7
 
 
 def find_previous_transcript(current: Path, cfg: Config | None = None) -> Path | None:
@@ -111,39 +114,78 @@ def _was_extracted(db: Db, path: Path) -> bool:
     return extracted.timestamp() >= mtime
 
 
+def _recent_trusted_rules_summary(db: Db) -> str | None:
+    """Build a summary of recently fired active/trusted rules from rule_fire_events."""
+    cutoff = (
+        datetime.now(timezone.utc) - timedelta(days=TRUSTED_RECENT_WINDOW_DAYS)
+    ).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+    rows = db.fetchall(
+        "SELECT DISTINCT r.id, r.trigger_canonical, r.action_instruction "
+        "FROM rule_fire_events e "
+        "JOIN rules r ON r.id = e.rule_id "
+        "WHERE r.status IN ('active', 'trusted') "
+        "AND e.created_at >= ? "
+        "ORDER BY e.created_at DESC "
+        "LIMIT 5",
+        (cutoff,),
+    )
+    if not rows:
+        return None
+
+    parts = ["[Nokori hot-cache] recently active trusted rules:"]
+    for row in rows:
+        trigger = (row["trigger_canonical"] or "").strip().replace("\n", " ")[:80]
+        action = (row["action_instruction"] or "").strip().replace("\n", " ")[:80]
+        content = f"{trigger} -> {action}" if trigger else action
+        if content:
+            parts.append(f"\n- {content}")
+    if len(parts) == 1:
+        return None
+    return "".join(parts)
+
+
 def maybe_inject(payload: dict, cfg: Config, db: Db) -> str | None:
-    """Inject tail user messages from the previous session if not yet extracted."""
+    """Inject tail user messages from the previous session if not yet extracted.
+
+    Also includes a summary of recently injected trusted rules from
+    rule_fire_events history.
+    """
     if not cfg.hot_cache_enabled:
         return None
     current = resolve_transcript_path(payload)
     if current is None:
         return None
 
+    sections: list[str] = []
+
+    # Transcript context from previous session
     previous = find_previous_transcript(current, cfg)
-    if previous is None:
-        return None
+    if previous is not None and not _was_extracted(db, previous):
+        tail = read_tail_user_turns(previous, HOT_CACHE_RECENT_TURNS)
+        if tail:
+            parts = ["[Nokori hot-cache] last messages from the previous session:"]
+            used = len(parts[0]) + 1
+            for t in tail:
+                msg = t.content.strip().replace("\n", " ")
+                if not msg:
+                    continue
+                line = f"\n- {msg[:200]}"
+                if used + len(line) > HOT_CACHE_BUDGET_CHARS:
+                    break
+                parts.append(line)
+                used += len(line)
+            if len(parts) > 1:
+                sections.append("".join(parts))
 
-    if _was_extracted(db, previous):
-        return None
+    # Recently fired trusted rules summary
+    trusted_summary = _recent_trusted_rules_summary(db)
+    if trusted_summary:
+        sections.append(trusted_summary)
 
-    tail = read_tail_user_turns(previous, HOT_CACHE_RECENT_TURNS)
-    if not tail:
+    if not sections:
         return None
-
-    parts = ["[Nokori hot-cache] last messages from the previous session:"]
-    used = len(parts[0]) + 1
-    for t in tail:
-        msg = t.content.strip().replace("\n", " ")
-        if not msg:
-            continue
-        line = f"\n- {msg[:200]}"
-        if used + len(line) > HOT_CACHE_BUDGET_CHARS:
-            break
-        parts.append(line)
-        used += len(line)
-    if len(parts) == 1:
-        return None
-    return "".join(parts)
+    return "\n\n".join(sections)
 
 
 def load_last_byte_offset(db: Db, path: Path) -> int:

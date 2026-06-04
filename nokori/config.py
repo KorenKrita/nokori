@@ -135,6 +135,84 @@ def _str_or_none_val(name: str, file_values: dict[str, str]) -> str | None:
 
 _LOG_LEVELS = frozenset({"debug", "info", "warning", "warn", "error"})
 
+# --- Per-role model configuration ---
+
+_ROLE_IDS: tuple[str, ...] = (
+    "extractor",
+    "admission_judge",
+    "rule_rewriter",
+    "final_judge",
+    "merge_planner",
+    "synthetic_eval_generator",
+    "posthoc_evaluator",
+)
+
+_DEFAULT_MAX_TOKENS: dict[str, int] = {
+    "extractor": 4000,
+    "admission_judge": 2000,
+    "rule_rewriter": 4000,
+    "final_judge": 2000,
+    "merge_planner": 3000,
+    "synthetic_eval_generator": 4000,
+    "posthoc_evaluator": 3000,
+}
+
+_DEFAULT_TIMEOUTS: dict[str, int] = {
+    "extractor": 60,
+    "admission_judge": 30,
+    "rule_rewriter": 60,
+    "final_judge": 30,
+    "merge_planner": 45,
+    "synthetic_eval_generator": 60,
+    "posthoc_evaluator": 45,
+}
+
+
+def _resolve_role_models(toml: dict, file_values: dict[str, str]) -> dict[str, str]:
+    """Resolve per-role model IDs from [models] section + env overrides."""
+    models_section = toml.get("models", {}) if toml else {}
+    result: dict[str, str] = {}
+    for role in _ROLE_IDS:
+        env_name = f"NOKORI_MODEL_{role.upper()}"
+        env_val = os.environ.get(env_name)
+        if env_val and env_val.strip():
+            result[role] = env_val.strip()
+        elif isinstance(models_section.get(role), str) and models_section[role].strip():
+            result[role] = models_section[role].strip()
+    return result
+
+
+def _resolve_role_max_tokens(toml: dict) -> dict[str, int]:
+    """Resolve per-role max_tokens from [models.limits] with defaults."""
+    limits = _get_nested(toml, ("models", "limits")) if toml else None
+    if not isinstance(limits, dict):
+        limits = {}
+    result: dict[str, int] = {}
+    for role in _ROLE_IDS:
+        key = f"{role}_max_tokens"
+        val = limits.get(key)
+        if isinstance(val, int) and val > 0:
+            result[role] = val
+        else:
+            result[role] = _DEFAULT_MAX_TOKENS[role]
+    return result
+
+
+def _resolve_role_timeouts(toml: dict) -> dict[str, int]:
+    """Resolve per-role timeouts from [models.timeouts] with defaults."""
+    timeouts = _get_nested(toml, ("models", "timeouts")) if toml else None
+    if not isinstance(timeouts, dict):
+        timeouts = {}
+    result: dict[str, int] = {}
+    for role in _ROLE_IDS:
+        key = f"{role}_timeout"
+        val = timeouts.get(key)
+        if isinstance(val, int) and val > 0:
+            result[role] = val
+        else:
+            result[role] = _DEFAULT_TIMEOUTS[role]
+    return result
+
 
 def _log_level_val(name: str, default: str, file_values: dict[str, str]) -> str:
     raw = _get(name, file_values)
@@ -216,6 +294,9 @@ class Config:
     strict: bool
     disabled: bool
     dismiss_phrase: str
+    role_models: dict[str, str]
+    role_max_tokens: dict[str, int]
+    role_timeouts: dict[str, int]
     log_level: str
 
     @classmethod
@@ -223,6 +304,10 @@ class Config:
         data_dir_raw = os.environ.get("NOKORI_DATA_DIR") or "~/.nokori"
         file_values = _resolve_file_values(data_dir_raw)
         data_dir = _expand_path(_str_val("NOKORI_DATA_DIR", "~/.nokori", file_values))
+
+        # Load raw TOML for [models] section parsing
+        config_path = data_dir / _CONFIG_FILE_NAME
+        raw_toml = _load_toml(config_path) if config_path.exists() else {}
         return cls(
             data_dir=data_dir,
             max_injection_chars=_int_val("NOKORI_MAX_INJECTION_CHARS", 1500, file_values, min_value=0),
@@ -266,6 +351,9 @@ class Config:
             strict=_bool_val("NOKORI_STRICT", False, file_values),
             disabled=_bool_val("NOKORI_DISABLED", False, file_values),
             dismiss_phrase=_str_val("NOKORI_DISMISS_PHRASE", "dismiss", file_values),
+            role_models=_resolve_role_models(raw_toml, file_values),
+            role_max_tokens=_resolve_role_max_tokens(raw_toml),
+            role_timeouts=_resolve_role_timeouts(raw_toml),
             log_level=_log_level_val("NOKORI_LOG_LEVEL", "warn", file_values),
         )
 

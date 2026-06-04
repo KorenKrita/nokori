@@ -22,11 +22,12 @@ def dashboard():
             "SELECT status, COUNT(*) AS n FROM rules GROUP BY status"
         )
         cutoff = iso_of(datetime.now(timezone.utc) - timedelta(hours=24))
-        inj_row = db.fetchone(
-            "SELECT COUNT(*) AS n FROM injections WHERE created_at >= ?", (cutoff,)
+        fire_row = db.fetchone(
+            "SELECT COUNT(*) AS n FROM rule_fire_events WHERE created_at >= ?",
+            (cutoff,),
         )
-        inj_hot = db.fetchone(
-            "SELECT COUNT(*) AS n FROM injections WHERE created_at >= ? AND level = 'hot'",
+        fire_hot = db.fetchone(
+            "SELECT COUNT(*) AS n FROM rule_fire_events WHERE created_at >= ? AND level = 'hot'",
             (cutoff,),
         )
         global_count = db.fetchone(
@@ -44,14 +45,14 @@ def dashboard():
             "rules": {
                 "total": sum(by_status.values()),
                 "active": by_status.get("active", 0),
-                "dormant": by_status.get("dormant", 0),
+                "trusted": by_status.get("trusted", 0),
                 "candidate": by_status.get("candidate", 0),
-                "merged": by_status.get("merged", 0),
+                "suppressed": by_status.get("suppressed", 0),
                 "archived": by_status.get("archived", 0),
                 "global": global_count["n"] if global_count else 0,
             },
-            "injections_24h": inj_row["n"] if inj_row else 0,
-            "injections_hot_24h": inj_hot["n"] if inj_hot else 0,
+            "fire_events_24h": fire_row["n"] if fire_row else 0,
+            "fire_events_hot_24h": fire_hot["n"] if fire_hot else 0,
             "gate_enabled": cfg.gate_enabled,
             "embed_server": {
                 "running": est["running"],

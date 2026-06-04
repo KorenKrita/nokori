@@ -1,3 +1,4 @@
+"""Test session_end posthoc job enqueue behavior (replaces old async extract defer)."""
 import json
 from unittest.mock import patch
 
@@ -7,32 +8,22 @@ from nokori.utils import sessions
 from nokori.utils.host import Host
 
 
-def test_async_extract_deferred_when_other_sessions_active(monkeypatch, tmp_path):
+def test_session_end_enqueues_posthoc_for_session(monkeypatch, tmp_path):
+    """session_end always enqueues posthoc jobs for the ending session."""
     monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
-    monkeypatch.setenv("NOKORI_EXTRACT_MODE", "async")
-    monkeypatch.setenv("NOKORI_EXTRACT_DEFER_ACTIVE", "1")
     cfg = Config.from_env()
-    sessions.register(cfg, "other-session", "proj")
 
-    transcript = tmp_path / "t.jsonl"
-    transcript.write_text('{"type":"user","message":{"content":"x"}}\n', encoding="utf-8")
-
-    spawned: list[int] = []
-
-    def fake_spawn(c):
-        spawned.append(1)
+    # Register and then end a session to verify posthoc enqueue is called
+    sessions.register(cfg, "ending-session", "proj")
 
     payload = {
         "session_id": "ending-session",
         "cwd": str(tmp_path),
-        "transcript_path": str(transcript),
     }
-    with patch.object(session_end, "_spawn_async_extract", fake_spawn):
+    with patch("nokori.hooks.session_end.enqueue_posthoc_for_session") as mock_enqueue:
         session_end.handle(payload, cfg, host=Host.CLAUDE)
 
-    assert spawned == []
-
-    sessions.end(cfg, "other-session")
-    with patch.object(session_end, "_spawn_async_extract", fake_spawn):
-        session_end.handle(payload, cfg, host=Host.CLAUDE)
-    assert spawned == [1]
+    mock_enqueue.assert_called_once()
+    # The session_id is passed to the enqueue function
+    args = mock_enqueue.call_args
+    assert args[0][1] == "ending-session"

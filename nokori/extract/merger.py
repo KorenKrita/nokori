@@ -74,31 +74,38 @@ def _persist_new(db: Db, cand: Candidate, project_id: str | None, cfg=None) -> R
     sid = short_id_for(rid, fetch_short_ids(db))
     status = _initial_status(cand)
     is_user_correction = (status == "active")
-    ev_score = 3 if is_user_correction else 0
-    ev_log = dumps_json([{"kind": "user_correction", "points": 3, "at": now}]) if is_user_correction else "[]"
+    ev_score = 3.0 if is_user_correction else 0.0
     if project_id:
         scope, pid = "project", project_id
     else:
         scope, pid = "global", None
+    severity = "reminder"
+    activation_origin = "cold_fast_lane" if is_user_correction else None
     with db.transaction() as tx:
         tx.execute(
-            "INSERT INTO rules (id, short_id, trigger_text, trigger_variants, "
-            "search_terms, behavior, action, rationale, source_type, confidence, "
-            "status, evidence_score, evidence_log, project_scope, project_id, "
-            "created_at, updated_at, "
-            "trigger_text_zh, behavior_zh, action_zh, rationale_zh, "
-            "trigger_variants_zh) "
+            "INSERT INTO rules (id, short_id, schema_version, rule_version, "
+            "created_by_pipeline_version, runtime_policy_version, "
+            "status, severity, "
+            "trigger_canonical, trigger_canonical_zh, "
+            "trigger_variants, trigger_variants_zh, search_terms, "
+            "action_instruction, action_instruction_zh, "
+            "evidence_support_score, "
+            "source_origin, activation_origin, "
+            "project_scope, project_id, "
+            "created_at, updated_at) "
             "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
-                rid, sid, cand.trigger,
+                rid, sid, 1, 1,
+                "merger_v1", "policy_v1",
+                status, severity,
+                cand.trigger, cand.trigger_text_zh,
                 dumps_json(cand.trigger_variants),
-                dumps_json(cand.search_terms),
-                cand.behavior, cand.action, cand.rationale,
-                cand.source_type, cand.confidence, status,
-                ev_score, ev_log,
-                scope, pid, now, now,
-                cand.trigger_text_zh, cand.behavior_zh, cand.action_zh, cand.rationale_zh,
                 dumps_json(cand.trigger_variants_zh),
+                dumps_json(cand.search_terms),
+                cand.action, cand.action_zh,
+                ev_score,
+                "transcript_extraction", activation_origin,
+                scope, pid, now, now,
             ),
         )
     row = db.fetchone(f"SELECT {RULE_COLUMNS} FROM rules WHERE id = ?", (rid,))
@@ -125,7 +132,7 @@ def _fetch_merge_pool(db: Db, project_id: str | None) -> list[Rule]:
     if project_id:
         rows = db.fetchall(
             f"SELECT {RULE_COLUMNS} FROM rules "
-            "WHERE status IN ('candidate','active','dormant') "
+            "WHERE status IN ('candidate','active','trusted') "
             "AND (project_scope = 'global' OR project_id = ?) "
             "ORDER BY updated_at DESC",
             (project_id,),
@@ -133,7 +140,7 @@ def _fetch_merge_pool(db: Db, project_id: str | None) -> list[Rule]:
     else:
         rows = db.fetchall(
             f"SELECT {RULE_COLUMNS} FROM rules "
-            "WHERE status IN ('candidate','active','dormant') "
+            "WHERE status IN ('candidate','active','trusted') "
             "AND project_scope = 'global' "
             "ORDER BY updated_at DESC",
         )
@@ -146,7 +153,7 @@ def _recent_neighbors(
     if project_id:
         rows = db.fetchall(
             f"SELECT {RULE_COLUMNS} FROM rules "
-            "WHERE status IN ('candidate','active','dormant') "
+            "WHERE status IN ('candidate','active','trusted') "
             "AND (project_scope = 'global' OR project_id = ?) "
             "ORDER BY updated_at DESC LIMIT ?",
             (project_id, limit),
@@ -154,7 +161,7 @@ def _recent_neighbors(
     else:
         rows = db.fetchall(
             f"SELECT {RULE_COLUMNS} FROM rules "
-            "WHERE status IN ('candidate','active','dormant') "
+            "WHERE status IN ('candidate','active','trusted') "
             "AND project_scope = 'global' "
             "ORDER BY updated_at DESC LIMIT ?",
             (limit,),
@@ -207,10 +214,9 @@ def _format_existing(rules: list[Rule]) -> str:
     parts = []
     for r in rules:
         parts.append(
-            f"- id={r.short_id}\n  trigger: {r.trigger_text}\n"
-            f"  action: {r.action}\n"
-            f"  behavior: {r.behavior or '-'}\n"
-            f"  source_type: {r.source_type}\n  confidence: {r.confidence}\n"
+            f"- id={r.short_id}\n  trigger: {r.trigger_canonical}\n"
+            f"  action: {r.action_instruction}\n"
+            f"  severity: {r.severity}\n"
             f"  status: {r.status}"
         )
     return "\n".join(parts)
@@ -245,11 +251,13 @@ def _ask_llm(cand: Candidate, neighbors: list[Rule], llm: LLMAdapter) -> dict | 
     return None
 
 
-def _activate(db: Db, rule_id: str, confidence: str, cfg=None) -> None:
+def _activate(db: Db, rule_id: str, confidence: str = "high", cfg=None) -> None:
+    now = now_iso()
     with db.transaction() as tx:
         tx.execute(
-            "UPDATE rules SET status = 'active', confidence = ?, updated_at = ? WHERE id = ?",
-            (confidence, now_iso(), rule_id),
+            "UPDATE rules SET status = 'active', activation_origin = 'cold_fast_lane', "
+            "updated_at = ? WHERE id = ?",
+            (now, rule_id),
         )
     if cfg:
         row = db.fetchone(f"SELECT {RULE_COLUMNS} FROM rules WHERE id = ?", (rule_id,))
@@ -260,7 +268,8 @@ def _activate(db: Db, rule_id: str, confidence: str, cfg=None) -> None:
 def _supersede(db: Db, old_id: str, new_id: str) -> None:
     with db.transaction() as tx:
         tx.execute(
-            "UPDATE rules SET superseded_by = ?, status = 'merged', updated_at = ? "
+            "UPDATE rules SET replacement_id = ?, status = 'archived', "
+            "archived_reason = 'superseded', updated_at = ? "
             "WHERE id = ?",
             (new_id, now_iso(), old_id),
         )
@@ -325,17 +334,17 @@ def merge_candidate(
         if existing.status == "candidate":
             if cand.confidence == "high" and cand.source_type == "correction":
                 add_evidence(db, existing.id, "user_correction", 3)
-                _activate(db, existing.id, "high", cfg)
+                _activate(db, existing.id, cfg=cfg)
                 activated += 1
             else:
-                score, log_list = add_evidence(db, existing.id, "same_extraction", 1)
+                score, _ = add_evidence(db, existing.id, "same_extraction", 1)
                 check_rule = dataclasses.replace(
-                    existing, evidence_score=score, evidence_log=log_list,
+                    existing, evidence_support_score=score,
                 )
                 if should_activate_pure_ai(check_rule):
-                    _activate(db, existing.id, check_rule.confidence, cfg)
+                    _activate(db, existing.id, cfg=cfg)
                     activated += 1
-        elif existing.status in ("active", "dormant"):
+        elif existing.status in ("active", "trusted"):
             add_evidence(db, existing.id, "same_extraction", 1)
 
     # Pass 2: B/D — may supersede onto anchor_id from pass 1 regardless of LLM order.

@@ -13,17 +13,22 @@ def _utcnow_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
-def _insert_rule(db, *, id_, trigger, project_id="other-proj", short_id=None):
+def _insert_rule(db, *, id_, trigger, project_id="other-proj", short_id=None,
+                 status="active"):
     now = _utcnow_iso()
     sid = short_id or id_.replace("-", "")[:6]
     with db.transaction() as tx:
         tx.execute(
-            "INSERT INTO rules (id, short_id, trigger_text, action, source_type, "
-            "confidence, status, project_scope, project_id, created_at, updated_at) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO rules (id, short_id, schema_version, rule_version, "
+            "created_by_pipeline_version, runtime_policy_version, "
+            "trigger_canonical, action_instruction, "
+            "source_origin, status, severity, "
+            "project_scope, project_id, created_at, updated_at) "
+            "VALUES (?,?,1,1,'v1','v1',?,?,?,?,?,?,?,?,?)",
             (
                 id_, sid, trigger, "action text",
-                "correction", "high", "active", "project", project_id,
+                "transcript_extraction", status, "reminder",
+                "project", project_id,
                 now, now,
             ),
         )
@@ -56,8 +61,9 @@ def test_retrieve_formal_and_shadow_splits_pools(monkeypatch, tmp_path):
             db,
             id_="rule-shadow",
             trigger="never git force push remote branch",
-            project_id="other-proj",
+            project_id="my-proj",
             short_id="shad01",
+            status="candidate",
         )
         formal_rules = fetch_rules(
             db, statuses=("active",), project_id="my-proj"
@@ -122,17 +128,20 @@ def test_auto_enabled_uses_retrieval_pool_size(monkeypatch, tmp_path):
         now = _utcnow_iso()
         with db.transaction() as tx:
             tx.execute(
-                "INSERT INTO rules (id, short_id, trigger_text, action, source_type, "
-                "confidence, status, project_scope, project_id, created_at, updated_at) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                "INSERT INTO rules (id, short_id, schema_version, rule_version, "
+                "created_by_pipeline_version, runtime_policy_version, "
+                "trigger_canonical, action_instruction, "
+                "source_origin, status, severity, "
+                "project_scope, project_id, created_at, updated_at) "
+                "VALUES (?,?,1,1,'v1','v1',?,?,?,?,?,?,?,?,?)",
                 (
                     "global-0000-4000-8000-000000000001",
                     "glob01",
                     "global rule trigger tokens",
                     "act",
-                    "correction",
-                    "high",
+                    "transcript_extraction",
                     "active",
+                    "reminder",
                     "global",
                     None,
                     now,
@@ -179,7 +188,7 @@ def test_formal_shadow_pool_size_for_embed(monkeypatch, tmp_path):
             project_id="my-proj",
             short_id="loc001",
         )
-        formal = fetch_rules(db, statuses=("active", "dormant"), project_id="my-proj")
+        formal = fetch_rules(db, statuses=("active", "trusted"), project_id="my-proj")
         shadow = fetch_shadow_rules(db, project_id="my-proj")
         checked: list[int] = []
 

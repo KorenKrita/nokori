@@ -6,8 +6,6 @@ from dataclasses import replace
 
 from ..models import ScoredResult
 
-SINGLE_HOT_MIN_RRF = 0.01
-SINGLE_HOT_MIN_MATCHED_TOKENS = 3
 RRF_K = 60
 
 
@@ -15,6 +13,7 @@ def rrf_fuse(
     bm25_results: Sequence[ScoredResult],
     embed_results: Sequence[ScoredResult],
 ) -> list[ScoredResult]:
+    """Reciprocal Rank Fusion of BM25 and embedding results."""
     scores: dict[str, float] = defaultdict(float)
     rule_map: dict[str, ScoredResult] = {}
 
@@ -26,8 +25,8 @@ def rrf_fuse(
         scores[r.rule.id] += 1.0 / (RRF_K + rank + 1)
         if r.rule.id not in rule_map:
             rule_map[r.rule.id] = r
-        elif r.cosine is not None:
-            rule_map[r.rule.id] = replace(rule_map[r.rule.id], cosine=r.cosine)
+        else:
+            rule_map[r.rule.id] = merge_scored_fields(rule_map[r.rule.id], r)
 
     fused: list[ScoredResult] = []
     for rule_id, score in sorted(scores.items(), key=lambda kv: -kv[1]):
@@ -36,46 +35,23 @@ def rrf_fuse(
     return fused
 
 
-def meets_min_evidence(r: ScoredResult) -> bool:
-    if len(r.matched_tokens) >= 2:
-        return True
-    if len(r.matched_tokens) >= 1 and r.has_trigger_variant_match:
-        return True
-    if r.cosine is not None and r.cosine >= 0.55:
-        return True
-    return False
+def merge_scored_fields(
+    bm25_result: ScoredResult, embed_result: ScoredResult
+) -> ScoredResult:
+    """Combine fielded evidence from BM25 and embedding sources into one ScoredResult.
 
-
-def tier_results(
-    results: Sequence[ScoredResult],
-) -> tuple[list[ScoredResult], list[ScoredResult]]:
-    """Split results into HOT and WARM tiers (see README Search engine section)."""
-    if not results:
-        return [], []
-    top5 = list(results[:5])
-    hot: list[ScoredResult] = []
-    warm: list[ScoredResult] = []
-
-    top1 = top5[0]
-    if len(top5) == 1:
-        top1_dominant = (
-            top1.rrf_score > SINGLE_HOT_MIN_RRF
-            and len(top1.matched_tokens) >= SINGLE_HOT_MIN_MATCHED_TOKENS
-        )
-    else:
-        top1_dominant = (
-            top1.rrf_score - top5[1].rrf_score > top5[1].rrf_score * 0.3
-        )
-
-    for i, r in enumerate(top5):
-        if not meets_min_evidence(r):
-            continue
-        if i == 0 and top1_dominant:
-            if r.rule.status == "active":
-                hot.append(r)
-                continue
-            if r.rule.status == "dormant":
-                warm.append(replace(r, retrieval_hot=True))
-                continue
-        warm.append(r)
-    return hot, warm
+    BM25 provides token-level field matches; embedding provides cosine and
+    embedding_only_match. The merged result preserves all fielded data from BM25
+    and adds embedding evidence.
+    """
+    embedding_only = (
+        embed_result.cosine is not None
+        and not bm25_result.matched_trigger_tokens
+        and not bm25_result.matched_variant_tokens
+    )
+    return replace(
+        bm25_result,
+        cosine=embed_result.cosine,
+        embedding_only_match=embedding_only,
+        embedding_profile_bucket=embed_result.embedding_profile_bucket,
+    )
