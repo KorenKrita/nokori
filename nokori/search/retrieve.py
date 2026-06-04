@@ -185,6 +185,7 @@ def retrieve_and_tier(
     top_k: int = 10,
     interaction: InteractionKind = "cli",
     pool_size: int | None = None,
+    background_idf_rules: Sequence[Rule] | None = None,
 ) -> RetrievalResult:
     """BM25 + optional embedding RRF, then applicability + selection tiering.
 
@@ -232,7 +233,9 @@ def retrieve_and_tier(
     fused = ranker.rrf_fuse(bm25_results, embed_results)
 
     # Applicability gate: compile v6 matchers and apply the runtime policy.
-    idf_stats = build_idf_stats(r for r in rules if r.status in ("active", "trusted"))
+    # For shadow scoring, use the formal (active/trusted) pool's IDF stats (spec 9.3)
+    idf_pool = background_idf_rules if background_idf_rules is not None else rules
+    idf_stats = build_idf_stats(r for r in idf_pool if r.status in ("active", "trusted"))
     store_idf_stats(db, idf_stats)
     eligible = [
         applied
@@ -280,6 +283,7 @@ def retrieve_formal_and_shadow(
         interaction=interaction,
         pool_size=effective_pool,
     )
+    # Spec section 9.3: shadow scoring uses the same active/trusted background pool
     shadow_result = retrieve_and_tier(
         prompt,
         shadow_only,
@@ -288,5 +292,6 @@ def retrieve_formal_and_shadow(
         top_k=10,
         interaction=interaction,
         pool_size=effective_pool,
+        background_idf_rules=formal_rules,
     )
     return formal_result, shadow_result.hot, shadow_result.warm
