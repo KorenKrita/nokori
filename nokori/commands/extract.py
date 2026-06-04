@@ -5,7 +5,7 @@ import hashlib
 import os
 from pathlib import Path
 
-from ..cold.jobs import enqueue_transcript_ingest, get_pending_ingest_jobs, expire_stale_ingest_jobs
+from ..cold.jobs import enqueue_transcript_ingest, expire_stale_ingest_jobs
 from ..cold.pipeline import run_cold_pipeline
 from ..cold.roles import PROMPT_VERSIONS
 from ..config import Config
@@ -133,6 +133,8 @@ def _process_path(path: Path, project_id: str | None, cfg: Config,
                     cold_llm,
                     transcript_ref=transcript_ref,
                     extractor_output=extractor_output,
+                    role_models=cfg.role_models,
+                    default_model=cfg.llm_model,
                 )
                 if result.rule_id is not None:
                     rules_created += 1

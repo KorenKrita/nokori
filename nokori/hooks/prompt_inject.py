@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from ..config import Config
-from ..db import Db, fetch_rules, fetch_shadow_rules, log_injections_batch
+from ..db import Db, fetch_rules, fetch_shadow_rules
 from ..events.fire import create_fire_event
 from ..events.shadow import (
     compute_context_fingerprint,
@@ -13,12 +13,9 @@ from ..events.shadow import (
 )
 from ..gate.blocker import format_injection
 from ..gate.marker import prompt_hash
-from ..runtime.applicability import evaluate_applicability
-from ..runtime.selection import select_injection
 from ..search.retrieve import retrieve_formal_and_shadow
 from ..utils.logging import get_logger
 from ..utils.prompt_text import normalize_prompt_for_hash
-from ..utils.time import now_iso
 
 log = get_logger("nokori.hooks.prompt_inject")
 
@@ -84,6 +81,9 @@ def _record_fire_events(
                 prompt_hash=ph,
                 level=level,
                 decision_features=_build_decision_features(r),
+                idf_pool_version=getattr(r, "trigger_idf_pool_version", None),
+                embedding_profile_version=r.embedding_profile_version,
+                bounded_window_ref=f"session:{session_id}:prompt:{ph}",
             )
         except Exception as e:
             log.info("fire event creation failed rule=%s: %s", r.rule.id, e)
@@ -116,6 +116,8 @@ def _record_shadow_events(
                 prompt_hash=ph,
                 matched_level="hot" if r.strong_variant_phrase_hit else "warm",
                 decision_features=_build_decision_features(r),
+                idf_pool_version=r.trigger_idf_pool_version,
+                embedding_profile_version=r.embedding_profile_version,
                 context_fingerprint=fp,
             )
         except Exception as e:
@@ -168,10 +170,6 @@ def inject_for_prompt(
     text, rendered_entries = format_injection(
         hot, warm, max_chars=cfg.max_injection_chars, dismiss_phrase=cfg.dismiss_phrase
     )
-
-    if text and record_injections:
-        now = now_iso()
-        log_injections_batch(db, session_id, ph, rendered_entries, now)
 
     return PromptInjectOutcome(
         hot=hot,

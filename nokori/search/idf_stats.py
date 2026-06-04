@@ -194,9 +194,11 @@ def _trigger_tokens_for_rule(rule) -> set[str]:
     if rule.trigger_canonical_zh:
         tokens.update(tokenize(rule.trigger_canonical_zh))
     for v in rule.trigger_variants:
-        tokens.update(tokenize(v))
+        text = v.get("text") if isinstance(v, dict) else v
+        tokens.update(tokenize(str(text or "")))
     for v in rule.trigger_variants_zh:
-        tokens.update(tokenize(v))
+        text = v.get("text") if isinstance(v, dict) else v
+        tokens.update(tokenize(str(text or "")))
     return tokens
 
 
@@ -285,6 +287,33 @@ def compute_trigger_idf_sum(tokens: list[str], idf_stats: IdfPoolStats) -> float
         if df_t > 0:
             total += math.log(1 + (n - df_t + 0.5) / (df_t + 0.5))
     return total
+
+
+def store_idf_stats(db, idf_stats: IdfPoolStats) -> None:
+    """Persist a built IDF pool snapshot for event auditability."""
+    from ..db import dumps_json
+
+    with db.transaction() as tx:
+        tx.execute(
+            "INSERT OR REPLACE INTO trigger_idf_stats "
+            "(pool_version, rule_pool_size, eligible_rule_set_hash, "
+            "tokenizer_version, matcher_compiler_version, "
+            "generic_token_policy_version, concept_compiler_version, "
+            "df_by_token, dynamic_threshold, built_at) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (
+                idf_stats.pool_version,
+                idf_stats.rule_pool_size,
+                idf_stats.eligible_rule_set_hash,
+                idf_stats.tokenizer_version,
+                idf_stats.matcher_compiler_version,
+                idf_stats.generic_token_policy_version,
+                idf_stats.concept_compiler_version,
+                dumps_json(idf_stats.df_by_token),
+                idf_stats.dynamic_threshold,
+                idf_stats.built_at,
+            ),
+        )
 
 
 def compute_shadow_idf(token: str, idf_stats: IdfPoolStats) -> float:

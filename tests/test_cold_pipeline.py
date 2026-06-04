@@ -18,7 +18,6 @@ Covers:
 from __future__ import annotations
 
 import json
-import time
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -27,7 +26,6 @@ import pytest
 
 from nokori.cold.jobs import (
     CIRCUIT_BREAKER_THRESHOLD,
-    TRANSCRIPT_INGEST_TTL_HOURS,
     enqueue_job,
     enqueue_transcript_ingest,
     expire_stale_ingest_jobs,
@@ -39,11 +37,9 @@ from nokori.cold.jobs import (
 )
 from nokori.cold.pipeline import (
     PIPELINE_VERSION,
-    ColdPipelineResult,
     run_cold_pipeline,
 )
-from nokori.cold.roles import PROMPT_VERSIONS
-from nokori.db import Db, open_db
+from nokori.db import SCHEMA_VERSION, Db, open_db
 from nokori.policy import COLD_FAST_LANE, RUNTIME_POLICY_VERSION
 
 
@@ -709,4 +705,4 @@ class TestVersionFieldsStored:
         assert row["created_by_pipeline_version"] == PIPELINE_VERSION
         assert row["runtime_policy_version"] == RUNTIME_POLICY_VERSION
         assert row["rule_version"] == 1
-        assert row["schema_version"] == 1
+        assert row["schema_version"] == SCHEMA_VERSION

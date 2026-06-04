@@ -23,6 +23,7 @@ def prompt_hash(prompt: str) -> str:
 class MarkerRule:
     short_id: str
     action: str
+    trigger: str = ""
     source_type: str = "transcript_extraction"
     rationale: str | None = None
 

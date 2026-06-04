@@ -75,6 +75,7 @@ def _update_gate_marker(
                 MarkerRule(
                     short_id=r.rule.short_id,
                     action=r.rule.action_instruction,
+                    trigger=r.rule.trigger_canonical,
                     source_type=r.rule.source_origin,
                 )
                 for r in gate_rules

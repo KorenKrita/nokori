@@ -32,11 +32,16 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
             updates.append(("severity", args.severity))
         if args.status is not None:
             new_status = args.status
+            if new_status in {"active", "trusted", "suppressed"}:
+                raise NokoriError(
+                    "manual lifecycle status changes are disabled in v6; "
+                    "use autonomous promotion/suppression or archive the rule"
+                )
             allowed = {
-                "candidate": {"active", "archived"},
-                "active": {"trusted", "suppressed", "archived"},
-                "trusted": {"active", "suppressed", "archived"},
-                "suppressed": {"active", "archived"},
+                "candidate": {"archived"},
+                "active": {"archived"},
+                "trusted": {"archived"},
+                "suppressed": {"archived"},
                 "archived": set(),
             }
             if new_status not in allowed.get(rule.status, set()):

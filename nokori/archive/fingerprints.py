@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import hashlib
+import re
 import uuid
 
-from ..db import Db, dumps_json, loads_json
+from ..db import Db, loads_json
 
 _STRENGTH_ORDER = ("replacement", "system", "user")
 
@@ -54,9 +55,9 @@ def create_archived_fingerprint(
     blocked_trigger_area = rule.trigger_canonical
     blocked_action_area = rule.action_instruction
 
-    # user archive: can be overridden only with explicit scope change evidence
-    # system/replacement: can be overridden
-    can_be_overridden = 1 if strength in ("system", "replacement") else 1
+    # User/system vetoes can be overridden only with explicit changed-scope
+    # evidence; replacement fingerprints block exact duplicates only.
+    can_be_overridden = 1 if strength in ("user", "system") else 0
 
     fp_id = str(uuid.uuid4())
     now = _now_iso()
@@ -100,17 +101,37 @@ def check_fingerprint_block(
     """
     signature = compute_signature(trigger_canonical, action_instruction, domain_tags)
 
-    row = db.fetchone(
+    exact_row = db.fetchone(
         "SELECT id, signature, scope_summary, blocked_trigger_area, "
         "blocked_action_area, archive_strength, "
         "can_be_overridden_by_changed_scope, rule_id, created_at "
         "FROM archived_fingerprints WHERE signature = ?",
         (signature,),
     )
+    if exact_row is not None:
+        return _fingerprint_decision(
+            exact_row,
+            scope_change_evidence=scope_change_evidence,
+            exact_match=True,
+        )
+
+    row = _find_related_fingerprint(db, trigger_canonical, action_instruction)
     if row is None:
         return None
+    return _fingerprint_decision(
+        row,
+        scope_change_evidence=scope_change_evidence,
+        exact_match=False,
+    )
 
+
+def _fingerprint_decision(row, *, scope_change_evidence: str | None, exact_match: bool):
     strength = row["archive_strength"]
+    if strength == "replacement" and not exact_match:
+        return None
+
+    if scope_change_evidence and row["can_be_overridden_by_changed_scope"]:
+        return None
 
     if strength == "user" and not scope_change_evidence:
         return {
@@ -149,6 +170,41 @@ def check_fingerprint_block(
         }
 
     return None
+
+
+def _find_related_fingerprint(
+    db: Db, trigger_canonical: str, action_instruction: str
+):
+    new_tokens = _content_tokens(f"{trigger_canonical} {action_instruction}")
+    if not new_tokens:
+        return None
+    rows = db.fetchall(
+        "SELECT id, signature, scope_summary, blocked_trigger_area, "
+        "blocked_action_area, archive_strength, "
+        "can_be_overridden_by_changed_scope, rule_id, created_at "
+        "FROM archived_fingerprints "
+        "WHERE archive_strength IN ('user','system')",
+    )
+    best = None
+    best_score = 0.0
+    for row in rows:
+        old_tokens = _content_tokens(
+            f"{row['blocked_trigger_area']} {row['blocked_action_area']}"
+        )
+        if not old_tokens:
+            continue
+        overlap = len(new_tokens & old_tokens) / len(old_tokens)
+        containment = len(new_tokens & old_tokens) / len(new_tokens)
+        score = max(overlap, containment)
+        if score > best_score:
+            best = row
+            best_score = score
+    return best if best_score >= 0.75 else None
+
+
+def _content_tokens(text: str) -> set[str]:
+    stop = {"the", "and", "for", "with", "before", "after", "rule", "use"}
+    return {t for t in re.findall(r"[a-z0-9_+-]{3,}", text.lower()) if t not in stop}
 
 
 def is_narrower_scope(

@@ -164,10 +164,13 @@ def select_injection(
     shadow_matches: list[ScoredResult] = []
     selected_tokens: list[frozenset[str]] = []
     chars_used = 0
+    has_runtime_levels = any(sr.level is not None for _, sr in scored_with_utility)
 
     # --- HOT selection (default max 1, second allowed under strict conditions) ---
     hot_max = HOT_MAX_DEFAULT
     for _initial_utility, sr in scored_with_utility:
+        if has_runtime_levels and sr.level not in ("hot", "gate"):
+            continue
         if len(hot) >= hot_max:
             break
         # Recompute with MMR against already-selected
@@ -181,6 +184,8 @@ def select_injection(
     if len(hot) == 1 and len(scored_with_utility) > 1:
         for _initial_utility, sr in scored_with_utility:
             if sr is hot[0]:
+                continue
+            if has_runtime_levels and sr.level not in ("hot", "gate"):
                 continue
             u = compute_utility(sr, {}, selected_tokens_list=selected_tokens)
             if u <= 0:
@@ -197,6 +202,9 @@ def select_injection(
 
     for _initial_utility, sr in scored_with_utility:
         if id(sr) in hot_set:
+            continue
+        if has_runtime_levels and sr.level not in ("warm", "hot", "gate"):
+            shadow_matches.append(sr)
             continue
         if len(warm) >= warm_hard_max:
             break

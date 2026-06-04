@@ -4,7 +4,37 @@ import sys
 import time
 from datetime import datetime, timezone
 
-import pytest
+def _set_rule_lifecycle(
+    tmp_path,
+    short_id: str,
+    *,
+    status: str,
+    severity: str | None = None,
+    observed: bool = False,
+):
+    from nokori.db import open_db
+
+    db = open_db(tmp_path / "rules.db")
+    try:
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace(
+            "+00:00", "Z"
+        )
+        updates = ["status = ?", "updated_at = ?"]
+        params = [status, now]
+        if severity is not None:
+            updates.append("severity = ?")
+            params.append(severity)
+        if observed:
+            updates.append("first_observed_useful_at = ?")
+            params.append(now)
+        params.append(short_id)
+        with db.transaction() as tx:
+            tx.execute(
+                f"UPDATE rules SET {', '.join(updates)} WHERE short_id = ?",
+                tuple(params),
+            )
+    finally:
+        db.close()
 
 
 def _run(*args, env_extra=None, stdin: str = ""):
@@ -56,10 +86,14 @@ def _add_rule(
 
 def _add_high_active(tmp_path, trigger, action, variants=None):
     short = _add_rule(tmp_path, trigger, action, variants=variants)
-    # Promote to trusted — gate now requires trusted + gate_eligible
-    r = _run("edit", short, "--status", "trusted",
-             env_extra={"NOKORI_DATA_DIR": str(tmp_path)})
-    assert r.returncode == 0, r.stderr
+    # v6 lifecycle promotion is autonomous; tests seed trusted fixtures directly.
+    _set_rule_lifecycle(
+        tmp_path,
+        short,
+        status="trusted",
+        severity="gate_eligible",
+        observed=True,
+    )
     return short
 
 
@@ -233,6 +267,20 @@ def test_hook_without_cwd_injects_global_rules_only(tmp_path):
         "git push --force",
         env_extra=env,
     ).stdout.split()[1]
+    _set_rule_lifecycle(
+        tmp_path,
+        proj_short,
+        status="active",
+        severity="reminder",
+        observed=True,
+    )
+    _set_rule_lifecycle(
+        tmp_path,
+        global_short,
+        status="active",
+        severity="reminder",
+        observed=True,
+    )
 
     r = _run(
         "hook",
@@ -261,8 +309,13 @@ def test_solution_hot_injects_without_gate(monkeypatch, tmp_path):
         variants=["git push --force"],
     )
     env_extra = {"NOKORI_DATA_DIR": str(tmp_path)}
-    r_act = _run("edit", short, "--status", "active", env_extra=env_extra)
-    assert r_act.returncode == 0, r_act.stderr
+    _set_rule_lifecycle(
+        tmp_path,
+        short,
+        status="active",
+        severity="reminder",
+        observed=True,
+    )
     sess = "s-solution-no-gate"
     r = _run(
         "hook",

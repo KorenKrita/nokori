@@ -61,9 +61,8 @@ If you hit English abbreviations on a first read, skim this table first; the key
 | **extract** | Use an LLM to **extract** candidate rules from a transcript (cold path, not urgent) |
 | **shadow pool** | Rules from other projects: used only to tally "should this go global"; **not injected into your current chat** |
 | **promotion** | After a project rule is validated by several other projects, it is promoted to **global** (visible everywhere) |
-| **candidate / active / dormant** | Pending confirmation → in use → dormant after long disuse |
-| **merged / archived** | Superseded by a newer rule / retired by you or the system |
-| **supersede** | A new rule replaces an old one (old status becomes `merged`) |
+| **candidate / active / trusted / suppressed / archived** | v6 lifecycle: observed candidates, injectable active/trusted rules, shadow-only suppressed rules, terminal archives |
+| **lineage / replacement** | Replacement history is stored as lineage/tombstone data, not a runtime `merged` state |
 | **OpenAI-compatible** | Point the API at `.../v1` to use Ollama, LM Studio, OpenRouter, etc. |
 
 ---
@@ -459,9 +458,9 @@ The LLM returns one relation letter `A`–`E` per candidate, mapping to SAME / B
 
 | Decision | Behavior |
 |----------|----------|
-| **SAME (A)** + existing `candidate` | Add evidence; high correction activates immediately, otherwise activates per the evidence rules |
-| **SAME (A)** + existing `active` / `dormant` | **No new rule**; record `add_evidence(..., "same_extraction", 1)` on the existing row, full history kept |
-| **BROADER / CONTRADICTS (B/D)** | Insert new rule and `supersede` the old one; if this round already judged another candidate **A**, `supersede` to A's rule instead, no second active insert |
+| Existing overlap | The merge planner proposes relation/safety/quality, then deterministic merge policy decides keep_both / merge_into_existing / replace_existing / suppress_existing / reject_new / split_required |
+| Archived fingerprint conflict | Equivalent or broader future rules are blocked unless explicit changed-scope evidence allows a narrower rule |
+| Unsafe or low-confidence merge | Conservative keep_both or reject_new; trusted replacement requires the higher v6 bar |
 | **NARROWER (C)** | Insert new rule, coexisting with the existing one; even if the same round also has **SAME (A)**, this candidate is still inserted |
 | **UNRELATED (E)** | Insert a new `candidate`, independent of its neighbors |
 | No strong relation | Insert a new `candidate` |
@@ -481,37 +480,32 @@ Every rule lives in one SQLite file, `rules.db`, created automatically on first 
 
 ## Rule lifecycle
 
-Every rule flows through a state machine. The status names stay English (meanings in the [Glossary](#glossary)); this table is for people who want to fine-tune.
+Every rule flows through the v6 autonomous state machine. Manual commands can create or archive rules, but they do **not** promote, trust, or suppress rules directly.
 
 ```
-candidate → active → dormant → may reactivate or archived
-              ↘ merged (superseded by a newer rule)
+candidate → active → trusted
+      │        │        │
+      └────────┴────────┴→ suppressed → candidate (only by recovery automation)
+                         └→ archived (terminal)
 ```
 
 | Status | In reminders? | Gated? | How it got here |
 |--------|---------------|--------|-----------------|
-| `candidate` | No | No | Auto-extracted, moderate confidence, observed for a while first |
-| `active` | Yes | Maybe, when HOT and the type matches | Your manual high correction, or enough evidence accrued to auto-promote |
-| `dormant` | Yes, but at most WARM | No | 30 days without a "strong" hit (see `last_hit`) |
-| `merged` | No | No | Superseded by a newer rule |
-| `archived` | No | No | You dismissed it, or a candidate sat too long and got cleaned up |
+| `candidate` | No; shadow/evidence only | No | `nokori add` or cold extraction creates a structured v6 candidate |
+| `active` | Yes, WARM until usefulness is observed; HOT only with strong evidence/history | No direct gate unless later trusted | Autonomous cold fast lane or shadow/posthoc promotion |
+| `trusted` | Yes | Maybe, only when `severity=gate_eligible` and runtime evidence passes | Autonomous lifecycle after observed usefulness |
+| `suppressed` | No; shadow recovery only | No | Autonomous false-positive/harm suppression |
+| `archived` | No | No | User dismiss/archive or terminal replacement/veto |
 
-### How a rule turns active
+### How a rule turns active/trusted
 
-Two paths:
+- **Manual `nokori add` always creates a `candidate`** with v6 structured trigger concepts/groups. Even `--confidence high --source-type correction` does not bypass the lifecycle.
+- **Cold-path promotion** requires matcher compilation, archived-fingerprint checks, merge policy, synthetic evaluation, and cold-fast-lane thresholds.
+- **Trusted/gate-capable rules** require autonomous posthoc/shadow evidence; `nokori edit --status active|trusted|suppressed` is intentionally rejected.
 
-- **Manual `nokori add`**, or an **extract merge that hit SAME**: a `high` + `correction` candidate goes straight to `active`, carrying an initial `user_correction` evidence
-- **Evidence-based activation**: `evidence_score >= 2` with evidence spanning `>= 2` active days (including cross-project `shadow_hot`) is required to promote to active
+### Runtime evidence and posthoc
 
-### last_hit and hit_count
-
-`last_hit` is what the dormant scan reads (if the field is missing, `created_at` stands in). Two situations refresh it: a formal pool HOT/WARM injection that was **actually written to context**; and a dormant rule that hits the retrieval threshold and reactivates this turn.
-
-`hit_count` increments in exactly two places: a HOT injection, and the moment a dormant rule's retrieval reaches the HOT tier and it reactivates this turn.
-
-### Dormant reactivation
-
-What happens when a dormant rule's retrieval score spikes to the HOT tier this turn? This turn it still injects as WARM (no gate firing), but the DB flips it back to `status=active` and refreshes `last_hit` **this turn**. From the **next turn** on it's a normal active rule, eligible for HOT and able to fire the gate (provided the type is correction / anti_pattern). This matches the `UserPromptSubmit` hook's behavior.
+The hot path compiles v6 trigger data, checks required concepts/exclusions, applies dynamic IDF trigger evidence, records complete fire events, and enqueues posthoc evaluation after session end. Active rules without observed usefulness inject at most WARM; trusted `gate_eligible` rules can create a gate marker, and PreToolUse re-checks inspectable tool input before blocking.
 
 ### Project ID
 
@@ -566,17 +560,17 @@ SessionStart looks for the "previous transcript" in two steps:
 1. **Prefer** the previous/current pointers SessionEnd wrote into `{data_dir}/transcript_index/`. That points at the **last session that ended normally in this directory**, not necessarily the older `*.jsonl` with the largest mtime.
 2. **Fallback**: in the same directory, the newest `*.jsonl` whose mtime is strictly before the current file (heuristic, scans at most 50 files).
 
-If the previous session hasn't been extracted yet, it injects the last 3 user messages from the **tail** of the file (500 chars, in a budget separate from the 1500-char rule budget). **dormant pseudo-HOT, shadow counts, and HOT `hit_count`** are written to the DB during **UserPromptSubmit** for that turn, not deferred to the next SessionStart.
+If the previous session hasn't been extracted yet, it injects the last 3 user messages from the **tail** of the file (500 chars, in a budget separate from the 1500-char rule budget). Fire/shadow events are written during **UserPromptSubmit**; posthoc labels are enqueued at SessionEnd and processed later by `nokori maintain`.
 
-**Shadow hits and candidate activation**: a cross-project shadow HOT records `add_evidence(..., shadow_hot, 1)`. If that rule is still a `candidate` in its home project, shadow hits accumulated over multiple days can count toward automatic activation (`evidence_score >= 2` across `>= 2` active days). Shadow-pool rules are never injected into the current chat, but their hits still contribute activation evidence.
+**Shadow hits and candidate/suppressed lifecycle**: shadow matches are never injected into the current chat. They are recorded with context fingerprints and later labeled/evaluated so the autonomous lifecycle can promote candidates or recover suppressed rules without manual status edits.
 
 ### Maintenance
 
 Maintenance runs from `SessionStart` on its configured intervals:
 
-- **Dormant scan** (every 7 days): an active rule with no hit for 30 days drops to dormant
-- **Candidate cleanup** (at most once every 30 days): delete ordinary candidates whose `created_at` reached **20 calendar days**, and `anti_pattern` candidates that reached **40 days** (by calendar date, not a rolling 30-day window)
-- **Unmerge check** (at most every 90 days): for a `status=merged` rule, if the rule its `superseded_by` points at was deleted or has gone dormant/archived, revert it to `dormant`; right after candidate cleanup deletes an anchor rule, an orphan unmerge also runs immediately
+- **Lifecycle transitions**: posthoc/shadow evidence updates candidate, active, trusted, and suppressed states according to the v6 control law
+- **Candidate cleanup** (at most once every 30 days): archive stale candidates after the configured calendar windows
+- **Archived fingerprint checks**: archived rules leave negative-memory fingerprints so equivalent or broader future rules are blocked by cold-path admission
 - **Session file cleanup**: delete registry files in `active_sessions/` that ended more than 60 days ago
 - **Hook coalesce cleanup**: delete `hook_coalesce/` claim files older than 24 hours (prevents buildup when both ends are registered and messages run heavy)
 - **Prompt ack cleanup**: delete `prompt_submit_ack/` and `cursor_deferred/` files older than 24 hours; `SessionEnd` also clears this session's ack/deferred directory
@@ -611,7 +605,7 @@ There are two thresholds here, both called "20," and they are easy to confuse �
 
 | Scenario | What it counts | What it decides |
 |----------|----------------|-----------------|
-| **SessionStart** embed kickstart | The whole DB's `active + dormant` total | Whether to spin up an embed server in the background (≥20 may spawn, regardless of how few rules your current project has) |
+| **SessionStart** embed kickstart | The whole DB's `active + trusted` total | Whether to spin up an embed server in the background (≥20 may spawn, regardless of how few rules your current project has) |
 | **UserPromptSubmit** retrieval | This pass's `formal ∪ shadow` pool size | Whether this prompt goes through embedding RRF |
 
 **Partial index**: after embed is on, rules **without** a `rule_embeddings` row can only lean on BM25 inside RRF (just activated, imported but not yet indexed, or indexing failed). Semantic search only recognizes `rule_embeddings` rows matching the **currently configured embed model name**; after a model or dimension change, remember to `reindex`, or re-`add` / `import` to trigger indexing. `nokori health` `embed.index` warns how many rows are missing; a remote endpoint probe counts as ok only on **HTTP 2xx**, 401/404 don't count as healthy.
@@ -798,7 +792,7 @@ nokori install [--claude | --cursor | --all] [--dry-run | --uninstall | --disabl
 | `NOKORI_LLM_BASE_URL` | — | OpenAI-compatible chat completions endpoint |
 | `NOKORI_LLM_MODEL` | — | LLM model name |
 | `NOKORI_LLM_API_KEY` | — | LLM API key |
-| `NOKORI_EMBED_ENABLED` | `0` (auto when active+dormant≥20) | Force embedding on |
+| `NOKORI_EMBED_ENABLED` | `0` (auto when active+trusted≥20) | Force embedding on |
 | `NOKORI_EMBED_BASE_URL` | — | OpenAI-compatible embeddings endpoint |
 | `NOKORI_EMBED_MODEL` | — | Embedding model name |
 | `NOKORI_EMBED_API_KEY` | — | Embedding API key |

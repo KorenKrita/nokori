@@ -10,8 +10,9 @@ from __future__ import annotations
 import hashlib
 import uuid
 
-from ..db import Db, loads_json
+from ..db import Db, dumps_json, loads_json
 from ..events.fire import get_fire_events_for_session, mark_posthoc_label
+from .evaluator import run_posthoc_evaluation
 from ..utils.time import now_iso
 
 
@@ -120,6 +121,46 @@ def mark_posthoc_job_unclear(db: Db, job_id: str) -> None:
     mark_posthoc_job_complete(db, job_id, "unclear", "window_unavailable")
 
 
+def process_pending_posthoc_jobs(db: Db, llm, *, limit: int = 20) -> dict[str, int]:
+    """Evaluate pending posthoc jobs and mark each done/failed/unclear."""
+    summary = {"processed": 0, "done": 0, "unclear": 0, "failed": 0}
+    for job in get_pending_posthoc_jobs(db, limit=limit):
+        row = db.fetchone(
+            "SELECT * FROM rule_fire_events WHERE id = ?",
+            (job["fire_event_id"],),
+        )
+        if row is None:
+            mark_posthoc_job_unclear(db, job["id"])
+            summary["processed"] += 1
+            summary["unclear"] += 1
+            continue
+
+        evaluator_input = build_evaluator_input(db, dict(row))
+        if evaluator_input is None:
+            mark_posthoc_job_unclear(db, job["id"])
+            summary["processed"] += 1
+            summary["unclear"] += 1
+            continue
+
+        result = run_posthoc_evaluation(llm, evaluator_input)
+        if result is None:
+            mark_posthoc_job_failed(db, job["id"])
+            summary["processed"] += 1
+            summary["failed"] += 1
+            continue
+
+        mark_posthoc_job_complete(
+            db,
+            job["id"],
+            result["label"],
+            result["reason_code"],
+            result.get("attribution_weight"),
+        )
+        summary["processed"] += 1
+        summary["done"] += 1
+    return summary
+
+
 def compute_window_payload_hash(
     session_id: str, fire_event_id: str, turn_index: int | None
 ) -> str:
@@ -178,9 +219,20 @@ def build_evaluator_input(db: Db, fire_event: dict) -> dict | None:
     )
     feedback = [dict(r) for r in feedback_rows]
 
+    transcript_window = (
+        f"bounded_window_ref: {bounded_window_ref}"
+        if bounded_window_ref
+        else f"transcript_window_ref: {transcript_window_ref}"
+    )
+    feedback_text = dumps_json(feedback) if feedback else None
+
     return {
         "fire_event_id": fire_event_id,
         "session_id": fire_event.get("session_id"),
+        "injected_suggestion": suggestion_text,
+        "injection_context": trigger_snapshot,
+        "transcript_window": transcript_window,
+        "feedback": feedback_text,
         "suggestion": {
             "text": suggestion_text,
             "trigger_context": trigger_snapshot,

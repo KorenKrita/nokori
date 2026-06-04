@@ -6,12 +6,25 @@ from ..cold.jobs import expire_stale_ingest_jobs
 from ..config import Config
 from ..db import fetch_rules, open_db
 from ..lifecycle import maintenance
-from ..posthoc.jobs import get_pending_posthoc_jobs
-from ..search.idf_stats import build_idf_stats, compute_eligible_rule_set_hash
+from ..llm.adapter import LLMAdapter
+from ..posthoc.jobs import process_pending_posthoc_jobs
+from ..search.idf_stats import (
+    build_idf_stats,
+    compute_eligible_rule_set_hash,
+    store_idf_stats,
+)
 
 
 # Cached pool hash to detect pool changes between runs
 _last_idf_pool_hash: str | None = None
+
+
+class _PosthocLLMAdapter:
+    def __init__(self, cfg: Config):
+        self._llm = LLMAdapter(cfg)
+
+    def call(self, *, system: str, user: str, role: str):
+        return self._llm.complete_role(role, system, user)
 
 
 def run(_args: argparse.Namespace, cfg: Config) -> int:
@@ -24,9 +37,10 @@ def run(_args: argparse.Namespace, cfg: Config) -> int:
         # Core maintenance (includes lifecycle transitions via run_maintenance)
         summary = maintenance.run_maintenance(db, cfg)
 
-        # Pending posthoc jobs count (actual processing is cold-path worker)
-        pending_posthoc = get_pending_posthoc_jobs(db, limit=100)
-        posthoc_pending_count = len(pending_posthoc)
+        # Cold-path posthoc evaluation jobs
+        posthoc_summary = process_pending_posthoc_jobs(
+            db, _PosthocLLMAdapter(cfg), limit=20
+        )
 
         # Expire stale transcript ingest jobs
         expired_ingest = expire_stale_ingest_jobs(db)
@@ -37,7 +51,7 @@ def run(_args: argparse.Namespace, cfg: Config) -> int:
         current_hash = compute_eligible_rule_set_hash(eligible_rules)
         idf_rebuilt = False
         if current_hash != _last_idf_pool_hash:
-            build_idf_stats(eligible_rules)
+            store_idf_stats(db, build_idf_stats(eligible_rules))
             _last_idf_pool_hash = current_hash
             idf_rebuilt = True
     finally:
@@ -47,7 +61,12 @@ def run(_args: argparse.Namespace, cfg: Config) -> int:
     print(f"candidate_cleanup     deleted={summary['candidate_cleanup']}")
     print(f"injection_cleanup     deleted={summary['injection_cleanup']}")
     print(f"unmerge_check         restored={summary['unmerge_check']}")
-    print(f"posthoc.pending       {posthoc_pending_count}")
+    print(
+        "posthoc.processed     "
+        f"done={posthoc_summary['done']} "
+        f"unclear={posthoc_summary['unclear']} "
+        f"failed={posthoc_summary['failed']}"
+    )
     print(f"ingest.expired        {expired_ingest}")
     print(f"idf.rebuilt           {idf_rebuilt}")
     return 0

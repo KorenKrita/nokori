@@ -14,7 +14,6 @@ Pipeline invariants:
 
 from __future__ import annotations
 
-import hashlib
 import json
 import uuid
 from dataclasses import dataclass
@@ -22,24 +21,21 @@ from datetime import datetime, timezone
 from typing import Any
 
 from ..archive.fingerprints import check_fingerprint_block
-from ..db import Db, dumps_json
+from ..db import Db, SCHEMA_VERSION, dumps_json
 from ..matcher.compiler import CompilationError, CompiledMatcher, compile_rule
 from ..eval.synthetic import SyntheticEvalResult, run_synthetic_eval
 from ..policy import (
     COLD_FAST_LANE,
-    CAS_FIELDS,
     RUNTIME_POLICY_VERSION,
-    ColdFastLaneThresholds,
-    MergeOperation,
     SourceOrigin,
     ActivationOrigin,
 )
+from ..merge.policy import apply_merge_policy
 from ..search.idf_stats import IdfPoolStats, build_idf_stats
 from .roles import (
     PROMPT_VERSIONS,
     resolve_model_id,
     validate_role_output,
-    job_key,
 )
 
 
@@ -489,25 +485,41 @@ def _run_merge_planner(
         )
         result = validate_role_output("merge_planner", response)
         operation = result["operation"]
-
-        # Map merge_planner output to policy operations
-        # split -> split_required, no_op -> keep_both
-        if operation == "split":
-            return "split_required", result
-        if operation == "no_op":
-            return "keep_both", result
-
-        # Deterministic policy overrides (section 8.4)
-        if result.get("conflict_detected") and operation == "replace":
-            # Cannot replace trusted rules without strong evidence
-            for existing in existing_rules:
-                if existing.get("status") == "trusted":
-                    return "keep_both", {**result, "merge_rationale": "cannot_replace_trusted"}
-
-        return operation, result
+        target_ids = result.get("target_rule_ids") or []
+        existing = next(
+            (r for r in existing_rules if r["id"] in target_ids),
+            existing_rules[0],
+        )
+        planner_output = {
+            **result,
+            "relation_shape": result.get("relation_shape")
+            or _operation_to_relation_shape(operation),
+            "new_rule_safety": result.get("new_rule_safety", "safe"),
+            "operation_safety": result.get("operation_safety", "safe"),
+            "quality_winner": result.get("quality_winner")
+            or ("new" if operation == "replace" else "neither"),
+            "confidence": result.get("confidence", 0.5),
+            "reason": result.get("merge_rationale", ""),
+        }
+        decision = apply_merge_policy(planner_output, existing, rule_data)
+        return decision.operation, {
+            **result,
+            "merge_rationale": decision.reason,
+            "target_rule_ids": [decision.target_rule_id] if decision.target_rule_id else [],
+            "policy_decision": decision.operation,
+            "requires_synthetic_reeval": decision.requires_synthetic_reeval,
+        }
     except (ValueError, Exception):
         # Conservative: keep_both on failure (do not block insertion)
         return "keep_both", {"merge_rationale": "merge_planner_failed", "target_rule_ids": []}
+
+
+def _operation_to_relation_shape(operation: str) -> str:
+    if operation in {"merge", "replace"}:
+        return "equivalent"
+    if operation == "split":
+        return "split_required"
+    return "unrelated"
 
 
 # ---------------------------------------------------------------------------
@@ -641,7 +653,7 @@ def insert_rule_from_pipeline(
             (
                 rule_id,
                 short_id,
-                1,  # schema_version
+                SCHEMA_VERSION,
                 1,  # rule_version
                 PIPELINE_VERSION,
                 RUNTIME_POLICY_VERSION,

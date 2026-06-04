@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import json
 import uuid
 
 from ..db import Db, dumps_json, loads_json
+from ..policy import RUNTIME_POLICY_VERSION
 from ..utils.time import now_iso
 
 
@@ -19,6 +19,7 @@ def create_fire_event(
     idf_pool_version: str | None = None,
     runtime_policy_version: str | None = None,
     embedding_profile_version: str | None = None,
+    bounded_window_ref: str | None = None,
 ) -> str:
     """Persist a fire event when a rule is injected into a session."""
     event_id = str(uuid.uuid4())
@@ -39,8 +40,9 @@ def create_fire_event(
             "injected_structured_snapshot, "
             "trigger_idf_pool_version, runtime_policy_version, "
             "embedding_profile_version, "
-            "prompt_hash, turn_index, level, decision_features, created_at) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "prompt_hash, turn_index, level, decision_features, bounded_window_ref, "
+            "created_at) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 event_id,
                 rule.id,
@@ -50,12 +52,13 @@ def create_fire_event(
                 rule.action_instruction,
                 injected_structured_snapshot,
                 idf_pool_version,
-                runtime_policy_version,
+                runtime_policy_version or RUNTIME_POLICY_VERSION,
                 embedding_profile_version,
                 prompt_hash,
                 turn_index,
                 level,
                 dumps_json(decision_features),
+                bounded_window_ref,
                 now,
             ),
         )

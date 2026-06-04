@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 
 from ..config import Config
@@ -57,9 +58,27 @@ def _has_tool_evidence(rule, payload: dict) -> bool:
     if not tool_input:
         # No inspectable tool input -- prompt-only gate is valid
         return True
-    # Tool input exists; check if rule's required_concepts match against it.
-    # The marker already encodes this decision from applicability evaluation.
-    return True
+    if isinstance(tool_input, str):
+        haystack = tool_input.lower()
+    else:
+        haystack = json.dumps(tool_input, ensure_ascii=False, sort_keys=True).lower()
+
+    trigger = getattr(rule, "trigger", "") or ""
+    action = getattr(rule, "action", "") or ""
+    for phrase in (trigger, action):
+        phrase = phrase.strip().lower()
+        if phrase and phrase in haystack:
+            return True
+
+    tokens = {
+        t
+        for t in re.findall(r"[a-z0-9_+-]{3,}", f"{trigger} {action}".lower())
+        if t not in {"the", "and", "for", "with", "before", "after", "rule"}
+    }
+    if not tokens:
+        return False
+    hits = {t for t in tokens if t in haystack}
+    return len(hits) >= min(2, len(tokens))
 
 
 def _run_gate(payload: dict, cfg: Config, session_id: str, host) -> dict:
@@ -139,10 +158,14 @@ def _run_gate(payload: dict, cfg: Config, session_id: str, host) -> dict:
         marker_io.delete(cfg, session_id, prompt_hash_value=current_ph)
         return {}
 
-    # Filter to only gate-eligible rules (trusted + gate_eligible severity)
-    gate_rules = [r for r in marker.rules if _is_gate_eligible_rule(r)]
+    # Filter to only gate-eligible rules whose prompt evidence still matches
+    # inspectable tool input. If input is unrelated, keep marker for a later
+    # tool call in this turn instead of consuming it.
+    gate_rules = [
+        r for r in marker.rules
+        if _is_gate_eligible_rule(r) and _has_tool_evidence(r, payload)
+    ]
     if not gate_rules:
-        marker_io.delete(cfg, session_id, prompt_hash_value=current_ph)
         return {}
 
     marker_io.delete(cfg, session_id, prompt_hash_value=current_ph)
