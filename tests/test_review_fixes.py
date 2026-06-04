@@ -2,14 +2,10 @@
 import json
 import subprocess
 import sys
-from pathlib import Path
-from unittest.mock import patch
 
-import pytest
 
 from nokori.config import Config
 from nokori.db import open_db
-from nokori.gate import marker as marker_io
 from nokori.models import Rule
 from nokori.search import embedding
 

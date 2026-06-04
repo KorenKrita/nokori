@@ -4,7 +4,6 @@ from datetime import datetime, timedelta, timezone
 
 from ..db import Db, _delete_rule_cascade_tx
 from ..utils.logging import get_logger
-from ..utils.sql_batch import batched
 from ..utils.time import iso_of, now_iso, parse_iso
 
 log = get_logger("nokori.lifecycle.maintenance")

@@ -1,12 +1,8 @@
-import json
-import struct
-from unittest.mock import patch
 
 import pytest
 
 from nokori.config import Config
 from nokori.db import open_db
-from nokori.errors import EmbeddingError
 from nokori.search import embedding
 
 

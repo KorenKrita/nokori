@@ -2,7 +2,6 @@
 from dataclasses import replace
 from unittest.mock import patch
 
-import pytest
 
 from nokori.config import Config
 from nokori.db import open_db

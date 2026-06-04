@@ -1,10 +1,7 @@
 """Code-review round: regression tests for reported issues."""
 
 import json
-import os
-from pathlib import Path
 
-import pytest
 
 from nokori.config import Config
 from nokori.db import open_db, log_injections_batch

@@ -12,7 +12,7 @@ them deterministically without LLM calls.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
@@ -161,8 +161,6 @@ def _case_passes(
     if case_type == "medium_positive":
         # May warm but need not hot. Must not be cold.
         expected_max = case.get("expected_max_decision", "warm")
-        # Medium positive: at least warm is acceptable, must not exceed max
-        meets_floor = decision_meets_min(actual_decision, "warm")
         within_ceiling = decision_within_max(actual_decision, expected_max)
         # Per spec: medium_positive may warm but need not hot.
         # If it's cold, that's acceptable (not a hard failure for medium).

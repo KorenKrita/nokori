@@ -5,7 +5,6 @@ and that open_db / policy constants behave correctly.
 """
 import sqlite3
 import uuid
-from pathlib import Path
 
 import pytest
 

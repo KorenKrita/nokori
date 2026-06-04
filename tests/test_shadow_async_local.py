@@ -1,9 +1,7 @@
 """Tests for shadow pool, async extract, and local embedding features."""
-import json
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
-import pytest
 
 from nokori.config import Config
 from nokori.db import open_db, fetch_shadow_rules

@@ -3,8 +3,7 @@ from datetime import datetime, timezone
 
 from nokori.config import Config
 from nokori.db import open_db
-from nokori.db import fetch_rules, fetch_shadow_rules, total_rule_count
-from nokori.models import ScoredResult
+from nokori.db import fetch_rules, fetch_shadow_rules
 from nokori.search import embedding as embedding_search
 from nokori.search.retrieve import retrieve_and_tier, retrieve_formal_and_shadow
 

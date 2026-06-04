@@ -2,7 +2,6 @@ import subprocess
 import sys
 from datetime import datetime, timezone
 
-import pytest
 
 from nokori.config import Config
 from nokori.db import open_db

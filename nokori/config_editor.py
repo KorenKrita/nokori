@@ -2,10 +2,9 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 from typing import Any, Literal
 
-from .config import Config, _resolve_file_values
+from .config import Config
 from .config_file import (
     apply_patch,
     config_path,

@@ -9,7 +9,7 @@ Literal type aliases are defined inline to avoid coupling to policy.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field, fields
+from dataclasses import dataclass
 from typing import Any, Literal, Optional
 
 

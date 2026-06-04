@@ -1,11 +1,9 @@
 import json
-from pathlib import Path
 
-import pytest
 
 from nokori.config import Config
 from nokori.extract.compressor import compress
-from nokori.extract.extractor import _parse_candidates, extract
+from nokori.extract.extractor import extract
 from nokori.extract.reader import read as read_transcript
 from nokori.models import Turn
 
@@ -206,7 +204,6 @@ def test_llm_adapter_skips_when_extracting_env_set(monkeypatch):
 
 def test_mark_extracted_on_empty_text(tmp_path, monkeypatch):
     """Extract marks transcript as extracted even when compressed text is empty."""
-    import os
     monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
     from nokori.config import Config
     from nokori.db import open_db
@@ -383,7 +380,7 @@ def test_extract_refreshes_job_when_transcript_mtime_changes(monkeypatch, tmp_pa
     mtime_old = path.stat().st_mtime
     from nokori.extract import jobs as job_io
 
-    job_path = job_io.write_job(cfg, path, "proj", mtime_old)
+    job_io.write_job(cfg, path, "proj", mtime_old)
     path.write_text(
         path.read_text(encoding="utf-8") + '{"type":"user","message":{"content":"more"}}\n',
         encoding="utf-8",

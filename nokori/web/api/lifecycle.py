@@ -4,7 +4,7 @@ import json
 
 from fastapi import APIRouter, HTTPException, Query
 
-from nokori.db import fetch_rule_by_short_id, loads_json, open_db
+from nokori.db import fetch_rule_by_short_id, open_db
 from nokori.events.fire import (
     count_evaluated_fire_events,
     get_fire_events_for_rule,

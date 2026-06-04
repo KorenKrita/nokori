@@ -4,8 +4,6 @@ from dataclasses import dataclass
 from unittest.mock import patch
 
 from nokori.commands import extract as extract_cmd
-from nokori.cold.jobs import enqueue_transcript_ingest
-from nokori.cold.roles import PROMPT_VERSIONS
 from nokori.config import Config
 from nokori.db import open_db
 

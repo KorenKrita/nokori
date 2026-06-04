@@ -24,7 +24,7 @@ from nokori.utils.host import (
     effective_gate_matcher,
     effective_session_id,
 )
-from nokori.utils.transcript import is_path_allowed, resolve_transcript_path
+from nokori.utils.transcript import is_path_allowed
 
 
 def test_detect_host_from_cursor_transcript_path():

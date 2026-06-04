@@ -1,6 +1,5 @@
 import json
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 
 from nokori.config import Config
 from nokori.db import open_db

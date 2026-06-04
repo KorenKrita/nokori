@@ -3,7 +3,6 @@ import socket
 import threading
 from pathlib import Path
 
-import pytest
 
 from nokori.config import Config
 from nokori.search import embed_ipc

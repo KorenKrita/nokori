@@ -11,13 +11,11 @@ from ..config import Config
 from ..db import (
     SCHEMA_VERSION,
     dumps_json,
-    fetch_rule_by_short_id,
     fetch_rules,
     fetch_short_ids,
     open_db,
 )
 from ..errors import NokoriError
-from ..search.embedding import index_rule_if_enabled
 from ..utils.ids import new_uuid, short_id_for
 from ..utils.time import now_iso
 

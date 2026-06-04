@@ -11,14 +11,11 @@ from nokori.policy import (
     DYNAMIC_IDF_NORMAL,
     DYNAMIC_IDF_SMALL_POOL,
     IDF_MAX_SHADOW,
-    SMALL_POOL_THRESHOLD,
 )
 from nokori.search.idf_stats import (
     GENERIC_TOKENS,
-    IdfPoolStats,
     _trigger_tokens_for_rule,
     build_idf_stats,
-    compute_eligible_rule_set_hash,
     compute_shadow_idf,
     compute_trigger_idf_sum,
     get_small_pool_requirements,

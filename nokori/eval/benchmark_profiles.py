@@ -111,8 +111,6 @@ def run_benchmark(
         all_scores["near_miss"].extend(near_miss)
         all_scores["negative"].extend(negative)
 
-        sample_count = len(positive) + len(medium) + len(near_miss) + len(negative)
-
         positive_p10 = _percentile(positive, 10) if positive else 0.0
         medium_p10 = _percentile(medium, 10) if medium else 0.0
         medium_p50 = _percentile(medium, 50) if medium else 0.0

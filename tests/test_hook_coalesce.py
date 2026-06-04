@@ -93,7 +93,6 @@ def test_describe_dual_hook_registration(monkeypatch):
 
 
 def test_prune_stale_claims(cfg):
-    key = "session-start|old-sess"
     path = cfg.data_dir / "hook_coalesce"
     path.mkdir(parents=True, exist_ok=True)
     stale = path / "stale.json"

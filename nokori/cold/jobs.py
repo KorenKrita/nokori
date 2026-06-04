@@ -7,11 +7,9 @@ input_hash for deduplication and caching.
 
 from __future__ import annotations
 
-import time
 import uuid
 from datetime import datetime, timezone
 
-from nokori.cold.roles import PROMPT_VERSIONS, job_key
 from nokori.db import Db
 
 # --- Constants ---
@@ -49,7 +47,6 @@ def enqueue_job(
     If pending or failed, returns existing job id for retry tracking.
     Otherwise creates a new job. Returns job id.
     """
-    key = job_key(role, model_id, input_hash)
     existing = db.fetchone(
         "SELECT id, status, output_json FROM llm_jobs "
         "WHERE role = ? AND model_id = ? AND prompt_version = ? AND input_hash = ?",

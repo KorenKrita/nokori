@@ -1,5 +1,4 @@
 """Test session_end posthoc job enqueue behavior (replaces old async extract defer)."""
-import json
 from unittest.mock import patch
 
 from nokori.config import Config

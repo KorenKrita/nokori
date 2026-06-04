@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 
 import pytest
 
@@ -187,7 +186,7 @@ def test_deferred_without_generation_id_uses_prompt_hash_only(cfg, tmp_path, mon
         "tool_name": "Grep",
     }
 
-    first = maybe_deferred_pre_tool_use(
+    maybe_deferred_pre_tool_use(
         base_payload, cfg, "sess", "Grep", Host.CURSOR
     )
     assert prompt_ack.deferred_done(cfg, "sess", "", ph)

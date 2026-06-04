@@ -22,7 +22,6 @@ from nokori.eval.synthetic import (
     CONCEPT_COMPILER_VERSION,
     DECISION_RANK,
     EMBEDDING_PROFILE_VERSION,
-    SyntheticEvalResult,
     _case_passes,
     decision_meets_min,
     decision_within_max,
@@ -30,16 +29,9 @@ from nokori.eval.synthetic import (
 )
 from nokori.matcher.compiler import (
     COMPILER_VERSION as MATCHER_COMPILER_VERSION,
-    CompiledAlias,
-    CompiledConcept,
-    CompiledConceptGroup,
-    CompiledExcludedContext,
     CompiledMatcher,
-    CompiledTriggerAnchors,
-    CompiledVariant,
     compile_rule,
 )
-from nokori.matcher.runtime import MatchResult, evaluate_match
 from nokori.policy import RUNTIME_POLICY_VERSION
 from nokori.search.idf_stats import IdfPoolStats, TOKENIZER_VERSION
 

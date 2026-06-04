@@ -5,7 +5,6 @@ from __future__ import annotations
 import zipfile
 from pathlib import Path
 
-import pytest
 
 
 def test_wheel_includes_web_static(tmp_path: Path) -> None:

@@ -3,7 +3,6 @@ from nokori.db import open_db
 from nokori.hooks.user_prompt_submit import handle
 from nokori.utils.host import Host
 from nokori.utils.project import resolve_project_id
-from nokori.utils.time import now_iso
 
 
 def _utcnow_iso() -> str:
@@ -87,7 +86,6 @@ def test_total_rule_count_ignores_archived(monkeypatch, tmp_path):
     cfg = Config.from_env()
     db = open_db(cfg.db_path)
     try:
-        now = _utcnow_iso()
         for i in range(19):
             _insert(db, id_=f"active-{i:02d}", trigger=f"trigger {i}",
                     status="active", project_id="p1")

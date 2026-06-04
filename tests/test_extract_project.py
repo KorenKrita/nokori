@@ -1,5 +1,3 @@
-import json
-from pathlib import Path
 
 from nokori.config import Config
 from nokori.extract import jobs as job_io

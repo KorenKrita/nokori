@@ -392,46 +392,6 @@ def _call_llm_role(
     return response
 
 
-def _run_extractor(llm, transcript_text: str, role_config: dict[str, Any]) -> dict | None:
-    """Call extractor role, validate output.
-
-    Args:
-        llm: LLM client.
-        transcript_text: Raw transcript segment text.
-        role_config: Dict with model_id, max_tokens, timeout keys.
-
-    Returns:
-        Validated extractor output dict or None on failure.
-    """
-    model_id = role_config["model_id"]
-    max_tokens = role_config.get("max_tokens", 4000)
-    timeout = role_config.get("timeout", 60)
-
-    system_prompt = (
-        "You are a rule extractor for an autonomous memory system. "
-        "Find candidate lessons with concrete transcript evidence. "
-        "Do NOT invent lessons or turn passing remarks into rules. "
-        "Output strict JSON matching the extractor schema."
-    )
-    user_prompt = (
-        f"<transcript>\n{_prompt_text(transcript_text)}\n</transcript>\n\n"
-        "Extract candidate rules from this transcript. "
-        "Each candidate must have direct evidence quotes from the text above."
-    )
-
-    try:
-        response = llm.call(
-            model=model_id,
-            system=system_prompt,
-            user=user_prompt,
-            max_tokens=max_tokens,
-            timeout=timeout,
-        )
-        return validate_role_output("extractor", response)
-    except (ValueError, Exception):
-        return None
-
-
 def _run_admission_judge(
     db: Db, llm, candidate: dict[str, Any], model_id: str
 ) -> tuple[str, dict]:

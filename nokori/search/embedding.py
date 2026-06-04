@@ -10,8 +10,6 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Literal
 
-EmbedKind = Literal["query", "document"]
-
 from ..config import Config
 from ..db import Db
 from ..errors import EmbeddingError
@@ -20,6 +18,8 @@ from ..utils.logging import get_logger
 from ..utils.sql_batch import batched
 from ..utils.time import now_iso
 from .embedding_profiles import is_known_profile, load_profile
+
+EmbedKind = Literal["query", "document"]
 
 log = get_logger("nokori.search.embedding")
 

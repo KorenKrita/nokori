@@ -10,7 +10,6 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from ..cold.roles import validate_role_output
 
 # ---------------------------------------------------------------------------
 # Labels and reason codes (section 10.2)
