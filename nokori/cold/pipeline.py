@@ -468,7 +468,8 @@ def _enforce_admission_policy(decision: str, scores: dict) -> str:
     """Enforce deterministic admission policy over LLM decision (spec section 6.2).
 
     LLM roles are advisory; the database state transition is made by
-    deterministic policy over LLM outputs (section 6.7).
+    deterministic policy over LLM outputs (section 6.7). Policy is
+    bidirectional — can upgrade revise->accept or downgrade accept->revise.
 
     accept requires: overall >= 0.82, evidence >= 0.85, specificity >= 0.75, scope >= 0.75
     revise requires: overall >= 0.55, evidence >= 0.70
@@ -479,18 +480,11 @@ def _enforce_admission_policy(decision: str, scores: dict) -> str:
     specificity = scores.get("trigger_specificity", 0.0)
     scope = scores.get("scope_control", 0.0)
 
-    if decision == "accept":
-        if overall >= 0.82 and evidence >= 0.85 and specificity >= 0.75 and scope >= 0.75:
-            return "accept"
-        if overall >= 0.55 and evidence >= 0.70:
-            return "revise"
-        return "reject"
-
-    if decision == "revise":
-        if overall >= 0.55 and evidence >= 0.70:
-            return "revise"
-        return "reject"
-
+    # Deterministic policy is authoritative regardless of LLM decision
+    if overall >= 0.82 and evidence >= 0.85 and specificity >= 0.75 and scope >= 0.75:
+        return "accept"
+    if overall >= 0.55 and evidence >= 0.70:
+        return "revise"
     return "reject"
 
 

@@ -506,11 +506,18 @@ def evaluate_match(
                     )
                     trigger_idf_sum += min(raw_idf, idf_max)
                 else:
-                    # Normal IDF: df=0 means novel term (very rare = highest IDF)
-                    df_effective = max(1, df_t)
-                    trigger_idf_sum += math.log(
-                        1 + (pool_size - df_effective + 0.5) / (df_effective + 0.5)
-                    )
+                    # Normal IDF uses raw df_trigger(t) per spec formula.
+                    # df=0 means novel term not in any rule — still computable
+                    # but should not appear since matched_anchors come from rules.
+                    if df_t > 0:
+                        trigger_idf_sum += math.log(
+                            1 + (pool_size - df_t + 0.5) / (df_t + 0.5)
+                        )
+                    else:
+                        # Novel term safety: use df=1 as minimum
+                        trigger_idf_sum += math.log(
+                            1 + (pool_size - 0.5) / 1.5
+                        )
             distinct_trigger_terms = len(seen_terms)
 
     return MatchResult(

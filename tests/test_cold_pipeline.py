@@ -428,8 +428,12 @@ class TestEvidenceSupportThreshold:
 class TestReviseRoutesRewriter:
     def test_revise_decision_calls_rewriter_then_final_judge(self, db: Db):
         """admission_judge returns 'revise' -> rewriter called -> final_judge called."""
+        # Scores in revise range: overall >= 0.55 but < 0.82
         llm = _make_llm_mock({
-            "admission judge": _admission_json("revise"),
+            "admission judge": _admission_json(
+                "revise", overall_quality=0.70, evidence_support=0.75,
+                trigger_specificity=0.65, scope_control=0.60,
+            ),
             "rule rewriter": _rewriter_json(),
             "final judge": _final_judge_json("accept_candidate"),
             "merge planner": _merge_planner_json("insert"),

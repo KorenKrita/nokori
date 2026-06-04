@@ -186,7 +186,7 @@ def count_shadow_evidence(
         sid = row["session_id"]
         if sid:
             sessions.add(sid)
-            if label in ("would_help_high", "would_help_low"):
+            if label == "would_help_high":
                 per_session_strong[sid] = per_session_strong.get(sid, 0) + 1
 
     # Best single-session strong count
