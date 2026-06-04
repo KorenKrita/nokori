@@ -144,12 +144,12 @@ def run_cold_pipeline(
             rejection_reason=f"circuit_breaker_pending: {e}",
             scores=None,
         )
-    except (RuntimeError, OSError, TimeoutError, ConnectionError) as e:
-        # Spec section 13: transient failures leave jobs pending for retry
+    except (RuntimeError, OSError, TimeoutError, ConnectionError, ValueError) as e:
+        # Spec section 13: failed role calls leave jobs pending for retry
         return ColdPipelineResult(
             status="pending",
             rule_id=None,
-            rejection_reason=f"transient_failure_pending: {type(e).__name__}: {e}",
+            rejection_reason=f"role_failure_pending: {type(e).__name__}: {e}",
             scores=None,
         )
 
@@ -502,10 +502,9 @@ def _run_admission_judge(
         decision = _enforce_admission_policy(decision, scores)
         return decision, scores
     except CircuitBreakerOpenError:
-        raise  # Propagate: job should remain pending, not rejected
+        raise
     except ValueError:
-        # Conservative: reject on judge failure
-        return "reject", {}
+        raise  # Propagate for retry (spec section 13: failed role = pending)
 
 
 def _enforce_admission_policy(decision: str, scores: dict) -> str:
@@ -570,7 +569,7 @@ def _run_rewriter(
     except CircuitBreakerOpenError:
         raise
     except ValueError:
-        return None
+        raise  # Propagate for retry (spec section 13)
 
 
 def _run_final_judge(
@@ -614,8 +613,7 @@ def _run_final_judge(
     except CircuitBreakerOpenError:
         raise
     except ValueError:
-        # Conservative: reject on failure
-        return "reject"
+        raise  # Propagate for retry (spec section 13)
 
 
 def _run_merge_planner(
@@ -688,8 +686,7 @@ def _run_merge_planner(
     except CircuitBreakerOpenError:
         raise
     except ValueError:
-        # Conservative: keep_both on failure (do not block insertion)
-        return "keep_both", {"merge_rationale": "merge_planner_failed", "target_rule_ids": []}
+        raise  # Propagate for retry (spec section 13)
 
 
 def _operation_to_relation_shape(operation: str) -> str:

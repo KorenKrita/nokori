@@ -557,12 +557,15 @@ def _evaluate_active(db: Db, row, rule_version: int) -> TransitionResult:
     distinct_sessions = fire.get("distinct_observed_useful_sessions", 0)
 
     # Rate-based promotion NOT allowed below minimum_rate_denominator (spec 3.4)
+    # For trusted promotion: harmful_count uses recent window (not lifetime).
+    # Lifetime harmful gates SUPPRESSION; promotion uses windowed count.
+    recent_harmful = fire.get("harmful", 0)
     if (
         total_evaluated >= th.evaluated_fire_count_min
         and total_evaluated >= MINIMUM_RATE_DENOMINATOR
         and observed_useful >= th.observed_useful_count_min
         and distinct_sessions >= th.distinct_observed_useful_sessions_min
-        and lifetime_harmful <= th.harmful_count_max
+        and recent_harmful <= th.harmful_count_max
         and fp_rate <= th.recent_false_positive_rate_max
     ):
         reason = (

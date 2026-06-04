@@ -226,8 +226,8 @@ class TestCircuitBreaker:
 
 
 class TestFailedRoleNoDurableRules:
-    def test_admission_judge_failure_rejects_no_rule_inserted(self, db: Db):
-        """When admission judge call raises, pipeline rejects and no rule is stored."""
+    def test_admission_judge_failure_leaves_pending_no_rule_inserted(self, db: Db):
+        """When admission judge call raises, pipeline returns pending (spec section 13)."""
         llm = _make_llm_mock({
             "admission judge": ValueError("LLM timeout"),
         })
@@ -240,7 +240,7 @@ class TestFailedRoleNoDurableRules:
             default_model="test-model",
         )
 
-        assert result.status == "rejected"
+        assert result.status == "pending"
         assert result.rule_id is None
 
         # Verify no rule was inserted
@@ -270,8 +270,8 @@ class TestFailedRoleNoDurableRules:
 
 
 class TestRewriterFailure:
-    def test_rewriter_failure_rejects_no_rule_inserted(self, db: Db):
-        """When rewriter fails after revise decision, no durable rule created."""
+    def test_rewriter_failure_leaves_pending_no_rule_inserted(self, db: Db):
+        """When rewriter fails, pipeline returns pending (spec section 13)."""
         llm = _make_llm_mock({
             "admission judge": _admission_json("revise", evidence_support=0.70),
             "rule rewriter": ValueError("rewriter crash"),
@@ -285,8 +285,8 @@ class TestRewriterFailure:
             default_model="test-model",
         )
 
-        assert result.status == "rejected"
-        assert result.rejection_reason == "rewriter_failed"
+        assert result.status == "pending"
+        assert "ValueError" in result.rejection_reason
 
         row = db.fetchone("SELECT COUNT(*) AS n FROM rules")
         assert row["n"] == 0
