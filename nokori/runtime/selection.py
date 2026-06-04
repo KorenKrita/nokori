@@ -211,8 +211,9 @@ def select_injection(
                 continue
             has_strong_evidence = (
                 sr.strong_variant_phrase_hit
-                or (sr.trigger_idf_sum > 0 and sr.trigger_coverage >= 0.25
-                    and sr.required_concepts_match)
+                or (sr.trigger_idf_sum >= 2.0 and sr.trigger_coverage >= 0.25
+                    and sr.required_concepts_match
+                    and getattr(sr, 'distinct_trigger_terms', 1) >= 1)
             )
             if _has_distinct_domain(sr, hot) and has_strong_evidence:
                 hot.append(sr)

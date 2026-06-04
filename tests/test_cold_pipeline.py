@@ -339,35 +339,30 @@ class TestTranscriptIngestTTL:
 
 class TestEvidenceSupportThreshold:
     def test_low_evidence_support_rejected_at_fast_lane(self, db: Db):
-        """evidence_support below 0.85 prevents fast lane (enters as candidate at best)."""
+        """evidence_support below 0.85 prevents fast lane (enters as candidate at best).
+
+        With deterministic policy enforcement, evidence_support=0.80 (below 0.85)
+        forces the admission decision to 'revise' even if LLM says 'accept'.
+        The rewriter then produces a candidate which enters as candidate.
+        """
         # The fast lane threshold is 0.90 for evidence_support.
-        # Set admission to accept but with low evidence_support.
+        # Deterministic policy overrides 'accept' to 'revise' when evidence < 0.85.
         llm = _make_llm_mock({
             "admission judge": _admission_json(
                 "accept",
                 overall_quality=0.92,
-                evidence_support=0.80,  # below 0.85 AND below fast-lane 0.90
+                evidence_support=0.80,  # below 0.85 -> policy forces 'revise'
                 trigger_specificity=0.90,
                 scope_control=0.90,
             ),
-            "final judge": _final_judge_json("accept_active"),
-            "merge planner": _merge_planner_json("insert"),
-            "synthetic evaluation case generator": _synthetic_eval_cases(),
+            "rule rewriter": _rewriter_json(),
+            "final judge": _final_judge_json("accept_candidate"),
+            "merge planner": _merge_planner_json("keep_both"),
         })
 
         with patch(
             "nokori.cold.pipeline.check_fingerprint_block", return_value=None
-        ), patch(
-            "nokori.cold.pipeline.run_synthetic_eval"
-        ) as mock_eval:
-            mock_eval.return_value = MagicMock(
-                passed=True, results=[], rule_id="", rule_version=1,
-                runtime_policy_version="1.0.0", tokenizer_version="1.0.0",
-                matcher_compiler_version="1.0.0", concept_compiler_version="1.0.0",
-                embedding_profile_version="1.0.0", trigger_idf_pool_version="test",
-                benchmark_version="1.0.0", cases=[],
-            )
-
+        ):
             result = run_cold_pipeline(
                 db,
                 llm,
@@ -376,7 +371,7 @@ class TestEvidenceSupportThreshold:
                 default_model="test-model",
             )
 
-        # evidence_support=0.80 < fast lane 0.90 threshold, so cannot be active
+        # evidence_support=0.80 < 0.85 -> policy forces revise -> candidate
         assert result.status == "candidate"
 
     def test_evidence_support_below_fast_lane_threshold_blocks_active(self, db: Db):

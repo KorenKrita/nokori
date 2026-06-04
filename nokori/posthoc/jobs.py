@@ -240,6 +240,21 @@ def submit_feedback(
         if fire_time and (datetime.now(timezone.utc) - fire_time) > timedelta(hours=24):
             return None
 
+    # Rate-limiting: max 5 feedback events per rule per day
+    rule_id = fire_row["rule_id"]
+    from datetime import datetime, timedelta, timezone
+    day_ago = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat(
+        timespec="seconds"
+    ).replace("+00:00", "Z")
+    count_row = db.fetchone(
+        "SELECT COUNT(*) AS n FROM rule_feedback_events f "
+        "JOIN rule_fire_events e ON e.id = f.fire_event_id "
+        "WHERE e.rule_id = ? AND f.created_at >= ?",
+        (rule_id, day_ago),
+    )
+    if count_row and count_row["n"] >= 5:
+        return None
+
     feedback_id = str(uuid.uuid4())
     now = now_iso()
     with db.transaction() as tx:
@@ -249,6 +264,23 @@ def submit_feedback(
             "VALUES (?,?,?,?,?,?,?)",
             (feedback_id, fire_event_id, source, label, confidence, evidence, now),
         )
+
+    # High-confidence harmful feedback triggers immediate suppression (spec 10.4)
+    if label == "harmful" and confidence >= 0.9 and rule_id:
+        from ..lifecycle.transitions import _apply_transition
+        from ..policy import RUNTIME_POLICY_VERSION
+
+        rule_row_full = db.fetchone(
+            "SELECT rule_version, status, runtime_policy_version FROM rules WHERE id = ?",
+            (rule_id,),
+        )
+        if rule_row_full and rule_row_full["status"] in ("active", "trusted"):
+            _apply_transition(
+                db, rule_id, rule_row_full["rule_version"],
+                rule_row_full["status"], "suppressed",
+                rule_row_full["runtime_policy_version"],
+                f"high_confidence_harmful_feedback (confidence={confidence:.2f})",
+            )
 
     return feedback_id
 

@@ -598,11 +598,28 @@ def find_rule_id_injected_since(
 
 
 def archive_rule(db: "Db", rule_id: str, reason: str, now: str) -> None:
+    # Read rule data before archiving for fingerprint creation
+    rule_row = db.fetchone(
+        "SELECT trigger_canonical, action_instruction, domain_tags FROM rules WHERE id = ?",
+        (rule_id,),
+    )
     with db.transaction() as tx:
         tx.execute(
             "UPDATE rules SET status = 'archived', archived_reason = ?, "
             "updated_at = ? WHERE id = ?",
             (reason, now, rule_id),
+        )
+    # Create user-strength archived fingerprint (spec section 11)
+    if rule_row:
+        from .archive.fingerprints import create_archived_fingerprint_from_data
+        domain_tags = loads_json(rule_row["domain_tags"], []) if rule_row["domain_tags"] else []
+        create_archived_fingerprint_from_data(
+            db,
+            rule_id=rule_id,
+            trigger_canonical=rule_row["trigger_canonical"] or "",
+            action_instruction=rule_row["action_instruction"] or "",
+            domain_tags=domain_tags,
+            strength="user",
         )
 
 

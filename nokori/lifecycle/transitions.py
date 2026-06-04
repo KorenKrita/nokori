@@ -116,15 +116,16 @@ def run_all_pending_transitions(db: Db) -> list[TransitionResult]:
 def _aggregate_fire_evidence(db: Db, rule_id: str, window_days: int = 30) -> dict:
     """Count fire event labels using last-N-events window (section 3.4).
 
-    Uses RECENT_EVENT_WINDOW (last 10 evaluated events) for rate-based metrics.
+    Uses BOTH recent_event_window (last 10 evaluated) AND recent_time_window (30 days).
     Harmful events are counted lifetime — they do NOT decay by time alone.
     """
-    # Last N evaluated events (event-count window per spec 3.4)
+    # Last N evaluated events within time window (spec 3.4: both windows apply)
+    cutoff = _days_ago_iso(window_days)
     recent_rows = db.fetchall(
         "SELECT posthoc_label, posthoc_reason_code, session_id FROM rule_fire_events "
-        "WHERE rule_id = ? AND posthoc_label IS NOT NULL "
+        "WHERE rule_id = ? AND posthoc_label IS NOT NULL AND created_at >= ? "
         "ORDER BY created_at DESC LIMIT ?",
-        (rule_id, RECENT_EVENT_WINDOW),
+        (rule_id, cutoff, RECENT_EVENT_WINDOW),
     )
 
     counts: dict[str, int | float] = {
@@ -570,12 +571,14 @@ def _evaluate_trusted(db: Db, row, rule_version: int) -> TransitionResult:
     observed_useful = fire.get("observed_useful", 0)
     irrelevant = fire.get("irrelevant", 0)
 
+    # Rate-based decay requires minimum_rate_denominator (spec 3.4)
     if (
         total_evaluated >= th.evaluated_fire_count_in_recent_window_min
+        and total_evaluated >= MINIMUM_RATE_DENOMINATOR
         and observed_useful <= th.observed_useful_count_in_recent_window_max
         and irrelevant >= th.irrelevant_count_in_recent_window_min
         and lifetime_harmful <= th.harmful_count_max
-        and (total_evaluated < MINIMUM_RATE_DENOMINATOR or fp_rate >= th.recent_false_positive_rate_min)
+        and fp_rate >= th.recent_false_positive_rate_min
     ):
         reason = (
             f"trust_decay: useful={observed_useful} "

@@ -83,6 +83,59 @@ def create_archived_fingerprint(
     return fp_id
 
 
+def create_archived_fingerprint_from_data(
+    db: Db,
+    rule_id: str,
+    trigger_canonical: str,
+    action_instruction: str,
+    domain_tags: list[str] | None = None,
+    strength: str = "user",
+) -> str:
+    """Create an archived fingerprint from raw rule data (no rule object needed).
+
+    Used by archive_rule() when the rule row is already fetched as a dict.
+    """
+    signature = compute_signature(trigger_canonical, action_instruction, domain_tags)
+
+    scope_summary = f"domain:{','.join(domain_tags)}" if domain_tags else "general"
+    can_be_overridden = 1 if strength in ("user", "system") else 0
+
+    fp_id = str(uuid.uuid4())
+    now = _now_iso()
+
+    # Upsert: update strength if existing fingerprint is weaker
+    existing = db.fetchone(
+        "SELECT id, archive_strength FROM archived_fingerprints WHERE signature = ?",
+        (signature,),
+    )
+    if existing:
+        existing_strength = existing["archive_strength"]
+        if _STRENGTH_ORDER.index(strength) > _STRENGTH_ORDER.index(existing_strength):
+            with db.transaction() as tx:
+                tx.execute(
+                    "UPDATE archived_fingerprints SET archive_strength = ?, "
+                    "can_be_overridden_by_changed_scope = ?, created_at = ? "
+                    "WHERE id = ?",
+                    (strength, can_be_overridden, now, existing["id"]),
+                )
+            return existing["id"]
+        return existing["id"]
+
+    with db.transaction() as tx:
+        tx.execute(
+            "INSERT INTO archived_fingerprints "
+            "(id, signature, scope_summary, blocked_trigger_area, blocked_action_area, "
+            "archive_strength, can_be_overridden_by_changed_scope, rule_id, created_at) "
+            "VALUES (?,?,?,?,?,?,?,?,?)",
+            (
+                fp_id, signature, scope_summary,
+                trigger_canonical, action_instruction,
+                strength, can_be_overridden, rule_id, now,
+            ),
+        )
+    return fp_id
+
+
 def check_fingerprint_block(
     db: Db,
     trigger_canonical: str,
