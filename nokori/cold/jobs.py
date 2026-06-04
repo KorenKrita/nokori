@@ -130,16 +130,28 @@ def is_circuit_breaker_open(db: Db, role: str, model_id: str | None = None) -> b
     2. provider_auth_or_rate_limit_error -> pause affected provider/model route
     3. schema_parse_failure >= 3 consecutive -> pause role prompt version
     """
-    # Type 1: general role failure rate
+    # Type 1: role_failure_rate >= 0.50 over last 10 attempts -> pause
     rows = db.fetchall(
-        "SELECT status FROM llm_jobs WHERE role = ? "
+        "SELECT status, updated_at FROM llm_jobs WHERE role = ? "
         "ORDER BY updated_at DESC LIMIT 10",
         (role,),
     )
     if rows:
         failure_count = sum(1 for r in rows if r["status"] == "failed")
-        if failure_count >= CIRCUIT_BREAKER_THRESHOLD:
-            return True
+        total = len(rows)
+        failure_rate = failure_count / total if total > 0 else 0.0
+        if failure_rate >= 0.50 and failure_count >= 2:
+            # Check cooldown: if most recent failure is within cooldown, breaker open
+            most_recent = rows[0]["updated_at"] if rows else None
+            if most_recent:
+                from datetime import datetime, timezone
+                try:
+                    recent_dt = datetime.fromisoformat(most_recent.replace("Z", "+00:00"))
+                    elapsed = (datetime.now(timezone.utc) - recent_dt).total_seconds()
+                    if elapsed < CIRCUIT_BREAKER_COOLDOWN_SECONDS:
+                        return True
+                except (ValueError, TypeError):
+                    return True
 
     # Type 2: provider auth/rate-limit (check by model_id if available)
     if model_id:

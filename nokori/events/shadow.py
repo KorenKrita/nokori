@@ -126,23 +126,33 @@ def count_shadow_evidence(
     rule_version: int,
     window_days: int = 30,
     event_limit: int = 10,
+    shadow_type: str | None = None,
 ) -> dict:
     """Count shadow labels for version-compatible events with fingerprint dedup.
 
     Uses SHADOW_EVENT_WINDOW (last N evaluated events) per spec section 3.4.
+    Optionally filters by shadow_type (candidate_probe or suppression_recovery).
     Returns counts by label plus distinct_sessions, unique_contexts, and per_session_counts.
     """
     cutoff = _days_ago_iso(window_days)
 
     # SHADOW_EVENT_WINDOW: use last N events (spec 3.4)
-    rows = db.fetchall(
+    type_filter = ""
+    params: list = [rule_id, rule_version, cutoff]
+    if shadow_type:
+        type_filter = "AND shadow_type = ? "
+        params.append(shadow_type)
+    params.append(event_limit)
+
+    sql = (
         "SELECT shadow_label, session_id, context_fingerprint "
         "FROM rule_shadow_events "
         "WHERE rule_id = ? AND shadow_rule_version = ? "
         "AND shadow_label IS NOT NULL AND created_at >= ? "
-        "ORDER BY created_at DESC LIMIT ?",
-        (rule_id, rule_version, cutoff, event_limit),
+        f"{type_filter}"
+        "ORDER BY created_at DESC LIMIT ?"
     )
+    rows = db.fetchall(sql, tuple(params))
 
     # Deduplicate by context_fingerprint
     seen_fingerprints: set[str] = set()

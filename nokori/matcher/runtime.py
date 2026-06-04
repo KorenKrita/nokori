@@ -51,6 +51,8 @@ class MatchResult:
     search_only_match: bool
     required_concepts_match: bool
     trigger_coverage: float
+    trigger_idf_sum: float = 0.0
+    distinct_trigger_terms: int = 0
 
 
 # ---------------------------------------------------------------------------
@@ -362,6 +364,7 @@ def evaluate_match(
     tool_input: Optional[str] = None,
     path_hints: Optional[list[str]] = None,
     project_tags: Optional[list[str]] = None,
+    idf_stats: Optional[dict] = None,
 ) -> MatchResult:
     """Evaluate a compiled matcher against prompt/tool context.
 
@@ -479,6 +482,26 @@ def evaluate_match(
 
     search_only_match = search_term_hit and not has_trigger_evidence
 
+    # 7. Compute trigger IDF sum and distinct trigger terms if idf_stats provided
+    trigger_idf_sum = 0.0
+    distinct_trigger_terms = 0
+    if idf_stats and matched_anchors:
+        pool_size = idf_stats.get("pool_size", 0)
+        df_by_token = idf_stats.get("df_by_token", {})
+        if pool_size > 0:
+            import math
+            seen_terms: set[str] = set()
+            for token in matched_anchors:
+                if token in seen_terms:
+                    continue
+                seen_terms.add(token)
+                df_t = df_by_token.get(token, 0)
+                if df_t > 0:
+                    trigger_idf_sum += math.log(
+                        1 + (pool_size - df_t + 0.5) / (df_t + 0.5)
+                    )
+            distinct_trigger_terms = len(seen_terms)
+
     return MatchResult(
         matched_concept_ids=matched_concept_ids,
         matched_group_ids=matched_group_ids,
@@ -490,4 +513,6 @@ def evaluate_match(
         search_only_match=search_only_match,
         required_concepts_match=required_concepts_match,
         trigger_coverage=trigger_coverage,
+        trigger_idf_sum=trigger_idf_sum,
+        distinct_trigger_terms=distinct_trigger_terms,
     )

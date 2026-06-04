@@ -212,11 +212,12 @@ def run_cold_pipeline(
     )
     fingerprint_conflict = fingerprint_block is not None
 
-    if fingerprint_conflict and fingerprint_block.get("archive_strength") == "user":
+    # Spec section 6.7: "reject if archived fingerprint blocks the rule" (unconditional)
+    if fingerprint_conflict:
         return ColdPipelineResult(
             status="rejected",
             rule_id=None,
-            rejection_reason="fingerprint_blocked_user_archive",
+            rejection_reason=f"fingerprint_blocked_{fingerprint_block.get('archive_strength', 'unknown')}",
             scores=scores,
         )
 
@@ -368,10 +369,11 @@ def _prompt_text(value: str) -> str:
     return html_escape(value, quote=False)
 
 
-def _llm_input_hash(role: str, system: str, user: str) -> str:
+def _llm_input_hash(role: str, system: str, user: str, model_id: str = "") -> str:
     payload = dumps_json({
         "role": role,
         "prompt_version": PROMPT_VERSIONS.get(role),
+        "model_id": model_id,
         "system": system,
         "user": user,
     })
@@ -391,7 +393,7 @@ def _call_llm_role(
 ) -> str:
     """Call an LLM role through the durable idempotency/circuit-breaker layer."""
     prompt_version = PROMPT_VERSIONS[role]
-    input_hash = _llm_input_hash(role, system, user)
+    input_hash = _llm_input_hash(role, system, user, model_id)
 
     if is_circuit_breaker_open(db, role, model_id=model_id):
         raise RuntimeError(f"circuit breaker open for role {role}")
@@ -1098,9 +1100,24 @@ def _apply_non_destructive_merge(
 ) -> None:
     """Apply merge_into_existing or update_existing_fields to an existing rule.
 
+    Uses CAS (rule_version + status + runtime_policy_version) per spec section 13.
     Updates trigger variants, concepts, exclusions, or examples from the new data
     without changing status or action semantics.
     """
+    # Read current state atomically for CAS
+    rule_row = db.fetchone(
+        "SELECT rule_version, status, runtime_policy_version, "
+        "trigger_variants, excluded_contexts, near_miss_examples "
+        "FROM rules WHERE id = ?",
+        (target_rule_id,),
+    )
+    if rule_row is None:
+        return
+
+    current_version = rule_row["rule_version"]
+    current_status = rule_row["status"]
+    current_rpv = rule_row["runtime_policy_version"]
+
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
     updates: list[str] = []
     params: list = []
@@ -1108,59 +1125,52 @@ def _apply_non_destructive_merge(
     # Merge new variants into existing
     new_variants = new_rule_data.get("variants", [])
     if new_variants:
-        existing = db.fetchone(
-            "SELECT trigger_variants FROM rules WHERE id = ?", (target_rule_id,)
-        )
-        if existing:
-            import json
-            current = json.loads(existing["trigger_variants"]) if existing["trigger_variants"] else []
-            current_texts = {v.get("text", "") for v in current}
-            added = [v for v in new_variants if v.get("text", "") not in current_texts]
-            if added:
-                merged = current + added
-                updates.append("trigger_variants = ?")
-                params.append(dumps_json(merged))
+        current = json.loads(rule_row["trigger_variants"]) if rule_row["trigger_variants"] else []
+        current_texts = {v.get("text", "") for v in current}
+        added = [v for v in new_variants if v.get("text", "") not in current_texts]
+        if added:
+            merged = current + added
+            updates.append("trigger_variants = ?")
+            params.append(dumps_json(merged))
 
     # Merge new excluded contexts
     new_excluded = new_rule_data.get("excluded_contexts", [])
     if new_excluded:
-        existing = db.fetchone(
-            "SELECT excluded_contexts FROM rules WHERE id = ?", (target_rule_id,)
-        )
-        if existing:
-            import json
-            current = json.loads(existing["excluded_contexts"]) if existing["excluded_contexts"] else []
-            current_ids = {e.get("id", "") for e in current}
-            added = [e for e in new_excluded if e.get("id", "") not in current_ids]
-            if added:
-                merged = current + added
-                updates.append("excluded_contexts = ?")
-                params.append(dumps_json(merged))
+        current = json.loads(rule_row["excluded_contexts"]) if rule_row["excluded_contexts"] else []
+        current_ids = {e.get("id", "") for e in current}
+        added = [e for e in new_excluded if e.get("id", "") not in current_ids]
+        if added:
+            merged = current + added
+            updates.append("excluded_contexts = ?")
+            params.append(dumps_json(merged))
 
     # Merge near-miss examples
     new_near_miss = new_rule_data.get("near_miss_examples", [])
     if new_near_miss:
-        existing = db.fetchone(
-            "SELECT near_miss_examples FROM rules WHERE id = ?", (target_rule_id,)
-        )
-        if existing:
-            import json
-            current = json.loads(existing["near_miss_examples"]) if existing["near_miss_examples"] else []
-            added = [nm for nm in new_near_miss if nm not in current]
-            if added:
-                merged = current + added
-                updates.append("near_miss_examples = ?")
-                params.append(dumps_json(merged))
+        current = json.loads(rule_row["near_miss_examples"]) if rule_row["near_miss_examples"] else []
+        added = [nm for nm in new_near_miss if nm not in current]
+        if added:
+            merged = current + added
+            updates.append("near_miss_examples = ?")
+            params.append(dumps_json(merged))
 
     if updates:
         updates.append("rule_version = rule_version + 1")
+        updates.append("runtime_policy_version = ?")
+        params.append(RUNTIME_POLICY_VERSION)
         updates.append("updated_at = ?")
         params.append(now)
+        # CAS: verify rule hasn't changed concurrently
+        rpv_where = "AND runtime_policy_version = ?" if current_rpv else "AND runtime_policy_version IS NULL"
+        rpv_params: tuple = (current_rpv,) if current_rpv else ()
         params.append(target_rule_id)
+        params.append(current_version)
+        params.append(current_status)
         with db.transaction() as tx:
             tx.execute(
-                f"UPDATE rules SET {', '.join(updates)} WHERE id = ?",
-                tuple(params),
+                f"UPDATE rules SET {', '.join(updates)} "
+                f"WHERE id = ? AND rule_version = ? AND status = ? {rpv_where}",
+                tuple(params) + rpv_params,
             )
 
 

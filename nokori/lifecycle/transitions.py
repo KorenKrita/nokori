@@ -171,10 +171,13 @@ def _aggregate_fire_evidence(db: Db, rule_id: str, window_days: int = 30) -> dic
 
 
 def _aggregate_shadow_evidence(
-    db: Db, rule_id: str, rule_version: int, window_days: int = 30
+    db: Db, rule_id: str, rule_version: int, window_days: int = 30,
+    shadow_type: str | None = None,
 ) -> dict:
     """Count shadow labels with fingerprint dedup, distinct sessions."""
-    return count_shadow_evidence(db, rule_id, rule_version, window_days=window_days)
+    return count_shadow_evidence(
+        db, rule_id, rule_version, window_days=window_days, shadow_type=shadow_type,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -443,15 +446,29 @@ def _evaluate_candidate(db: Db, row, rule_version: int) -> TransitionResult:
                 False,
             )
 
-        # Check for agent miss / user correction evidence
+        # Check for observed agent miss or user correction evidence.
+        # Candidates rarely have fire events, so check:
+        # 1. Direct feedback with agent_miss/user_correction label
+        # 2. Feedback on shadow events indicating agent_miss
         correction_row = db.fetchone(
-            "SELECT 1 FROM rule_feedback_events f "
-            "JOIN rule_fire_events e ON e.id = f.fire_event_id "
-            "WHERE e.rule_id = ? AND f.label IN ('agent_miss', 'user_correction') "
+            "SELECT 1 FROM rule_feedback_events "
+            "WHERE fire_event_id IN ("
+            "  SELECT id FROM rule_fire_events WHERE rule_id = ?"
+            ") AND label IN ('agent_miss', 'user_correction') "
             "LIMIT 1",
             (rule_id,),
         )
-        if correction_row is not None:
+        # Also check direct feedback referencing this rule's shadow events
+        shadow_feedback_row = db.fetchone(
+            "SELECT 1 FROM rule_feedback_events "
+            "WHERE source = 'agent_miss' "
+            "AND fire_event_id IN ("
+            "  SELECT id FROM rule_shadow_events WHERE rule_id = ?"
+            ") LIMIT 1",
+            (rule_id,),
+        )
+        has_miss_evidence = correction_row is not None or shadow_feedback_row is not None
+        if has_miss_evidence:
             reason = (
                 f"single_session_exception: quality={admission_quality:.2f} "
                 f"strong={strong_count} would_help_high={would_help_high} "

@@ -207,8 +207,13 @@ class TestCircuitBreaker:
 
         assert is_circuit_breaker_open(db, "extractor") is True
 
-    def test_breaker_stays_closed_below_threshold(self, db: Db):
-        for i in range(CIRCUIT_BREAKER_THRESHOLD - 1):
+    def test_breaker_stays_closed_below_rate_threshold(self, db: Db):
+        """Breaker stays closed when failure rate < 0.50 (spec: rate >= 0.50 trips)."""
+        # Insert 6 successes and 3 failures = 3/9 = 33% < 50%
+        for i in range(6):
+            job_id = enqueue_job(db, "extractor", "model-a", "1.0.0", f"ok_{i}")
+            mark_job_complete(db, job_id, "{}")
+        for i in range(3):
             job_id = enqueue_job(db, "extractor", "model-a", "1.0.0", f"fail_{i}")
             mark_job_failed(db, job_id)
 
@@ -624,7 +629,7 @@ class TestArchivedFingerprintBlock:
             )
 
         assert result.status == "rejected"
-        assert "fingerprint_blocked_user_archive" in result.rejection_reason
+        assert "fingerprint_blocked_user" in result.rejection_reason
         assert result.rule_id is None
 
         row = db.fetchone("SELECT COUNT(*) AS n FROM rules")
