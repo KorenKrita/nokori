@@ -58,6 +58,11 @@ from .roles import (
 # Pipeline version
 # ---------------------------------------------------------------------------
 
+class CircuitBreakerOpenError(RuntimeError):
+    """Raised when a circuit breaker is open — job should remain pending, not rejected."""
+    pass
+
+
 PIPELINE_VERSION: str = "1.0.0"
 DESTRUCTIVE_MERGE_OPS: frozenset[str] = frozenset((
     "replace_existing",
@@ -124,6 +129,35 @@ def run_cold_pipeline(
     Returns:
         ColdPipelineResult with final status, rule_id (if inserted), rejection reason, and scores.
     """
+    try:
+        return _run_cold_pipeline_inner(
+            db, llm, transcript_ref, extractor_output,
+            role_models=role_models, default_model=default_model,
+            idf_stats=idf_stats, global_adversarial_cases=global_adversarial_cases,
+            source_origin=source_origin,
+        )
+    except CircuitBreakerOpenError as e:
+        # Spec section 5.2: paused jobs remain pending, not rejected
+        return ColdPipelineResult(
+            status="pending",
+            rule_id=None,
+            rejection_reason=f"circuit_breaker_pending: {e}",
+            scores=None,
+        )
+
+
+def _run_cold_pipeline_inner(
+    db: Db,
+    llm,
+    transcript_ref: str,
+    extractor_output: dict[str, Any],
+    *,
+    role_models: dict[str, str] | None = None,
+    default_model: str | None = None,
+    idf_stats: IdfPoolStats | None = None,
+    global_adversarial_cases: list[dict[str, Any]] | None = None,
+    source_origin: SourceOrigin = "transcript_extraction",
+) -> ColdPipelineResult:
     candidate = extractor_output
 
     # --- Pre-check: evidence_quotes must be non-empty (section 6.1) ---
@@ -396,7 +430,7 @@ def _call_llm_role(
     input_hash = _llm_input_hash(role, system, user, model_id)
 
     if is_circuit_breaker_open(db, role, model_id=model_id):
-        raise RuntimeError(f"circuit breaker open for role {role}")
+        raise CircuitBreakerOpenError(f"circuit breaker open for role {role}")
 
     cached = get_cached_output(db, role, model_id, prompt_version, input_hash)
     if cached is not None:
@@ -459,6 +493,8 @@ def _run_admission_judge(
         # Enforce deterministic policy over LLM decision (spec section 6.2/6.7)
         decision = _enforce_admission_policy(decision, scores)
         return decision, scores
+    except CircuitBreakerOpenError:
+        raise  # Propagate: job should remain pending, not rejected
     except (ValueError, Exception):
         # Conservative: reject on judge failure
         return "reject", {}

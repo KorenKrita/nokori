@@ -308,9 +308,13 @@ def compute_trigger_idf_sum(tokens: list[str], idf_stats: IdfPoolStats) -> float
 
     total = 0.0
     for t in tokens:
-        df_t = idf_stats.df_by_token.get(t, 0)
-        if df_t > 0:
-            total += math.log(1 + (n - df_t + 0.5) / (df_t + 0.5))
+        if t not in idf_stats.df_by_token:
+            # Token not in any rule's trigger fields — not a valid trigger anchor
+            continue
+        df_t = idf_stats.df_by_token[t]
+        # Use df_effective=max(1, df_t) for the formula
+        df_effective = max(1, df_t)
+        total += math.log(1 + (n - df_effective + 0.5) / (df_effective + 0.5))
     return total
 
 

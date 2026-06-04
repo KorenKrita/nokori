@@ -646,9 +646,12 @@ def _evaluate_suppressed(db: Db, row, rule_version: int) -> TransitionResult:
     old_status = "suppressed"
     rpv = row["runtime_policy_version"]
 
-    # Only count shadow evidence AFTER suppression (recovery evidence only)
+    # Only count shadow evidence AFTER suppression with recovery type (spec 10.3)
     suppressed_at_iso = row["suppressed_at"]
-    shadow = _aggregate_shadow_evidence(db, rule_id, rule_version, since_iso=suppressed_at_iso)
+    shadow = _aggregate_shadow_evidence(
+        db, rule_id, rule_version, since_iso=suppressed_at_iso,
+        shadow_type="suppression_recovery",
+    )
 
     # Check suppressed -> archived (fast downgrade)
     risky_harmful = shadow.get("risky", 0) + shadow.get("near_miss", 0)

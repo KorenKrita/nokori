@@ -455,28 +455,14 @@ def evaluate_applicability(
                         penalties=penalties,
                     )
 
-        # HOT for trusted
-        if rule_severity == "high_risk":
-            has_strong = _high_risk_strong_evidence(**evidence_kwargs)
-        else:
-            has_strong = _strong_trigger_evidence(**evidence_kwargs)
-
-        if has_strong:
-            if false_positive_score > 0.0:
-                penalties.append(f"recent_fp_penalty={false_positive_score:.2f}")
-            return ApplicabilityResult(
-                decision="hot",
-                eligible=True,
-                reason="trusted with strong trigger evidence",
-                trigger_evidence_passed=True,
-                penalties=penalties,
-            )
-
-        # Fall back to WARM
+        # HOT for trusted: spec says trusted "can WARM/HOT" without strong-evidence requirement
+        # (unlike active which requires strong evidence for HOT)
+        if false_positive_score > 0.0:
+            penalties.append(f"recent_fp_penalty={false_positive_score:.2f}")
         return ApplicabilityResult(
-            decision="warm",
+            decision="hot",
             eligible=True,
-            reason="trusted: trigger evidence passed",
+            reason="trusted: trigger evidence passed -> HOT eligible",
             trigger_evidence_passed=True,
             penalties=penalties,
         )

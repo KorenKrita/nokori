@@ -94,11 +94,13 @@ def _insert_shadow_event(
     label: str = "would_help_high",
     fingerprint: str | None = None,
     days_ago: float = 0,
+    shadow_type: str = "candidate_probe",
 ) -> str:
     eid = str(uuid.uuid4())
     sid = session_id or str(uuid.uuid4())
     ts = _utcnow_iso(-days_ago)
     fp = fingerprint or str(uuid.uuid4())
+    status_at_match = "suppressed" if shadow_type == "suppression_recovery" else "candidate"
     with db.transaction() as tx:
         tx.execute(
             "INSERT INTO rule_shadow_events "
@@ -113,8 +115,8 @@ def _insert_shadow_event(
                 rule_version,
                 label,
                 fp,
-                "candidate",
-                "candidate_probe",
+                status_at_match,
+                shadow_type,
                 "hash",
                 "warm",
                 "{}",
@@ -760,9 +762,9 @@ class TestSuppressedToActive:
             sess2 = str(uuid.uuid4())
 
             # recovery_would_help_high >= 3, distinct_sessions >= 2
-            _insert_shadow_event(db, rid, session_id=sess1, label="would_help_high")
-            _insert_shadow_event(db, rid, session_id=sess1, label="would_help_high")
-            _insert_shadow_event(db, rid, session_id=sess2, label="would_help_high")
+            _insert_shadow_event(db, rid, session_id=sess1, label="would_help_high", shadow_type="suppression_recovery")
+            _insert_shadow_event(db, rid, session_id=sess1, label="would_help_high", shadow_type="suppression_recovery")
+            _insert_shadow_event(db, rid, session_id=sess2, label="would_help_high", shadow_type="suppression_recovery")
 
             result = evaluate_transitions(db, rid)
             assert result.new_status == "active"
@@ -779,9 +781,9 @@ class TestSuppressedToActive:
             sess1 = str(uuid.uuid4())
             sess2 = str(uuid.uuid4())
 
-            _insert_shadow_event(db, rid, session_id=sess1, label="would_help_high")
-            _insert_shadow_event(db, rid, session_id=sess1, label="would_help_high")
-            _insert_shadow_event(db, rid, session_id=sess2, label="would_help_high")
+            _insert_shadow_event(db, rid, session_id=sess1, label="would_help_high", shadow_type="suppression_recovery")
+            _insert_shadow_event(db, rid, session_id=sess1, label="would_help_high", shadow_type="suppression_recovery")
+            _insert_shadow_event(db, rid, session_id=sess2, label="would_help_high", shadow_type="suppression_recovery")
 
             # Harmful fire event after suppression
             _insert_fire_event(db, rid, label="harmful",
@@ -805,8 +807,8 @@ class TestSuppressedToArchived:
             suppressed_at = _utcnow_iso(-5)
             rid = _insert_rule(db, status="suppressed", suppressed_at=suppressed_at)
 
-            _insert_shadow_event(db, rid, label="risky")
-            _insert_shadow_event(db, rid, label="risky")
+            _insert_shadow_event(db, rid, label="risky", shadow_type="suppression_recovery")
+            _insert_shadow_event(db, rid, label="risky", shadow_type="suppression_recovery")
 
             result = evaluate_transitions(db, rid)
             assert result.new_status == "archived"
@@ -822,7 +824,7 @@ class TestSuppressedToArchived:
             rid = _insert_rule(db, status="suppressed", suppressed_at=suppressed_at)
 
             # No would_help_high evidence
-            _insert_shadow_event(db, rid, label="would_help_low")
+            _insert_shadow_event(db, rid, label="would_help_low", shadow_type="suppression_recovery")
 
             result = evaluate_transitions(db, rid)
             assert result.new_status == "archived"
@@ -841,9 +843,9 @@ class TestSuppressedToArchived:
             sess2 = str(uuid.uuid4())
 
             # Meet recovery threshold
-            _insert_shadow_event(db, rid, session_id=sess1, label="would_help_high")
-            _insert_shadow_event(db, rid, session_id=sess1, label="would_help_high")
-            _insert_shadow_event(db, rid, session_id=sess2, label="would_help_high")
+            _insert_shadow_event(db, rid, session_id=sess1, label="would_help_high", shadow_type="suppression_recovery")
+            _insert_shadow_event(db, rid, session_id=sess1, label="would_help_high", shadow_type="suppression_recovery")
+            _insert_shadow_event(db, rid, session_id=sess2, label="would_help_high", shadow_type="suppression_recovery")
 
             result = evaluate_transitions(db, rid)
             # Should recover to active instead of archiving
