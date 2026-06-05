@@ -239,6 +239,8 @@ def _run_cold_pipeline_inner(
                 scores=scores,
             )
         rule_data = rewritten
+        # Always use original evidence — rewriter must not override with hallucinated quotes
+        rule_data["evidence_quotes"] = candidate.get("evidence_quotes", [])
     else:
         # Build structured rule_data from extractor candidate for accepted path
         rule_data = _candidate_to_rule_data(candidate)
