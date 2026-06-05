@@ -44,6 +44,7 @@ def _rule_to_response(rule) -> dict:
         domain_tags=rule.domain_tags,
         tool_tags=rule.tool_tags,
         path_patterns=rule.path_patterns,
+        evidence_quotes=rule.evidence_quotes if isinstance(rule.evidence_quotes, list) else loads_json(rule.evidence_quotes, []),
         quality_score=rule.quality_score,
         evidence_support_score=rule.evidence_support_score,
         specificity_score=rule.specificity_score,

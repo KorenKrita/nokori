@@ -155,6 +155,9 @@ class RuleResponse(BaseModel):
     tool_tags: list[str] = []
     path_patterns: list[str] = []
 
+    # Evidence
+    evidence_quotes: list[str] = []
+
     # Quality scores
     quality_score: float = 0.0
     evidence_support_score: float = 0.0

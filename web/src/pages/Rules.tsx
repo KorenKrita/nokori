@@ -7,7 +7,7 @@ import { StatusBadge } from '@/components/StatusBadge'
 import { PageSkeleton } from '@/components/PageSkeleton'
 import { useApi } from '@/hooks/useApi'
 import { t, lz } from '@/lib/i18n'
-import { ruleHitCount, ruleSource, ruleTrigger, ruleTriggerZh } from '@/lib/ruleDisplay'
+import { ruleSource, ruleTrigger, ruleTriggerZh } from '@/lib/ruleDisplay'
 import type { Meta, Rule } from '@/lib/types'
 
 const STATUS_FILTERS = [
@@ -118,7 +118,7 @@ export function Rules() {
                 <th className="text-left py-3 px-2">{t('rules.col.status')}</th>
                 <th className="text-left py-3 px-2">{t('rules.col.type')}</th>
                 <th className="text-left py-3 px-2">{t('rules.col.trigger')}</th>
-                <th className="text-right py-3 pl-2 pr-6">{t('rules.col.hits')}</th>
+                <th className="text-right py-3 pl-2 pr-6">{t('rules.col.severity')}</th>
                 <th className="text-left py-3 pl-6 pr-2">{t('rules.col.scope')}</th>
               </tr>
             </thead>
@@ -139,7 +139,7 @@ export function Rules() {
                   <td className="py-3 px-2"><StatusBadge status={rule.status} /></td>
                   <td className="py-3 px-2 text-text-secondary">{ruleSource(rule)}</td>
                   <td className="py-3 px-2 text-text-secondary truncate">{lz(ruleTrigger(rule), ruleTriggerZh(rule))}</td>
-                  <td className="py-3 pl-2 pr-6 text-right font-mono tabular-nums">{ruleHitCount(rule)}</td>
+                  <td className="py-3 pl-2 pr-6 text-right font-mono tabular-nums text-text-tertiary">{rule.severity ?? '-'}</td>
                   <td className="py-3 pl-6 pr-2 text-text-tertiary text-xs font-mono truncate">
                     {rule.project_scope === 'global' ? t('rules.scope.global') : rule.project_id ?? '-'}
                   </td>

@@ -65,6 +65,9 @@ class Rule:
     language_hints: str = "[]"  # JSON list[str]
     transcript_ref: str | None = None
 
+    # Evidence
+    evidence_quotes: list[str] = field(default_factory=list)
+
     # Quality scores
     quality_score: float = 0.0
     evidence_support_score: float = 0.0

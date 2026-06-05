@@ -10,7 +10,6 @@ import { t, lz, getLocale } from '@/lib/i18n'
 import {
   ruleAction,
   ruleActionZh,
-  ruleHitCount,
   ruleSource,
   ruleTrigger,
   ruleTriggerZh,
@@ -18,10 +17,9 @@ import {
 } from '@/lib/ruleDisplay'
 import type { Rule } from '@/lib/types'
 
-const DATE_META_KEYS = new Set(['last_hit', 'created_at', 'updated_at'])
+const DATE_META_KEYS = new Set(['created_at', 'updated_at'])
 
-function formatMetaValue(field: string, value: string, neverLabel: string): string {
-  if (field === 'last_hit' && value === neverLabel) return value
+function formatMetaValue(field: string, value: string): string {
   if (DATE_META_KEYS.has(field)) return formatDateTime(value) || value
   return value
 }
@@ -36,7 +34,7 @@ export function RuleDetail() {
   const triggerVariants = rule.trigger_variants ?? []
   const triggerVariantsZh = rule.trigger_variants_zh ?? []
   const searchTerms = rule.search_terms ?? {}
-  const evidenceLog = rule.evidence_log ?? []
+  const evidenceQuotes = rule.evidence_quotes ?? []
 
   const handleDismiss = async () => {
     await mutateApi(`/rules/${shortId}/dismiss`, 'POST')
@@ -100,11 +98,8 @@ export function RuleDetail() {
             <dl className="space-y-2 text-xs">
               {(
                 [
-                  ['source_type', t('rules.source_type'), ruleSource(rule)],
-                  ['confidence', t('rules.confidence'), rule.confidence ?? rule.severity ?? '-'],
-                  ['evidence_score', t('rules.evidence_score'), String(rule.evidence_score ?? 0)],
-                  ['hit_count', t('rules.hit_count'), String(ruleHitCount(rule))],
-                  ['last_hit', t('rules.last_hit'), rule.last_hit ?? t('rules.never')],
+                  ['source_origin', t('rules.source_type'), ruleSource(rule)],
+                  ['severity', t('rules.severity'), rule.severity ?? '-'],
                   ['project_scope', t('rules.project_scope'), rule.project_scope],
                   ['project_id', t('rules.project_id'), rule.project_id ?? 'global'],
                   ['created_at', t('rules.created'), rule.created_at],
@@ -114,7 +109,7 @@ export function RuleDetail() {
                 <div key={field} className="flex justify-between gap-3">
                   <dt className="text-text-tertiary shrink-0">{label}</dt>
                   <dd className="font-mono text-text-secondary text-right break-all">
-                    {formatMetaValue(field, value, t('rules.never'))}
+                    {formatMetaValue(field, value)}
                   </dd>
                 </div>
               ))}
@@ -141,13 +136,13 @@ export function RuleDetail() {
         </div>
       </div>
 
-      {evidenceLog.length > 0 && (
+      {evidenceQuotes.length > 0 && (
         <GlassCard>
-          <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary mb-3">{t('rules.evidence_log')}</h3>
+          <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary mb-3">{t('rules.evidence_quotes')}</h3>
           <div className="space-y-1 max-h-60 overflow-y-auto">
-            {evidenceLog.map((entry, i) => (
+            {evidenceQuotes.map((quote: string, i: number) => (
               <div key={i} className="text-xs font-mono text-text-secondary py-1 border-b border-[var(--color-border-subtle)]">
-                {JSON.stringify(entry)}
+                &ldquo;{quote}&rdquo;
               </div>
             ))}
           </div>

@@ -1,0 +1,1 @@
+function e(e){return e.trigger_canonical??``}function t(e){return e.trigger_canonical_zh??null}function n(e){return e.action_instruction??``}function r(e){return e.action_instruction_zh??null}function i(e){return e.source_origin??`-`}function a(e){return typeof e==`string`?e:e.text??``}export{t as a,e as i,r as n,a as o,i as r,n as t};

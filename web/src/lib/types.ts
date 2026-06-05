@@ -11,32 +11,38 @@ export interface Rule {
   rule_version?: number
   trigger_canonical?: string
   trigger_canonical_zh?: string | null
-  trigger_text?: string
   trigger_variants?: TriggerVariant[]
   trigger_variants_zh?: string[]
   search_terms?: Record<string, string[]>
-  action?: string
   action_instruction?: string
   action_instruction_zh?: string | null
-  source_type?: string
-  source_origin?: string
-  confidence?: string
+  allowed_behavior?: string[]
+  forbidden_behavior?: string[]
   severity?: string
   status: string
-  evidence_score?: number
-  evidence_log?: Record<string, unknown>[]
-  hit_count?: number
-  last_hit?: string | null
-  shadow_hit_count?: number
-  promotion_evidence?: Record<string, unknown>[]
+  source_origin?: string
+  activation_origin?: string | null
+  evidence_quotes?: string[]
+  domain_tags?: string[]
+  tool_tags?: string[]
+  path_patterns?: string[]
+  quality_score?: number
+  evidence_support_score?: number
+  specificity_score?: number
+  retrieval_readiness_score?: number
+  observed_usefulness_score?: number
+  plausible_usefulness_score?: number
+  false_positive_score?: number
+  harmful_score?: number
+  first_observed_useful_at?: string | null
+  trusted_at?: string | null
+  suppressed_at?: string | null
   project_scope: string
   project_id: string | null
-  superseded_by: string | null
   archived_reason: string | null
+  replacement_id?: string | null
   created_at: string
   updated_at: string
-  trigger_text_zh?: string | null
-  action_zh?: string | null
 }
 
 export interface ScoredResult {

@@ -435,6 +435,7 @@ def row_to_rule(row):
         path_patterns=loads_json(row["path_patterns"], []),
         language_hints=row["language_hints"],
         transcript_ref=row["transcript_ref"],
+        evidence_quotes=loads_json(row["evidence_quotes"], []),
         quality_score=row["quality_score"],
         evidence_support_score=row["evidence_support_score"],
         specificity_score=row["specificity_score"],
@@ -467,7 +468,7 @@ RULE_COLUMNS = (
     "near_miss_examples, trigger_variants, trigger_variants_zh, search_terms, "
     "action_instruction, action_instruction_zh, "
     "allowed_behavior, forbidden_behavior, "
-    "domain_tags, tool_tags, path_patterns, language_hints, transcript_ref, "
+    "domain_tags, tool_tags, path_patterns, language_hints, transcript_ref, evidence_quotes, "
     "quality_score, evidence_support_score, specificity_score, retrieval_readiness_score, "
     "observed_usefulness_score, plausible_usefulness_score, false_positive_score, harmful_score, "
     "source_origin, activation_origin, first_observed_useful_at, "
