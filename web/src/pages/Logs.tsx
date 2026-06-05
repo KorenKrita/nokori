@@ -73,14 +73,14 @@ export function Logs() {
             <div
               key={i}
               className={`py-0.5 px-2 rounded break-all whitespace-pre-wrap ${
-                line.toLowerCase().includes('error')
+                /\bERROR\b/.test(line.slice(0, 80))
                   ? 'text-accent-rose bg-accent-rose/5'
-                  : line.toLowerCase().includes('warn')
+                  : /\bWARN(?:ING)?\b/.test(line.slice(0, 80))
                   ? 'text-accent-amber bg-accent-amber/5'
                   : 'text-text-secondary'
               }`}
             >
-              {line}
+              {line.replace(/(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}:\d{2})Z/, '$1 $2')}
             </div>
           ))}
         </div>
