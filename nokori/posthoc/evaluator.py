@@ -54,6 +54,7 @@ POSTHOC_OUTPUT_SCHEMA: dict[str, Any] = {
             "type": "string",
             "enum": list(POSTHOC_REASON_CODES),
         },
+        "rule_application_evidence": {"type": "string"},
         "would_likely_have_happened_without_rule": {
             "type": "string",
             "enum": list(ATTRIBUTION_ANSWERS),
@@ -103,6 +104,7 @@ Return a single JSON object (no markdown fences, no extra text):
 {
   "label": "observed_useful|plausible_useful|irrelevant|harmful|unclear",
   "reason_code": "<one of the defined reason codes>",
+  "rule_application_evidence": "<specific evidence from the transcript>",
   "would_likely_have_happened_without_rule": "yes|no|unclear"
 }
 """
@@ -152,7 +154,8 @@ def build_posthoc_prompt(evaluator_input: dict) -> str:
     parts.append("\n## Instructions")
     parts.append(
         "Based on the above, produce a single JSON object with: "
-        "label, reason_code, would_likely_have_happened_without_rule."
+        "label, reason_code, rule_application_evidence, "
+        "would_likely_have_happened_without_rule."
     )
 
     return "\n".join(parts)
