@@ -342,11 +342,30 @@ def find_merge_neighbors(db: Db, rule_data: dict, limit: int = 10) -> list[dict]
     """
     from nokori.db import loads_json, RULE_COLUMNS
 
+    def _variant_texts(value) -> set[str]:
+        raw_variants = loads_json(value, []) if isinstance(value, str) else value
+        if not isinstance(raw_variants, list):
+            return set()
+
+        texts: set[str] = set()
+        for variant in raw_variants:
+            if isinstance(variant, str):
+                text = variant
+            elif isinstance(variant, dict):
+                text = str(variant.get("text") or "")
+            else:
+                text = ""
+            if text.strip():
+                texts.add(text.strip().lower())
+        return texts
+
     candidates: dict[str, tuple[dict, float]] = {}
 
     trigger = rule_data.get("trigger_canonical", "")
     trigger_tokens = _tokenize(trigger)
-    variants: list[str] = rule_data.get("trigger_variants", [])
+    variant_texts = _variant_texts(
+        rule_data.get("variants") or rule_data.get("trigger_variants", [])
+    )
     search_terms: dict = rule_data.get("search_terms", {})
     domain_tags: list[str] = rule_data.get("domain_tags", [])
     tool_tags: list[str] = rule_data.get("tool_tags", [])
@@ -375,10 +394,9 @@ def find_merge_neighbors(db: Db, rule_data: dict, limit: int = 10) -> list[dict]
 
         # Variant phrase overlap.
         row_variants = loads_json(row["trigger_variants"], [])
-        if variants and row_variants:
-            variant_set = {v.lower() for v in variants}
-            row_variant_set = {v.lower() if isinstance(v, str) else "" for v in row_variants}
-            variant_overlap = len(variant_set & row_variant_set)
+        row_variant_texts = _variant_texts(row_variants)
+        if variant_texts and row_variant_texts:
+            variant_overlap = len(variant_texts & row_variant_texts)
             score += variant_overlap * 2.0
 
         # Search terms overlap.

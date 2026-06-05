@@ -555,6 +555,56 @@ class TestRunShadowCounterfactualEvaluation:
         finally:
             db.close()
 
+    def test_shadow_labels_drive_candidate_promotion(self, tmp_path):
+        from nokori.events.shadow import run_shadow_counterfactual_evaluation
+
+        db = _make_db(tmp_path)
+        try:
+            rule = _insert_rule(db, status="candidate")
+            now = _utcnow_iso()
+            with db.transaction() as tx:
+                tx.execute(
+                    "INSERT INTO rule_synthetic_evals "
+                    "(rule_id, rule_version, runtime_policy_version, eval_cases, "
+                    "eval_results, passed, created_at) VALUES (?,?,?,?,?,?,?)",
+                    (
+                        rule.id,
+                        rule.rule_version,
+                        rule.runtime_policy_version,
+                        dumps_json([]),
+                        dumps_json({"positive_recall": 1.0}),
+                        1,
+                        now,
+                    ),
+                )
+            for idx in range(5):
+                create_shadow_event(
+                    db,
+                    rule,
+                    f"s_promote_{idx % 2}",
+                    "candidate",
+                    "candidate_probe",
+                    f"hash_promote_{idx}",
+                    "hot_candidate",
+                    {"sim": 0.9},
+                    context_fingerprint=f"fp_promote_{idx}",
+                )
+
+            class MockLLM:
+                def call(self, *, system, user, role):
+                    return json.dumps({
+                        "label": "would_help_high",
+                        "reasoning": "The rule would have prevented an error",
+                    })
+
+            summary = run_shadow_counterfactual_evaluation(db, MockLLM())
+
+            assert summary["processed"] == 5
+            row = db.fetchone("SELECT status FROM rules WHERE id = ?", (rule.id,))
+            assert row["status"] == "active"
+        finally:
+            db.close()
+
     def test_handles_llm_failure_gracefully(self, tmp_path):
         from nokori.events.shadow import run_shadow_counterfactual_evaluation
 

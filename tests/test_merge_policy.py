@@ -1,5 +1,7 @@
 """Tests for nokori.merge.policy -- deterministic merge policy (section 8.4)."""
 
+import json
+
 import pytest
 
 from nokori.db import open_db
@@ -439,3 +441,35 @@ def test_find_merge_neighbors_returns_related_rules(db):
     neighbor_ids = [n["id"] for n in neighbors]
     assert "rule-a" in neighbor_ids
     assert "rule-b" in neighbor_ids
+
+
+def test_find_merge_neighbors_matches_v6_variant_dicts(db):
+    """V6 variant objects participate in merge-neighbor phrase recall."""
+    _insert_rule(db, "rule-a", "ra", "alpha beta", "gamma delta")
+    with db.transaction() as tx:
+        tx.execute(
+            "UPDATE rules SET trigger_variants = ? WHERE id = ?",
+            (
+                json.dumps(
+                    [{"text": "git push --force", "strength": "strong_anchor"}]
+                ),
+                "rule-a",
+            ),
+        )
+    _insert_rule(db, "rule-b", "rb", "recent unrelated", "recent unrelated")
+    with db.transaction() as tx:
+        tx.execute(
+            "UPDATE rules SET updated_at = ? WHERE id = ?",
+            ("2999-01-01T00:00:00Z", "rule-b"),
+        )
+
+    rule_data = {
+        "id": "new-candidate",
+        "trigger_canonical": "omega sigma",
+        "variants": [{"text": "git push --force", "strength": "strong_anchor"}],
+        "action_instruction": "theta lambda",
+    }
+
+    neighbors = find_merge_neighbors(db, rule_data, limit=1)
+
+    assert [n["id"] for n in neighbors] == ["rule-a"]

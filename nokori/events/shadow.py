@@ -349,16 +349,20 @@ def run_shadow_counterfactual_evaluation(
     This is the shadow counterfactual evaluation pipeline that enables
     candidate promotion and suppressed recovery (spec section 10.3).
     """
-    summary = {"processed": 0, "labeled": 0, "failed": 0}
+    summary = {"processed": 0, "labeled": 0, "failed": 0, "transitions_applied": 0}
+    affected_rule_ids: set[str] = set()
 
     events = get_unlabeled_shadow_events(db, limit=limit)
     for event in events:
         shadow_event_id = event["id"]
+        rule_id = event.get("rule_id")
         action_snapshot = event.get("shadow_action_snapshot", "")
         trigger_snapshot = event.get("shadow_trigger_snapshot", "")
 
         if not action_snapshot and not trigger_snapshot:
             mark_shadow_label(db, shadow_event_id, "unclear")
+            if rule_id:
+                affected_rule_ids.add(rule_id)
             summary["processed"] += 1
             summary["labeled"] += 1
             continue
@@ -408,11 +412,21 @@ def run_shadow_counterfactual_evaluation(
             if label not in valid_labels:
                 label = "unclear"
             mark_shadow_label(db, shadow_event_id, label)
+            if rule_id:
+                affected_rule_ids.add(rule_id)
             summary["labeled"] += 1
         except Exception:
             summary["failed"] += 1
 
         summary["processed"] += 1
+
+    if affected_rule_ids:
+        from ..lifecycle.transitions import evaluate_transitions
+
+        for rule_id in sorted(affected_rule_ids):
+            result = evaluate_transitions(db, rule_id)
+            if result.applied:
+                summary["transitions_applied"] += 1
 
     return summary
 

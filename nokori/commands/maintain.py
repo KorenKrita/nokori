@@ -7,6 +7,7 @@ from ..config import Config
 from ..db import fetch_rules, open_db
 from ..lifecycle import maintenance
 from ..llm.adapter import LLMAdapter
+from ..events.shadow import run_shadow_counterfactual_evaluation
 from ..posthoc.jobs import process_pending_posthoc_jobs
 from ..search.idf_stats import (
     build_idf_stats,
@@ -37,9 +38,13 @@ def run(_args: argparse.Namespace, cfg: Config) -> int:
         # Core maintenance (includes lifecycle transitions via run_maintenance)
         summary = maintenance.run_maintenance(db, cfg)
 
-        # Cold-path posthoc evaluation jobs
+        # Cold-path posthoc/shadow evaluation jobs
+        llm = _PosthocLLMAdapter(cfg)
         posthoc_summary = process_pending_posthoc_jobs(
-            db, _PosthocLLMAdapter(cfg), limit=20
+            db, llm, limit=20
+        )
+        shadow_summary = run_shadow_counterfactual_evaluation(
+            db, llm, limit=20
         )
 
         # Expire stale transcript ingest jobs
@@ -66,6 +71,13 @@ def run(_args: argparse.Namespace, cfg: Config) -> int:
         f"done={posthoc_summary['done']} "
         f"unclear={posthoc_summary['unclear']} "
         f"failed={posthoc_summary['failed']}"
+    )
+    print(
+        "shadow.processed    "
+        f"processed={shadow_summary['processed']} "
+        f"labeled={shadow_summary['labeled']} "
+        f"failed={shadow_summary['failed']} "
+        f"transitions={shadow_summary['transitions_applied']}"
     )
     print(f"ingest.expired        {expired_ingest}")
     print(f"idf.rebuilt           {idf_rebuilt}")
