@@ -1251,12 +1251,15 @@ def _candidate_to_rule_data(candidate: dict[str, Any]) -> dict[str, Any]:
     """Convert raw extractor candidate output to structured rule_data format."""
     return {
         "trigger_canonical": candidate.get("trigger_draft", candidate.get("trigger", "")),
+        "trigger_canonical_zh": candidate.get("trigger_zh"),
         "action_instruction": candidate.get("action_draft", candidate.get("action", "")),
+        "action_instruction_zh": candidate.get("action_zh"),
         "severity": "reminder",
         "required_concept_groups": _draft_concept_groups(candidate),
         "concepts": _draft_concepts(candidate),
         "excluded_contexts": _draft_excluded_contexts(candidate),
         "variants": _draft_variants(candidate),
+        "trigger_variants_zh": candidate.get("trigger_variants_zh", []),
         "near_miss_examples": candidate.get("near_miss_examples", []),
         "search_terms": candidate.get("search_terms_draft", candidate.get("search_terms", {})),
         "scope": {

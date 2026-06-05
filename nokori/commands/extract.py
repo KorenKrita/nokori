@@ -145,13 +145,16 @@ def _process_path(path: Path, project_id: str | None, cfg: Config,
             extractor_output = {
                 "trigger": cand.trigger,
                 "trigger_draft": cand.trigger,
+                "trigger_zh": cand.trigger_text_zh,
                 "action": cand.action,
                 "action_draft": cand.action,
+                "action_zh": cand.action_zh,
                 "evidence_quotes": _candidate_evidence_quotes(cand, text),
                 "confidence": 0.7 if cand.confidence == "medium" else (
                     0.9 if cand.confidence == "high" else 0.5
                 ),
                 "trigger_variants_draft": cand.trigger_variants,
+                "trigger_variants_zh": cand.trigger_variants_zh,
                 "search_terms_draft": cand.search_terms,
                 "domain_tags": [],
                 "tool_tags": [],
