@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import { CpuIcon, CloudIcon } from '@phosphor-icons/react'
 import type { ConfigVariantSchema, ConfigValues } from '@/lib/configTypes'
@@ -34,15 +33,8 @@ export function ExclusiveVariantPanel({
   envLocked,
   clearsOnSave = [],
 }: Props) {
-  const [openId, setOpenId] = useState<'local' | 'remote'>(active)
-
-  useEffect(() => {
-    setOpenId(active)
-  }, [active])
-
   const select = (id: 'local' | 'remote') => {
     if (id === active) {
-      setOpenId(id)
       return
     }
     onRequestActiveChange(id)
@@ -78,8 +70,8 @@ export function ExclusiveVariantPanel({
 
       <div className="space-y-2">
         {variants.map((variant) => {
-          const isOpen = openId === variant.id
           const isActive = active === variant.id
+          const isOpen = isActive
           const Icon = VARIANT_ICON[variant.id]
           return (
             <div

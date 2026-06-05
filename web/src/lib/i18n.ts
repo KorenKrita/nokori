@@ -14,16 +14,16 @@ const translations: Record<Locale, Record<string, string>> = {
     // Dashboard
     'dashboard.title': '仪表盘',
     'dashboard.rules': '规则',
-    'dashboard.injections_24h': '注入 (24h)',
+    'dashboard.fire_events_24h': 'Fire events (24h)',
     'dashboard.embed_server': 'Embed 服务',
     'dashboard.gate': 'Gate 阻断',
     'dashboard.extract': '提取任务',
     'dashboard.promotion': '跨项目提升',
     'dashboard.hot_label': 'HOT:',
     'dashboard.status.active': '活跃',
-    'dashboard.status.dormant': '休眠',
+    'dashboard.status.trusted': '可信',
     'dashboard.status.candidate': '候选',
-    'dashboard.status.merged': '已合并',
+    'dashboard.status.suppressed': '已抑制',
     'dashboard.status.archived': '已归档',
     'dashboard.total': '总计',
     'dashboard.global': '全局',
@@ -40,22 +40,25 @@ const translations: Record<Locale, Record<string, string>> = {
     // Rules
     'rules.title': '规则管理',
     'rules.total': '共 {n} 条',
-    'rules.filter.active_dormant': '在用',
+    'rules.filter.formal': '正式池',
     'rules.filter.active': '活跃',
-    'rules.filter.dormant': '休眠',
+    'rules.filter.trusted': '可信',
     'rules.filter.candidate': '候选',
+    'rules.filter.suppressed': '抑制',
     'rules.filter.archived': '归档',
     'rules.filter.all': '全部',
-    'rules.filter.help.active_dormant':
-      '包含「活跃」和「休眠」：仍会参与检索、可能写入上下文的正式规则（不含候选与已归档/已合并）。',
+    'rules.filter.help.formal':
+      '包含 active 和 trusted：正式检索池，满足 v6 runtime applicability 后可注入。',
     'rules.filter.help.active':
-      '仅 status=active。可 HOT 注入；correction / anti_pattern 类在满足条件时可触发 Gate 阻断。',
-    'rules.filter.help.dormant':
-      '长期无强命中后降为休眠。命中时最多 WARM 注入，不触发 Gate。',
+      '仅 status=active。可 WARM/HOT 注入，但不能触发 Gate。',
+    'rules.filter.help.trusted':
+      '仅 status=trusted。可 WARM/HOT 注入；gate_eligible 且证据通过时可 Gate。',
     'rules.filter.help.candidate':
-      '自动提取或合并产生的待观察规则，暂不注入上下文，也不 Gate。',
+      '自动提取或影子证据中的待观察规则，暂不注入上下文，也不 Gate。',
+    'rules.filter.help.suppressed':
+      '因误报/有害证据被抑制的规则，仅走影子恢复，不注入也不 Gate。',
     'rules.filter.help.archived':
-      '已归档（archived）或已被新规则取代（merged），不再参与检索。',
+      '已归档规则，不再参与检索；用户 archive/dismiss 是显式否决。',
     'rules.filter.help.all': '显示所有状态的规则。',
     'rules.no_results': '暂无规则',
     'rules.col.id': 'ID',
@@ -122,10 +125,9 @@ const translations: Record<Locale, Record<string, string>> = {
     'lifecycle.no_candidates': '暂无提升候选',
     'lifecycle.maintenance': '维护任务',
     'lifecycle.no_maintenance': '暂无维护记录',
-    'lifecycle.job.dormant_scan': '休眠扫描（长期无强命中后降为休眠）',
     'lifecycle.job.candidate_cleanup': '候选规则清理',
     'lifecycle.job.injection_cleanup': '注入记录清理',
-    'lifecycle.job.unmerge_check': '合并回滚检查',
+    'lifecycle.job.unmerge_check': '替代规则孤儿检查',
     'lifecycle.last_run_never': '从未运行',
     // Config
     'config.title': '配置与健康',
@@ -195,16 +197,16 @@ const translations: Record<Locale, Record<string, string>> = {
     // Dashboard
     'dashboard.title': 'Dashboard',
     'dashboard.rules': 'Rules',
-    'dashboard.injections_24h': 'Injections (24h)',
+    'dashboard.fire_events_24h': 'Fire events (24h)',
     'dashboard.embed_server': 'Embed Server',
     'dashboard.gate': 'Gate',
     'dashboard.extract': 'Extract',
     'dashboard.promotion': 'Promotion',
     'dashboard.hot_label': 'HOT:',
     'dashboard.status.active': 'Active',
-    'dashboard.status.dormant': 'Dormant',
+    'dashboard.status.trusted': 'Trusted',
     'dashboard.status.candidate': 'Candidate',
-    'dashboard.status.merged': 'Merged',
+    'dashboard.status.suppressed': 'Suppressed',
     'dashboard.status.archived': 'Archived',
     'dashboard.total': 'Total',
     'dashboard.global': 'Global',
@@ -221,22 +223,25 @@ const translations: Record<Locale, Record<string, string>> = {
     // Rules
     'rules.title': 'Rules',
     'rules.total': '{n} total',
-    'rules.filter.active_dormant': 'In use',
+    'rules.filter.formal': 'Formal',
     'rules.filter.active': 'Active',
-    'rules.filter.dormant': 'Dormant',
+    'rules.filter.trusted': 'Trusted',
     'rules.filter.candidate': 'Candidate',
+    'rules.filter.suppressed': 'Suppressed',
     'rules.filter.archived': 'Archived',
     'rules.filter.all': 'All',
-    'rules.filter.help.active_dormant':
-      'Active + dormant: formal rules still retrieved and may enter context (excludes candidates and archived/merged).',
+    'rules.filter.help.formal':
+      'Active + trusted: formal retrieval pool; may inject only after v6 runtime applicability passes.',
     'rules.filter.help.active':
-      'status=active only. HOT injection; correction / anti_pattern rules may Gate when conditions match.',
-    'rules.filter.help.dormant':
-      'Dormant after long inactivity. At most WARM when retrieved; no Gate.',
+      'status=active only. WARM/HOT injection allowed; Gate is never allowed.',
+    'rules.filter.help.trusted':
+      'status=trusted only. WARM/HOT injection allowed; gate_eligible rules may Gate when evidence passes.',
     'rules.filter.help.candidate':
-      'Extracted or merged candidates under observation; not injected, not gated.',
+      'Extracted or shadow-evidence candidates under observation; not injected, not gated.',
+    'rules.filter.help.suppressed':
+      'Suppressed by false-positive or harmful evidence; shadow recovery only, never injected or gated.',
     'rules.filter.help.archived':
-      'Archived or superseded (merged); excluded from retrieval.',
+      'Archived rules are excluded from retrieval; user archive/dismiss is an explicit veto.',
     'rules.filter.help.all': 'All rule statuses.',
     'rules.no_results': 'No rules found',
     'rules.col.id': 'ID',
@@ -303,10 +308,9 @@ const translations: Record<Locale, Record<string, string>> = {
     'lifecycle.no_candidates': 'No promotion candidates yet',
     'lifecycle.maintenance': 'Maintenance Jobs',
     'lifecycle.no_maintenance': 'No maintenance runs recorded',
-    'lifecycle.job.dormant_scan': 'Dormant scan (inactive rules → dormant)',
     'lifecycle.job.candidate_cleanup': 'Candidate cleanup',
     'lifecycle.job.injection_cleanup': 'Injection history cleanup',
-    'lifecycle.job.unmerge_check': 'Unmerge check',
+    'lifecycle.job.unmerge_check': 'Replacement orphan check',
     'lifecycle.last_run_never': 'Never run',
     // Config
     'config.title': 'Config & Health',
@@ -376,16 +380,16 @@ const translations: Record<Locale, Record<string, string>> = {
     // Dashboard
     'dashboard.title': 'ダッシュボード',
     'dashboard.rules': 'ルール',
-    'dashboard.injections_24h': 'インジェクション (24h)',
+    'dashboard.fire_events_24h': 'Fire events (24h)',
     'dashboard.embed_server': 'Embed サーバー',
     'dashboard.gate': 'Gate',
     'dashboard.extract': '抽出',
     'dashboard.promotion': 'プロモーション',
     'dashboard.hot_label': 'HOT:',
     'dashboard.status.active': 'アクティブ',
-    'dashboard.status.dormant': '休止中',
+    'dashboard.status.trusted': '信頼済み',
     'dashboard.status.candidate': '候補',
-    'dashboard.status.merged': 'マージ済み',
+    'dashboard.status.suppressed': '抑制中',
     'dashboard.status.archived': 'アーカイブ',
     'dashboard.total': '合計',
     'dashboard.global': 'グローバル',
@@ -402,22 +406,25 @@ const translations: Record<Locale, Record<string, string>> = {
     // Rules
     'rules.title': 'ルール管理',
     'rules.total': '全 {n} 件',
-    'rules.filter.active_dormant': '使用中',
+    'rules.filter.formal': '正式プール',
     'rules.filter.active': 'アクティブ',
-    'rules.filter.dormant': '休止中',
+    'rules.filter.trusted': '信頼済み',
     'rules.filter.candidate': '候補',
+    'rules.filter.suppressed': '抑制中',
     'rules.filter.archived': 'アーカイブ',
     'rules.filter.all': 'すべて',
-    'rules.filter.help.active_dormant':
-      '「アクティブ」と「休止中」を含む。検索・コンテキスト注入の対象になる正式ルール（候補・アーカイブ/merged 除く）。',
+    'rules.filter.help.formal':
+      'active と trusted を含む正式検索プール。v6 runtime applicability を満たした場合のみ注入されます。',
     'rules.filter.help.active':
-      'status=active のみ。HOT 注入可。correction / anti_pattern は条件一致時に Gate 可能。',
-    'rules.filter.help.dormant':
-      '長期間ヒットがなく休止中。命中時は最大 WARM、Gate なし。',
+      'status=active のみ。WARM/HOT 注入は可能ですが、Gate は不可です。',
+    'rules.filter.help.trusted':
+      'status=trusted のみ。WARM/HOT 注入が可能で、gate_eligible は証拠通過時に Gate できます。',
     'rules.filter.help.candidate':
-      '抽出・マージ候補。観察中で注入・Gate なし。',
+      '抽出またはシャドウ証拠中の候補。観察中で注入・Gate なし。',
+    'rules.filter.help.suppressed':
+      '誤検知または有害証拠で抑制中。シャドウ復帰のみで、注入・Gate はありません。',
     'rules.filter.help.archived':
-      'アーカイブまたは merged。検索対象外。',
+      'アーカイブ済みルール。検索対象外で、ユーザー archive/dismiss は明示的な拒否です。',
     'rules.filter.help.all': 'すべてのステータスを表示。',
     'rules.no_results': 'ルールがありません',
     'rules.col.id': 'ID',
@@ -484,10 +491,9 @@ const translations: Record<Locale, Record<string, string>> = {
     'lifecycle.no_candidates': 'プロモーション候補なし',
     'lifecycle.maintenance': 'メンテナンスジョブ',
     'lifecycle.no_maintenance': 'メンテナンス記録なし',
-    'lifecycle.job.dormant_scan': '休止スキャン（長期未命中後に休止へ）',
     'lifecycle.job.candidate_cleanup': '候補ルール掃除',
     'lifecycle.job.injection_cleanup': '注入履歴掃除',
-    'lifecycle.job.unmerge_check': 'マージ解除チェック',
+    'lifecycle.job.unmerge_check': '代替ルール孤児チェック',
     'lifecycle.last_run_never': '未実行',
     // Config
     'config.title': '設定とヘルスチェック',

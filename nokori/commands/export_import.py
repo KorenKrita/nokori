@@ -17,6 +17,8 @@ from ..db import (
     open_db,
 )
 from ..errors import NokoriError
+from ..matcher.compiler import CompilationError, compile_rule
+from ..policy import RUNTIME_POLICY_VERSION
 from ..utils.ids import new_uuid, short_id_for
 from ..utils.time import now_iso
 
@@ -46,6 +48,24 @@ def _str_len(value: object, field: str, limit: int) -> str | None:
     return None
 
 
+def _json_list(value: object) -> list:
+    if isinstance(value, list):
+        return value
+    if isinstance(value, str):
+        parsed = loads_json(value, [])
+        return parsed if isinstance(parsed, list) else []
+    return []
+
+
+def _json_dict(value: object) -> dict:
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        parsed = loads_json(value, {})
+        return parsed if isinstance(parsed, dict) else {}
+    return {}
+
+
 def _validate_import_record(rec: dict) -> str | None:
     trigger = rec.get("trigger_canonical")
     if trigger is not None and not str(trigger).strip():
@@ -67,9 +87,14 @@ def _validate_import_record(rec: dict) -> str | None:
     if len(variants) > _MAX_VARIANTS:
         return f"trigger_variants exceeds {_MAX_VARIANTS} entries"
     for i, v in enumerate(variants):
-        err = _str_len(v, f"trigger_variants[{i}]", _MAX_VARIANT_LEN)
-        if err:
-            return err
+        if isinstance(v, dict):
+            err = _str_len(v.get("text"), f"trigger_variants[{i}].text", _MAX_VARIANT_LEN)
+            if err:
+                return err
+        else:
+            err = _str_len(v, f"trigger_variants[{i}]", _MAX_VARIANT_LEN)
+            if err:
+                return err
     terms = rec.get("search_terms") or {}
     if not isinstance(terms, dict):
         return "search_terms must be an object"
@@ -90,6 +115,67 @@ def _validate_import_record(rec: dict) -> str | None:
     sid = rec.get("short_id")
     if sid is not None and not _HEX_SHORT_ID.match(str(sid)):
         return "short_id must be 6-32 hexadecimal characters"
+    matcher_err = _validate_matcher_structure(rec)
+    if matcher_err:
+        return matcher_err
+    return None
+
+
+def _normalize_variants_for_compile(rec: dict) -> list[dict]:
+    groups = rec.get("required_concept_groups") or []
+    required_concepts = []
+    if groups and isinstance(groups[0], dict):
+        required_concepts = list(groups[0].get("all_of") or [])
+    variants = []
+    for variant in rec.get("trigger_variants") or []:
+        if isinstance(variant, dict):
+            variants.append(variant)
+            continue
+        text = str(variant).strip()
+        if not text:
+            continue
+        variants.append({
+            "text": text,
+            "kind": "weak_recall",
+            "requires_concepts": [],
+        })
+    trigger = str(rec.get("trigger_canonical") or "").strip()
+    if trigger and required_concepts and len(re.findall(r"[\w+-]+", trigger)) >= 2:
+        variants.append({
+            "text": trigger,
+            "kind": "strong_anchor",
+            "requires_concepts": required_concepts,
+        })
+    return variants
+
+
+def _validate_matcher_structure(rec: dict) -> str | None:
+    status = rec.get("status", "candidate")
+    if status == "archived":
+        return None
+    concepts = rec.get("concepts") or []
+    groups = rec.get("required_concept_groups") or []
+    excluded_contexts = rec.get("excluded_contexts") or []
+    if not isinstance(concepts, list) or not concepts or not isinstance(groups, list) or not groups:
+        return (
+            "concepts and required_concept_groups must be non-empty lists "
+            "for non-archived imports"
+        )
+    if not isinstance(excluded_contexts, list):
+        return "excluded_contexts must be a list"
+    try:
+        compile_rule(
+            {
+                "concepts": concepts,
+                "required_concept_groups": groups,
+                "excluded_contexts": excluded_contexts,
+                "variants": _normalize_variants_for_compile(rec),
+                "trigger_canonical": rec.get("trigger_canonical", ""),
+            },
+            search_terms=rec.get("search_terms") or {},
+        )
+    except (CompilationError, TypeError, AttributeError) as e:
+        return f"matcher compilation failed: {e}"
     return None
 
 
@@ -117,11 +203,18 @@ def run_export(args: argparse.Namespace, cfg: Config) -> int:
                 "severity": r.severity,
                 "trigger_canonical": r.trigger_canonical,
                 "trigger_canonical_zh": r.trigger_canonical_zh,
-                "trigger_variants": r.trigger_variants if isinstance(r.trigger_variants, list) else loads_json(r.trigger_variants, []),
-                "trigger_variants_zh": r.trigger_variants_zh if isinstance(r.trigger_variants_zh, list) else loads_json(r.trigger_variants_zh, []),
-                "search_terms": r.search_terms,
+                "concepts": _json_list(r.concepts),
+                "required_concept_groups": _json_list(r.required_concept_groups),
+                "excluded_contexts": _json_list(r.excluded_contexts),
+                "near_miss_examples": _json_list(r.near_miss_examples),
+                "trigger_variants": _json_list(r.trigger_variants),
+                "trigger_variants_zh": _json_list(r.trigger_variants_zh),
+                "search_terms": _json_dict(r.search_terms),
                 "action_instruction": r.action_instruction,
                 "action_instruction_zh": r.action_instruction_zh,
+                "domain_tags": _json_list(r.domain_tags),
+                "tool_tags": _json_list(r.tool_tags),
+                "path_patterns": _json_list(r.path_patterns),
                 "source_origin": r.source_origin,
                 "project_scope": r.project_scope,
                 "project_id": r.project_id,
@@ -199,17 +292,24 @@ def run_import(args: argparse.Namespace, cfg: Config) -> int:
             existing_ids.add(rid)
             pending.append((
                 rid, sid,
-                rec.get("schema_version", 1),
+                SCHEMA_VERSION,
                 rec.get("rule_version", 1),
-                rec.get("created_by_pipeline_version", "import_v1"),
-                rec.get("runtime_policy_version", "policy_v1"),
+                rec.get("created_by_pipeline_version", "import_v6"),
+                RUNTIME_POLICY_VERSION,
                 rec.get("trigger_canonical", ""),
                 rec.get("trigger_canonical_zh"),
+                dumps_json(rec.get("concepts") or []),
+                dumps_json(rec.get("required_concept_groups") or []),
+                dumps_json(rec.get("excluded_contexts") or []),
+                dumps_json(rec.get("near_miss_examples") or []),
                 dumps_json(rec.get("trigger_variants") or []),
                 dumps_json(rec.get("trigger_variants_zh") or []),
                 dumps_json(rec.get("search_terms") or {}),
                 rec.get("action_instruction", ""),
                 rec.get("action_instruction_zh"),
+                dumps_json(rec.get("domain_tags") or []),
+                dumps_json(rec.get("tool_tags") or []),
+                dumps_json(rec.get("path_patterns") or []),
                 rec.get("status", "candidate"),
                 rec.get("severity", "reminder"),
                 rec.get("source_origin", "transcript_extraction"),
@@ -228,13 +328,16 @@ def run_import(args: argparse.Namespace, cfg: Config) -> int:
                         "INSERT INTO rules (id, short_id, schema_version, rule_version, "
                         "created_by_pipeline_version, runtime_policy_version, "
                         "trigger_canonical, trigger_canonical_zh, "
+                        "concepts, required_concept_groups, excluded_contexts, "
+                        "near_miss_examples, "
                         "trigger_variants, trigger_variants_zh, search_terms, "
                         "action_instruction, action_instruction_zh, "
+                        "domain_tags, tool_tags, path_patterns, "
                         "status, severity, source_origin, "
                         "project_scope, project_id, "
                         "archived_reason, replacement_id, "
                         "created_at, updated_at) "
-                        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                         row,
                     )
             inserted = len(pending)

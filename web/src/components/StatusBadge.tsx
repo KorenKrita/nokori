@@ -2,9 +2,9 @@ import { cn } from '@/lib/utils'
 
 const VARIANTS: Record<string, string> = {
   active: 'bg-accent-emerald/15 text-accent-emerald border-accent-emerald/25',
-  dormant: 'bg-[var(--color-bg-elevated)] text-text-tertiary border-[var(--color-border-subtle)]',
+  trusted: 'bg-accent-sky/15 text-accent-sky border-accent-sky/25',
   candidate: 'bg-accent-violet/15 text-accent-violet border-accent-violet/25',
-  merged: 'bg-accent-sky/15 text-accent-sky border-accent-sky/25',
+  suppressed: 'bg-accent-amber/15 text-accent-amber border-accent-amber/25',
   archived: 'bg-[var(--color-bg-elevated)] text-text-muted border-[var(--color-border-subtle)]',
   hot: 'bg-accent-rose/20 text-accent-rose border-accent-rose/25',
   warm: 'bg-accent-amber/20 text-accent-amber border-accent-amber/25',

@@ -70,10 +70,10 @@ def test_tier_hot_when_top1_dominant():
     assert hot[0].rule.short_id == "aaa111"
 
 
-def test_tier_dormant_appears_in_results():
+def test_tier_preserves_ranked_results_before_status_filtering():
     rules = [
         _rule("aaa111", "force push", variants=("git push --force",),
-              action="use lease", status="dormant"),
+              action="use lease", status="suppressed"),
         _rule("bbb222", "yarn install", action="don't"),
     ]
     bm = bm25.search("git push --force", rules)

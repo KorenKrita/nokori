@@ -68,7 +68,7 @@ export function ConfigField({
             onChange={(e) => onChange(field.id, e.target.checked)}
           />
           <span className="text-xs text-[var(--color-text-secondary)]">
-            {Boolean(value) ? t('config.on') : t('config.off')}
+            {value ? t('config.on') : t('config.off')}
           </span>
         </label>
       )}

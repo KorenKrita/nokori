@@ -438,7 +438,9 @@ def _run_cold_pipeline_inner(
                         _recompiled = None
 
                     _synth_ok = False
-                    if _recompiled is not None and eval_cases:
+                    if _recompiled is not None and (
+                        eval_cases or global_adversarial_cases
+                    ):
                         _reeval_rule_data = {
                             "id": target_id,
                             "version": _merged_row["rule_version"],

@@ -43,14 +43,14 @@ export interface DashboardData {
   rules: {
     total: number
     active: number
-    dormant: number
+    trusted: number
     candidate: number
-    merged: number
+    suppressed: number
     archived: number
     global: number
   }
-  injections_24h: number
-  injections_hot_24h: number
+  fire_events_24h: number
+  fire_events_hot_24h: number
   gate_enabled: boolean
   embed_server: { running: boolean; pid: number | null; idle_seconds: number }
   extract_pending: number

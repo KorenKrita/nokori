@@ -10,16 +10,17 @@ import { t, lz } from '@/lib/i18n'
 import type { Meta, Rule } from '@/lib/types'
 
 const STATUS_FILTERS = [
-  { value: 'active,dormant', labelKey: 'rules.filter.active_dormant', helpKey: 'rules.filter.help.active_dormant' },
+  { value: 'active,trusted', labelKey: 'rules.filter.formal', helpKey: 'rules.filter.help.formal' },
   { value: 'active', labelKey: 'rules.filter.active', helpKey: 'rules.filter.help.active' },
-  { value: 'dormant', labelKey: 'rules.filter.dormant', helpKey: 'rules.filter.help.dormant' },
+  { value: 'trusted', labelKey: 'rules.filter.trusted', helpKey: 'rules.filter.help.trusted' },
   { value: 'candidate', labelKey: 'rules.filter.candidate', helpKey: 'rules.filter.help.candidate' },
-  { value: 'archived,merged', labelKey: 'rules.filter.archived', helpKey: 'rules.filter.help.archived' },
+  { value: 'suppressed', labelKey: 'rules.filter.suppressed', helpKey: 'rules.filter.help.suppressed' },
+  { value: 'archived', labelKey: 'rules.filter.archived', helpKey: 'rules.filter.help.archived' },
   { value: '', labelKey: 'rules.filter.all', helpKey: 'rules.filter.help.all' },
 ] as const
 
 export function Rules() {
-  const [statusFilter, setStatusFilter] = useState('active,dormant')
+  const [statusFilter, setStatusFilter] = useState('active,trusted')
   const [scopeFilter, setScopeFilter] = useState('')
   const params: Record<string, string> = { status: statusFilter }
   if (scopeFilter === 'global') {

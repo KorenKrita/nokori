@@ -179,13 +179,13 @@
 
 - **现行**：`lifecycle/maintenance.run_candidate_cleanup` — 自 `created_at` 起 **日历天**（`candidate` 20 天、`anti_pattern` 40 天）；维护任务每 **30 天** 最多跑一次（`maintenance_meta`）。
 - **未实现**：`review-history.md` R2-Q2 的「累计 N 个有活跃 session 的天」——需额外计数，留 **v0.2**。
-- **对齐**：`README.md` 维护节、`maintenance.py` 注释与本节一致；勿与 dormant 的 `last_hit` 语义混用。
+- **对齐**：`README.md` 维护节、`maintenance.py` 注释与本节一致；勿恢复旧 `dormant` / `merged` 生命周期语义。
 
-### Unmerge 检查（merged 规则恢复）
+### Archived replacement orphan check
 
-- **行为**：`run_unmerge_check`（SessionStart 维护，最多每 **90** 天）：`status=merged` 且 `superseded_by` 非空时，若赢家规则**已删除**，或赢家为 **dormant/archived**，则把 merged 行恢复为 **`dormant`** 并清空 `superseded_by`。
-- **原因**：B/D 合并后旧规则进入 `merged`；若新规则被删或长期 dormant，旧规则不应永远卡在 `merged` 不可检索。
-- **产品定位**：v0.1 **有意保留**（非规格初稿遗漏）；`product-spec` §6 / §7 与 README 维护节已摘要。审查若要求「merged 终态不可逆」应改产品而非删代码。
+- **行为**：`run_unmerge_check` 是遗留函数名；v6 中不再存在 durable `merged` / `dormant` 状态。维护任务最多每 **90** 天检查 `status=archived` 且 `replacement_id` 非空的规则：若 replacement 已删除，或 replacement 变为 `suppressed` / `archived`，则把旧 archived replacement 恢复为 **`candidate`** 并清空 `replacement_id` / `archived_reason`。
+- **原因**：replacement 是自动合并/替换的结果，不是用户 archive veto。若替代规则已经不可用，旧规则需要重新走 candidate shadow/posthoc 证据路径，而不是回到旧 v0.1 的可检索 `dormant` 状态。
+- **产品定位**：这是 v6 replacement 安全网，不是 manual unmerge 工作流；用户可见生命周期仍为 `candidate → active → trusted / suppressed → archived`。
 
 ### Global promotion 计数
 
@@ -243,7 +243,7 @@
 
 ### Export `version` = rules.db `PRAGMA user_version`
 
-- `nokori export` JSON 的 **`version` 字段 = `SCHEMA_VERSION`（当前 2）**，与 `rules.db` 的 `PRAGMA user_version` 一致（不是独立的「JSON 信封版本」）。
+- `nokori export` JSON 的 **`version` 字段 = `SCHEMA_VERSION`（当前 6）**，与 `rules.db` 的 `PRAGMA user_version` 一致（不是独立的「JSON 信封版本」）。
 - Import 校验 `version == SCHEMA_VERSION`，不匹配则拒绝（需用匹配版本 re-export）。
 - 仅 `format=nokori-export` + 按 id 跳过已存在行；**无** v1→v2 库内迁移。
 

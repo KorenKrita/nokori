@@ -45,7 +45,7 @@ def _build_parser() -> argparse.ArgumentParser:
     sp_list.add_argument(
         "--all",
         action="store_true",
-        help="include candidate, archived, and merged rules",
+        help="include candidate, suppressed, and archived rules",
     )
     sp_list.add_argument("--project", default=None)
 

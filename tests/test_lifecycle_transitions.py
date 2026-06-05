@@ -97,6 +97,7 @@ def _insert_shadow_event(
     fingerprint: str | None = None,
     days_ago: float = 0,
     shadow_type: str = "candidate_probe",
+    decision_features: dict | None = None,
 ) -> str:
     eid = str(uuid.uuid4())
     sid = session_id or str(uuid.uuid4())
@@ -121,7 +122,7 @@ def _insert_shadow_event(
                 shadow_type,
                 "hash",
                 "warm_candidate",
-                "{}",
+                json.dumps(decision_features or {}),
                 ts,
             ),
         )
@@ -280,16 +281,18 @@ class TestCandidateToActiveSingleSession:
 
             sess = str(uuid.uuid4())
             # 3 strong matches in one session, counterfactual_would_help_high >= 3
-            _insert_shadow_event(db, rid, session_id=sess, label="would_help_high")
+            _insert_shadow_event(
+                db,
+                rid,
+                session_id=sess,
+                label="would_help_high",
+                decision_features={"user_correction": True},
+            )
             _insert_shadow_event(db, rid, session_id=sess, label="would_help_high")
             _insert_shadow_event(db, rid, session_id=sess, label="would_help_high")
             # Evaluated >= 5
             _insert_shadow_event(db, rid, session_id=sess, label="would_help_low")
             _insert_shadow_event(db, rid, session_id=sess, label="would_help_low")
-
-            # User correction evidence
-            fire_eid = _insert_fire_event(db, rid, session_id=sess)
-            _insert_feedback_event(db, fire_eid, "user_correction")
 
             result = evaluate_transitions(db, rid)
             assert result.new_status == "active"
@@ -323,11 +326,15 @@ class TestCandidateToActiveSingleSession:
             _insert_review(db, rid, overall_quality=0.70)  # Below 0.88
 
             sess = str(uuid.uuid4())
-            for _ in range(5):
+            _insert_shadow_event(
+                db,
+                rid,
+                session_id=sess,
+                label="would_help_high",
+                decision_features={"user_correction": True},
+            )
+            for _ in range(4):
                 _insert_shadow_event(db, rid, session_id=sess, label="would_help_high")
-
-            fire_eid = _insert_fire_event(db, rid, session_id=sess)
-            _insert_feedback_event(db, fire_eid, "user_correction")
 
             result = evaluate_transitions(db, rid)
             assert result.new_status is None
@@ -360,14 +367,17 @@ class TestCandidateToActiveSingleSession:
 
             sess_a = str(uuid.uuid4())
             sess_b = str(uuid.uuid4())
-            _insert_shadow_event(db, rid, session_id=sess_a, label="would_help_high")
+            _insert_shadow_event(
+                db,
+                rid,
+                session_id=sess_a,
+                label="would_help_high",
+                decision_features={"user_correction": True},
+            )
             _insert_shadow_event(db, rid, session_id=sess_a, label="would_help_high")
             _insert_shadow_event(db, rid, session_id=sess_a, label="would_help_low")
             _insert_shadow_event(db, rid, session_id=sess_b, label="would_help_high")
             _insert_shadow_event(db, rid, session_id=sess_b, label="would_help_low")
-
-            fire_eid = _insert_fire_event(db, rid, session_id=sess_a)
-            _insert_feedback_event(db, fire_eid, "user_correction")
 
             result = evaluate_transitions(db, rid)
 

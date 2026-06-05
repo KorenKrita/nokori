@@ -76,7 +76,12 @@ class TestDashboard:
         data = resp.json()["data"]
         assert "rules" in data
         assert data["rules"]["active"] == 0
+        assert "trusted" in data["rules"]
+        assert "suppressed" in data["rules"]
+        assert "dormant" not in data["rules"]
+        assert "merged" not in data["rules"]
         assert "fire_events_24h" in data
+        assert "fire_events_hot_24h" in data
         assert "embed_server" in data
         assert "extract_pending" in data
 
@@ -84,7 +89,9 @@ class TestDashboard:
         resp = client_with_rule.get("/api/dashboard")
         data = resp.json()["data"]
         assert data["rules"]["active"] == 1
+        assert data["rules"]["trusted"] == 0
         assert data["fire_events_24h"] == 2
+        assert data["fire_events_hot_24h"] == 1
 
 
 # --- Rules ---

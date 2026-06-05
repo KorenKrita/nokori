@@ -137,7 +137,7 @@ export function Config() {
 
   const counts = useMemo(() => healthCounts(health?.data), [health])
 
-  const sections = editor?.schema.sections ?? []
+  const sections = useMemo(() => editor?.schema.sections ?? [], [editor?.schema.sections])
   const sectionIds = useMemo(() => sections.map((s) => s.id), [sections])
 
   const fieldVisible = useCallback(

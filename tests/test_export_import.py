@@ -20,6 +20,24 @@ def _run(*args, env_extra=None):
     )
 
 
+def _v6_structure(trigger: str):
+    return {
+        "concepts": [
+            {
+                "id": "manual_trigger",
+                "label": trigger,
+                "aliases": [{"text": trigger, "strength": "strong"}],
+                "match_mode": "phrase",
+                "required": True,
+            }
+        ],
+        "required_concept_groups": [
+            {"id": "manual_primary", "all_of": ["manual_trigger"]}
+        ],
+        "excluded_contexts": [],
+    }
+
+
 def test_export_import_roundtrip(tmp_path):
     src_data = tmp_path / "src"
     dst_data = tmp_path / "dst"
@@ -44,6 +62,117 @@ def test_export_import_roundtrip(tmp_path):
     list_out = _run("list", "--all", env_extra={"NOKORI_DATA_DIR": str(dst_data)})
     assert "rule one" in list_out.stdout
     assert "rule two" in list_out.stdout
+
+
+def test_export_includes_v6_matcher_structure(tmp_path):
+    src_data = tmp_path / "src"
+    out = tmp_path / "rules.json"
+
+    r_add = _run("add", "--trigger", "rule one", "--action", "do x",
+                 env_extra={"NOKORI_DATA_DIR": str(src_data)})
+    assert r_add.returncode == 0, r_add.stderr
+
+    r = _run("export", str(out), env_extra={"NOKORI_DATA_DIR": str(src_data)})
+    assert r.returncode == 0, r.stderr
+
+    payload = json.loads(out.read_text())
+    rule = payload["rules"][0]
+    assert rule["schema_version"] == 6
+    assert rule["runtime_policy_version"] == "1.0.0"
+    assert rule["concepts"]
+    assert rule["required_concept_groups"]
+    assert "excluded_contexts" in rule
+
+
+def test_export_coerces_json_fields_to_expected_container_types(tmp_path):
+    from nokori.db import open_db
+
+    src_data = tmp_path / "src"
+    out = tmp_path / "rules.json"
+
+    r_add = _run("add", "--trigger", "rule one", "--action", "do x",
+                 env_extra={"NOKORI_DATA_DIR": str(src_data)})
+    assert r_add.returncode == 0, r_add.stderr
+
+    db = open_db(src_data / "rules.db")
+    try:
+        with db.transaction() as tx:
+            tx.execute("UPDATE rules SET concepts = '{}', search_terms = '[]'")
+    finally:
+        db.close()
+
+    r = _run("export", str(out), env_extra={"NOKORI_DATA_DIR": str(src_data)})
+    assert r.returncode == 0, r.stderr
+
+    rule = json.loads(out.read_text())["rules"][0]
+    assert rule["concepts"] == []
+    assert rule["search_terms"] == {}
+
+
+def test_import_rejects_active_rule_without_v6_matcher_structure(tmp_path):
+    data = tmp_path / "data"
+    out = tmp_path / "unsafe.json"
+    payload = {
+        "format": "nokori-export",
+        "version": 6,
+        "rules": [
+            {
+                "id": "00000000-0000-4000-8000-000000000111",
+                "short_id": "bad111",
+                "trigger_canonical": "force push shared branch",
+                "action_instruction": "use --force-with-lease",
+                "status": "active",
+            }
+        ],
+    }
+    out.write_text(json.dumps(payload), encoding="utf-8")
+
+    r = _run("import", str(out), env_extra={"NOKORI_DATA_DIR": str(data)})
+
+    assert r.returncode != 0
+    assert "required_concept_groups" in (r.stderr + r.stdout)
+
+
+def test_import_forces_current_schema_policy_and_keeps_structure(tmp_path):
+    from nokori.db import open_db
+
+    data = tmp_path / "data"
+    out = tmp_path / "legacy_meta.json"
+    trigger = "force push shared branch"
+    payload = {
+        "format": "nokori-export",
+        "version": 6,
+        "rules": [
+            {
+                "id": "00000000-0000-4000-8000-000000000112",
+                "short_id": "bad112",
+                "schema_version": 1,
+                "runtime_policy_version": "policy_v1",
+                "trigger_canonical": trigger,
+                **_v6_structure(trigger),
+                "action_instruction": "use --force-with-lease",
+                "status": "candidate",
+            }
+        ],
+    }
+    out.write_text(json.dumps(payload), encoding="utf-8")
+
+    r = _run("import", str(out), env_extra={"NOKORI_DATA_DIR": str(data)})
+
+    assert r.returncode == 0, r.stderr
+    db = open_db(data / "rules.db")
+    try:
+        row = db.fetchone(
+            "SELECT schema_version, runtime_policy_version, concepts, "
+            "required_concept_groups FROM rules WHERE short_id = ?",
+            ("bad112",),
+        )
+    finally:
+        db.close()
+    assert row["schema_version"] == 6
+    assert row["runtime_policy_version"] == "1.0.0"
+    assert json.loads(row["concepts"])
+    assert json.loads(row["required_concept_groups"])
 
 
 def test_import_rejects_oversized_trigger(tmp_path):
@@ -130,14 +259,15 @@ def test_export_import_roundtrip_zh_fields(tmp_path):
         "format": "nokori-export",
         "version": 6,
         "rules": [
-            {
-                "id": "00000000-0000-4000-8000-000000000099",
-                "short_id": "a0b1c2",
-                "trigger_canonical": "Force push to shared branch",
-                "trigger_canonical_zh": "strong push to shared branch zh",
-                "trigger_variants": ["git push --force"],
-                "search_terms": {"en": ["force", "push"], "zh": ["force-zh"]},
-                "action_instruction": "use --force-with-lease",
+                {
+                    "id": "00000000-0000-4000-8000-000000000099",
+                    "short_id": "a0b1c2",
+                    "trigger_canonical": "Force push to shared branch",
+                    "trigger_canonical_zh": "strong push to shared branch zh",
+                    **_v6_structure("Force push to shared branch"),
+                    "trigger_variants": ["git push --force"],
+                    "search_terms": {"en": ["force", "push"], "zh": ["force-zh"]},
+                    "action_instruction": "use --force-with-lease",
                 "action_instruction_zh": "use lease zh",
                 "status": "active",
             }

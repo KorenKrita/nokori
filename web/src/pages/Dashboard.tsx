@@ -55,7 +55,7 @@ export function Dashboard() {
               {t('dashboard.rules')}
             </h3>
             <div className="grid grid-cols-5 gap-4">
-              {(['active', 'dormant', 'candidate', 'merged', 'archived'] as const).map((status) => (
+              {(['active', 'trusted', 'candidate', 'suppressed', 'archived'] as const).map((status) => (
                 <motion.div
                   key={status}
                   whileHover={{ scale: 1.08, y: -2 }}
@@ -78,11 +78,11 @@ export function Dashboard() {
         <motion.div variants={cardVariant} className="col-span-4">
           <GlassCard hover>
             <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary mb-4">
-              {t('dashboard.injections_24h')}
+              {t('dashboard.fire_events_24h')}
             </h3>
-            <AnimatedNumber value={d.injections_24h} className="font-mono text-4xl font-semibold block" />
+            <AnimatedNumber value={d.fire_events_24h} className="font-mono text-4xl font-semibold block" />
             <p className="text-sm text-text-secondary mt-2">
-              {t('dashboard.hot_label')} <span className="text-accent-rose font-mono">{d.injections_hot_24h}</span>
+              {t('dashboard.hot_label')} <span className="text-accent-rose font-mono">{d.fire_events_hot_24h}</span>
             </p>
           </GlassCard>
         </motion.div>
