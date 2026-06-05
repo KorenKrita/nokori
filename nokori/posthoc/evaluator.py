@@ -189,11 +189,19 @@ def parse_posthoc_output(raw_json: str) -> dict:
 
     # Normalize field aliases
     if "would_likely_have_happened_without_rule" not in data:
-        data["would_likely_have_happened_without_rule"] = data.pop(
-            "without_rule", data.pop("counterfactual", "unclear")
-        )
+        val = None
+        for alias in ("without_rule", "counterfactual"):
+            if alias in data:
+                val = data.pop(alias)
+                break
+        data["would_likely_have_happened_without_rule"] = val if val is not None else "unclear"
     if "reason_code" not in data:
-        data["reason_code"] = data.pop("reason", data.pop("code", "unclear"))
+        val = None
+        for alias in ("reason", "code"):
+            if alias in data:
+                val = data.pop(alias)
+                break
+        data["reason_code"] = val if val is not None else "unclear"
 
     # Validate required fields
     for field in POSTHOC_OUTPUT_SCHEMA["required"]:

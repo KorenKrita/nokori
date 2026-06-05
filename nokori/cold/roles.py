@@ -439,10 +439,16 @@ def _normalize_role_output(role: str, data: dict[str, Any]) -> dict[str, Any]:
             for alias in ("citations", "evidence"):
                 if alias in data:
                     cit = data.pop(alias)
-                    data["evidence_citations"] = [cit] if isinstance(cit, str) else cit
+                    if cit is None:
+                        cit = []
+                    elif isinstance(cit, str):
+                        cit = [cit]
+                    data["evidence_citations"] = cit
                     break
         if isinstance(data.get("evidence_citations"), str):
             data["evidence_citations"] = [data["evidence_citations"]]
+        if data.get("evidence_citations") is None:
+            data["evidence_citations"] = []
         if "reasoning" not in data:
             for alias in ("rationale", "reason", "explanation"):
                 if alias in data:
@@ -475,7 +481,7 @@ def _normalize_role_output(role: str, data: dict[str, Any]) -> dict[str, Any]:
         if "required_concept_groups" not in data:
             data["required_concept_groups"] = _pop_first(data, "concepts", "concept_groups", default=[])
         if "excluded_contexts" not in data:
-            data["excluded_contexts"] = data.pop("exclusions", [])
+            data["excluded_contexts"] = _pop_first(data, "exclusions", default=[])
         # Fix: missing scope
         if "scope" not in data:
             scope = {}
@@ -504,8 +510,8 @@ def _normalize_role_output(role: str, data: dict[str, Any]) -> dict[str, Any]:
             if ev is not None:
                 data["rule_application_evidence"] = ev
         if "would_likely_have_happened_without_rule" not in data:
-            data["would_likely_have_happened_without_rule"] = data.pop(
-                "without_rule", data.pop("counterfactual", "unclear")
+            data["would_likely_have_happened_without_rule"] = _pop_first(
+                data, "without_rule", "counterfactual", default="unclear"
             )
         if "reason_code" not in data:
             data["reason_code"] = _pop_first(data, "reason", "code", default="unclear")
