@@ -10,6 +10,7 @@ from ..db import Db, SCHEMA_VERSION, loads_json
 from ..matcher.compiler import CompilationError, compile_rule
 from ..matcher.runtime import evaluate_match
 from ..models import Rule, ScoredResult
+from ..policy import RUNTIME_POLICY_VERSION
 from ..runtime.applicability import evaluate_applicability, meets_min_evidence
 from ..runtime.selection import SelectionResult, select_injection
 from . import bm25, ranker
@@ -92,6 +93,7 @@ def _apply_runtime_applicability(
     prompt: str,
     *,
     idf_stats,
+    cfg: Config,
 ) -> ScoredResult | None:
     if (
         result.rule.schema_version < SCHEMA_VERSION
@@ -104,6 +106,8 @@ def _apply_runtime_applicability(
         return replace(
             result,
             trigger_idf_pool_version=idf_stats.pool_version,
+            embedding_profile_version=cfg.embed_model or "unknown",
+            runtime_policy_version=RUNTIME_POLICY_VERSION,
             level=level,
             decision_reason="legacy unstructured rule: fielded minimum evidence passed",
         )
@@ -171,6 +175,8 @@ def _apply_runtime_applicability(
         search_only_match=match.search_only_match,
         matched_trigger_tokens=frozenset(trigger_tokens),
         trigger_idf_pool_version=idf_stats.pool_version,
+        embedding_profile_version=cfg.embed_model or "unknown",
+        runtime_policy_version=RUNTIME_POLICY_VERSION,
         decision_reason=applicability.reason,
         level=level,
     )
@@ -240,7 +246,7 @@ def retrieve_and_tier(
     eligible = [
         applied
         for r in fused
-        if (applied := _apply_runtime_applicability(r, prompt, idf_stats=idf_stats))
+        if (applied := _apply_runtime_applicability(r, prompt, idf_stats=idf_stats, cfg=cfg))
         is not None
     ]
 

@@ -7,6 +7,7 @@ from nokori.merge.policy import (
     MergeDecision,
     apply_merge_policy,
     check_trusted_replacement,
+    find_merge_neighbors,
     record_lineage,
     validate_merge_transaction,
 )
@@ -306,3 +307,135 @@ def test_record_lineage_creates_entry(db):
     assert row["operation"] == "replace_existing"
     assert row["reason"] == "quality upgrade"
     assert row["created_at"] is not None
+
+
+# ---------------------------------------------------------------------------
+# 11. suppress_existing on contradiction
+# ---------------------------------------------------------------------------
+
+
+def test_suppress_existing_on_contradiction():
+    """contradiction + quality_winner=new + safe + weak history -> suppress_existing."""
+    existing = _existing(
+        observed_usefulness_score=0.1,
+        false_positive_score=0.5,
+    )
+    planner = _planner(
+        relation="contradiction",
+        quality_winner="new",
+        operation="suppress_existing",
+        confidence=0.9,
+    )
+    result = apply_merge_policy(planner, existing, _new_rule())
+    assert result.operation == "suppress_existing"
+    assert result.lineage_record is not None
+    assert result.lineage_record["operation"] == "suppress_existing"
+
+
+# ---------------------------------------------------------------------------
+# 12. archive_existing for system-created harmful
+# ---------------------------------------------------------------------------
+
+
+def test_archive_existing_system_harmful():
+    """System-created rule with harmful history -> archive_existing."""
+    existing = _existing(
+        status="trusted",
+        source_origin="transcript_extraction",
+        activation_origin=None,
+        harmful_score=0.7,
+        quality_score=0.2,
+        action_instruction="do something harmful",
+    )
+    planner = _planner(
+        relation="equivalent",
+        quality_winner="new",
+        confidence=0.9,
+    )
+    new_rule = _new_rule(user_archived_opposite=False)
+    result = apply_merge_policy(planner, existing, new_rule)
+    assert result.operation == "archive_existing"
+    assert result.lineage_record is not None
+    assert result.lineage_record["operation"] == "archive_existing"
+
+
+# ---------------------------------------------------------------------------
+# 13. update_existing_fields with improvement
+# ---------------------------------------------------------------------------
+
+
+def test_update_existing_fields_with_improvement():
+    """equivalent + safe + active + unchanged action + more variants -> update_existing_fields."""
+    existing = _existing(
+        status="active",
+        action_instruction="always use semicolons",
+    )
+    planner = _planner(
+        relation="equivalent",
+        quality_winner="new",
+        confidence=0.9,
+    )
+    new_rule = _new_rule(
+        action_instruction="always use semicolons",
+        trigger_variants=["use semicolons", "semicolon usage", "add semicolons"],
+    )
+    result = apply_merge_policy(planner, existing, new_rule)
+    assert result.operation == "update_existing_fields"
+    assert result.lineage_record is not None
+    assert result.lineage_record["operation"] == "update_existing_fields"
+
+
+# ---------------------------------------------------------------------------
+# 14. merge_into_existing with quality_winner=both
+# ---------------------------------------------------------------------------
+
+
+def test_merge_into_existing_quality_both():
+    """equivalent + safe + quality_winner=both -> merge_into_existing."""
+    existing = _existing(status="active")
+    planner = _planner(
+        relation="equivalent",
+        quality_winner="both",
+        confidence=0.9,
+    )
+    result = apply_merge_policy(planner, existing, _new_rule())
+    assert result.operation == "merge_into_existing"
+    assert result.lineage_record is not None
+    assert result.lineage_record["operation"] == "merge_into_existing"
+
+
+# ---------------------------------------------------------------------------
+# 15. find_merge_neighbors returns related rules
+# ---------------------------------------------------------------------------
+
+
+def _insert_rule(db, rule_id, short_id, trigger, action, status="active"):
+    """Insert a minimal rule into the DB for neighbor retrieval tests."""
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc).isoformat()
+    with db.transaction() as tx:
+        tx.execute(
+            "INSERT INTO rules (id, short_id, schema_version, rule_version, "
+            "trigger_canonical, action_instruction, status, severity, "
+            "source_origin, created_at, updated_at) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            (rule_id, short_id, 6, 1, trigger, action, status, "reminder",
+             "transcript_extraction", now, now),
+        )
+
+
+def test_find_merge_neighbors_returns_related_rules(db):
+    """Rules with overlapping trigger text are returned as merge neighbors."""
+    _insert_rule(db, "rule-a", "ra", "always use typescript strict mode", "enable strict")
+    _insert_rule(db, "rule-b", "rb", "prefer typescript strict checking", "check strict")
+
+    rule_data = {
+        "id": "new-candidate",
+        "trigger_canonical": "use typescript strict mode for all files",
+        "action_instruction": "enforce strict",
+    }
+    neighbors = find_merge_neighbors(db, rule_data)
+    neighbor_ids = [n["id"] for n in neighbors]
+    assert "rule-a" in neighbor_ids
+    assert "rule-b" in neighbor_ids

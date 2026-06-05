@@ -414,6 +414,16 @@ def evaluate_applicability(
             )
 
         # Active with history: HOT requires strong evidence
+        # Excluded context hit (even with override) caps active rules at WARM
+        if excluded_context_hit:
+            return ApplicabilityResult(
+                decision="warm",
+                eligible=True,
+                reason="active: excluded_context_hit caps at WARM (even with override)",
+                trigger_evidence_passed=True,
+                penalties=penalties,
+            )
+
         if rule_severity == "high_risk":
             has_strong = _high_risk_strong_evidence(**evidence_kwargs)
         else:

@@ -309,13 +309,11 @@ def _is_narrower_scope(
     )
     if not new_tokens or not old_tokens:
         return False
-    # New is narrower if it has additional specificity tokens not in old
-    # AND old covers broader area (new tokens not a superset of old)
+    # Narrower = new tokens mostly contained in old (subset) AND old is NOT
+    # contained in new (new doesn't cover everything old did).
     new_in_old = len(new_tokens & old_tokens) / len(new_tokens) if new_tokens else 0
     old_in_new = len(new_tokens & old_tokens) / len(old_tokens) if old_tokens else 0
-    # Narrower: new rule adds specificity (not all new tokens are in old)
-    # AND doesn't cover the full breadth of old (old is broader)
-    return new_in_old < 0.90 and old_in_new >= 0.60
+    return new_in_old >= 0.80 and old_in_new < 0.70
 
 
 def _content_tokens(text: str) -> set[str]:

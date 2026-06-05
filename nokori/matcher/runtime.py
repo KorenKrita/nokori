@@ -403,9 +403,7 @@ def evaluate_match(
     satisfied_concepts: set[str] = set()
     for concept in matcher.concepts:
         concept_text = text_lower
-        concept_tool_input = None
-        if "tool_pattern" in concept.match_mode:
-            concept_tool_input = tool_input_lower
+        concept_tool_input = tool_input_lower
         if _evaluate_concept(
             concept,
             concept_text,
@@ -619,7 +617,7 @@ def _evaluate_trigger_evidence(
         distinct_min = _NORMAL_DISTINCT_MIN
         absolute_min = _NORMAL_ABSOLUTE_MIN
 
-    trigger_info_min = max(dynamic_threshold, absolute_min) if dynamic_threshold else absolute_min
+    trigger_info_min = dynamic_threshold if dynamic_threshold else absolute_min
 
     # Small pool additionally requires strong_variant OR concepts
     if pool_size < _SMALL_POOL_THRESHOLD:

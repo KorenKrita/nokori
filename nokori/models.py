@@ -136,6 +136,7 @@ class ScoredResult:
     embedding_profile_version: str | None = None
     embedding_profile_unknown: bool = False
     trigger_idf_pool_version: str | None = None
+    runtime_policy_version: str | None = None
 
     # Ranking
     ranking_utility: float = 0.0

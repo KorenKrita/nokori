@@ -976,25 +976,26 @@ class TestFalsePositiveRate:
     def test_basic_fp_calculation(self):
         events = {
             "total_evaluated": 10,
-            "unclear": 2,
+            "unclear": 0,  # unclear already excluded by SQL query
             "reason_counts": {
                 "irrelevant_not_applicable": 2,
                 "harmful_wrong_scope": 1,
             },
         }
-        # fp = (2 + 1) / (10 - 2) = 3/8 = 0.375
-        assert abs(compute_false_positive_rate(events) - 0.375) < 1e-6
+        # fp = (2 + 1) / 10 = 3/10 = 0.3
+        assert abs(compute_false_positive_rate(events) - 0.3) < 1e-6
 
-    def test_unclear_excluded_from_denominator(self):
+    def test_denominator_uses_total_evaluated_directly(self):
+        """unclear events are pre-filtered by SQL; denominator = total_evaluated."""
         events = {
             "total_evaluated": 5,
-            "unclear": 3,
+            "unclear": 0,
             "reason_counts": {
                 "irrelevant_not_applicable": 1,
             },
         }
-        # fp = 1 / (5 - 3) = 1/2 = 0.5
-        assert abs(compute_false_positive_rate(events) - 0.5) < 1e-6
+        # fp = 1 / 5 = 0.2
+        assert abs(compute_false_positive_rate(events) - 0.2) < 1e-6
 
     def test_zero_denominator_returns_zero(self):
         events = {

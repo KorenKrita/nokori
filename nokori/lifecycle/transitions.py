@@ -116,17 +116,15 @@ def run_all_pending_transitions(db: Db) -> list[TransitionResult]:
 def _aggregate_fire_evidence(db: Db, rule_id: str, window_days: int = 30) -> dict:
     """Count fire event labels using last-N-events window (section 3.4).
 
-    Uses BOTH recent_event_window (last 10 evaluated) AND recent_time_window (30 days).
+    recent_event_window = last 10 evaluated fire events (count-based, not time-based).
     Harmful events are counted lifetime — they do NOT decay by time alone.
     """
-    # Last N evaluated events within time window, excluding unclear (spec 3.4)
-    cutoff = _days_ago_iso(window_days)
+    # Last N evaluated events (count-based, not time-based), excluding unclear (spec 3.4)
     recent_rows = db.fetchall(
         "SELECT posthoc_label, posthoc_reason_code, session_id FROM rule_fire_events "
         "WHERE rule_id = ? AND posthoc_label IS NOT NULL AND posthoc_label != 'unclear' "
-        "AND created_at >= ? "
         "ORDER BY created_at DESC LIMIT ?",
-        (rule_id, cutoff, RECENT_EVENT_WINDOW),
+        (rule_id, RECENT_EVENT_WINDOW),
     )
 
     counts: dict[str, int | float] = {
@@ -193,14 +191,13 @@ def compute_false_positive_rate(events: dict) -> float:
 
     fp_events = irrelevant_not_applicable + harmful_wrong_scope
                 + harmful_blocked_valid_action + harmful_distracted
-    denominator = total_evaluated - unclear_count
+    denominator = total_evaluated (unclear already excluded by query)
     """
     reason_counts = events.get("reason_counts", {})
     fp_events = sum(reason_counts.get(code, 0) for code in FALSE_POSITIVE_REASON_CODES)
 
     total_evaluated = events.get("total_evaluated", 0)
-    unclear_count = events.get("unclear", 0)
-    denominator = total_evaluated - unclear_count
+    denominator = total_evaluated
 
     return fp_events / max(1, denominator)
 
@@ -623,8 +620,9 @@ def _evaluate_trusted(db: Db, row, rule_version: int) -> TransitionResult:
     irrelevant = fire.get("irrelevant", 0)
 
     # Rate-based decay requires minimum_rate_denominator (spec 3.4)
-    # Uses lifetime harmful for decay check (spec 3.4)
-    recent_harmful_for_decay = fire.get("lifetime_harmful", 0)
+    # Decay uses windowed harmful (spec 3.3 'harmful_count=0' in recent window);
+    # suppression handles lifetime harmful.
+    recent_harmful_for_decay = fire.get("harmful", 0)
     if (
         total_evaluated >= th.evaluated_fire_count_in_recent_window_min
         and total_evaluated >= MINIMUM_RATE_DENOMINATOR

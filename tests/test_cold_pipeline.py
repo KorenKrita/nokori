@@ -162,10 +162,12 @@ def _extractor_candidate(
 
 def _synthetic_eval_cases() -> str:
     """Mock response for synthetic_eval_generator role."""
-    return json.dumps([
-        {"prompt": "I'm using pytest parametrize with a fixture", "case_type": "positive", "expected_min_decision": "warm"},
-        {"prompt": "How do I write a bash script?", "case_type": "negative", "expected_max_decision": "cold"},
-    ])
+    return json.dumps({"cases": [
+        {"prompt": "I'm using pytest parametrize with a fixture", "case_type": "positive",
+         "expected_min_decision": "warm", "expected_max_decision": "hot", "rationale": "Direct match"},
+        {"prompt": "How do I write a bash script?", "case_type": "negative",
+         "expected_min_decision": "cold", "expected_max_decision": "cold", "rationale": "Unrelated"},
+    ]})
 
 
 # ---------------------------------------------------------------------------

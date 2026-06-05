@@ -331,6 +331,7 @@ def _run_cold_pipeline_inner(
         fingerprint_conflict=fingerprint_conflict,
         merge_op=merge_op,
         source_origin=source_origin,
+        final_judge_decision=final_decision,
     )
 
     # Determine final status
@@ -720,12 +721,16 @@ def _check_cold_fast_lane(
     fingerprint_conflict: bool,
     merge_op: str,
     source_origin: SourceOrigin = "transcript_extraction",
+    final_judge_decision: str = "accept_active",
 ) -> bool:
     """Check all cold fast lane thresholds from policy (section 3.3).
 
     Returns True only if ALL thresholds pass for direct active insertion.
     external_source_material CANNOT use cold fast lane (spec acceptance criteria).
     """
+    if final_judge_decision != "accept_active":
+        return False
+
     if source_origin == "external_source_material":
         return False
 
@@ -1165,6 +1170,7 @@ def _generate_eval_cases(
             timeout=30,
         )
         cases = json.loads(response)
+        validate_role_output("synthetic_eval_generator", response)
         if isinstance(cases, list):
             return cases
         if isinstance(cases, dict) and "cases" in cases:
