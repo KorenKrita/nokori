@@ -63,6 +63,10 @@ def _is_gate_eligible_rule(rule, db=None) -> bool:
         if marker_policy and marker_policy != row["runtime_policy_version"]:
             return False
         return row["runtime_policy_version"] == RUNTIME_POLICY_VERSION
+    # DB available but rule not found → rule was deleted/archived after marker creation
+    if db is not None:
+        return False
+    # Degraded no-DB mode: trust marker attributes as last resort
     return (
         getattr(rule, "status", None) == "trusted"
         and getattr(rule, "severity", None) == "gate_eligible"

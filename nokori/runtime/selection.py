@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from nokori.models import ScoredResult
-from nokori.policy import DYNAMIC_IDF_SMALL_POOL, HOT_MAX_DEFAULT, WARM_HARD_MAX
+from nokori.policy import DYNAMIC_IDF_NORMAL, DYNAMIC_IDF_SMALL_POOL, HOT_MAX_DEFAULT, SMALL_POOL_THRESHOLD, WARM_HARD_MAX
 
 
 # ---------------------------------------------------------------------------
@@ -150,6 +150,7 @@ def select_injection(
     eligible_results: list[ScoredResult],
     max_injection_chars: int,
     warm_hard_max: int = WARM_HARD_MAX,
+    pool_size: int = 0,
 ) -> SelectionResult:
     """Select rules for HOT/WARM injection from eligible candidates.
 
@@ -212,14 +213,16 @@ def select_injection(
             # Strong evidence per spec 9.6: Path A or full Path B.
             # sr.level=='gate' implies strong evidence; sr.level=='hot' does NOT
             # (trusted rules get hot without strong evidence requirement).
+            # Use pool-size-aware thresholds matching applicability.py logic.
+            _idf_policy = DYNAMIC_IDF_SMALL_POOL if pool_size < SMALL_POOL_THRESHOLD else DYNAMIC_IDF_NORMAL
             has_strong_evidence = (
                 (sr.strong_variant_phrase_hit and sr.required_concepts_match)
                 or sr.level == "gate"
                 or (
-                    sr.trigger_idf_sum >= DYNAMIC_IDF_SMALL_POOL.absolute_trigger_info_min
-                    and sr.trigger_coverage >= DYNAMIC_IDF_SMALL_POOL.trigger_coverage_min
+                    sr.trigger_idf_sum >= _idf_policy.absolute_trigger_info_min
+                    and sr.trigger_coverage >= _idf_policy.trigger_coverage_min
                     and sr.required_concepts_match
-                    and sr.distinct_trigger_terms >= DYNAMIC_IDF_SMALL_POOL.distinct_trigger_terms_min
+                    and sr.distinct_trigger_terms >= _idf_policy.distinct_trigger_terms_min
                 )
             )
             if _has_distinct_domain(sr, hot) and has_strong_evidence:

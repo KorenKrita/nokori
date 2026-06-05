@@ -138,6 +138,7 @@ def _aggregate_fire_evidence(db: Db, rule_id: str, window_days: int = 30) -> dic
     }
     reason_counts: dict[str, int] = {}
     useful_sessions: set[str] = set()
+    strong_useful_sessions: set[str] = set()
 
     for r in recent_rows:
         label = r["posthoc_label"]
@@ -155,9 +156,11 @@ def _aggregate_fire_evidence(db: Db, rule_id: str, window_days: int = 30) -> dic
             attribution_weight = r["posthoc_score"]
             if attribution_weight is None or attribution_weight > 0.5:
                 counts["observed_useful_strong"] = int(counts["observed_useful_strong"]) + 1
+                strong_useful_sessions.add(r["session_id"])
 
     counts["reason_counts"] = reason_counts  # type: ignore[assignment]
     counts["distinct_observed_useful_sessions"] = len(useful_sessions)
+    counts["distinct_strong_useful_sessions"] = len(strong_useful_sessions)
     counts["false_positive_rate"] = compute_false_positive_rate(counts)
 
     # Irrelevant in last 5 evaluated fire events
@@ -566,7 +569,7 @@ def _evaluate_active(db: Db, row, rule_version: int) -> TransitionResult:
     th = ACTIVE_TO_TRUSTED
     observed_useful = fire.get("observed_useful_strong", 0)
     total_evaluated = fire.get("total_evaluated", 0)
-    distinct_sessions = fire.get("distinct_observed_useful_sessions", 0)
+    distinct_sessions = fire.get("distinct_strong_useful_sessions", 0)
 
     # Defensive guard: reject if shadow evidence was accidentally mixed into fire aggregation.
     # The _aggregate_fire_evidence query only reads rule_fire_events, but verify the counts

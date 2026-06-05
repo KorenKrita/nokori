@@ -390,6 +390,9 @@ def build_evaluator_input(db: Db, fire_event: dict) -> dict | None:
     decision_features = loads_json(
         fire_event.get("decision_features"), {}
     )
+    # Spec 10.2: evaluator must NOT see status-revealing fields.
+    # Strip decision_reason which may contain status/severity info.
+    decision_features.pop("decision_reason", None)
 
     # Fetch feedback events tied to this fire event, if any
     feedback_rows = db.fetchall(
