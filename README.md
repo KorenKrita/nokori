@@ -39,22 +39,24 @@ During a chat Nokori only does retrieval and small file I/O, never making you wa
 
 ---
 
-## What is new in the autonomous flywheel
+## Autonomous quality flywheel
 
-The old shape was "extract a rule, retrieve it later." The new shape is a quality flywheel: every rule has to earn its way from memory into behavior.
+Nokori is built as a quality flywheel: every rule has to earn its way from memory into behavior.
 
-| Layer | What shines |
-|-------|-------------|
-| **Cold-path rule factory** | Transcript extraction is now a multi-role pipeline: extractor, admission judge, rule rewriter, final judge, merge planner, synthetic eval generator, and posthoc evaluator. Weak rules stay out; broad rules get tightened; unsafe merges are rejected or split. |
-| **Structured triggers** | Rules carry concepts, required concept groups, trigger variants, excluded contexts, tool tags, severity, source origin, runtime policy version, and lineage metadata. They are not just loose text blobs. |
-| **Autonomous lifecycle** | Rules move through `candidate → active → trusted`, can fall to `suppressed`, recover from shadow evidence, or end as `archived`. Manual commands can archive, but cannot fake trust. |
-| **Evidence loop** | HOT/WARM injections create fire events; candidate/suppressed matches create shadow events; SessionEnd queues posthoc jobs; maintenance applies lifecycle transitions from evaluated evidence. |
-| **Conservative Gate** | Gate is the final privilege, not the default. It requires `trusted + gate_eligible`, strong prompt evidence, matching runtime policy, prompt hash freshness, and inspectable tool-input evidence when available. |
-| **No LLM on the hot path** | `SessionStart`, `UserPromptSubmit`, and `PreToolUse` do deterministic retrieval, matching, scoring, marker I/O, and fail-open handling only. LLM work lives in extract/posthoc jobs. |
-| **Hybrid retrieval** | BM25 is always available; optional remote embeddings or the local Granite multilingual model add semantic recall; RRF fuses rankings, then v6 applicability and MMR-style selection decide HOT/WARM. |
-| **Local-first operations** | SQLite, hook logs, job queues, gate markers, embedding weights, and web dashboard state all live under `~/.nokori/`. Remote LLM/embedding endpoints are opt-in. |
-| **Cross-tool support** | Claude Code and Cursor both work, including Cursor's `Shell` tool name, duplicate-hook coalescing, deferred injection behavior, and platform-specific hook output formats. |
-| **Inspectability** | `nokori test`, `status`, `health`, `logs`, `extract`, `maintain`, and the Web UI expose why a rule did or did not fire, what evidence exists, and what the resolved config says. |
+The loop is deliberately split in three:
+
+- **Cold path**: after the session closes, a multi-role LLM pipeline extracts, judges, rewrites, merges, and evaluates rule candidates. Weak rules stay out; broad rules get tightened; unsafe merges are rejected or split.
+- **Hot path**: during chat, hooks do deterministic retrieval, matching, scoring, marker I/O, and fail-open handling only. No LLM call sits between your prompt and the agent's reply.
+- **Evidence loop**: HOT/WARM injections create fire events; candidate/suppressed shadow matches create counterfactual evidence; maintenance applies lifecycle transitions from evaluated evidence.
+
+What makes that loop useful:
+
+- **Structured triggers**, not loose text: concepts, required concept groups, variants, excluded contexts, tool tags, severity, source origin, runtime policy version, and lineage metadata.
+- **Autonomous lifecycle**: `candidate → active → trusted`, with `suppressed` recovery and terminal `archived` outcomes. Manual commands can archive, but cannot fake trust.
+- **Conservative Gate**: a one-turn reminder brake for `trusted + gate_eligible` rules with strong runtime evidence. It is not a permission system.
+- **Hybrid retrieval**: BM25 is always available; optional remote embeddings or the local Granite multilingual model add semantic recall; RRF and v6 applicability decide HOT/WARM.
+- **Local-first operations**: SQLite, hook logs, job queues, gate markers, embedding weights, and web dashboard state all live under `~/.nokori/`. Remote LLM/embedding endpoints are opt-in.
+- **Cross-tool inspectability**: Claude Code and Cursor both work, and `nokori test`, `status`, `health`, `logs`, `extract`, `maintain`, plus the Web UI explain why a rule did or did not fire.
 
 The important product promise is restraint: Nokori is allowed to remind early, but it must collect evidence before it becomes authoritative, and it must keep collecting evidence after it starts helping.
 
@@ -81,9 +83,11 @@ If you hit English abbreviations on a first read, skim this table first; the key
 | **fail-open** | When Nokori itself errors, it **does not block** the agent — it skips the reminder for that turn |
 | **extract** | Use an LLM to **extract** candidate rules from a transcript (cold path, not urgent) |
 | **shadow pool** | `candidate` / `suppressed` rules matched in the background: used as evidence, **not injected into your current chat** |
-| **promotion** | Autonomous lifecycle movement: candidate → active, active → trusted, suppressed recovery, or cross-project global scope |
+| **lifecycle transition** | Autonomous movement such as candidate → active, active → trusted, or suppressed recovery |
+| **promotion** | Shadow lifecycle evidence for candidate and suppressed rules; not a shortcut to trust |
+| **project / global scope** | Where an eligible rule can apply; scope never bypasses lifecycle trust |
 | **candidate / active / trusted / suppressed / archived** | v6 lifecycle: observed candidates, injectable active/trusted rules, shadow-only suppressed rules, terminal archives |
-| **lineage / replacement** | Replacement history is stored as lineage/tombstone data, not a runtime `merged` state |
+| **lineage / replacement** | Replacement history is stored as lineage/tombstone data, not as a user-managed lifecycle status |
 | **OpenAI-compatible** | Point the API at `.../v1` to use Ollama, LM Studio, OpenRouter, etc. |
 
 ---
@@ -266,9 +270,9 @@ After upgrading, run `nokori health` to confirm everything still checks out. Hoo
 
 ## Quick start
 
-Three steps to get going; the details are all in later sections.
+This quick start follows the real lifecycle: create a candidate, verify the shadow match, let evidence move it forward, then use it in a live session.
 
-### 1. Add a rule manually
+### 1. Add a candidate rule
 
 ```bash
 nokori add \
@@ -283,7 +287,7 @@ nokori add \
 
 Manual add writes a structured v6 `candidate`. That is intentional: it gives the lifecycle something to evaluate, but it does not bypass the trust bar and it will not immediately inject or Gate. Without `--project-id`, the candidate is `project_scope=global`; with `--project-id`, it is `project_scope=project` and bound to that project.
 
-### 2. Simulate retrieval (no Claude session needed)
+### 2. Verify the shadow match
 
 ```bash
 nokori test "I'll just git push --force this branch"
@@ -311,16 +315,28 @@ shadow_pool HOT (1 would record hit, embed=off, not injected):
 
 That "not injected" is the point: candidates gather shadow/posthoc evidence first. Once a rule becomes `active` or `trusted`, it moves into the formal pool and starts appearing in real prompts.
 
-### 3. Run it in a real session
+### 3. Let evidence move it forward
 
-Just open Claude Code and write code as usual. When your words brush up against a rule:
+After real sessions, `SessionEnd` queues extraction/posthoc work and `nokori maintain` applies lifecycle transitions. You can watch the evidence instead of guessing:
+
+```bash
+nokori status
+nokori maintain
+nokori status
+```
+
+The important rule: **shadow evidence can move candidates forward, but it never injects into the current chat by itself**.
+
+### 4. Run it in a real session
+
+Once the rule is in the formal pool, just open Claude Code or Cursor and work as usual. When your words brush up against a rule:
 
 - Claude **sees the injected rules before it replies** (HOT is written out in full, WARM gets a one-liner)
 - For a `trusted` + `gate_eligible` rule with strong prompt evidence: the first matching Write / Bash / etc. may be **blocked once**, and the UI shows the reason and the `short_id`
 - **Within the same message**, after one block the later tool calls all go through (the marker is cleared)
 - **solution** rules: may appear in the prompt, but never block a tool
 
-### 4. Rule out of date? (Dismiss)
+### 5. Rule out of date? (Dismiss)
 
 Each rule has a **short_id** (e.g. `a3f2b1`), shown in injection text and in Gate block reasons. When a rule no longer applies, **retire** it (status becomes `archived`; no retrieval, no Gate).
 
@@ -437,6 +453,8 @@ Changing only this layer while settings still exclude Read: Read still **won't**
 
 For example, an `active` high-risk reminder can appear in HOT prompts but **will not** Gate-block your first Write/Bash. Gate begins only after the autonomous lifecycle trusts the rule and assigns `gate_eligible`.
 
+Gate is not a permission system. It is a one-turn reminder brake: show the relevant rule, deny once, clear the marker, and let later tool calls in the same message proceed.
+
 ### Other Gate-related settings
 
 | Setting | Purpose |
@@ -521,7 +539,7 @@ candidate → active → trusted
 | Status | In reminders? | Gated? | How it got here |
 |--------|---------------|--------|-----------------|
 | `candidate` | No; shadow/evidence only | No | `nokori add` or cold extraction creates a structured v6 candidate |
-| `active` | Yes, WARM until usefulness is observed; HOT only with strong evidence/history | No direct gate unless later trusted | Autonomous cold fast lane or shadow/posthoc promotion |
+| `active` | Yes, WARM until usefulness is observed; HOT only with strong evidence/history | No direct gate unless later trusted | Autonomous cold fast lane or shadow/posthoc lifecycle evidence |
 | `trusted` | Yes | Maybe, only when `severity=gate_eligible` and runtime evidence passes | Autonomous lifecycle after observed usefulness |
 | `suppressed` | No; shadow recovery only | No | Autonomous false-positive/harm suppression |
 | `archived` | No | No | User dismiss/archive or terminal replacement/veto |
@@ -529,7 +547,7 @@ candidate → active → trusted
 ### How a rule turns active/trusted
 
 - **Manual `nokori add` always creates a `candidate`** with v6 structured trigger concepts/groups. Even `--confidence high --source-type correction` does not bypass the lifecycle.
-- **Cold-path promotion** requires matcher compilation, archived-fingerprint checks, merge policy, synthetic evaluation, and cold-fast-lane thresholds.
+- **Cold-path lifecycle movement** requires matcher compilation, archived-fingerprint checks, merge policy, synthetic evaluation, and cold-fast-lane thresholds.
 - **Trusted/gate-capable rules** require autonomous posthoc/shadow evidence; `nokori edit --status active|trusted|suppressed` is intentionally rejected.
 
 ### Runtime evidence and posthoc
@@ -554,7 +572,7 @@ On every `UserPromptSubmit`, Nokori retrieves the **formal pool** and the **shad
 - Suppressed shadow matches become recovery evidence for suppressed → active
 - Matches are fingerprint-deduped, version-bound, and labeled later by the posthoc evaluator
 
-`NOKORI_PROMOTION_ENABLED=0` disables this shadow pass. The old cross-project `N/3` promotion counters still appear where historical data exists, but the v6 hot path treats shadow primarily as lifecycle evidence rather than as text to inject into the current chat.
+`NOKORI_PROMOTION_ENABLED=0` disables this shadow pass. Shadow matches are treated as lifecycle evidence rather than text to inject into the current chat.
 
 ### Async Extract Mode (auto-mine rules after session close)
 
@@ -590,7 +608,7 @@ SessionStart looks for the "previous transcript" in two steps:
 
 If the previous session hasn't been extracted yet, it injects the last 3 user messages from the **tail** of the file (500 chars, in a budget separate from the 1500-char rule budget). Fire/shadow events are written during **UserPromptSubmit**; posthoc labels are enqueued at SessionEnd and processed later by `nokori maintain`.
 
-**Shadow hits and candidate/suppressed lifecycle**: shadow matches are never injected into the current chat. They are recorded with context fingerprints and later labeled/evaluated so the autonomous lifecycle can promote candidates or recover suppressed rules without manual status edits.
+**Shadow hits and candidate/suppressed lifecycle**: shadow matches are never injected into the current chat. They are recorded with context fingerprints and later labeled/evaluated so the autonomous lifecycle can move candidates forward or recover suppressed rules without manual status edits.
 
 ### Maintenance
 
@@ -665,7 +683,7 @@ Installing `[local-embed]` pulls in **sentence-transformers>=3.0** (required for
 
 Only the files inference actually needs are downloaded; the same repo's hundreds-of-MB ONNX / OpenVINO variants are **not** fetched. At retrieval time your words go through `encode_query` and rule indexing goes through `encode_document` — that's Granite R2's bi-encoder retrieval API.
 
-Weights land in `~/.nokori/models/` only at the moments below; hooks never download them (timeout risk). After upgrading from an older default model, remember to run `nokori embed prefetch` once and re-index the rules (`add` / `import` / editing trigger-related fields all work) so the `rule_embeddings` `model_version` aligns with the new model:
+Weights land in `~/.nokori/models/` only at the moments below; hooks never download them (timeout risk). After changing the default model or embedding config, remember to run `nokori embed prefetch` once and re-index the rules (`add` / `import` / editing trigger-related fields all work) so the `rule_embeddings` `model_version` aligns with the current model:
 
 | When | Notes |
 |------|-------|
@@ -729,12 +747,12 @@ nokori web --no-browser       # start server only, don't auto-open
 
 | Page | Content |
 |------|---------|
-| **Dashboard** | Rule counts by status, injection stats (24h), embed server status with start/stop control, gate state, extract pending jobs, promotion progress |
-| **Rules** | Full CRUD: filter by status/type, view details (trigger, action, evidence log, promotion evidence, superseded-by chain), edit fields, dismiss |
+| **Dashboard** | Rule counts by status, injection stats (24h), embed server status with start/stop control, gate state, extract pending jobs, lifecycle evidence |
+| **Rules** | Full CRUD: filter by status/type, view details (trigger, action, evidence log, lifecycle evidence, replacement lineage), edit fields, dismiss |
 | **Retrieve** | Enter a prompt, see exactly which rules fire: BM25 + embedding scores, HOT/WARM tier, matched tokens, shadow pool results. Embedding toggle on/off |
 | **Injections** | Timeline of every rule injection: rule, level (HOT/WARM), session, timestamp. Filter by level or session |
 | **Extract** | Pending/done jobs, extract state per transcript (byte offset, mtime) |
-| **Lifecycle** | Promotion progress bars (shadow hits from N projects toward global threshold), maintenance job last-run times |
+| **Lifecycle** | Evidence progress for candidate → active, active → trusted, and suppressed recovery; maintenance job last-run times |
 | **Config** | Live view of all resolved config values + health checks (db, llm, embed, hooks) |
 | **Logs** | Real-time log stream via WebSocket, level filter, auto-scroll with pause |
 
@@ -766,6 +784,9 @@ nokori web --no-browser   # start the API backend
 
 ## Full CLI reference
 
+<details>
+<summary>Show CLI commands</summary>
+
 ```bash
 # Rule management
 nokori add [--trigger "..." --action "..." --source-type ... --confidence ...]
@@ -779,7 +800,7 @@ nokori extract [--session <path>] [--dry-run]
 
 # Debugging
 nokori test "<prompt>" [--project <id>]
-nokori status          # Includes promotion progress: per project rule, N/3 distinct projects already shadow HOT
+nokori status          # Rule status, hook/config, embed, and lifecycle evidence
 nokori logs
 nokori health
 
@@ -798,9 +819,14 @@ nokori import <path.json>
 nokori install [--claude | --cursor | --all] [--dry-run | --uninstall | --disable | --enable | --no-prefetch-embed]
 ```
 
+</details>
+
 ---
 
 ## Environment variables
+
+<details>
+<summary>Show environment variables</summary>
 
 | Variable | Default | Description |
 |----------|---------|-------------|
@@ -830,7 +856,7 @@ nokori install [--claude | --cursor | --all] [--dry-run | --uninstall | --disabl
 | `NOKORI_STRICT` | `0` | `1` = hook errors propagate upward (debug; default fail-open) |
 | `NOKORI_DISABLED` | `0` | Disable entirely |
 | `NOKORI_HOOK_COALESCE` | `1` | When Claude + Cursor both register hooks: only the first invocation per event actually runs (`0` = off, may double-inject) |
-| `NOKORI_DISMISS_PHRASE` | `dismiss` | Chat verb to retire a rule (`verb + short_id`); see [Dismiss](#4-rule-out-of-date-dismiss) |
+| `NOKORI_DISMISS_PHRASE` | `dismiss` | Chat verb to retire a rule (`verb + short_id`); see [Dismiss](#5-rule-out-of-date-dismiss) |
 | `NOKORI_LOG_LEVEL` | `warn` | Log level |
 | `NOKORI_MODEL_<ROLE>` | — | Per-role LLM override for `EXTRACTOR`, `ADMISSION_JUDGE`, `RULE_REWRITER`, `FINAL_JUDGE`, `MERGE_PLANNER`, `SYNTHETIC_EVAL_GENERATOR`, `POSTHOC_EVALUATOR` |
 
@@ -843,6 +869,8 @@ nokori install [--claude | --cursor | --all] [--dry-run | --uninstall | --disabl
 | `NOKORI_EXTRACTING` | — | Internal: prevents recursion in the `claude -p` fallback child; do not set it in a user shell or async extract |
 
 All LLM/embedding endpoints are compatible with: Ollama, LMStudio, vLLM, OpenRouter, OpenAI, any `/v1/chat/completions` + `/v1/embeddings` endpoint.
+
+</details>
 
 ---
 
@@ -866,6 +894,9 @@ Start from what you want to tune, then decide which table to touch:
 | Change the chat verb for retiring rules | top level | `dismiss_phrase` |
 
 A template you can copy straight in (trim as needed; anything unlisted uses defaults):
+
+<details>
+<summary>Show config.toml template</summary>
 
 ```toml
 # ~/.nokori/config.toml
@@ -939,9 +970,11 @@ enabled = true
 # posthoc_evaluator_timeout = 45
 ```
 
+</details>
+
 Every field maps to an environment variable (one-to-one in the [config.toml.example](config.toml.example) quick reference).
 
-Common pitfalls: `[gate] matcher` only governs whether the Nokori hook blocks **internally**, while whether PreToolUse **invokes the hook at all** is decided by `~/.claude/settings.json` (see [Gate two-layer matching](#gate-and-pretooluse-two-layers-of-tool-matching)); full `dismiss_phrase` details are in [Dismiss](#4-rule-out-of-date-dismiss).
+Common pitfalls: `[gate] matcher` only governs whether the Nokori hook blocks **internally**, while whether PreToolUse **invokes the hook at all** is decided by `~/.claude/settings.json` (see [Gate two-layer matching](#gate-and-pretooluse-two-layers-of-tool-matching)); full `dismiss_phrase` details are in [Dismiss](#5-rule-out-of-date-dismiss).
 
 ---
 
