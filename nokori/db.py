@@ -663,6 +663,13 @@ def archive_rule(db: "Db", rule_id: str, reason: str, now: str) -> None:
             "updated_at = ? WHERE id = ?",
             (reason, now, rule_id),
         )
+        # Cancel in-flight shadow promotion/recovery (spec section 11:
+        # removes from injection, Gate, shadow promotion, and recovery)
+        tx.execute(
+            "UPDATE rule_shadow_events SET shadow_label = 'unclear' "
+            "WHERE rule_id = ? AND shadow_label IS NULL",
+            (rule_id,),
+        )
     # Create user-strength archived fingerprint (spec section 11)
     if rule_row:
         from .archive.fingerprints import create_archived_fingerprint_from_data

@@ -756,8 +756,8 @@ def _check_cold_fast_lane(
     if fingerprint_conflict:
         return False
 
-    # Merge operation must be keep_both — any other op means structural work
-    if merge_op != "keep_both":
+    # Merge operation must not require split/rewrite (spec 3.3 condition 9)
+    if merge_op in ("split_required", "reject_new"):
         return False
 
     return True

@@ -675,7 +675,7 @@ def compute_dynamic_threshold(pool_size: int) -> dict:
             "dynamic_trigger_info_min": 0.0,
         }
 
-    rare_df = max(1, int(pool_size * 0.10))
+    rare_df = max(1, math.ceil(pool_size * 0.10))
     idf_10pct = math.log(1 + (pool_size - rare_df + 0.5) / (rare_df + 0.5))
 
     if pool_size < _SMALL_POOL_THRESHOLD:
@@ -683,7 +683,8 @@ def compute_dynamic_threshold(pool_size: int) -> dict:
     else:
         absolute_min = _NORMAL_ABSOLUTE_MIN
 
-    dynamic_trigger_info_min = max(idf_10pct, absolute_min)
+    # Spec: dynamic_trigger_info_min = 2 * idf_10pct; trigger_info_min = max(dynamic, absolute)
+    dynamic_trigger_info_min = max(2 * idf_10pct, absolute_min)
 
     return {
         "pool_size": pool_size,
