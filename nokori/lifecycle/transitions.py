@@ -490,28 +490,7 @@ def _evaluate_candidate(db: Db, row, rule_version: int) -> TransitionResult:
                 False,
             )
 
-        # Check for observed agent miss or user correction evidence.
-        # Candidates rarely have fire events, so check:
-        # 1. Direct feedback with agent_miss/user_correction label
-        # 2. Feedback on shadow events indicating agent_miss
-        correction_row = db.fetchone(
-            "SELECT 1 FROM rule_feedback_events "
-            "WHERE fire_event_id IN ("
-            "  SELECT id FROM rule_fire_events WHERE rule_id = ?"
-            ") AND label IN ('agent_miss', 'user_correction') "
-            "LIMIT 1",
-            (rule_id,),
-        )
-        # Also check feedback on fire events for this rule with agent_miss source
-        shadow_feedback_row = db.fetchone(
-            "SELECT 1 FROM rule_feedback_events "
-            "WHERE source = 'agent_miss' "
-            "AND fire_event_id IN ("
-            "  SELECT id FROM rule_fire_events WHERE rule_id = ?"
-            ") LIMIT 1",
-            (rule_id,),
-        )
-        has_miss_evidence = correction_row is not None or shadow_feedback_row is not None
+        has_miss_evidence = _candidate_has_miss_evidence(db, rule_id, rule_version)
         if has_miss_evidence:
             reason = (
                 f"single_session_exception: quality={admission_quality:.2f} "
@@ -526,6 +505,35 @@ def _evaluate_candidate(db: Db, row, rule_version: int) -> TransitionResult:
     return TransitionResult(
         rule_id, old_status, None, "insufficient promotion evidence", False
     )
+
+
+def _candidate_has_miss_evidence(db: Db, rule_id: str, rule_version: int) -> bool:
+    """Check shadow-only observed miss/user correction evidence for a candidate."""
+    rows = db.fetchall(
+        "SELECT decision_features FROM rule_shadow_events "
+        "WHERE rule_id = ? AND shadow_rule_version = ? "
+        "AND shadow_label = 'would_help_high'",
+        (rule_id, rule_version),
+    )
+    for row in rows:
+        try:
+            features = json.loads(row["decision_features"] or "{}")
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if not isinstance(features, dict):
+            continue
+        if features.get("observed_agent_miss") is True:
+            return True
+        if features.get("user_correction") is True:
+            return True
+        if features.get("source") in {"agent_miss", "user_correction"}:
+            return True
+        evidence = features.get("evidence")
+        if isinstance(evidence, list) and (
+            "agent_miss" in evidence or "user_correction" in evidence
+        ):
+            return True
+    return False
 
 
 def _evaluate_active(db: Db, row, rule_version: int) -> TransitionResult:
