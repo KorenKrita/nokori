@@ -31,7 +31,7 @@ def create_fire_event(
     injected_structured_snapshot = dumps_json({
         "concepts": loads_json(rule.concepts, []),
         "required_concept_groups": loads_json(rule.required_concept_groups, []),
-        "trigger_variants": rule.trigger_variants,
+        "trigger_variants": loads_json(rule.trigger_variants, []) if isinstance(rule.trigger_variants, str) else (rule.trigger_variants or []),
         "excluded_contexts": loads_json(rule.excluded_contexts, []),
     })
 

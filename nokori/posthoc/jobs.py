@@ -59,11 +59,14 @@ def enqueue_posthoc_for_session(db: Db, session_id: str) -> int:
 
 
 def get_pending_posthoc_jobs(db: Db, limit: int = 20) -> list[dict]:
-    """Fetch pending posthoc jobs ordered by created_at (oldest first)."""
+    """Fetch pending posthoc jobs with exponential backoff on retried jobs."""
+    now = now_iso()
     rows = db.fetchall(
         "SELECT * FROM posthoc_jobs WHERE status = 'pending' "
-        "ORDER BY created_at ASC LIMIT ?",
-        (limit,),
+        "AND (retries = 0 OR "
+        "  datetime(updated_at, '+' || (30 * (1 << MIN(retries, 8))) || ' seconds') <= datetime(?)) "
+        "ORDER BY retries ASC, created_at ASC LIMIT ?",
+        (now, limit),
     )
     return [dict(r) for r in rows]
 
@@ -99,11 +102,11 @@ def mark_posthoc_job_complete(
         )
 
 
-def mark_posthoc_job_failed(db: Db, job_id: str) -> None:
-    """Increment retries and update timestamp for a failed posthoc job.
+_POSTHOC_MAX_RETRIES = 5
 
-    The worker uses retries count and updated_at to compute exponential backoff.
-    """
+
+def mark_posthoc_job_failed(db: Db, job_id: str) -> None:
+    """Increment retries. After max retries, mark as permanently failed."""
     now = now_iso()
     row = db.fetchone(
         "SELECT retries FROM posthoc_jobs WHERE id = ?", (job_id,)
@@ -112,11 +115,12 @@ def mark_posthoc_job_failed(db: Db, job_id: str) -> None:
         return
 
     new_retries = (row["retries"] or 0) + 1
+    new_status = "failed" if new_retries >= _POSTHOC_MAX_RETRIES else "pending"
 
     with db.transaction() as tx:
         tx.execute(
-            "UPDATE posthoc_jobs SET retries = ?, updated_at = ? WHERE id = ?",
-            (new_retries, now, job_id),
+            "UPDATE posthoc_jobs SET retries = ?, status = ?, updated_at = ? WHERE id = ?",
+            (new_retries, new_status, now, job_id),
         )
 
 

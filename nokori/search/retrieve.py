@@ -57,10 +57,11 @@ def _variant_dicts(rule: Rule, required_concepts: list[str]) -> list[dict]:
     if canonical and required_concepts:
         existing = {v.get("text") for v in variants}
         if canonical not in existing:
+            is_multi_token = len(tokenize(canonical)) >= 2
             variants.append({
                 "text": canonical,
-                "kind": "strong_anchor",
-                "requires_concepts": required_concepts,
+                "kind": "strong_anchor" if is_multi_token else "weak_recall",
+                "requires_concepts": required_concepts if is_multi_token else [],
             })
     return variants
 
@@ -257,7 +258,8 @@ def retrieve_and_tier(
 
     # Selection: split into HOT/WARM via utility + diversity
     selection: SelectionResult = select_injection(
-        eligible, max_injection_chars=cfg.max_injection_chars
+        eligible, max_injection_chars=cfg.max_injection_chars,
+        pool_size=idf_stats.rule_pool_size,
     )
     hot = selection.hot
     warm = selection.warm
