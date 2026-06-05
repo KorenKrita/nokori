@@ -17,7 +17,7 @@ _TOP_LEVEL_ORDER = (
     "strict",
     "dismiss_phrase",
 )
-_SECTION_ORDER = ("gate", "extract", "llm", "embed", "hot_cache", "session", "promotion")
+_SECTION_ORDER = ("gate", "extract", "llm", "embed", "hot_cache", "session", "promotion", "models")
 
 
 def config_path(data_dir: Path) -> Path:
@@ -122,8 +122,19 @@ def write_document(path: Path, doc: dict[str, Any]) -> None:
             continue
         lines.append("")
         lines.append(f"[{section}]")
+        sub_tables: list[tuple[str, dict]] = []
         for sk in sorted(block.keys()):
-            lines.append(f"{sk} = {_format_toml_value(block[sk])}")
+            if isinstance(block[sk], dict):
+                sub_tables.append((sk, block[sk]))
+            else:
+                lines.append(f"{sk} = {_format_toml_value(block[sk])}")
+        for sub_name, sub_block in sub_tables:
+            if not sub_block:
+                continue
+            lines.append("")
+            lines.append(f"[{section}.{sub_name}]")
+            for k in sorted(sub_block.keys()):
+                lines.append(f"{k} = {_format_toml_value(sub_block[k])}")
 
     path.parent.mkdir(parents=True, exist_ok=True)
     text = "\n".join(lines).strip() + "\n"
