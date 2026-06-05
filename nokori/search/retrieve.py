@@ -183,7 +183,7 @@ def _apply_runtime_applicability(
         return None
 
     level = applicability.decision
-    if level == "cold":
+    if level == "cold" and result.rule.status not in ("candidate", "suppressed"):
         level = "hot" if match.strong_variant_hits else "warm"
 
     return replace(

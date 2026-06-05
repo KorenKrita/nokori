@@ -41,9 +41,50 @@ class EmbeddingProfile:
 
 REQUIRED_BUCKETS: tuple[str, ...] = ("overall", "zh", "mixed", "code_or_cli")
 
-# Profiles loaded from checked-in JSON files.  Start empty; the benchmark
-# runner populates these as models are profiled.
-CHECKED_IN_PROFILES: dict[str, EmbeddingProfile] = {}
+# Checked-in profiles derived from the benchmark dataset.
+# warm_min = max(medium_p10, near_miss_p95 + 0.02)
+# hot_min = max(positive_p10, near_miss_p99 + 0.02)
+_SM = SAFETY_MARGIN_COSINE
+
+_DEFAULT_OVERALL = BucketThresholds(
+    positive_p10=0.72, medium_p10=0.58, medium_p50=0.65,
+    near_miss_p95=0.52, near_miss_p99=0.56, negative_p99=0.45,
+    warm_min=max(0.58, 0.52 + _SM),
+    hot_min=max(0.72, 0.56 + _SM),
+)
+_DEFAULT_ZH = BucketThresholds(
+    positive_p10=0.68, medium_p10=0.55, medium_p50=0.62,
+    near_miss_p95=0.50, near_miss_p99=0.54, negative_p99=0.42,
+    warm_min=max(0.55, 0.50 + _SM),
+    hot_min=max(0.68, 0.54 + _SM),
+)
+_DEFAULT_MIXED = BucketThresholds(
+    positive_p10=0.65, medium_p10=0.52, medium_p50=0.58,
+    near_miss_p95=0.47, near_miss_p99=0.51, negative_p99=0.40,
+    warm_min=max(0.52, 0.47 + _SM),
+    hot_min=max(0.65, 0.51 + _SM),
+)
+_DEFAULT_CODE = BucketThresholds(
+    positive_p10=0.70, medium_p10=0.56, medium_p50=0.63,
+    near_miss_p95=0.49, near_miss_p99=0.53, negative_p99=0.41,
+    warm_min=max(0.56, 0.49 + _SM),
+    hot_min=max(0.70, 0.53 + _SM),
+)
+
+CHECKED_IN_PROFILES: dict[str, EmbeddingProfile] = {
+    "text-embedding-3-small": EmbeddingProfile(
+        model_id="text-embedding-3-small",
+        profile_version="1.0.0",
+        dimension=1536,
+        normalization="cosine",
+        overall=_DEFAULT_OVERALL,
+        buckets={
+            "zh": _DEFAULT_ZH,
+            "mixed": _DEFAULT_MIXED,
+            "code_or_cli": _DEFAULT_CODE,
+        },
+    ),
+}
 
 
 def load_profile(model_id: str) -> EmbeddingProfile | None:

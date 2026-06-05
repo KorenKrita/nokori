@@ -6,6 +6,7 @@ All configuration is accepted as plain dicts/strings.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from typing import Any
 
@@ -34,6 +35,13 @@ PROMPT_VERSIONS: dict[str, str] = {
     "synthetic_eval_generator": "1.0.0",
     "posthoc_evaluator": "1.0.0",
 }
+
+
+def compute_prompt_version(role: str, system_prompt: str) -> str:
+    """Derive prompt version from content hash so prompt edits auto-invalidate cache."""
+    base = PROMPT_VERSIONS.get(role, "1.0.0")
+    content_hash = hashlib.sha256(system_prompt.encode()).hexdigest()[:8]
+    return f"{base}-{content_hash}"
 
 
 # --- Per-Role Default Config ---

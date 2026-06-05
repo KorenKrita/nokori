@@ -596,7 +596,8 @@ def _call_llm_role(
     validate_response: Callable[[str], None] | None = None,
 ) -> str:
     """Call an LLM role through the durable idempotency/circuit-breaker layer."""
-    prompt_version = PROMPT_VERSIONS[role]
+    from .roles import compute_prompt_version
+    prompt_version = compute_prompt_version(role, system)
     input_hash = _llm_input_hash(role, system, user, model_id)
 
     if is_circuit_breaker_open(db, role, model_id=model_id):

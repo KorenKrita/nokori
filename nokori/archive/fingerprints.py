@@ -198,7 +198,8 @@ def check_fingerprint_block(
         return None
     # Related (non-exact) match: check if new rule is narrower scope
     is_narrower = _is_narrower_scope(
-        trigger_canonical, action_instruction, row
+        trigger_canonical, action_instruction, row,
+        new_domain_tags=domain_tags,
     )
     return _fingerprint_decision(
         row,
@@ -334,11 +335,14 @@ def _is_narrower_scope(
     trigger_canonical: str,
     action_instruction: str,
     fingerprint_row,
+    *,
+    new_domain_tags: list[str] | None = None,
 ) -> bool:
     """Determine if the new rule has narrower scope than the archived fingerprint.
 
-    Narrower = the new rule's tokens are a STRICT SUBSET of the fingerprint's tokens,
-    meaning it covers less ground.
+    Narrower = the new rule covers less ground than the fingerprint. Checked via:
+    1. Token containment: new tokens are mostly a subset of old tokens
+    2. Scope specificity: new rule has more domain/path constraints than old
     """
     new_tokens = _content_tokens(f"{trigger_canonical} {action_instruction}")
     old_tokens = _content_tokens(
@@ -346,11 +350,19 @@ def _is_narrower_scope(
     )
     if not new_tokens or not old_tokens:
         return False
-    # Narrower = new tokens mostly contained in old (subset) AND old is NOT
-    # contained in new (new doesn't cover everything old did).
     new_in_old = len(new_tokens & old_tokens) / len(new_tokens) if new_tokens else 0
     old_in_new = len(new_tokens & old_tokens) / len(old_tokens) if old_tokens else 0
-    return new_in_old >= 0.80 and old_in_new < 0.70
+
+    # Structural narrowness: new has domain_tags that old's scope_summary lacks
+    scope_summary = fingerprint_row.get("scope_summary") or ""
+    has_structural_narrowing = (
+        new_domain_tags
+        and len(new_domain_tags) > 0
+        and "general" in scope_summary.lower()
+    )
+
+    token_narrower = new_in_old >= 0.80 and old_in_new < 0.70
+    return token_narrower or bool(has_structural_narrowing)
 
 
 def _content_tokens(text: str) -> set[str]:
