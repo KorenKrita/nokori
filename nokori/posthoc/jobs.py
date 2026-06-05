@@ -279,15 +279,15 @@ def submit_feedback(
             (feedback_id, fire_event_id, source, label, confidence, evidence, now),
         )
 
-    # High-confidence harmful feedback: suppress ONLY after posthoc confirmation
-    # or direct deterministic harm evidence (spec 10.4).
-    # Check if posthoc already confirmed harmful for this fire event.
+    # High-confidence harmful feedback: suppress after posthoc confirmation
+    # OR direct deterministic harm evidence (spec 10.4).
     if label == "harmful" and confidence >= 0.9 and rule_id:
         posthoc_confirmed = db.fetchone(
             "SELECT posthoc_label FROM rule_fire_events WHERE id = ? AND posthoc_label = 'harmful'",
             (fire_event_id,),
         )
-        if posthoc_confirmed:
+        has_deterministic_harm = _is_deterministic_harm_evidence(evidence)
+        if posthoc_confirmed or has_deterministic_harm:
             from ..lifecycle.transitions import _apply_transition
 
             rule_row_full = db.fetchone(
@@ -295,14 +295,43 @@ def submit_feedback(
                 (rule_id,),
             )
             if rule_row_full and rule_row_full["status"] in ("active", "trusted"):
+                reason = (
+                    f"harmful_feedback_deterministic (confidence={confidence:.2f})"
+                    if has_deterministic_harm
+                    else f"harmful_feedback_with_posthoc_confirmation (confidence={confidence:.2f})"
+                )
                 _apply_transition(
                     db, rule_id, rule_row_full["rule_version"],
                     rule_row_full["status"], "suppressed",
                     rule_row_full["runtime_policy_version"],
-                    f"harmful_feedback_with_posthoc_confirmation (confidence={confidence:.2f})",
+                    reason,
                 )
 
     return feedback_id
+
+
+_DETERMINISTIC_HARM_MARKERS = (
+    "build failed",
+    "test failed",
+    "error:",
+    "exception:",
+    "traceback",
+    "command failed",
+    "exit code",
+    "permission denied",
+    "data loss",
+    "deleted",
+    "overwritten",
+    "corrupted",
+)
+
+
+def _is_deterministic_harm_evidence(evidence: str) -> bool:
+    """Check if feedback evidence contains machine-verifiable harm signals."""
+    if not evidence or len(evidence) < 20:
+        return False
+    lower = evidence.lower()
+    return any(marker in lower for marker in _DETERMINISTIC_HARM_MARKERS)
 
 
 def compute_window_payload_hash(
