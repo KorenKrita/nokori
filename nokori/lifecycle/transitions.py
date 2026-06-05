@@ -462,7 +462,7 @@ def _evaluate_candidate(db: Db, row, rule_version: int) -> TransitionResult:
         admission_quality >= ss.admission_overall_quality_min
         and best_single_session_strong >= ss.shadow_strong_match_count_min
         and evaluated_count >= ss.evaluated_shadow_match_count_min
-        and would_help_high >= ss.counterfactual_would_help_high_min
+        and best_single_session_strong >= ss.counterfactual_would_help_high_min
         and risky_harmful <= ss.risky_or_near_miss_shadow_count_max
         and shadow_fp_rate <= ss.shadow_false_positive_rate_max
     )

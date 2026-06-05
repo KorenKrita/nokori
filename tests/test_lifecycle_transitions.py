@@ -16,6 +16,8 @@ from nokori.lifecycle.transitions import (
     update_derived_scores,
 )
 from nokori.policy import (
+    CandidateToActiveSingleSessionThresholds,
+    CandidateToActiveThresholds,
     RECENT_TIME_WINDOW_DAYS,
     RUNTIME_POLICY_VERSION,
     SUPPRESSION_TTL_DAYS,
@@ -327,6 +329,47 @@ class TestCandidateToActiveSingleSession:
             _insert_feedback_event(db, fire_eid, "user_correction")
 
             result = evaluate_transitions(db, rid)
+            assert result.new_status is None
+        finally:
+            db.close()
+
+    def test_single_session_requires_counterfactuals_in_same_session(
+        self, tmp_path, monkeypatch
+    ):
+        db = _fresh_db(tmp_path)
+        try:
+            import nokori.lifecycle.transitions as transitions
+
+            monkeypatch.setattr(
+                transitions,
+                "CANDIDATE_TO_ACTIVE",
+                CandidateToActiveThresholds(distinct_shadow_sessions_min=99),
+            )
+            monkeypatch.setattr(
+                transitions,
+                "CANDIDATE_TO_ACTIVE_SINGLE_SESSION",
+                CandidateToActiveSingleSessionThresholds(
+                    shadow_strong_match_count_min=2,
+                    counterfactual_would_help_high_min=3,
+                ),
+            )
+            rid = _insert_rule(db, status="candidate")
+            _insert_synthetic_eval(db, rid, 1, passed=True)
+            _insert_review(db, rid, overall_quality=0.92)
+
+            sess_a = str(uuid.uuid4())
+            sess_b = str(uuid.uuid4())
+            _insert_shadow_event(db, rid, session_id=sess_a, label="would_help_high")
+            _insert_shadow_event(db, rid, session_id=sess_a, label="would_help_high")
+            _insert_shadow_event(db, rid, session_id=sess_a, label="would_help_low")
+            _insert_shadow_event(db, rid, session_id=sess_b, label="would_help_high")
+            _insert_shadow_event(db, rid, session_id=sess_b, label="would_help_low")
+
+            fire_eid = _insert_fire_event(db, rid, session_id=sess_a)
+            _insert_feedback_event(db, fire_eid, "user_correction")
+
+            result = evaluate_transitions(db, rid)
+
             assert result.new_status is None
         finally:
             db.close()
