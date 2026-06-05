@@ -364,16 +364,6 @@ def _run_cold_pipeline_inner(
     )
 
     # Determine final status
-    final_status: str
-    if fingerprint_conflict and not fast_lane_passed:
-        final_status = "rejected"
-        return ColdPipelineResult(
-            status="rejected",
-            rule_id=None,
-            rejection_reason="fingerprint_conflict_and_failed_fast_lane",
-            scores=scores,
-        )
-
     existing_rule = merge_info.get("existing_rule")
     if merge_op in DESTRUCTIVE_MERGE_OPS:
         merge_decision = MergeDecision(
