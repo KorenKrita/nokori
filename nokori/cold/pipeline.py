@@ -245,9 +245,11 @@ def _run_cold_pipeline_inner(
     rule_data = _ensure_rule_data_variants(rule_data)
 
     # --- Stage c: Final Judge ---
+    # Strip evidence from rule_data so final_judge sees rule and evidence separately
+    rule_data_for_judge = {k: v for k, v in rule_data.items() if k != "evidence_quotes"}
     final_judge_model = resolve_model_id("final_judge", role_models, default_model)
     final_decision = _run_final_judge(
-        db, llm, rule_data, candidate.get("evidence_quotes", []), final_judge_model,
+        db, llm, rule_data_for_judge, candidate.get("evidence_quotes", []), final_judge_model,
         role_max_tokens, role_timeouts,
     )
 
