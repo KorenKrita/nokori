@@ -184,22 +184,6 @@ def run_maintenance(db: Db, cfg=None) -> dict:
     return run_due_jobs(db, cfg, transition_results)
 
 
-def run_dormant_scan(db: Db) -> int:
-    """No-op. Dormant status no longer exists; transitions handle state changes.
-
-    .. deprecated::
-        Dormant was removed in favor of suppressed/archived via transitions.py.
-    """
-    return 0
-
-
-def reactivate_dormant_on_retrieval_hot(db: Db, rule_id: str) -> None:
-    """No-op. Dormant status no longer exists; transitions are handled by transitions.py.
-
-    .. deprecated::
-        Retained for backward compat with tests referencing this function.
-    """
-
 
 def run_session_file_cleanup(cfg) -> int:
     from ..utils import sessions

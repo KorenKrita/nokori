@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 
 from nokori.config import Config
 from nokori.db import open_db
-from nokori.lifecycle import hot_cache, maintenance, promotion
+from nokori.lifecycle import hot_cache, maintenance
 
 
 def _utcnow_iso(delta_days: int = 0) -> str:
@@ -29,31 +29,6 @@ def _make_rule(db, *, id_, status, last_hit_days_ago=None,
              project_scope, project_id, created, created),
         )
 
-
-def test_dormant_scan_is_noop(monkeypatch, tmp_path):
-    """run_dormant_scan is now a no-op (dormant status removed)."""
-    monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
-    cfg = Config.from_env()
-    db = open_db(cfg.db_path)
-    try:
-        _make_rule(db, id_="aaa-old", status="active", last_hit_days_ago=45)
-        moved = maintenance.run_dormant_scan(db)
-        assert moved == 0
-    finally:
-        db.close()
-
-
-def test_dormant_scan_always_returns_zero(monkeypatch, tmp_path):
-    """Dormant scan is deprecated, always returns 0."""
-    monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
-    cfg = Config.from_env()
-    db = open_db(cfg.db_path)
-    try:
-        _make_rule(db, id_="zzz-old", status="active", last_hit_days_ago=45)
-        moved = maintenance.run_dormant_scan(db)
-        assert moved == 0
-    finally:
-        db.close()
 
 
 def test_candidate_cleanup_deletes_fire_events(monkeypatch, tmp_path):
@@ -99,19 +74,6 @@ def test_candidate_cleanup_removes_old(monkeypatch, tmp_path):
         db.close()
 
 
-def test_dormant_reactivation_is_noop(monkeypatch, tmp_path):
-    """reactivate_dormant_on_retrieval_hot is now a no-op."""
-    monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
-    cfg = Config.from_env()
-    db = open_db(cfg.db_path)
-    try:
-        _make_rule(db, id_="suppressed-1", status="suppressed", last_hit_days_ago=5)
-        maintenance.reactivate_dormant_on_retrieval_hot(db, "suppressed-1")
-        row = db.fetchone("SELECT status FROM rules WHERE id = 'suppressed-1'")
-        # No-op - status unchanged
-        assert row["status"] == "suppressed"
-    finally:
-        db.close()
 
 
 def test_unmerge_restores_when_superseder_deleted(monkeypatch, tmp_path):
@@ -144,48 +106,6 @@ def test_unmerge_restores_when_superseder_deleted(monkeypatch, tmp_path):
     finally:
         db.close()
 
-
-def test_unique_promotion_project_ids_dedupes():
-    from nokori.lifecycle.promotion import unique_promotion_project_ids
-
-    raw = [
-        {"key": "b:2026-01-01", "project_id": "proj-b", "date": "2026-01-01"},
-        {"key": "b:2026-01-02", "project_id": "proj-b", "date": "2026-01-02"},
-        {"key": "c:2026-01-01", "project_id": "proj-c", "date": "2026-01-01"},
-    ]
-    assert unique_promotion_project_ids(raw) == ["proj-b", "proj-c"]
-
-
-def test_promotion_record_shadow_hit_is_noop(monkeypatch, tmp_path):
-    """promotion.record_shadow_hit is now a no-op returning False."""
-    monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
-    monkeypatch.setenv("NOKORI_PROMOTION_ENABLED", "1")
-    cfg = Config.from_env()
-    db = open_db(cfg.db_path)
-    try:
-        _make_rule(db, id_="rule-A", status="active", project_id="proj-A",
-                   last_hit_days_ago=1)
-        result = promotion.record_shadow_hit(db, "rule-A", "proj-B")
-        assert result is False
-    finally:
-        db.close()
-
-
-def test_promotion_skips_preference(monkeypatch, tmp_path):
-    """promotion.record_shadow_hit is now a no-op."""
-    monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
-    monkeypatch.setenv("NOKORI_PROMOTION_ENABLED", "1")
-    cfg = Config.from_env()
-    db = open_db(cfg.db_path)
-    try:
-        _make_rule(db, id_="pref-1", status="active", project_id="proj-A",
-                   source_origin="transcript_extraction", last_hit_days_ago=1)
-        result = promotion.record_shadow_hit(db, "pref-1", "proj-B")
-        assert result is False
-        row = db.fetchone("SELECT project_scope FROM rules WHERE id='pref-1'")
-        assert row["project_scope"] == "project"
-    finally:
-        db.close()
 
 
 def test_unmerge_check_restores_when_replacement_target_suppressed(monkeypatch, tmp_path):

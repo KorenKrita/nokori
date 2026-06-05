@@ -23,32 +23,6 @@ def _index_path(cfg: Config, parent: Path) -> Path:
     return cfg.data_dir / "transcript_index" / f"{_parent_key(parent)}.json"
 
 
-def record_session_transcript(cfg: Config, transcript: Path) -> None:
-    """Remember current transcript as latest for this parent directory."""
-    try:
-        parent = transcript.parent.resolve()
-        resolved = transcript.resolve()
-        mtime = transcript.stat().st_mtime
-    except OSError as e:
-        log.warning("transcript_index skip %s: %s", transcript, e)
-        return
-
-    path = _index_path(cfg, parent)
-    data: dict = {}
-    if path.exists():
-        try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            data = {}
-
-    current = {"path": str(resolved), "mtime": mtime}
-    prev = data.get("current")
-    if prev and prev.get("path") != current["path"]:
-        data["previous"] = prev
-    data["current"] = current
-
-    atomic_write_json(path, data, mkdir=True)
-
 
 def lookup_previous(cfg: Config, current: Path) -> Path | None:
     try:

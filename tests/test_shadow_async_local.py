@@ -228,21 +228,6 @@ class TestShadowPoolHotTier:
             db.close()
 
 
-class TestShadowHitEvidence:
-    def test_shadow_hit_adds_evidence(self, monkeypatch, tmp_path):
-        """promotion.record_shadow_hit is now a no-op (returns False)."""
-        monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
-        cfg = Config.from_env()
-        db = open_db(cfg.db_path)
-        try:
-            _make_rule(db, id_="rule-ev", project_id="proj-A")
-            from nokori.lifecycle.promotion import record_shadow_hit
-            result = record_shadow_hit(db, "rule-ev", "proj-B")
-            assert result is False
-        finally:
-            db.close()
-
-
 # --- Session End / Posthoc Enqueue Tests ---
 
 class TestSessionEndPosthoc:

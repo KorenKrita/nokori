@@ -8,8 +8,6 @@ from nokori.extract.jobs import transcript_hash
 from nokori.gate.blocker import format_injection
 from nokori.gate.marker import is_expired, strip_short_id_from_all_markers, Marker, MarkerRule
 from nokori.lifecycle.maintenance import _days_since_iso
-from nokori.lifecycle.promotion import record_shadow_hit
-from nokori.lifecycle import transcript_index
 from nokori.models import Rule, ScoredResult
 from nokori.runtime.selection import tier_results
 
@@ -36,26 +34,6 @@ def test_gate_ttl_zero_never_expires():
     m = Marker("s", "ph", "2026-01-01T00:00:00Z", [])
     assert is_expired(m, 0) is False
 
-
-def test_record_shadow_hit_returns_false_when_no_row(monkeypatch, tmp_path):
-    monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
-    db = open_db(Config.from_env().db_path)
-    try:
-        assert record_shadow_hit(db, "missing-id", "proj-a") is False
-    finally:
-        db.close()
-
-
-def test_transcript_index_roundtrip(tmp_path, monkeypatch):
-    monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
-    cfg = Config.from_env()
-    p = tmp_path / "t.jsonl"
-    p.write_text('{"type":"user","message":{"content":"hi"}}\n', encoding="utf-8")
-    transcript_index.record_session_transcript(cfg, p)
-    p2 = tmp_path / "t2.jsonl"
-    p2.write_text('{"type":"user","message":{"content":"hi"}}\n', encoding="utf-8")
-    transcript_index.record_session_transcript(cfg, p2)
-    assert transcript_index.lookup_previous(cfg, p2) == p.resolve()
 
 
 def test_strip_short_id_from_all_markers(tmp_path, monkeypatch):

@@ -3,11 +3,6 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 
 
-class Meta(BaseModel):
-    total: int
-    page: int
-    per_page: int
-
 
 # ---------------------------------------------------------------------------
 # Decision Features (fielded evidence for a retrieval decision)
@@ -104,13 +99,6 @@ class SyntheticEvalSummary(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-class EligibilityOut(BaseModel):
-    decision: str  # cold | warm | hot | gate
-    eligible: bool
-    reason: str
-    trigger_evidence_passed: bool
-    penalties: list[str] = []
-
 
 # ---------------------------------------------------------------------------
 # Rule Response (full structured rule for the flywheel)
@@ -205,13 +193,3 @@ class RetrieveRequest(BaseModel):
     use_embedding: bool = True
 
 
-class InjectionOut(BaseModel):
-    id: int
-    rule_id: str
-    rule_short_id: str | None = None
-    rule_project_scope: str | None = None
-    rule_project_id: str | None = None
-    session_id: str
-    prompt_hash: str
-    level: str
-    created_at: str
