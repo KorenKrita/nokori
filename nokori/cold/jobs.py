@@ -137,7 +137,7 @@ def is_circuit_breaker_open(db: Db, role: str, model_id: str | None = None) -> b
         "ORDER BY updated_at DESC LIMIT ?",
         (role, CIRCUIT_BREAKER_SAMPLE_SIZE),
     )
-    if rows:
+    if len(rows) >= CIRCUIT_BREAKER_SAMPLE_SIZE:
         failure_count = sum(1 for r in rows if r["status"] == "failed")
         total = len(rows)
         failure_rate = failure_count / total if total > 0 else 0.0

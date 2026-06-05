@@ -416,6 +416,32 @@ class TestExcludedContextScopes:
         assert result.required_concepts_match is True
         assert "ex_repeat" not in result.excluded_context_hits
 
+    @pytest.mark.parametrize(
+        "prompt",
+        [
+            "secret key sandbox-example",
+            "secret key sandbox.example",
+            "secret key sandbox_example",
+        ],
+    )
+    def test_near_trigger_span_matches_token_equivalent_punctuation(self, prompt):
+        concepts = [_concept("c1", [_alias("secret key")])]
+        groups = [_group("g1", ["c1"])]
+        excluded = [
+            _excluded_context(
+                "ex_punct",
+                ["sandbox example"],
+                scope="near_trigger_span",
+            )
+        ]
+        matcher = compile_rule(
+            _trigger_data(concepts=concepts, groups=groups, excluded_contexts=excluded)
+        )
+
+        result = evaluate_match(matcher, prompt)
+
+        assert "ex_punct" in result.excluded_context_hits
+
 
 # ---------------------------------------------------------------------------
 # 7. Near-miss examples don't suppress at runtime

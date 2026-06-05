@@ -102,6 +102,52 @@ def test_status_shows_rule_counts(tmp_path, monkeypatch):
     assert "1" in r.stdout
 
 
+def test_edit_rejects_manual_gate_eligible_severity(tmp_path, monkeypatch):
+    """CLI edit must not manually make rules Gate-capable."""
+    from datetime import datetime, timezone
+
+    monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+    from nokori.config import Config
+    from nokori.db import open_db
+
+    cfg = Config.from_env()
+    db = open_db(cfg.db_path)
+    try:
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace(
+            "+00:00", "Z"
+        )
+        with db.transaction() as tx:
+            tx.execute(
+                "INSERT INTO rules (id, short_id, schema_version, rule_version, "
+                "created_by_pipeline_version, runtime_policy_version, "
+                "trigger_canonical, action_instruction, "
+                "status, severity, project_scope, project_id, "
+                "created_at, updated_at) "
+                "VALUES (?,?,1,1,'v1','v1',?,?,?,?,?,?,?,?)",
+                (
+                    "rule-gate", "gate01",
+                    "dangerous deploy command", "ask before deploy",
+                    "trusted", "reminder", "global", None,
+                    now, now,
+                ),
+            )
+    finally:
+        db.close()
+
+    r = _nokori(
+        monkeypatch, tmp_path, "edit", "gate01", "--severity", "gate_eligible"
+    )
+
+    assert r.returncode != 0
+    assert "gate_eligible" in (r.stderr + r.stdout)
+    db = open_db(cfg.db_path)
+    try:
+        row = db.fetchone("SELECT severity FROM rules WHERE short_id = ?", ("gate01",))
+        assert row["severity"] == "reminder"
+    finally:
+        db.close()
+
+
 def test_hook_session_start_smoke(tmp_path, monkeypatch):
     env = {"NOKORI_DATA_DIR": str(tmp_path), "PATH": "/usr/bin:/bin",
            "NOKORI_EMBED_ENABLED": "0", "HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1"}

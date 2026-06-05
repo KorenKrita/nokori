@@ -138,13 +138,19 @@ def _tool_input_exclusion_fires(rule, payload: dict, db) -> bool:
     else:
         haystack = json.dumps(tool_input, ensure_ascii=False).lower()
 
+    from ..matcher.compiler import CompilationError, _compile_excluded_context
+    from ..matcher.runtime import _excluded_context_matches
+
     for ctx in excluded_contexts:
         if ctx.get("scope") != "tool_input_only":
             continue
-        patterns = ctx.get("patterns", [])
-        for pattern in patterns:
-            if pattern.lower() in haystack:
-                return True
+        try:
+            compiled = _compile_excluded_context(ctx)
+        except (CompilationError, TypeError, AttributeError) as exc:
+            log.warning("invalid tool_input_only exclusion for gate rule %s: %s", rule_id, exc)
+            continue
+        if _excluded_context_matches(compiled, haystack):
+            return True
     return False
 
 

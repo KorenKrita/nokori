@@ -19,7 +19,7 @@ import hashlib
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Callable
 
 from ..archive.fingerprints import check_fingerprint_block
 from ..db import Db, SCHEMA_VERSION, dumps_json
@@ -580,6 +580,7 @@ def _call_llm_role(
     user: str,
     max_tokens: int,
     timeout: int,
+    validate_response: Callable[[str], None] | None = None,
 ) -> str:
     """Call an LLM role through the durable idempotency/circuit-breaker layer."""
     prompt_version = PROMPT_VERSIONS[role]
@@ -606,13 +607,17 @@ def _call_llm_role(
         mark_job_failed(db, job_id, error_info=error_info)
         raise
 
-    # Only cache if response is parseable JSON — prevents permanently caching
-    # malformed output that blocks all future retries.
+    # Only cache validated output; malformed/schema-invalid responses must be
+    # retryable instead of becoming permanent done-job cache entries.
     try:
-        json.loads(response)
-    except (json.JSONDecodeError, TypeError):
-        mark_job_failed(db, job_id, error_info="response not valid JSON")
-        raise ValueError(f"LLM role {role} returned non-JSON response")
+        if validate_response is not None:
+            validate_response(response)
+        else:
+            json.loads(response)
+    except (json.JSONDecodeError, TypeError, ValueError) as exc:
+        error_info = f"schema validation failed: {exc}"
+        mark_job_failed(db, job_id, error_info=error_info)
+        raise ValueError(f"LLM role {role} returned invalid output: {exc}") from exc
     mark_job_complete(db, job_id, response)
     return response
 
@@ -668,6 +673,7 @@ def _run_admission_judge(
             user=user_prompt,
             max_tokens=_role_max_tokens("admission_judge", role_max_tokens),
             timeout=_role_timeout("admission_judge", role_timeouts),
+            validate_response=lambda raw: validate_role_output("admission_judge", raw),
         )
         result = validate_role_output("admission_judge", response)
         decision = result["decision"]
@@ -744,6 +750,7 @@ def _run_rewriter(
             user=user_prompt,
             max_tokens=_role_max_tokens("rule_rewriter", role_max_tokens),
             timeout=_role_timeout("rule_rewriter", role_timeouts),
+            validate_response=lambda raw: validate_role_output("rule_rewriter", raw),
         )
         return validate_role_output("rule_rewriter", response)
     except CircuitBreakerOpenError:
@@ -793,6 +800,7 @@ def _run_final_judge(
             user=user_prompt,
             max_tokens=_role_max_tokens("final_judge", role_max_tokens),
             timeout=_role_timeout("final_judge", role_timeouts),
+            validate_response=lambda raw: validate_role_output("final_judge", raw),
         )
         result = validate_role_output("final_judge", response)
         return result["decision"]
@@ -850,6 +858,7 @@ def _run_merge_planner(
             user=user_prompt,
             max_tokens=_role_max_tokens("merge_planner", role_max_tokens),
             timeout=_role_timeout("merge_planner", role_timeouts),
+            validate_response=lambda raw: validate_role_output("merge_planner", raw),
         )
         result = validate_role_output("merge_planner", response)
         operation = result["operation"]
@@ -1430,6 +1439,29 @@ def _generate_eval_cases(
         'Output strict JSON object: {"cases": [...]}'
     )
 
+    def _validate_eval_cases_response(raw: str) -> None:
+        parsed = json.loads(raw)
+        case_list: list | None = None
+        if isinstance(parsed, list):
+            case_list = parsed
+        elif isinstance(parsed, dict) and "cases" in parsed:
+            validate_role_output("synthetic_eval_generator", raw)
+            case_list = parsed["cases"]
+        if case_list is None:
+            raise ValueError("synthetic_eval_generator returned no cases")
+        has_positive = False
+        for case in case_list:
+            if not isinstance(case, dict):
+                raise ValueError(f"eval case must be an object: {case}")
+            if "prompt" not in case:
+                raise ValueError(f"eval case missing 'prompt' key: {case}")
+            if "case_type" not in case:
+                raise ValueError(f"eval case missing 'case_type' key: {case}")
+            if case.get("case_type") == "positive":
+                has_positive = True
+        if not has_positive:
+            raise ValueError("synthetic_eval_generator returned no positive cases")
+
     try:
         response = _call_llm_role(
             db,
@@ -1444,6 +1476,7 @@ def _generate_eval_cases(
             timeout=_role_timeout(
                 "synthetic_eval_generator", role_timeouts
             ),
+            validate_response=_validate_eval_cases_response,
         )
         cases = json.loads(response)
         # Accept both array and {cases:[...]} formats for robustness
@@ -1456,9 +1489,18 @@ def _generate_eval_cases(
         if case_list is None:
             raise ValueError("synthetic_eval_generator returned no cases")
         # Validate each case has required 'prompt' key
+        has_positive = False
         for case in case_list:
-            if not isinstance(case, dict) or "prompt" not in case:
+            if not isinstance(case, dict):
+                raise ValueError(f"eval case must be an object: {case}")
+            if "prompt" not in case:
                 raise ValueError(f"eval case missing 'prompt' key: {case}")
+            if "case_type" not in case:
+                raise ValueError(f"eval case missing 'case_type' key: {case}")
+            if case.get("case_type") == "positive":
+                has_positive = True
+        if not has_positive:
+            raise ValueError("synthetic_eval_generator returned no positive cases")
         return case_list
     except CircuitBreakerOpenError:
         raise
@@ -1498,12 +1540,21 @@ def _handle_split_required(
     rule_text = _prompt_text(json.dumps(rule_data, ensure_ascii=False, indent=2))
     user_prompt = f"<rule_to_split>\n{rule_text}\n</rule_to_split>\n\nSplit into independent sub-rules."
 
+    def _validate_split_response(raw: str) -> None:
+        parsed = json.loads(raw)
+        if not isinstance(parsed, dict):
+            raise ValueError("split_required response must be an object")
+        split_rules = parsed.get("split_rules")
+        if not isinstance(split_rules, list) or not split_rules:
+            raise ValueError("split_required response missing non-empty split_rules")
+
     try:
         response = _call_llm_role(
             db, llm, role="rule_rewriter", model_id=rewriter_model,
             system=system_prompt, user=user_prompt,
             max_tokens=_role_max_tokens("rule_rewriter", role_max_tokens),
             timeout=_role_timeout("rule_rewriter", role_timeouts),
+            validate_response=_validate_split_response,
         )
         data = json.loads(response)
         sub_rules = data.get("split_rules", []) if isinstance(data, dict) else []

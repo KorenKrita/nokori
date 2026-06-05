@@ -385,6 +385,11 @@ class TestNegativeCases:
                 "case_type": "negative",
                 "expected_max_decision": "cold",
             },
+            {
+                "prompt": "React hooks useEffect cleanup function best practices",
+                "case_type": "positive",
+                "expected_min_decision": "warm",
+            },
         ]
         result = run_synthetic_eval(rule_data, matcher, idf_stats, eval_cases)
         assert result.results[0]["actual_decision"] == "cold"
@@ -570,6 +575,25 @@ class TestEvalPassesOnlyWhenAllSatisfied:
         result = run_synthetic_eval(rule_data, matcher, idf_stats, eval_cases)
         assert result.passed is False
 
+    def test_eval_without_positive_cases_fails(self, matcher, idf_stats, rule_data):
+        """Passing negatives alone is not proof that a rule retrieves correctly."""
+        eval_cases = [
+            {
+                "prompt": "Explain how Docker networking bridge mode works",
+                "case_type": "negative",
+                "expected_max_decision": "cold",
+            },
+            {
+                "prompt": "Class component lifecycle methods in React",
+                "case_type": "near_miss",
+                "expected_max_decision": "cold",
+            },
+        ]
+
+        result = run_synthetic_eval(rule_data, matcher, idf_stats, eval_cases)
+
+        assert result.passed is False
+
 
 # ---------------------------------------------------------------------------
 # Test: Eval fails if any near-miss would inject
@@ -614,6 +638,11 @@ class TestNearMissInjectionFails:
                 "prompt": "In the class component lifecycle, how do I cleanup React effects?",
                 "case_type": "near_miss",
                 "expected_max_decision": "cold",
+            },
+            {
+                "prompt": "React hooks useEffect cleanup function best practices",
+                "case_type": "positive",
+                "expected_min_decision": "warm",
             },
         ]
         result = run_synthetic_eval(rule_data, matcher, idf_stats, eval_cases)

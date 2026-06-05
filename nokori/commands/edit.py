@@ -29,6 +29,11 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
         if args.action is not None:
             updates.append(("action_instruction", args.action))
         if getattr(args, "severity", None) is not None:
+            if args.severity == "gate_eligible":
+                raise NokoriError(
+                    "manual gate_eligible severity changes are disabled in v6; "
+                    "Gate eligibility is assigned autonomously"
+                )
             updates.append(("severity", args.severity))
         if args.status is not None:
             new_status = args.status

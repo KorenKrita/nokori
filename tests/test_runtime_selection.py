@@ -141,6 +141,46 @@ class TestSecondHotConditions:
         sel = select_injection([r1, r2], max_injection_chars=5000)
         assert len(sel.hot) == 1
 
+    def test_second_hot_empty_domains_use_trigger_overlap_fallback(self):
+        r1 = _make_scored(
+            rule_id="r1",
+            trigger_idf_sum=5.0,
+            domain_tags=[],
+            strong_variant_phrase_hit=True,
+            matched_trigger_tokens=frozenset({"deploy", "schema"}),
+        )
+        r2 = _make_scored(
+            rule_id="r2",
+            trigger_idf_sum=4.5,
+            domain_tags=[],
+            strong_variant_phrase_hit=True,
+            matched_trigger_tokens=frozenset({"pytest", "snapshot"}),
+        )
+
+        sel = select_injection([r1, r2], max_injection_chars=5000)
+
+        assert len(sel.hot) == 2
+
+    def test_second_hot_empty_domains_still_block_high_overlap(self):
+        r1 = _make_scored(
+            rule_id="r1",
+            trigger_idf_sum=5.0,
+            domain_tags=[],
+            strong_variant_phrase_hit=True,
+            matched_trigger_tokens=frozenset({"deploy", "schema", "migration"}),
+        )
+        r2 = _make_scored(
+            rule_id="r2",
+            trigger_idf_sum=4.5,
+            domain_tags=[],
+            strong_variant_phrase_hit=True,
+            matched_trigger_tokens=frozenset({"deploy", "schema", "prisma"}),
+        )
+
+        sel = select_injection([r1, r2], max_injection_chars=5000)
+
+        assert len(sel.hot) == 1
+
     def test_second_hot_blocked_without_strong_evidence(self):
         """Second HOT blocked when no strong evidence (no variant, no IDF+coverage+concepts)."""
         r1 = _make_scored(

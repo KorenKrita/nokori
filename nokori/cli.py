@@ -63,7 +63,7 @@ def _build_parser() -> argparse.ArgumentParser:
     sp_edit.add_argument("--variants", default=None, help="comma-separated variants")
     sp_edit.add_argument("--terms-en", default=None, help="comma-separated English terms")
     sp_edit.add_argument("--terms-zh", default=None, help="comma-separated Chinese terms")
-    sp_edit.add_argument("--severity", default=None, choices=("reminder", "high_risk", "gate_eligible"))
+    sp_edit.add_argument("--severity", default=None, choices=("reminder", "high_risk"))
     sp_edit.add_argument("--status", default=None, choices=("archived",))
 
     sp_test = sub.add_parser("test", help="simulate retrieval for a prompt")

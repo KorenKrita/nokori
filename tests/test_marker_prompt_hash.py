@@ -1,5 +1,6 @@
 """Gate marker prompt_hash validation."""
 
+import json
 from datetime import datetime, timezone
 
 from nokori.config import Config
@@ -22,6 +23,7 @@ def _insert_rule(
     short_id=None,
     status="active",
     severity="reminder",
+    excluded_contexts=None,
 ):
     now = _utcnow_iso()
     sid = short_id or id_.replace("-", "")[:6]
@@ -29,12 +31,12 @@ def _insert_rule(
         tx.execute(
             "INSERT INTO rules (id, short_id, schema_version, rule_version, "
             "created_by_pipeline_version, runtime_policy_version, "
-            "trigger_canonical, action_instruction, "
+            "trigger_canonical, action_instruction, excluded_contexts, "
             "source_origin, status, severity, "
             "project_scope, project_id, created_at, updated_at) "
-            "VALUES (?,?,1,1,'v1',?,?,?,?,?,?,?,?,?,?)",
+            "VALUES (?,?,1,1,'v1',?,?,?,?,?,?,?,?,?,?,?)",
             (id_, sid, RUNTIME_POLICY_VERSION,
-             trigger, "use lease",
+             trigger, "use lease", json.dumps(excluded_contexts or []),
              "transcript_extraction", status, severity,
              "global", None, now, now),
         )
@@ -104,6 +106,62 @@ def test_pre_tool_use_skips_block_on_stale_prompt_hash(monkeypatch, tmp_path):
         hso = out.get("hookSpecificOutput") or {}
         assert hso.get("permissionDecision") != "deny"
         assert not cfg.marker_path(sess, ph_old).exists()
+    finally:
+        db.close()
+
+
+def test_pre_tool_use_rechecks_tool_input_only_regex_exclusion(monkeypatch, tmp_path):
+    """Gate revalidation must use excluded_context match_mode, not substring only."""
+    monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+    cfg = Config.from_env()
+    db = open_db(cfg.db_path)
+    sess = "s-tool-exclusion"
+    ph = prompt_hash("run deploy command")
+    try:
+        now = _utcnow_iso()
+        _insert_rule(
+            db,
+            id_="rule-regex",
+            short_id="regex1",
+            trigger="deploy command",
+            status="trusted",
+            severity="gate_eligible",
+            excluded_contexts=[
+                {
+                    "id": "fixture-tool-input",
+                    "patterns": [r"sandbox-\d+"],
+                    "scope": "tool_input_only",
+                    "match_mode": "regex",
+                }
+            ],
+        )
+        marker_io.write(
+            cfg,
+            sess,
+            "run deploy command",
+            [MarkerRule("regex1", "use lease", "transcript_extraction", "rationale")],
+            ph=ph,
+        )
+        with db.transaction() as tx:
+            tx.execute(
+                "INSERT INTO rule_fire_events (id, rule_id, session_id, prompt_hash, level, created_at) "
+                "VALUES (?,?,?,?,?,?)",
+                ("fe-regex", "rule-regex", sess, ph, "hot", now),
+            )
+        from nokori.hooks.pre_tool_use import handle
+
+        out = handle(
+            {
+                "session_id": sess,
+                "tool_name": "Bash",
+                "tool_input": {"command": "deploy command in sandbox-42"},
+            },
+            cfg,
+            host=Host.CLAUDE,
+        )
+
+        hso = out.get("hookSpecificOutput") or {}
+        assert hso.get("permissionDecision") != "deny"
     finally:
         db.close()
 

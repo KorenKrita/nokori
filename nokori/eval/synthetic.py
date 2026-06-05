@@ -250,7 +250,9 @@ def run_synthetic_eval(
 
     # Check that at least one positive case exists and passes
     positive_cases = [r for r in results if r["case_type"] == "positive"]
-    if positive_cases and not all(r["case_passed"] for r in positive_cases):
+    if not positive_cases:
+        overall_passed = False
+    elif not all(r["case_passed"] for r in positive_cases):
         overall_passed = False
 
     return SyntheticEvalResult(

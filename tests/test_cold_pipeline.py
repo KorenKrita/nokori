@@ -26,6 +26,7 @@ import pytest
 
 from nokori.cold.jobs import (
     CIRCUIT_BREAKER_SAMPLE_SIZE,
+    SCHEMA_PARSE_FAILURE_CONSECUTIVE_MAX,
     enqueue_job,
     enqueue_transcript_ingest,
     expire_stale_ingest_jobs,
@@ -37,6 +38,7 @@ from nokori.cold.jobs import (
 )
 from nokori.cold.pipeline import (
     PIPELINE_VERSION,
+    _run_admission_judge,
     run_cold_pipeline,
 )
 from nokori.db import SCHEMA_VERSION, Db, open_db
@@ -202,6 +204,34 @@ class TestCircuitBreaker:
     def test_breaker_closed_initially(self, db: Db):
         assert is_circuit_breaker_open(db, "extractor") is False
 
+    def test_breaker_waits_for_full_sample_before_opening(self, db: Db):
+        """One failed job is retry evidence, not enough to open the role breaker."""
+        job_id = enqueue_job(db, "extractor", "model-a", "1.0.0", "fail_once")
+        mark_job_failed(db, job_id)
+
+        assert is_circuit_breaker_open(db, "extractor") is False
+
+    def test_provider_auth_breaker_does_not_wait_for_role_sample(self, db: Db):
+        """Provider auth/rate-limit failures pause the route immediately."""
+        job_id = enqueue_job(db, "extractor", "model-auth", "1.0.0", "auth_fail")
+        mark_job_failed(db, job_id, error_info="rate_limit: 429")
+
+        assert is_circuit_breaker_open(
+            db, "extractor", model_id="model-auth"
+        ) is True
+
+    def test_schema_breaker_does_not_wait_for_role_sample(self, db: Db):
+        """Three consecutive schema failures pause the role prompt version."""
+        for i in range(SCHEMA_PARSE_FAILURE_CONSECUTIVE_MAX):
+            job_id = enqueue_job(
+                db, "admission_judge", "model-a", "1.0.0", f"schema_fail_{i}"
+            )
+            mark_job_failed(
+                db, job_id, error_info="schema validation failed: missing scores"
+            )
+
+        assert is_circuit_breaker_open(db, "admission_judge") is True
+
     def test_breaker_opens_after_threshold_failures(self, db: Db):
         for i in range(CIRCUIT_BREAKER_SAMPLE_SIZE):
             job_id = enqueue_job(db, "extractor", "model-a", "1.0.0", f"fail_{i}")
@@ -248,6 +278,76 @@ class TestFailedRoleNoDurableRules:
         # Verify no rule was inserted
         row = db.fetchone("SELECT COUNT(*) AS n FROM rules")
         assert row["n"] == 0
+
+    def test_schema_invalid_role_output_is_not_cached_as_done(self, db: Db):
+        """Parseable JSON that fails role schema validation must be retried."""
+
+        class SeqLLM:
+            def __init__(self):
+                self.calls = 0
+
+            def call(self, **_kwargs):
+                self.calls += 1
+                if self.calls == 1:
+                    return json.dumps({"decision": "accept"})
+                return _admission_json("accept")
+
+        llm = SeqLLM()
+
+        with pytest.raises(ValueError, match="schema validation failed"):
+            _run_admission_judge(db, llm, _extractor_candidate(), "test-model")
+
+        row = db.fetchone("SELECT status, output_json FROM llm_jobs")
+        assert row["status"] == "failed"
+        assert "schema validation failed" in row["output_json"]
+
+        decision, scores = _run_admission_judge(
+            db, llm, _extractor_candidate(), "test-model"
+        )
+
+        assert llm.calls == 2
+        assert decision == "accept"
+        assert scores["overall_quality"] >= 0.82
+        row = db.fetchone("SELECT status, output_json FROM llm_jobs")
+        assert row["status"] == "done"
+
+    def test_eval_cases_without_positive_are_not_cached_as_done(self, db: Db):
+        """Synthetic eval role output must prove retrieval with positive cases."""
+        llm = _make_llm_mock({
+            "admission judge": _admission_json("accept"),
+            "final judge": _final_judge_json("accept_active"),
+            "merge planner": _merge_planner_json("keep_both"),
+            "synthetic evaluation case generator": json.dumps({
+                "cases": [
+                    {
+                        "prompt": "How do I write a bash script?",
+                        "case_type": "negative",
+                        "expected_min_decision": "cold",
+                        "expected_max_decision": "cold",
+                        "rationale": "Unrelated negative",
+                    }
+                ]
+            }),
+        })
+
+        with patch(
+            "nokori.cold.pipeline.check_fingerprint_block", return_value=None
+        ):
+            result = run_cold_pipeline(
+                db,
+                llm,
+                transcript_ref="test_eval_cases_without_positive",
+                extractor_output=_extractor_candidate(),
+                default_model="test-model",
+            )
+
+        assert result.status == "pending"
+        row = db.fetchone(
+            "SELECT status, output_json FROM llm_jobs "
+            "WHERE role = 'synthetic_eval_generator'"
+        )
+        assert row["status"] == "failed"
+        assert "positive" in row["output_json"]
 
     def test_pipeline_records_failed_llm_job_for_admission_judge(self, db: Db):
         llm = _make_llm_mock({

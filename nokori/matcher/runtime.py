@@ -343,7 +343,11 @@ def _near_trigger_window_texts(
         seen.add(span)
         char_start = token_spans[start][1]
         char_end = token_spans[end - 1][2]
-        windows.append(text_lower[char_start:char_end])
+        original_window = text_lower[char_start:char_end]
+        normalized_window = " ".join(tokens[start:end])
+        windows.append(original_window)
+        if normalized_window != original_window:
+            windows.append(normalized_window)
     return tuple(windows)
 
 
