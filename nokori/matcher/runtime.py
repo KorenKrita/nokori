@@ -340,9 +340,10 @@ def _compute_trigger_coverage(
     anchors = matcher.trigger_anchors
     matched: set[str] = set()
 
-    # Check token anchors
+    # Check token anchors against both prompt_tokens and combined_lower tokens
+    combined_tokens = frozenset(_tokenize(text_lower))
     for tok in anchors.anchor_tokens:
-        if tok in prompt_tokens:
+        if tok in prompt_tokens or tok in combined_tokens:
             matched.add(tok)
 
     # Check phrase anchors
@@ -452,14 +453,11 @@ def evaluate_match(
             trigger_anchor_phrases=anchor_phrases,
         ):
             # Check if override is allowed and override_requires are met
-            if ctx.override_allowed and ctx.override_requires:
-                # All override_requires must be present for the override
-                all_overrides_met = all(
-                    _text_contains_phrase(combined_lower, req.lower())
-                    for req in ctx.override_requires
-                )
-                if all_overrides_met:
-                    continue  # Override applies, exclusion does not fire
+            if ctx.override_allowed and (not ctx.override_requires or all(
+                _text_contains_phrase(combined_lower, req.lower())
+                for req in ctx.override_requires
+            )):
+                continue  # Override applies, exclusion does not fire
 
             excluded_context_hits.append(ctx.id)
 

@@ -143,6 +143,7 @@ def check_fingerprint_block(
     domain_tags: list[str] | None = None,
     scope_change_evidence: str | None = None,
     synthetic_eval_passed: bool = True,
+    admission_judge_cited: bool = False,
 ) -> dict | None:
     """Check if an archived fingerprint blocks a proposed rule.
 
@@ -170,6 +171,7 @@ def check_fingerprint_block(
             exact_match=True,
             is_narrower_scope=False,  # exact match = same scope
             synthetic_eval_passed=synthetic_eval_passed,
+            admission_judge_cited=admission_judge_cited,
         )
 
     row = _find_related_fingerprint(db, trigger_canonical, action_instruction)
@@ -185,6 +187,7 @@ def check_fingerprint_block(
         exact_match=False,
         is_narrower_scope=is_narrower,
         synthetic_eval_passed=synthetic_eval_passed,
+        admission_judge_cited=admission_judge_cited,
     )
 
 
@@ -195,6 +198,7 @@ def _fingerprint_decision(
     exact_match: bool,
     is_narrower_scope: bool = False,
     synthetic_eval_passed: bool = True,
+    admission_judge_cited: bool = False,
 ):
     strength = row["archive_strength"]
 
@@ -215,9 +219,15 @@ def _fingerprint_decision(
         }
 
     # User archive: blocks equivalent/broader. Only NARROWER rules may proceed
-    # when scope change evidence is explicit AND can_be_overridden (spec 3.5)
+    # when scope change evidence is explicit AND (admission_judge_cited or
+    # synthetic_eval_passed) AND can_be_overridden (spec 3.5)
     if strength == "user":
-        if is_narrower_scope and scope_change_evidence and row["can_be_overridden_by_changed_scope"]:
+        if (
+            is_narrower_scope
+            and scope_change_evidence
+            and (admission_judge_cited or synthetic_eval_passed)
+            and row["can_be_overridden_by_changed_scope"]
+        ):
             return None
         return {
             "blocked": True,
@@ -280,7 +290,7 @@ def _find_related_fingerprint(
         if score > best_score:
             best = row
             best_score = score
-    return best if best_score >= 0.75 else None
+    return best if best_score >= 0.85 else None
 
 
 def _is_narrower_scope(

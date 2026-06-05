@@ -118,7 +118,7 @@ def mark_posthoc_job_failed(db: Db, job_id: str) -> None:
 
 def mark_posthoc_job_unclear(db: Db, job_id: str) -> None:
     """Mark a posthoc job as done with label='unclear' when window is unavailable."""
-    mark_posthoc_job_complete(db, job_id, "unclear", "window_unavailable")
+    mark_posthoc_job_complete(db, job_id, "unclear", None)
 
 
 def process_pending_posthoc_jobs(db: Db, llm, *, limit: int = 20) -> dict[str, int]:
@@ -160,11 +160,18 @@ def process_pending_posthoc_jobs(db: Db, llm, *, limit: int = 20) -> dict[str, i
             label == "observed_useful"
             and result.get("would_likely_have_happened_without_rule") == "yes"
         ):
-            evidence = result.get("rule_application_evidence", "")
-            if len(evidence) > 20:
-                # Substantive evidence: keep as observed_useful with weak weight
+            # Spec 10.4: check if feedback events exist supporting this rule
+            fire_event_id = job["fire_event_id"]
+            supporting_feedback = db.fetchone(
+                "SELECT id FROM rule_feedback_events "
+                "WHERE fire_event_id = ? AND label = 'helped'",
+                (fire_event_id,),
+            )
+            if supporting_feedback:
+                # Feedback supports the rule: keep as observed_useful with weak weight
                 attribution_weight = 0.3
             else:
+                # No feedback exists: convert to irrelevant
                 label = "irrelevant"
                 reason_code = "irrelevant_redundant"
                 attribution_weight = 0.0
@@ -232,7 +239,7 @@ def submit_feedback(
         return None
 
     # Validate source
-    valid_sources = ("agent_cli", "agent_miss", "user_correction")
+    valid_sources = ("agent_cli",)
     if source not in valid_sources:
         return None
 
@@ -379,7 +386,6 @@ def build_evaluator_input(db: Db, fire_event: dict) -> dict | None:
         "bounded_window_ref": bounded_window_ref,
         "transcript_window_ref": transcript_window_ref,
         "turn_index": fire_event.get("turn_index"),
-        "level": fire_event.get("level"),
         "decision_features": decision_features,
         "feedback_events": feedback,
     }

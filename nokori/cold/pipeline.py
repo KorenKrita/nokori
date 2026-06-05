@@ -831,6 +831,7 @@ def insert_rule_from_pipeline(
     tool_tags_json = dumps_json(scope.get("tool_tags", []))
     path_patterns_json = dumps_json(scope.get("file_or_path_patterns", []))
     language_hints_json = dumps_json(rule_data.get("language_hints", []))
+    evidence_quotes_json = dumps_json(rule_data.get("evidence_quotes", []))
 
     with db.transaction() as tx:
         tx.execute(
@@ -844,11 +845,12 @@ def insert_rule_from_pipeline(
             "action_instruction, action_instruction_zh, "
             "allowed_behavior, forbidden_behavior, "
             "domain_tags, tool_tags, path_patterns, language_hints, "
+            "evidence_quotes, "
             "quality_score, evidence_support_score, specificity_score, retrieval_readiness_score, "
             "source_origin, activation_origin, transcript_ref, "
             "created_at, updated_at"
             ") VALUES ("
-            "?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?"
+            "?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?"
             ")",
             (
                 rule_id,
@@ -878,6 +880,7 @@ def insert_rule_from_pipeline(
                 tool_tags_json,
                 path_patterns_json,
                 language_hints_json,
+                evidence_quotes_json,
                 scores.get("overall_quality", 0.0),
                 scores.get("evidence_support", 0.0),
                 scores.get("trigger_specificity", 0.0),
@@ -957,6 +960,7 @@ def _candidate_to_rule_data(candidate: dict[str, Any]) -> dict[str, Any]:
             "file_or_path_patterns": candidate.get("path_patterns", []),
         },
         "evidence_quotes": candidate.get("evidence_quotes", []),
+        "non_generalization_boundaries": candidate.get("non_generalization_boundaries", []),
         "allowed_behavior": [],
         "forbidden_behavior": [],
     }
@@ -1198,7 +1202,7 @@ def _handle_split_required(
         "Output strict JSON: {\"split_rules\": [{...}, {...}]} matching rule_rewriter schema per sub-rule."
     )
 
-    rule_text = json.dumps(rule_data, ensure_ascii=False, indent=2)
+    rule_text = _prompt_text(json.dumps(rule_data, ensure_ascii=False, indent=2))
     user_prompt = f"<rule_to_split>\n{rule_text}\n</rule_to_split>\n\nSplit into independent sub-rules."
 
     try:

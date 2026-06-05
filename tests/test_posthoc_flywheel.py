@@ -471,7 +471,7 @@ class TestMarkPosthocJobUnclear:
                 (eid,),
             )
             assert row["posthoc_label"] == "unclear"
-            assert row["posthoc_reason_code"] == "window_unavailable"
+            assert row["posthoc_reason_code"] is None
         finally:
             db.close()
 

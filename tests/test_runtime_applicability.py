@@ -561,3 +561,33 @@ class TestNearMissContext:
         )
         assert r.decision != "cold"
         assert r.eligible is True
+
+
+# ---------------------------------------------------------------------------
+# 19. false_positive_score downgrades active HOT to WARM
+# ---------------------------------------------------------------------------
+
+
+def test_active_hot_blocked_by_false_positive_score():
+    """Nonzero false_positive_score downgrades active HOT to WARM."""
+    r = _eval(
+        rule_status="active",
+        rule_severity="reminder",
+        rule_first_observed_useful_at="2025-01-01T00:00:00Z",
+        strong_variant_phrase_hit=True,
+        required_concepts_match=True,
+        false_positive_score=0.5,
+    )
+    assert r.decision == "warm"
+
+
+# ---------------------------------------------------------------------------
+# 20. archived status -> COLD
+# ---------------------------------------------------------------------------
+
+
+def test_archived_state_returns_cold():
+    """Archived rules return COLD."""
+    r = _eval(rule_status="archived")
+    assert r.decision == "cold"
+    assert r.eligible is False

@@ -347,6 +347,11 @@ def _compile_alias(
     strength: AliasStrength = alias_data.get("strength", "strong")
     requires_neighbor = tuple(alias_data.get("requires_neighbor") or ())
 
+    if strength == "weak" and not requires_neighbor:
+        raise CompilationError(
+            f"Weak alias '{text}' must have non-empty requires_neighbor"
+        )
+
     text_lower = text.lower()
     compiled_pattern: Optional[re.Pattern[str]] = None
     tokens: tuple[str, ...] = ()
@@ -630,7 +635,7 @@ def compile_rule(
     )
 
     # Build trigger anchors
-    canonical_trigger_text = trigger_data.get("canonical_trigger_text", "")
+    canonical_trigger_text = trigger_data.get("canonical_trigger_text") or trigger_data.get("trigger_canonical", "")
     trigger_anchors = _build_trigger_anchors(concepts, variants, canonical_trigger_text)
 
     # Normalize search terms

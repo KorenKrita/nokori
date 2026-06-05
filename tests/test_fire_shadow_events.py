@@ -159,7 +159,7 @@ class TestCreateShadowEventMalformedJson:
                 status_at_match="candidate",
                 shadow_type="candidate_probe",
                 prompt_hash="hash_abc",
-                matched_level="warm",
+                matched_level="warm_candidate",
                 decision_features={},
             )
 

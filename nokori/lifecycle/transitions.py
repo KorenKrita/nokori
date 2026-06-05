@@ -623,8 +623,8 @@ def _evaluate_trusted(db: Db, row, rule_version: int) -> TransitionResult:
     irrelevant = fire.get("irrelevant", 0)
 
     # Rate-based decay requires minimum_rate_denominator (spec 3.4)
-    # Uses recent (windowed) harmful for decay check — lifetime harmful gates suppression
-    recent_harmful_for_decay = fire.get("harmful", 0)
+    # Uses lifetime harmful for decay check (spec 3.4)
+    recent_harmful_for_decay = fire.get("lifetime_harmful", 0)
     if (
         total_evaluated >= th.evaluated_fire_count_in_recent_window_min
         and total_evaluated >= MINIMUM_RATE_DENOMINATOR

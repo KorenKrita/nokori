@@ -118,7 +118,7 @@ def _insert_shadow_event(
                 status_at_match,
                 shadow_type,
                 "hash",
-                "warm",
+                "warm_candidate",
                 "{}",
                 ts,
             ),
@@ -1287,5 +1287,48 @@ class TestEdgeCases:
             result = evaluate_transitions(db, rid)
             # Harmful DOES cause suppression regardless of age (spec 3.4)
             assert result.new_status == "suppressed"
+        finally:
+            db.close()
+
+
+# ---------------------------------------------------------------------------
+# 15. CAS concurrency
+# ---------------------------------------------------------------------------
+
+
+class TestCASConcurrency:
+    def test_stale_job_does_not_apply(self, tmp_path):
+        """CAS prevents stale transitions when rule was concurrently modified."""
+        db = _fresh_db(tmp_path)
+        try:
+            rid = _insert_rule(db, status="candidate", rule_version=1)
+            _insert_synthetic_eval(db, rid, 1, passed=True)
+
+            sess1 = str(uuid.uuid4())
+            sess2 = str(uuid.uuid4())
+
+            # Provide sufficient evidence for promotion
+            _insert_shadow_event(db, rid, session_id=sess1, label="would_help_high")
+            _insert_shadow_event(db, rid, session_id=sess1, label="would_help_high")
+            _insert_shadow_event(db, rid, session_id=sess2, label="would_help_high")
+            _insert_shadow_event(db, rid, session_id=sess1, label="would_help_low")
+            _insert_shadow_event(db, rid, session_id=sess2, label="would_help_low")
+
+            # Simulate concurrent modification: bump rule_version behind the scenes
+            with db.transaction() as tx:
+                tx.execute(
+                    "UPDATE rules SET rule_version = rule_version + 1 WHERE id = ?",
+                    (rid,),
+                )
+
+            # evaluate_transitions reads version=2 but evidence was for version=1;
+            # the CAS check should prevent applying the transition.
+            result = evaluate_transitions(db, rid)
+            assert result.applied is False
+
+            # Status must remain unchanged
+            row = db.fetchone("SELECT status, rule_version FROM rules WHERE id = ?", (rid,))
+            assert row["status"] == "candidate"
+            assert row["rule_version"] == 2
         finally:
             db.close()

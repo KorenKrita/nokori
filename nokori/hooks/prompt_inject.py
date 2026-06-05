@@ -122,7 +122,7 @@ def _record_shadow_events(
                 status_at_match=r.rule.status,
                 shadow_type=shadow_type,
                 prompt_hash=ph,
-                matched_level="hot" if r.strong_variant_phrase_hit else "warm",
+                matched_level="hot_candidate" if r.strong_variant_phrase_hit else "warm_candidate",
                 decision_features=_build_decision_features(r),
                 idf_pool_version=r.trigger_idf_pool_version,
                 embedding_profile_version=r.embedding_profile_version,

@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from nokori.models import ScoredResult
-from nokori.policy import HOT_MAX_DEFAULT, WARM_HARD_MAX
+from nokori.policy import DYNAMIC_IDF_SMALL_POOL, HOT_MAX_DEFAULT, WARM_HARD_MAX
 
 
 # ---------------------------------------------------------------------------
@@ -216,10 +216,10 @@ def select_injection(
                 (sr.strong_variant_phrase_hit and sr.required_concepts_match)
                 or (sr.level == "hot" or sr.level == "gate")
                 or (
-                    sr.trigger_idf_sum >= 2.40
-                    and sr.trigger_coverage >= 0.40
+                    sr.trigger_idf_sum >= DYNAMIC_IDF_SMALL_POOL.absolute_trigger_info_min
+                    and sr.trigger_coverage >= DYNAMIC_IDF_SMALL_POOL.trigger_coverage_min
                     and sr.required_concepts_match
-                    and sr.distinct_trigger_terms >= 2
+                    and sr.distinct_trigger_terms >= DYNAMIC_IDF_SMALL_POOL.distinct_trigger_terms_min
                 )
             )
             if _has_distinct_domain(sr, hot) and has_strong_evidence:

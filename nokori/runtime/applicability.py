@@ -385,7 +385,7 @@ def evaluate_applicability(
             decision="cold",
             eligible=False,
             reason="archived status: no hot-path retrieval",
-            trigger_evidence_passed=False,
+            trigger_evidence_passed=True,
             penalties=penalties,
         )
 
@@ -442,8 +442,10 @@ def evaluate_applicability(
     # ------------------------------------------------------------------
 
     if rule_status == "trusted":
+        # ABSOLUTE: excluded_context_hit prevents Gate regardless of override.
+        # Only WARM/HOT can use the override; Gate cannot.
         # Gate: requires gate_eligible severity + STRONG prompt evidence + tool evidence
-        if rule_severity == "gate_eligible":
+        if rule_severity == "gate_eligible" and not excluded_context_hit:
             has_strong_for_gate = _strong_trigger_evidence(**evidence_kwargs)
             if has_strong_for_gate:
                 if has_tool_input:

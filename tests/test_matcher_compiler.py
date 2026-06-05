@@ -337,7 +337,8 @@ class TestExcludedContextScopes:
         # prompt_only scope checks only the prompt text, not tool_input
         assert "ex_prompt" not in result.excluded_context_hits
 
-    def test_empty_override_requires_does_not_override_exclusion(self):
+    def test_empty_override_requires_allows_override_vacuous_truth(self):
+        """Empty override_requires with override_allowed=True: vacuous truth applies override."""
         concepts = [_concept("c1", [_alias("secret key")])]
         groups = [_group("g1", ["c1"])]
         excluded = [
@@ -354,7 +355,8 @@ class TestExcludedContextScopes:
 
         result = evaluate_match(matcher, "secret key sandbox example")
 
-        assert "ex_override" in result.excluded_context_hits
+        # Vacuous truth: empty override_requires = override applies, exclusion NOT fired
+        assert "ex_override" not in result.excluded_context_hits
 
     def test_near_trigger_span_ignores_far_away_exclusion(self):
         concepts = [_concept("c1", [_alias("secret key")])]

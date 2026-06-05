@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS rules (
     concept_aliases TEXT NOT NULL DEFAULT '[]',
     required_concept_groups TEXT NOT NULL DEFAULT '[]',
     excluded_contexts TEXT NOT NULL DEFAULT '[]',
+    evidence_quotes TEXT NOT NULL DEFAULT '[]',
     near_miss_examples TEXT NOT NULL DEFAULT '[]',
     trigger_variants TEXT NOT NULL DEFAULT '[]',
     trigger_variants_zh TEXT NOT NULL DEFAULT '[]',
@@ -144,7 +145,7 @@ CREATE TABLE IF NOT EXISTS rule_fire_events (
     decision_features TEXT,
     bounded_window_ref TEXT,
     posthoc_label TEXT CHECK(posthoc_label IS NULL OR posthoc_label IN ('observed_useful','plausible_useful','irrelevant','harmful','unclear')),
-    posthoc_reason_code TEXT CHECK(posthoc_reason_code IS NULL OR posthoc_reason_code IN ('useful_prevented_error','useful_improved_quality','useful_followed_preference','irrelevant_not_applicable','irrelevant_redundant','irrelevant_unused','harmful_distracted','harmful_wrong_scope','harmful_blocked_valid_action','window_unavailable')),
+    posthoc_reason_code TEXT CHECK(posthoc_reason_code IS NULL OR posthoc_reason_code IN ('useful_prevented_error','useful_improved_quality','useful_followed_preference','irrelevant_not_applicable','irrelevant_redundant','irrelevant_unused','harmful_distracted','harmful_wrong_scope','harmful_blocked_valid_action')),
     posthoc_score REAL,
     created_at TEXT NOT NULL
 );
@@ -162,12 +163,12 @@ CREATE TABLE IF NOT EXISTS rule_shadow_events (
     prompt_hash TEXT,
     transcript_window_ref TEXT,
     bounded_window_ref TEXT,
-    matched_level TEXT,
+    matched_level TEXT CHECK(matched_level IN ('cold','warm','hot','warm_candidate','hot_candidate')),
     decision_features TEXT,
     trigger_idf_pool_version TEXT,
     runtime_policy_version TEXT,
     embedding_profile_version TEXT,
-    shadow_label TEXT,
+    shadow_label TEXT CHECK(shadow_label IS NULL OR shadow_label IN ('would_help_high','would_help_low','irrelevant','risky','near_miss','unclear')),
     evaluator_model_id TEXT,
     context_fingerprint TEXT,
     created_at TEXT NOT NULL
@@ -651,7 +652,7 @@ def find_rule_id_injected_since(
     return find_rule_id_by_injection(db, short_id, since_iso)
 
 
-def archive_rule(db: "Db", rule_id: str, reason: str, now: str) -> None:
+def archive_rule(db: "Db", rule_id: str, reason: str, now: str, *, strength: str = "user") -> None:
     # Read rule data before archiving for fingerprint creation
     rule_row = db.fetchone(
         "SELECT trigger_canonical, action_instruction, domain_tags FROM rules WHERE id = ?",
@@ -680,7 +681,7 @@ def archive_rule(db: "Db", rule_id: str, reason: str, now: str) -> None:
             trigger_canonical=rule_row["trigger_canonical"] or "",
             action_instruction=rule_row["action_instruction"] or "",
             domain_tags=domain_tags,
-            strength="user",
+            strength=strength,
         )
 
 
