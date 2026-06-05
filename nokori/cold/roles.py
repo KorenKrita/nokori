@@ -113,15 +113,7 @@ EXTRACTOR_SCHEMA: dict[str, Any] = {
                 "required": [
                     "trigger_draft",
                     "action_draft",
-                    "behavior_draft",
-                    "source_type",
-                    "confidence_guess",
                     "evidence_quotes",
-                    "non_generalization_boundaries",
-                    "required_concepts_draft",
-                    "excluded_contexts_draft",
-                    "search_terms_draft",
-                    "trigger_variants_draft",
                 ],
             },
         },
@@ -401,6 +393,14 @@ def validate_role_output(role: str, raw_json_str: str) -> dict[str, Any]:
     return data
 
 
+def _pop_first(data: dict, *keys, default=None):
+    """Pop and return the first matching key from data."""
+    for k in keys:
+        if k in data:
+            return data.pop(k)
+    return default
+
+
 _ADMISSION_SCORE_KEYS = (
     "overall_quality", "evidence_support", "trigger_specificity",
     "action_clarity", "scope_control", "generalization_safety", "retrieval_readiness",
@@ -428,32 +428,36 @@ def _normalize_role_output(role: str, data: dict[str, Any]) -> dict[str, Any]:
                         pass
         # Fix 3: normalize reasoning alias (optional CoT)
         if "reasoning" not in data:
-            r = data.pop("rationale", data.pop("reason", data.pop("explanation", None)))
-            if r is not None:
-                data["reasoning"] = r
+            for alias in ("rationale", "reason", "explanation"):
+                if alias in data:
+                    data["reasoning"] = data.pop(alias)
+                    break
 
     elif role == "final_judge":
         # Normalize optional CoT fields if present
         if "evidence_citations" not in data:
-            cit = data.pop("citations", data.pop("evidence", None))
-            if cit is not None:
-                data["evidence_citations"] = [cit] if isinstance(cit, str) else cit
+            for alias in ("citations", "evidence"):
+                if alias in data:
+                    cit = data.pop(alias)
+                    data["evidence_citations"] = [cit] if isinstance(cit, str) else cit
+                    break
         if isinstance(data.get("evidence_citations"), str):
             data["evidence_citations"] = [data["evidence_citations"]]
         if "reasoning" not in data:
-            r = data.pop("rationale", data.pop("reason", data.pop("explanation", None)))
-            if r is not None:
-                data["reasoning"] = r
+            for alias in ("rationale", "reason", "explanation"):
+                if alias in data:
+                    data["reasoning"] = data.pop(alias)
+                    break
 
     elif role == "merge_planner":
         # Fix: target_rule_ids missing or as single string
         if "target_rule_ids" not in data:
-            tid = data.pop("target_rule_id", data.pop("target_id", None))
+            tid = _pop_first(data, "target_rule_id", "target_id")
             data["target_rule_ids"] = [tid] if tid else []
         if isinstance(data.get("target_rule_ids"), str):
             data["target_rule_ids"] = [data["target_rule_ids"]]
         if "reason" not in data:
-            data["reason"] = data.pop("reasoning", data.pop("rationale", ""))
+            data["reason"] = _pop_first(data, "reasoning", "rationale", default="")
         # Fix: confidence as string
         if isinstance(data.get("confidence"), str):
             try:
@@ -464,12 +468,12 @@ def _normalize_role_output(role: str, data: dict[str, Any]) -> dict[str, Any]:
     elif role == "rule_rewriter":
         # Fix: trigger/action field aliases
         if "trigger_canonical" not in data:
-            data["trigger_canonical"] = data.pop("trigger", data.pop("trigger_text", ""))
+            data["trigger_canonical"] = _pop_first(data, "trigger", "trigger_text", default="")
         if "action_instruction" not in data:
-            data["action_instruction"] = data.pop("action", data.pop("instruction", ""))
+            data["action_instruction"] = _pop_first(data, "action", "instruction", default="")
         # Fix: missing arrays
         if "required_concept_groups" not in data:
-            data["required_concept_groups"] = data.pop("concepts", data.pop("concept_groups", []))
+            data["required_concept_groups"] = _pop_first(data, "concepts", "concept_groups", default=[])
         if "excluded_contexts" not in data:
             data["excluded_contexts"] = data.pop("exclusions", [])
         # Fix: missing scope
@@ -481,7 +485,7 @@ def _normalize_role_output(role: str, data: dict[str, Any]) -> dict[str, Any]:
             data["scope"] = scope if scope else {"domain_tags": [], "path_patterns": [], "tool_tags": []}
         # Fix: rewrite_rationale alias (optional CoT)
         if "rewrite_rationale" not in data:
-            r = data.pop("rationale", data.pop("reasoning", data.pop("reason", None)))
+            r = _pop_first(data, "rationale", "reasoning", "reason")
             if r is not None:
                 data["rewrite_rationale"] = r
         # Fix: severity alias
@@ -496,7 +500,7 @@ def _normalize_role_output(role: str, data: dict[str, Any]) -> dict[str, Any]:
     elif role == "posthoc_evaluator":
         # Fix: field aliases
         if "rule_application_evidence" not in data:
-            ev = data.pop("evidence", data.pop("application_evidence", None))
+            ev = _pop_first(data, "evidence", "application_evidence")
             if ev is not None:
                 data["rule_application_evidence"] = ev
         if "would_likely_have_happened_without_rule" not in data:
@@ -504,7 +508,7 @@ def _normalize_role_output(role: str, data: dict[str, Any]) -> dict[str, Any]:
                 "without_rule", data.pop("counterfactual", "unclear")
             )
         if "reason_code" not in data:
-            data["reason_code"] = data.pop("reason", data.pop("code", "unclear"))
+            data["reason_code"] = _pop_first(data, "reason", "code", default="unclear")
 
     return data
 

@@ -239,8 +239,12 @@ def _run_cold_pipeline_inner(
                 scores=scores,
             )
         rule_data = rewritten
-        # Always use original evidence — rewriter must not override with hallucinated quotes
+        # Preserve fields from candidate that rewriter doesn't output
         rule_data["evidence_quotes"] = candidate.get("evidence_quotes", [])
+        rule_data["trigger_canonical_zh"] = candidate.get("trigger_zh")
+        rule_data["action_instruction_zh"] = candidate.get("action_zh")
+        rule_data["trigger_variants_zh"] = candidate.get("trigger_variants_zh", [])
+        rule_data["non_generalization_boundaries"] = candidate.get("non_generalization_boundaries", [])
         rule_data["_rewritten"] = True
     else:
         # Build structured rule_data from extractor candidate for accepted path
@@ -249,7 +253,7 @@ def _run_cold_pipeline_inner(
 
     # --- Stage c: Final Judge ---
     # Strip evidence from rule_data so final_judge sees rule and evidence separately
-    rule_data_for_judge = {k: v for k, v in rule_data.items() if k != "evidence_quotes"}
+    rule_data_for_judge = {k: v for k, v in rule_data.items() if k not in ("evidence_quotes", "_rewritten")}
     final_judge_model = resolve_model_id("final_judge", role_models, default_model)
     final_decision = _run_final_judge(
         db, llm, rule_data_for_judge, candidate.get("evidence_quotes", []), final_judge_model,
@@ -1133,7 +1137,7 @@ def insert_rule_from_pipeline(
                 1,  # rule_version
                 PIPELINE_VERSION,
                 RUNTIME_POLICY_VERSION,
-                "rule_rewriter" if rule_data.get("_rewritten") or "rewrite_rationale" in rule_data else None,
+                "rule_rewriter" if rule_data.get("_rewritten") else None,
                 status,
                 severity,
                 trigger_canonical,

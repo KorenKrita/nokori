@@ -627,8 +627,6 @@ def _candidate_dict(c: Candidate) -> dict:
         "behavior": c.behavior,
         "action": c.action,
         "rationale": c.rationale,
-        "source_type": c.source_type,
-        "confidence": c.confidence,
     }
 
 
