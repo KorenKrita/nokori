@@ -42,46 +42,48 @@ class EmbeddingProfile:
 REQUIRED_BUCKETS: tuple[str, ...] = ("overall", "zh", "mixed", "code_or_cli")
 
 # Checked-in profiles derived from the benchmark dataset.
-# warm_min = max(medium_p10, near_miss_p95 + 0.02)
-# hot_min = max(positive_p10, near_miss_p99 + 0.02)
+# Benchmarked against ibm-granite/granite-embedding-97m-multilingual-r2 (384-dim).
+# NOTE: This model has very high cosine similarity across all pairs (near_miss_p95 > 0.92),
+# meaning embedding signal alone has poor discrimination. BM25 + concepts are the primary
+# retrieval mechanism; embedding serves as a secondary recall boost only.
 _SM = SAFETY_MARGIN_COSINE
 
-_DEFAULT_OVERALL = BucketThresholds(
-    positive_p10=0.72, medium_p10=0.58, medium_p50=0.65,
-    near_miss_p95=0.52, near_miss_p99=0.56, negative_p99=0.45,
-    warm_min=max(0.58, 0.52 + _SM),
-    hot_min=max(0.72, 0.56 + _SM),
+_GRANITE_OVERALL = BucketThresholds(
+    positive_p10=0.7977, medium_p10=0.8031, medium_p50=0.8500,
+    near_miss_p95=0.9237, near_miss_p99=0.9481, negative_p99=0.8610,
+    warm_min=max(0.8031, 0.9237 + _SM),  # 0.9437
+    hot_min=max(0.7977, 0.9481 + _SM),   # 0.9681
 )
-_DEFAULT_ZH = BucketThresholds(
-    positive_p10=0.68, medium_p10=0.55, medium_p50=0.62,
-    near_miss_p95=0.50, near_miss_p99=0.54, negative_p99=0.42,
-    warm_min=max(0.55, 0.50 + _SM),
-    hot_min=max(0.68, 0.54 + _SM),
+_GRANITE_ZH = BucketThresholds(
+    positive_p10=0.8200, medium_p10=0.8300, medium_p50=0.8700,
+    near_miss_p95=0.9232, near_miss_p99=0.9393, negative_p99=0.8500,
+    warm_min=max(0.8300, 0.9232 + _SM),  # 0.9432
+    hot_min=max(0.8200, 0.9393 + _SM),   # 0.9593
 )
-_DEFAULT_MIXED = BucketThresholds(
-    positive_p10=0.65, medium_p10=0.52, medium_p50=0.58,
-    near_miss_p95=0.47, near_miss_p99=0.51, negative_p99=0.40,
-    warm_min=max(0.52, 0.47 + _SM),
-    hot_min=max(0.65, 0.51 + _SM),
+_GRANITE_MIXED = BucketThresholds(
+    positive_p10=0.8100, medium_p10=0.8200, medium_p50=0.8600,
+    near_miss_p95=0.9286, near_miss_p99=0.9445, negative_p99=0.8600,
+    warm_min=max(0.8200, 0.9286 + _SM),  # 0.9486
+    hot_min=max(0.8100, 0.9445 + _SM),   # 0.9645
 )
-_DEFAULT_CODE = BucketThresholds(
-    positive_p10=0.70, medium_p10=0.56, medium_p50=0.63,
-    near_miss_p95=0.49, near_miss_p99=0.53, negative_p99=0.41,
-    warm_min=max(0.56, 0.49 + _SM),
-    hot_min=max(0.70, 0.53 + _SM),
+_GRANITE_CODE = BucketThresholds(
+    positive_p10=0.8000, medium_p10=0.8100, medium_p50=0.8500,
+    near_miss_p95=0.9236, near_miss_p99=0.9319, negative_p99=0.8500,
+    warm_min=max(0.8100, 0.9236 + _SM),  # 0.9436
+    hot_min=max(0.8000, 0.9319 + _SM),   # 0.9519
 )
 
 CHECKED_IN_PROFILES: dict[str, EmbeddingProfile] = {
-    "text-embedding-3-small": EmbeddingProfile(
-        model_id="text-embedding-3-small",
+    "ibm-granite/granite-embedding-97m-multilingual-r2": EmbeddingProfile(
+        model_id="ibm-granite/granite-embedding-97m-multilingual-r2",
         profile_version="1.0.0",
-        dimension=1536,
+        dimension=384,
         normalization="cosine",
-        overall=_DEFAULT_OVERALL,
+        overall=_GRANITE_OVERALL,
         buckets={
-            "zh": _DEFAULT_ZH,
-            "mixed": _DEFAULT_MIXED,
-            "code_or_cli": _DEFAULT_CODE,
+            "zh": _GRANITE_ZH,
+            "mixed": _GRANITE_MIXED,
+            "code_or_cli": _GRANITE_CODE,
         },
     ),
 }
