@@ -47,6 +47,9 @@ from .jobs import (
     mark_job_complete,
     mark_job_failed,
 )
+from ..utils.logging import get_logger
+
+log = get_logger("nokori.cold.pipeline")
 from .roles import (
     DEFAULT_MAX_TOKENS,
     DEFAULT_TIMEOUTS,
@@ -135,8 +138,9 @@ def run_cold_pipeline(
     Returns:
         ColdPipelineResult with final status, rule_id (if inserted), rejection reason, and scores.
     """
+    trigger_preview = str(extractor_output.get("trigger", ""))[:60]
     try:
-        return _run_cold_pipeline_inner(
+        result = _run_cold_pipeline_inner(
             db, llm, transcript_ref, extractor_output,
             role_models=role_models, default_model=default_model,
             role_max_tokens=role_max_tokens, role_timeouts=role_timeouts,
@@ -144,8 +148,14 @@ def run_cold_pipeline(
             source_origin=source_origin,
             project_id=project_id,
         )
+        log.info(
+            "cold_pipeline done: trigger=%r status=%s rule_id=%s rejection=%s",
+            trigger_preview, result.status, result.rule_id, result.rejection_reason,
+        )
+        return result
     except CircuitBreakerOpenError as e:
         # Spec section 5.2: paused jobs remain pending, not rejected
+        log.warning("cold_pipeline pending (circuit breaker): trigger=%r %s", trigger_preview, e)
         return ColdPipelineResult(
             status="pending",
             rule_id=None,
@@ -154,6 +164,7 @@ def run_cold_pipeline(
         )
     except (RuntimeError, OSError, TimeoutError, ConnectionError, ValueError) as e:
         # Spec section 13: failed role calls leave jobs pending for retry
+        log.warning("cold_pipeline pending (role failure): trigger=%r %s: %s", trigger_preview, type(e).__name__, e)
         return ColdPipelineResult(
             status="pending",
             rule_id=None,
@@ -605,8 +616,10 @@ def _call_llm_role(
 
     cached = get_cached_output(db, role, model_id, prompt_version, input_hash)
     if cached is not None:
+        log.info("role=%s model=%s cache_hit=true", role, model_id)
         return cached
 
+    log.info("role=%s model=%s calling LLM (max_tokens=%d timeout=%ds)", role, model_id, max_tokens, timeout)
     job_id = enqueue_job(db, role, model_id, prompt_version, input_hash)
     try:
         response = llm.call(
@@ -619,6 +632,7 @@ def _call_llm_role(
     except Exception as exc:
         error_info = f"{type(exc).__name__}: {exc}"
         mark_job_failed(db, job_id, error_info=error_info)
+        log.warning("role=%s model=%s LLM call failed: %s", role, model_id, error_info)
         raise
 
     # Only cache validated output; malformed/schema-invalid responses must be
@@ -631,7 +645,9 @@ def _call_llm_role(
     except (json.JSONDecodeError, TypeError, ValueError) as exc:
         error_info = f"schema validation failed: {exc}"
         mark_job_failed(db, job_id, error_info=error_info)
+        log.warning("role=%s model=%s validation failed: %s", role, model_id, error_info)
         raise ValueError(f"LLM role {role} returned invalid output: {exc}") from exc
+    log.info("role=%s model=%s call OK (response_len=%d)", role, model_id, len(response))
     mark_job_complete(db, job_id, response)
     return response
 
@@ -690,10 +706,16 @@ def _run_admission_judge(
             validate_response=lambda raw: validate_role_output("admission_judge", raw),
         )
         result = validate_role_output("admission_judge", response)
-        decision = result["decision"]
+        llm_decision = result["decision"]
         scores = result["scores"]
         # Enforce deterministic policy over LLM decision (spec section 6.2/6.7)
-        decision = _enforce_admission_policy(decision, scores)
+        decision = _enforce_admission_policy(llm_decision, scores)
+        log.info(
+            "admission_judge: llm_decision=%s policy_decision=%s scores={overall=%.2f evidence=%.2f specificity=%.2f scope=%.2f}",
+            llm_decision, decision,
+            scores.get("overall_quality", 0), scores.get("evidence_support", 0),
+            scores.get("trigger_specificity", 0), scores.get("scope_control", 0),
+        )
         return decision, scores
     except CircuitBreakerOpenError:
         raise
@@ -817,7 +839,9 @@ def _run_final_judge(
             validate_response=lambda raw: validate_role_output("final_judge", raw),
         )
         result = validate_role_output("final_judge", response)
-        return result["decision"]
+        decision = result["decision"]
+        log.info("final_judge: decision=%s", decision)
+        return decision
     except CircuitBreakerOpenError:
         raise
     except ValueError:
@@ -891,6 +915,11 @@ def _run_merge_planner(
             "reason": result.get("reason", ""),
         }
         decision = apply_merge_policy(planner_output, existing, rule_data)
+        log.info(
+            "merge_planner: llm_op=%s policy_op=%s relation=%s quality_winner=%s",
+            operation, decision.operation,
+            planner_output.get("relation_shape"), planner_output.get("quality_winner"),
+        )
         return decision.operation, {
             **planner_output,
             "merge_rationale": decision.reason,
