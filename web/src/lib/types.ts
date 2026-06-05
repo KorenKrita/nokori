@@ -1,32 +1,46 @@
+export type TriggerVariant = string | {
+  text?: string
+  kind?: string
+  requires_concepts?: string[]
+}
+
 export interface Rule {
   id: string
   short_id: string
-  trigger_text: string
-  trigger_variants: string[]
-  trigger_variants_zh: string[]
-  search_terms: Record<string, string[]>
-  behavior: string | null
-  action: string
-  rationale: string | null
-  source_type: string
-  confidence: string
+  schema_version?: number
+  rule_version?: number
+  trigger_canonical?: string
+  trigger_canonical_zh?: string | null
+  trigger_text?: string
+  trigger_variants?: TriggerVariant[]
+  trigger_variants_zh?: string[]
+  search_terms?: Record<string, string[]>
+  behavior?: string | null
+  action?: string
+  action_instruction?: string
+  action_instruction_zh?: string | null
+  rationale?: string | null
+  source_type?: string
+  source_origin?: string
+  confidence?: string
+  severity?: string
   status: string
-  evidence_score: number
-  evidence_log: Record<string, unknown>[]
-  hit_count: number
-  last_hit: string | null
-  shadow_hit_count: number
-  promotion_evidence: Record<string, unknown>[]
+  evidence_score?: number
+  evidence_log?: Record<string, unknown>[]
+  hit_count?: number
+  last_hit?: string | null
+  shadow_hit_count?: number
+  promotion_evidence?: Record<string, unknown>[]
   project_scope: string
   project_id: string | null
   superseded_by: string | null
   archived_reason: string | null
   created_at: string
   updated_at: string
-  trigger_text_zh: string | null
-  behavior_zh: string | null
-  action_zh: string | null
-  rationale_zh: string | null
+  trigger_text_zh?: string | null
+  behavior_zh?: string | null
+  action_zh?: string | null
+  rationale_zh?: string | null
 }
 
 export interface ScoredResult {

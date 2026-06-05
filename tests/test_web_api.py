@@ -44,7 +44,8 @@ def client_with_rule(cfg):
             (
                 "rule-1", "abc", 1, 1,
                 "v1", "v1",
-                "when editing Python files", "[]",
+                "when editing Python files",
+                '[{"text":"editing Python files","kind":"strong_anchor","requires_concepts":["manual_trigger"]}]',
                 '{"en": ["python", "edit"]}',
                 "use black formatter",
                 "transcript_extraction", "active", "reminder",
@@ -108,6 +109,7 @@ class TestRules:
         body = resp.json()
         assert body["meta"]["total"] == 1
         assert body["data"][0]["short_id"] == "abc"
+        assert body["data"][0]["trigger_variants"][0]["text"] == "editing Python files"
 
     def test_filter_by_status(self, client_with_rule):
         resp = client_with_rule.get("/api/rules?status=suppressed")

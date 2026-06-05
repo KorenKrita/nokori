@@ -7,6 +7,15 @@ import { useApi } from '@/hooks/useApi'
 import { mutateApi } from '@/lib/api'
 import { formatDateTime } from '@/lib/formatDateTime'
 import { t, lz, getLocale } from '@/lib/i18n'
+import {
+  ruleAction,
+  ruleActionZh,
+  ruleHitCount,
+  ruleSource,
+  ruleTrigger,
+  ruleTriggerZh,
+  triggerVariantText,
+} from '@/lib/ruleDisplay'
 import type { Rule } from '@/lib/types'
 
 const DATE_META_KEYS = new Set(['last_hit', 'created_at', 'updated_at'])
@@ -24,6 +33,10 @@ export function RuleDetail() {
 
   if (isLoading || !data) return <PageSkeleton />
   const rule = data.data
+  const triggerVariants = rule.trigger_variants ?? []
+  const triggerVariantsZh = rule.trigger_variants_zh ?? []
+  const searchTerms = rule.search_terms ?? {}
+  const evidenceLog = rule.evidence_log ?? []
 
   const handleDismiss = async () => {
     await mutateApi(`/rules/${shortId}/dismiss`, 'POST')
@@ -63,21 +76,21 @@ export function RuleDetail() {
       <div className="grid grid-cols-12 gap-4">
         <GlassCard className="col-span-8">
           <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary mb-3">{t('rules.trigger')}</h3>
-          <p className="text-sm text-[var(--color-text-primary)]">{lz(rule.trigger_text, rule.trigger_text_zh)}</p>
-          {rule.trigger_variants.length > 0 && (
+          <p className="text-sm text-[var(--color-text-primary)]">{lz(ruleTrigger(rule), ruleTriggerZh(rule))}</p>
+          {triggerVariants.length > 0 && (
             <div className="mt-3 space-y-1">
               <p className="text-xs text-text-tertiary">{t('rules.variants')}:</p>
-              {(getLocale() === 'zh' && rule.trigger_variants_zh.length > 0
-                ? rule.trigger_variants_zh
-                : rule.trigger_variants
+              {(getLocale() === 'zh' && triggerVariantsZh.length > 0
+                ? triggerVariantsZh
+                : triggerVariants
               ).map((v, i) => (
-                <p key={i} className="text-xs text-text-secondary font-mono pl-2">{v}</p>
+                <p key={i} className="text-xs text-text-secondary font-mono pl-2">{triggerVariantText(v)}</p>
               ))}
             </div>
           )}
 
           <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary mt-6 mb-3">{t('rules.action')}</h3>
-          <p className="text-sm text-[var(--color-text-primary)]">{lz(rule.action, rule.action_zh)}</p>
+          <p className="text-sm text-[var(--color-text-primary)]">{lz(ruleAction(rule), ruleActionZh(rule))}</p>
 
           {(rule.behavior || rule.behavior_zh) && (
             <>
@@ -100,10 +113,10 @@ export function RuleDetail() {
             <dl className="space-y-2 text-xs">
               {(
                 [
-                  ['source_type', t('rules.source_type'), rule.source_type],
-                  ['confidence', t('rules.confidence'), rule.confidence],
-                  ['evidence_score', t('rules.evidence_score'), String(rule.evidence_score)],
-                  ['hit_count', t('rules.hit_count'), String(rule.hit_count)],
+                  ['source_type', t('rules.source_type'), ruleSource(rule)],
+                  ['confidence', t('rules.confidence'), rule.confidence ?? rule.severity ?? '-'],
+                  ['evidence_score', t('rules.evidence_score'), String(rule.evidence_score ?? 0)],
+                  ['hit_count', t('rules.hit_count'), String(ruleHitCount(rule))],
                   ['last_hit', t('rules.last_hit'), rule.last_hit ?? t('rules.never')],
                   ['project_scope', t('rules.project_scope'), rule.project_scope],
                   ['project_id', t('rules.project_id'), rule.project_id ?? 'global'],
@@ -121,10 +134,10 @@ export function RuleDetail() {
             </dl>
           </GlassCard>
 
-          {Object.keys(rule.search_terms).length > 0 && (
+          {Object.keys(searchTerms).length > 0 && (
             <GlassCard>
               <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary mb-3">{t('rules.search_terms')}</h3>
-              {Object.entries(rule.search_terms).map(([lang, terms]) => (
+              {Object.entries(searchTerms).map(([lang, terms]) => (
                 <div key={lang} className="mb-2">
                   <span className="text-xs text-text-tertiary">{lang}:</span>
                   <div className="flex flex-wrap gap-1 mt-1">
@@ -141,11 +154,11 @@ export function RuleDetail() {
         </div>
       </div>
 
-      {rule.evidence_log.length > 0 && (
+      {evidenceLog.length > 0 && (
         <GlassCard>
           <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary mb-3">{t('rules.evidence_log')}</h3>
           <div className="space-y-1 max-h-60 overflow-y-auto">
-            {rule.evidence_log.map((entry, i) => (
+            {evidenceLog.map((entry, i) => (
               <div key={i} className="text-xs font-mono text-text-secondary py-1 border-b border-[var(--color-border-subtle)]">
                 {JSON.stringify(entry)}
               </div>

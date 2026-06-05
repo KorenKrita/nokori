@@ -66,11 +66,12 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
     if rule.trigger_canonical_zh:
         print(f"trigger_canonical_zh: {rule.trigger_canonical_zh}")
 
-    variants = rule.trigger_variants
+    variants = _json_list(rule.trigger_variants)
     if variants:
         print("variants:")
         for v in variants:
-            print(f"  {v}")
+            text = v.get("text") if isinstance(v, dict) else v
+            print(f"  {text}")
     variants_zh = rule.trigger_variants_zh
     if variants_zh:
         print("variants_zh:")

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import json
 import subprocess
 import sys
 import uuid
@@ -46,7 +47,11 @@ def _insert_v6_rule(
     now = _now()
     concepts = concepts if concepts is not None else [_concept("danger_deploy", text=trigger)]
     groups = groups if groups is not None else [{"id": "primary", "all_of": [concepts[0]["id"]]}]
-    variants = variants if variants is not None else []
+    variants = variants if variants is not None else [{
+        "text": trigger,
+        "kind": "strong_anchor",
+        "requires_concepts": [concepts[0]["id"]],
+    }]
     with db.transaction() as tx:
         tx.execute(
             "INSERT INTO rules (id, short_id, schema_version, rule_version, "
@@ -172,13 +177,17 @@ def test_cli_add_high_correction_creates_v6_candidate_not_active(tmp_path):
     try:
         row = db.fetchone(
             "SELECT schema_version, runtime_policy_version, status, concepts, "
-            "required_concept_groups FROM rules LIMIT 1"
+            "required_concept_groups, trigger_variants FROM rules LIMIT 1"
         )
         assert row["schema_version"] == SCHEMA_VERSION
         assert row["runtime_policy_version"] == RUNTIME_POLICY_VERSION
         assert row["status"] == "candidate"
         assert row["concepts"] != "[]"
         assert row["required_concept_groups"] != "[]"
+        trigger_variants = json.loads(row["trigger_variants"])
+        assert trigger_variants
+        assert trigger_variants[0]["text"] == "manual dangerous trigger"
+        assert trigger_variants[0]["kind"] == "strong_anchor"
     finally:
         db.close()
 

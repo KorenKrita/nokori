@@ -139,7 +139,7 @@ class RuleResponse(BaseModel):
     required_concept_groups: list[dict] = []
     excluded_contexts: list[dict] = []
     near_miss_examples: list[str] = []
-    trigger_variants: list[str] = []
+    trigger_variants: list[str | dict] = []
     trigger_variants_zh: list[str] = []
     search_terms: dict[str, list[str]] = {}
 
@@ -197,7 +197,7 @@ class RuleOut(BaseModel):
     id: str
     short_id: str
     trigger_text: str
-    trigger_variants: list[str]
+    trigger_variants: list[str | dict]
     trigger_variants_zh: list[str]
     search_terms: dict[str, list[str]]
     behavior: str | None
@@ -230,7 +230,7 @@ class RuleEdit(BaseModel):
     rationale: str | None = None
     confidence: str | None = None
     status: str | None = None
-    trigger_variants: list[str] | None = None
+    trigger_variants: list[str | dict] | None = None
     trigger_variants_zh: list[str] | None = None
     search_terms: dict[str, list[str]] | None = None
     trigger_text_zh: str | None = None

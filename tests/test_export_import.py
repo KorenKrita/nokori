@@ -35,6 +35,13 @@ def _v6_structure(trigger: str):
             {"id": "manual_primary", "all_of": ["manual_trigger"]}
         ],
         "excluded_contexts": [],
+        "trigger_variants": [
+            {
+                "text": trigger,
+                "kind": "strong_anchor",
+                "requires_concepts": ["manual_trigger"],
+            }
+        ],
     }
 
 
@@ -82,6 +89,9 @@ def test_export_includes_v6_matcher_structure(tmp_path):
     assert rule["concepts"]
     assert rule["required_concept_groups"]
     assert "excluded_contexts" in rule
+    assert rule["trigger_variants"]
+    assert rule["trigger_variants"][0]["text"] == "rule one"
+    assert rule["trigger_variants"][0]["kind"] == "strong_anchor"
 
 
 def test_export_coerces_json_fields_to_expected_container_types(tmp_path):
@@ -131,6 +141,34 @@ def test_import_rejects_active_rule_without_v6_matcher_structure(tmp_path):
 
     assert r.returncode != 0
     assert "required_concept_groups" in (r.stderr + r.stdout)
+
+
+def test_import_rejects_active_rule_without_trigger_variants(tmp_path):
+    data = tmp_path / "data"
+    out = tmp_path / "unsafe_no_variants.json"
+    trigger = "force push shared branch"
+    structure = _v6_structure(trigger)
+    structure.pop("trigger_variants")
+    payload = {
+        "format": "nokori-export",
+        "version": 6,
+        "rules": [
+            {
+                "id": "00000000-0000-4000-8000-000000000113",
+                "short_id": "bad113",
+                "trigger_canonical": trigger,
+                **structure,
+                "action_instruction": "use --force-with-lease",
+                "status": "active",
+            }
+        ],
+    }
+    out.write_text(json.dumps(payload), encoding="utf-8")
+
+    r = _run("import", str(out), env_extra={"NOKORI_DATA_DIR": str(data)})
+
+    assert r.returncode != 0
+    assert "trigger_variants" in (r.stderr + r.stdout)
 
 
 def test_import_forces_current_schema_policy_and_keeps_structure(tmp_path):

@@ -31,6 +31,7 @@ from ..policy import (
     SourceOrigin,
     ActivationOrigin,
 )
+from ..search.tokenizer import tokenize
 from ..merge.policy import (
     MergeDecision,
     apply_merge_policy,
@@ -226,6 +227,7 @@ def _run_cold_pipeline_inner(
     else:
         # Build structured rule_data from extractor candidate for accepted path
         rule_data = _candidate_to_rule_data(candidate)
+    rule_data = _ensure_rule_data_variants(rule_data)
 
     # --- Stage c: Final Judge ---
     final_judge_model = resolve_model_id("final_judge", role_models, default_model)
@@ -1158,6 +1160,31 @@ def _candidate_to_rule_data(candidate: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _ensure_rule_data_variants(rule_data: dict[str, Any]) -> dict[str, Any]:
+    """Ensure compiled durable rule data has at least one v6 variant."""
+    variants = rule_data.get("variants") or []
+    if variants:
+        return rule_data
+    groups = rule_data.get("required_concept_groups") or []
+    required_concepts = [
+        concept_id
+        for group in groups
+        if isinstance(group, dict)
+        for concept_id in group.get("all_of", [])
+    ]
+    trigger = str(rule_data.get("trigger_canonical") or "").strip()
+    if not trigger:
+        return rule_data
+    strong_anchor = bool(required_concepts and len(tokenize(trigger)) >= 2)
+    updated = dict(rule_data)
+    updated["variants"] = [{
+        "text": trigger,
+        "kind": "strong_anchor" if strong_anchor else "weak_recall",
+        "requires_concepts": required_concepts if strong_anchor else [],
+    }]
+    return updated
+
+
 def _draft_concept_groups(candidate: dict[str, Any]) -> list[dict[str, Any]]:
     """Build minimal concept groups from draft concepts."""
     concepts_draft = candidate.get("required_concepts_draft", [])
@@ -1215,12 +1242,24 @@ def _draft_excluded_contexts(candidate: dict[str, Any]) -> list[dict[str, Any]]:
 def _draft_variants(candidate: dict[str, Any]) -> list[dict[str, Any]]:
     """Build variant entries from draft trigger variants."""
     variants_draft = candidate.get("trigger_variants_draft", candidate.get("trigger_variants", []))
+    trigger = candidate.get("trigger_draft", candidate.get("trigger", ""))
+    required_concepts = [
+        concept_id
+        for group in _draft_concept_groups(candidate)
+        for concept_id in group.get("all_of", [])
+    ]
     result = []
-    for text in variants_draft:
+    seen: set[str] = set()
+    for text in [trigger, *variants_draft]:
+        text = str(text).strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        strong_anchor = bool(required_concepts and len(tokenize(text)) >= 2)
         result.append({
             "text": text,
-            "kind": "weak_recall",
-            "requires_concepts": [],
+            "kind": "strong_anchor" if strong_anchor else "weak_recall",
+            "requires_concepts": required_concepts if strong_anchor else [],
         })
     return result
 

@@ -7,6 +7,7 @@ import { StatusBadge } from '@/components/StatusBadge'
 import { PageSkeleton } from '@/components/PageSkeleton'
 import { useApi } from '@/hooks/useApi'
 import { t, lz } from '@/lib/i18n'
+import { ruleHitCount, ruleSource, ruleTrigger, ruleTriggerZh } from '@/lib/ruleDisplay'
 import type { Meta, Rule } from '@/lib/types'
 
 const STATUS_FILTERS = [
@@ -136,9 +137,9 @@ export function Rules() {
                     </Link>
                   </td>
                   <td className="py-3 px-2"><StatusBadge status={rule.status} /></td>
-                  <td className="py-3 px-2 text-text-secondary">{rule.source_type}</td>
-                  <td className="py-3 px-2 text-text-secondary truncate">{lz(rule.trigger_text, rule.trigger_text_zh)}</td>
-                  <td className="py-3 pl-2 pr-6 text-right font-mono tabular-nums">{rule.hit_count}</td>
+                  <td className="py-3 px-2 text-text-secondary">{ruleSource(rule)}</td>
+                  <td className="py-3 px-2 text-text-secondary truncate">{lz(ruleTrigger(rule), ruleTriggerZh(rule))}</td>
+                  <td className="py-3 pl-2 pr-6 text-right font-mono tabular-nums">{ruleHitCount(rule)}</td>
                   <td className="py-3 pl-6 pr-2 text-text-tertiary text-xs font-mono truncate">
                     {rule.project_scope === 'global' ? t('rules.scope.global') : rule.project_id ?? '-'}
                   </td>

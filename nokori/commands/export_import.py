@@ -156,6 +156,7 @@ def _validate_matcher_structure(rec: dict) -> str | None:
     concepts = rec.get("concepts") or []
     groups = rec.get("required_concept_groups") or []
     excluded_contexts = rec.get("excluded_contexts") or []
+    variants = rec.get("trigger_variants") or []
     if not isinstance(concepts, list) or not concepts or not isinstance(groups, list) or not groups:
         return (
             "concepts and required_concept_groups must be non-empty lists "
@@ -163,6 +164,8 @@ def _validate_matcher_structure(rec: dict) -> str | None:
         )
     if not isinstance(excluded_contexts, list):
         return "excluded_contexts must be a list"
+    if not isinstance(variants, list) or not variants:
+        return "trigger_variants must be a non-empty list for non-archived imports"
     try:
         compile_rule(
             {

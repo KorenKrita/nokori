@@ -256,6 +256,8 @@ class TestCliShowCommand:
         assert "concepts:" in out
         assert "required_concept_groups:" in out
         assert "excluded_contexts:" in out
+        assert "variants:" in out
+        assert "  git push --force" in out
 
     def test_show_displays_scores(self, cfg, db_with_rules, capsys):
         from nokori.commands.show import run

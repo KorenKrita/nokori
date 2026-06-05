@@ -11,7 +11,7 @@ import hashlib
 import uuid
 
 from ..db import Db, dumps_json, loads_json
-from ..events.fire import get_fire_events_for_session, mark_posthoc_label, update_first_observed_useful
+from ..events.fire import get_fire_events_for_session, update_first_observed_useful
 from .evaluator import run_posthoc_evaluation
 from ..utils.time import now_iso
 

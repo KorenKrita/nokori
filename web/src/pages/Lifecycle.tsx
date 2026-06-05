@@ -12,7 +12,8 @@ interface PromotionData {
     candidates: {
       short_id: string
       project_id: string
-      trigger_text: string
+      trigger_text?: string
+      trigger_canonical?: string
       shadow_hit_count: number
       unique_projects: string[]
       progress: number
@@ -61,7 +62,7 @@ export function Lifecycle() {
                 {c.progress}/{c.threshold}
               </span>
             </div>
-            <p className="text-sm text-text-secondary mt-1 truncate">{c.trigger_text}</p>
+            <p className="text-sm text-text-secondary mt-1 truncate">{c.trigger_canonical ?? c.trigger_text ?? ''}</p>
             <div className="mt-2 h-1.5 rounded-full bg-[var(--color-bg-elevated)] overflow-hidden">
               <motion.div
                 className="h-full rounded-full bg-accent-violet"

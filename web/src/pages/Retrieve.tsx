@@ -5,6 +5,7 @@ import { GlassCard } from '@/components/GlassCard'
 import { StatusBadge } from '@/components/StatusBadge'
 import { mutateApi } from '@/lib/api'
 import { t } from '@/lib/i18n'
+import { ruleTrigger } from '@/lib/ruleDisplay'
 import type { ScoredResult } from '@/lib/types'
 
 interface RetrieveResponse {
@@ -128,7 +129,7 @@ function ResultSection({ title, items, level }: { title: string; items: ScoredRe
               </Link>
               <StatusBadge status={sr.rule.status} />
             </div>
-            <p className="text-sm text-text-secondary mt-1">{sr.rule.trigger_text}</p>
+            <p className="text-sm text-text-secondary mt-1">{ruleTrigger(sr.rule)}</p>
             <div className="flex gap-4 mt-2 text-xs text-text-tertiary font-mono">
               <span>BM25: {sr.bm25_score.toFixed(2)}</span>
               {sr.cosine !== null && <span>Cosine: {sr.cosine.toFixed(3)}</span>}

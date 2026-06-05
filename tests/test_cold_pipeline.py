@@ -388,6 +388,58 @@ class TestEvidenceSupportThreshold:
 
         # evidence_support=0.80 < 0.85 -> policy forces revise -> candidate
         assert result.status == "candidate"
+        row = db.fetchone(
+            "SELECT trigger_canonical, trigger_variants FROM rules WHERE id = ?",
+            (result.rule_id,),
+        )
+        variants = json.loads(row["trigger_variants"])
+        assert variants
+        assert variants[0]["text"] == row["trigger_canonical"]
+
+    def test_missing_draft_variants_persists_canonical_v6_variant(self, db: Db):
+        """Durable cold-path rows keep a compileable v6 variant even without LLM variants."""
+        candidate = _extractor_candidate()
+        candidate.pop("trigger_variants_draft")
+        llm = _make_llm_mock({
+            "admission judge": _admission_json(
+                "accept",
+                overall_quality=0.92,
+                evidence_support=0.85,
+                trigger_specificity=0.90,
+                scope_control=0.90,
+            ),
+            "final judge": _final_judge_json("accept_candidate"),
+            "merge planner": _merge_planner_json("keep_both"),
+            "synthetic evaluation case generator": _synthetic_eval_cases(),
+        })
+
+        with patch(
+            "nokori.cold.pipeline.check_fingerprint_block", return_value=None
+        ), patch("nokori.cold.pipeline.run_synthetic_eval") as mock_eval:
+            mock_eval.return_value = MagicMock(
+                passed=True, results=[], rule_id="", rule_version=1,
+                runtime_policy_version="1.0.0", tokenizer_version="1.0.0",
+                matcher_compiler_version="1.0.0", concept_compiler_version="1.0.0",
+                embedding_profile_version="1.0.0", trigger_idf_pool_version="test",
+                benchmark_version="1.0.0", cases=[],
+            )
+            result = run_cold_pipeline(
+                db,
+                llm,
+                transcript_ref="test_missing_variants",
+                extractor_output=candidate,
+                default_model="test-model",
+            )
+
+        assert result.status == "candidate"
+        row = db.fetchone(
+            "SELECT trigger_canonical, trigger_variants FROM rules WHERE id = ?",
+            (result.rule_id,),
+        )
+        variants = json.loads(row["trigger_variants"])
+        assert variants
+        assert variants[0]["text"] == row["trigger_canonical"]
+        assert variants[0]["kind"] == "strong_anchor"
 
     def test_evidence_support_below_fast_lane_threshold_blocks_active(self, db: Db):
         """evidence_support = 0.85 still below the COLD_FAST_LANE.evidence_support_min (0.90)."""

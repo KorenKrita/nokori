@@ -8,6 +8,7 @@ from ..errors import NokoriError
 from ..policy import RUNTIME_POLICY_VERSION
 from ..search.embedding import index_rule_if_enabled
 from ..utils.ids import new_uuid, short_id_for
+from ..search.tokenizer import tokenize
 from ..utils.text import split_csv
 from ..utils.time import now_iso
 
@@ -16,7 +17,25 @@ _MAX_TRIGGER = 16_384
 _MAX_ACTION = 8_192
 
 
-def _manual_trigger_structure(trigger: str, variants: list[str]) -> tuple[list[dict], list[dict]]:
+def _variant_entry(text: str, concept_id: str) -> dict:
+    text = text.strip()
+    if len(tokenize(text)) >= 2:
+        return {
+            "text": text,
+            "kind": "strong_anchor",
+            "requires_concepts": [concept_id],
+        }
+    return {
+        "text": text,
+        "kind": "weak_recall",
+        "requires_concepts": [],
+    }
+
+
+def _manual_trigger_structure(
+    trigger: str,
+    variants: list[str],
+) -> tuple[list[dict], list[dict], list[dict]]:
     concept_id = "manual_trigger"
     aliases = [{"text": trigger, "strength": "strong"}]
     aliases.extend({"text": v, "strength": "strong"} for v in variants)
@@ -28,7 +47,15 @@ def _manual_trigger_structure(trigger: str, variants: list[str]) -> tuple[list[d
         "required": True,
     }]
     groups = [{"id": "manual_primary", "all_of": [concept_id]}]
-    return concepts, groups
+    seen: set[str] = set()
+    variant_entries: list[dict] = []
+    for text in [trigger, *variants]:
+        key = text.strip()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        variant_entries.append(_variant_entry(key, concept_id))
+    return concepts, groups, variant_entries
 
 
 def run(args: argparse.Namespace, cfg: Config) -> int:
@@ -56,7 +83,7 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
     evidence_score = 0.0
     activation_origin = None
     severity = getattr(args, "severity", "reminder") or "reminder"
-    concepts, groups = _manual_trigger_structure(args.trigger, variants)
+    concepts, groups, variant_entries = _manual_trigger_structure(args.trigger, variants)
 
     db = open_db(cfg.db_path)
     try:
@@ -83,7 +110,7 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
                     args.trigger,
                     dumps_json(concepts),
                     dumps_json(groups),
-                    dumps_json(variants),
+                    dumps_json(variant_entries),
                     dumps_json(terms),
                     args.action,
                     "transcript_extraction",
