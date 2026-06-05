@@ -10,15 +10,12 @@ import pytest
 from nokori.policy import (
     DYNAMIC_IDF_NORMAL,
     DYNAMIC_IDF_SMALL_POOL,
-    IDF_MAX_SHADOW,
 )
 from nokori.search.idf_stats import (
     GENERIC_TOKENS,
     _trigger_tokens_for_rule,
     build_idf_stats,
-    compute_shadow_idf,
     compute_trigger_idf_sum,
-    get_small_pool_requirements,
 )
 
 
@@ -67,75 +64,8 @@ class TestEmptyPool:
         stats = build_idf_stats([])
         assert compute_trigger_idf_sum(["anything", "here"], stats) == 0.0
 
-    def test_shadow_idf_returns_zero(self):
-        stats = build_idf_stats([])
-        assert compute_shadow_idf("anything", stats) == 0.0
-
-    def test_get_small_pool_requirements_unavailable(self):
-        reqs = get_small_pool_requirements(0)
-        assert reqs["dynamic_idf_available"] is False
-        assert reqs["trigger_coverage_min"] is None
-        assert reqs["distinct_trigger_terms_min"] is None
 
 
-# ---------------------------------------------------------------------------
-# 2. Small pool (N<20) uses stricter coverage and distinct trigger terms
-# ---------------------------------------------------------------------------
-
-
-class TestSmallPool:
-    def test_coverage_min_040(self):
-        reqs = get_small_pool_requirements(5)
-        assert reqs["trigger_coverage_min"] == 0.40
-
-    def test_distinct_trigger_terms_min_2(self):
-        reqs = get_small_pool_requirements(10)
-        assert reqs["distinct_trigger_terms_min"] == 2
-
-    def test_requires_strong_evidence(self):
-        reqs = get_small_pool_requirements(19)
-        assert reqs["requires_strong_evidence"] is True
-        assert reqs["dynamic_idf_available"] is True
-
-    def test_absolute_trigger_info_min_matches_policy(self):
-        pool = _make_pool(5)
-        stats = build_idf_stats(pool)
-        n = 5
-        rare_df = max(1, math.ceil(n * 0.10))
-        idf_10pct = math.log(1 + (n - rare_df + 0.5) / (rare_df + 0.5))
-        dynamic = 2 * idf_10pct
-        expected = max(dynamic, DYNAMIC_IDF_SMALL_POOL.absolute_trigger_info_min)
-        assert stats.dynamic_threshold == pytest.approx(expected)
-
-
-# ---------------------------------------------------------------------------
-# 3. Normal pool uses 0.25 coverage and 1 distinct term
-# ---------------------------------------------------------------------------
-
-
-class TestNormalPool:
-    def test_coverage_min_025(self):
-        reqs = get_small_pool_requirements(20)
-        assert reqs["trigger_coverage_min"] == 0.25
-
-    def test_distinct_trigger_terms_min_1(self):
-        reqs = get_small_pool_requirements(50)
-        assert reqs["distinct_trigger_terms_min"] == 1
-
-    def test_no_strong_evidence_required(self):
-        reqs = get_small_pool_requirements(100)
-        assert reqs["requires_strong_evidence"] is False
-        assert reqs["dynamic_idf_available"] is True
-
-    def test_absolute_trigger_info_min_matches_policy(self):
-        pool = _make_pool(30)
-        stats = build_idf_stats(pool)
-        n = 30
-        rare_df = max(1, math.ceil(n * 0.10))
-        idf_10pct = math.log(1 + (n - rare_df + 0.5) / (rare_df + 0.5))
-        dynamic = 2 * idf_10pct
-        expected = max(dynamic, DYNAMIC_IDF_NORMAL.absolute_trigger_info_min)
-        assert stats.dynamic_threshold == pytest.approx(expected)
 
 
 # ---------------------------------------------------------------------------
@@ -229,83 +159,6 @@ class TestActionDoesNotContribute:
         assert result == 0.0
 
 
-# ---------------------------------------------------------------------------
-# 6. required_concepts_match is required for every trigger evidence path
-# ---------------------------------------------------------------------------
-
-
-class TestRequiredConceptsMatch:
-    """Validates the spec requirement from section 9.3.
-
-    All three trigger evidence paths require required_concepts_match = true.
-    This is a design-level test verifying the spec text. The actual gating
-    is in applicability.py; here we confirm IDF stats alone do not bypass
-    the concept requirement by checking get_small_pool_requirements always
-    returns a structure that implies concept matching is needed.
-    """
-
-    def test_empty_pool_requires_concepts(self):
-        reqs = get_small_pool_requirements(0)
-        # When dynamic IDF unavailable, only strong_variant + concepts can pass
-        assert reqs["dynamic_idf_available"] is False
-
-    def test_small_pool_requires_strong_evidence(self):
-        reqs = get_small_pool_requirements(10)
-        assert reqs["requires_strong_evidence"] is True
-
-    def test_normal_pool_still_has_coverage_requirement(self):
-        # Even normal pool requires trigger_coverage_min which is gated
-        # alongside required_concepts_match in the runtime
-        reqs = get_small_pool_requirements(50)
-        assert reqs["trigger_coverage_min"] is not None
-        assert reqs["distinct_trigger_terms_min"] is not None
-
-
-# ---------------------------------------------------------------------------
-# 7. Shadow IDF uses df floor (max(1, df)) and cap (IDF_MAX_SHADOW=3.0)
-# ---------------------------------------------------------------------------
-
-
-class TestShadowIdf:
-    def test_novel_token_uses_df_floor_of_1(self):
-        rules = _make_pool(30)
-        stats = build_idf_stats(rules)
-
-        # "never_seen" is not in any rule trigger, so df=0 -> df_effective=1
-        shadow = compute_shadow_idf("never_seen", stats)
-        n = 30
-        df_effective = 1
-        expected_raw = math.log(1 + (n - df_effective + 0.5) / (df_effective + 0.5))
-        expected = min(expected_raw, IDF_MAX_SHADOW)
-        assert shadow == pytest.approx(expected)
-
-    def test_capped_at_idf_max_shadow(self):
-        # With large N and df_effective=1, raw IDF exceeds 3.0
-        rules = _make_pool(100)
-        stats = build_idf_stats(rules)
-        shadow = compute_shadow_idf("totally_novel_xyz", stats)
-        assert shadow <= IDF_MAX_SHADOW
-        assert shadow == pytest.approx(IDF_MAX_SHADOW)
-
-    def test_known_token_not_floored(self):
-        # A token appearing in many rules has df > 1, so floor is irrelevant
-        rules = [
-            MockRule(id=f"r{i}", trigger_canonical="shared_term unique_{i}")
-            for i in range(25)
-        ]
-        stats = build_idf_stats(rules)
-        assert stats.df_by_token["shared_term"] == 25
-
-        shadow = compute_shadow_idf("shared_term", stats)
-        n = 25
-        df_t = 25
-        expected = math.log(1 + (n - df_t + 0.5) / (df_t + 0.5))
-        # df_effective = max(1, 25) = 25, same as raw
-        assert shadow == pytest.approx(expected)
-
-    def test_empty_pool_shadow_is_zero(self):
-        stats = build_idf_stats([])
-        assert compute_shadow_idf("anything", stats) == 0.0
 
 
 # ---------------------------------------------------------------------------

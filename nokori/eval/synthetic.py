@@ -355,69 +355,6 @@ Output strict JSON array:
 # ---------------------------------------------------------------------------
 
 
-def invalidate_stale_evals(
-    db: Any,
-    rule_id: str,
-    current_versions: dict[str, str],
-) -> int:
-    """Mark old eval results as stale when any tracked version has changed.
-
-    Compares stored eval version fields against current_versions dict.
-    Any eval row whose versions do not match ALL current versions is deleted.
-
-    Args:
-        db: Database instance with transaction() context manager.
-        rule_id: The rule to check evals for.
-        current_versions: Dict with keys matching version columns:
-            runtime_policy_version, tokenizer_version, matcher_compiler_version,
-            concept_compiler_version, embedding_profile_version,
-            trigger_idf_pool_version, benchmark_version.
-
-    Returns:
-        Number of stale eval rows deleted.
-    """
-    rows = db.fetchall(
-        "SELECT id, runtime_policy_version, tokenizer_version, "
-        "matcher_compiler_version, concept_compiler_version, "
-        "embedding_profile_version, trigger_idf_pool_version, "
-        "benchmark_version FROM rule_synthetic_evals WHERE rule_id = ?",
-        (rule_id,),
-    )
-
-    stale_ids: list[int] = []
-    version_keys = (
-        "runtime_policy_version",
-        "tokenizer_version",
-        "matcher_compiler_version",
-        "concept_compiler_version",
-        "embedding_profile_version",
-        "trigger_idf_pool_version",
-        "benchmark_version",
-    )
-
-    for row in rows:
-        is_stale = False
-        for key in version_keys:
-            stored_value = row[key] if key in row.keys() else None
-            current_value = current_versions.get(key)
-            if current_value is not None and stored_value != current_value:
-                is_stale = True
-                break
-        if is_stale:
-            stale_ids.append(row["id"])
-
-    if not stale_ids:
-        return 0
-
-    with db.transaction() as tx:
-        for eval_id in stale_ids:
-            tx.execute(
-                "DELETE FROM rule_synthetic_evals WHERE id = ?", (eval_id,)
-            )
-
-    return len(stale_ids)
-
-
 # ---------------------------------------------------------------------------
 # Database persistence
 # ---------------------------------------------------------------------------

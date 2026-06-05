@@ -12,7 +12,6 @@ from nokori.events.fire import (
     count_evaluated_fire_events,
     create_fire_event,
     get_fire_events_for_session,
-    mark_posthoc_label,
     update_first_observed_useful,
 )
 from nokori.events.shadow import (
@@ -199,25 +198,15 @@ class TestCreateShadowEventMalformedJson:
             db.close()
 
 
-class TestMarkPosthocLabel:
-    def test_updates_fire_event(self, tmp_path):
-        db = _make_db(tmp_path)
-        try:
-            rule = _insert_rule(db)
-            event_id = create_fire_event(
-                db, rule, "session_1", "hash_abc", "hot", {"score": 0.9}
-            )
-            mark_posthoc_label(db, event_id, "observed_useful", "useful_prevented_error", score=0.95)
-            row = db.fetchone(
-                "SELECT posthoc_label, posthoc_reason_code, posthoc_score "
-                "FROM rule_fire_events WHERE id = ?",
-                (event_id,),
-            )
-            assert row["posthoc_label"] == "observed_useful"
-            assert row["posthoc_reason_code"] == "useful_prevented_error"
-            assert row["posthoc_score"] == pytest.approx(0.95)
-        finally:
-            db.close()
+def _set_posthoc_label(db, event_id, label, reason_code, score=None):
+    """Helper to set posthoc fields directly via SQL (replaces deleted mark_posthoc_label)."""
+    with db.transaction() as tx:
+        tx.execute(
+            "UPDATE rule_fire_events "
+            "SET posthoc_label = ?, posthoc_reason_code = ?, posthoc_score = ? "
+            "WHERE id = ?",
+            (label, reason_code, score, event_id),
+        )
 
 
 class TestUpdateFirstObservedUseful:
@@ -228,7 +217,7 @@ class TestUpdateFirstObservedUseful:
             event_id = create_fire_event(
                 db, rule, "session_1", "hash_abc", "hot", {"score": 0.9}
             )
-            mark_posthoc_label(db, event_id, "observed_useful", "useful_prevented_error")
+            _set_posthoc_label(db, event_id, "observed_useful", "useful_prevented_error")
             update_first_observed_useful(db, rule.id)
             row = db.fetchone(
                 "SELECT first_observed_useful_at FROM rules WHERE id = ?",
@@ -252,7 +241,7 @@ class TestUpdateFirstObservedUseful:
             event_id = create_fire_event(
                 db, rule, "session_1", "hash_abc", "hot", {"score": 0.9}
             )
-            mark_posthoc_label(db, event_id, "observed_useful", "useful_prevented_error")
+            _set_posthoc_label(db, event_id, "observed_useful", "useful_prevented_error")
             update_first_observed_useful(db, rule.id)
             row = db.fetchone(
                 "SELECT first_observed_useful_at FROM rules WHERE id = ?",
@@ -270,7 +259,7 @@ class TestUpdateFirstObservedUseful:
             event_id = create_fire_event(
                 db, rule, "session_1", "hash_abc", "hot", {"score": 0.9}
             )
-            mark_posthoc_label(db, event_id, "irrelevant", "irrelevant_not_applicable")
+            _set_posthoc_label(db, event_id, "irrelevant", "irrelevant_not_applicable")
             update_first_observed_useful(db, rule.id)
             row = db.fetchone(
                 "SELECT first_observed_useful_at FROM rules WHERE id = ?",
@@ -291,7 +280,7 @@ class TestCountEvaluatedFireEvents:
                 eid = create_fire_event(
                     db, rule, "session_1", "hash_abc", "hot", {"score": 0.5}
                 )
-                mark_posthoc_label(db, eid, label, "useful_improved_quality")
+                _set_posthoc_label(db, eid, label, "useful_improved_quality")
 
             # One event without label (should not count)
             create_fire_event(db, rule, "session_1", "hash_abc", "hot", {"score": 0.5})
@@ -312,7 +301,7 @@ class TestCountEvaluatedFireEvents:
             eid = create_fire_event(
                 db, rule, "session_1", "hash_abc", "hot", {"score": 0.5}
             )
-            mark_posthoc_label(db, eid, "observed_useful", "useful_improved_quality")
+            _set_posthoc_label(db, eid, "observed_useful", "useful_improved_quality")
             # Backdate the event to 60 days ago
             old_ts = _utcnow_iso(-60)
             with db.transaction() as tx:

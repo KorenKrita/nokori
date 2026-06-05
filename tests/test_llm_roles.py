@@ -6,7 +6,6 @@ import pytest
 from nokori.cold.roles import (
     ROLE_IDS,
     ROLE_SCHEMAS,
-    job_key,
     resolve_model_id,
     validate_role_output,
 )
@@ -126,24 +125,6 @@ class TestResolveModelId:
             default_model=None,
         )
         assert result == "gpt-4o"
-
-
-# --- Test: job_key ---
-
-
-class TestJobKey:
-    def test_format(self):
-        key = job_key("extractor", "gpt-4o", "abc123")
-        assert key == "extractor:1.0.0:gpt-4o:abc123"
-
-    def test_different_roles_produce_different_keys(self):
-        k1 = job_key("extractor", "m", "h")
-        k2 = job_key("final_judge", "m", "h")
-        assert k1 != k2
-
-    def test_unknown_role_raises(self):
-        with pytest.raises(ValueError, match="unknown role"):
-            job_key("bogus", "model", "hash")
 
 
 # --- Test: validate_role_output ---

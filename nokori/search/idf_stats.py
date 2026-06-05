@@ -16,7 +16,6 @@ from ..db import loads_json
 from ..policy import (
     DYNAMIC_IDF_NORMAL,
     DYNAMIC_IDF_SMALL_POOL,
-    IDF_MAX_SHADOW,
     SMALL_POOL_THRESHOLD,
 )
 from .tokenizer import tokenize
@@ -358,65 +357,3 @@ def store_idf_stats(db, idf_stats: IdfPoolStats) -> None:
         )
 
 
-def compute_shadow_idf(token: str, idf_stats: IdfPoolStats) -> float:
-    """Compute shadow IDF for a token, clamped to IDF_MAX_SHADOW.
-
-    For candidate/suppressed shadow scoring. Prevents novelty from becoming
-    unbounded evidence.
-
-    Args:
-        token: A single trigger token.
-        idf_stats: Pre-computed IDF pool statistics.
-
-    Returns:
-        Clamped IDF value. Returns 0.0 if pool is empty.
-    """
-    n = idf_stats.rule_pool_size
-    if n == 0:
-        return 0.0
-
-    df_t = idf_stats.df_by_token.get(token, 0)
-    df_effective = max(1, df_t)
-    raw = math.log(1 + (n - df_effective + 0.5) / (df_effective + 0.5))
-    return min(raw, IDF_MAX_SHADOW)
-
-
-# ---------------------------------------------------------------------------
-# Small pool requirements
-# ---------------------------------------------------------------------------
-
-
-def get_small_pool_requirements(n: int) -> dict:
-    """Returns trigger requirements based on pool size N.
-
-    Args:
-        n: Number of rules in the eligible pool.
-
-    Returns:
-        Dict with trigger_coverage_min, distinct_trigger_terms_min,
-        requires_strong_evidence keys.
-    """
-    if n == 0:
-        return {
-            "trigger_coverage_min": None,
-            "distinct_trigger_terms_min": None,
-            "requires_strong_evidence": True,
-            "dynamic_idf_available": False,
-        }
-
-    if n < SMALL_POOL_THRESHOLD:
-        policy = DYNAMIC_IDF_SMALL_POOL
-        return {
-            "trigger_coverage_min": policy.trigger_coverage_min,
-            "distinct_trigger_terms_min": policy.distinct_trigger_terms_min,
-            "requires_strong_evidence": True,
-            "dynamic_idf_available": True,
-        }
-
-    policy = DYNAMIC_IDF_NORMAL
-    return {
-        "trigger_coverage_min": policy.trigger_coverage_min,
-        "distinct_trigger_terms_min": policy.distinct_trigger_terms_min,
-        "requires_strong_evidence": False,
-        "dynamic_idf_available": True,
-    }

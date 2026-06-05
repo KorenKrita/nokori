@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-import os
 import tomllib
 from pathlib import Path
 from typing import Any
@@ -86,10 +85,6 @@ def list_set_paths(doc: dict[str, Any], prefix: tuple[str, ...] = ()) -> set[str
 
 def env_keys_for_path(path: tuple[str, ...]) -> list[str]:
     return [env for keys, env in _TOML_TO_ENV.items() if keys == path]
-
-
-def env_overrides() -> set[str]:
-    return {name for name in os.environ if name.startswith("NOKORI_")}
 
 
 def _format_toml_value(value: Any) -> str:

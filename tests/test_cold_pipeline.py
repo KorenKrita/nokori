@@ -31,7 +31,6 @@ from nokori.cold.jobs import (
     enqueue_transcript_ingest,
     expire_stale_ingest_jobs,
     get_cached_output,
-    get_pending_ingest_jobs,
     is_circuit_breaker_open,
     mark_job_complete,
     mark_job_failed,
@@ -406,10 +405,11 @@ class TestTranscriptIngestTTL:
         )
         assert job_id is not None
 
-        # Job should appear in pending list
-        pending = get_pending_ingest_jobs(db)
-        assert len(pending) == 1
-        assert pending[0]["id"] == job_id
+        # Job should exist in pending state
+        row = db.fetchone(
+            "SELECT status FROM transcript_ingest_jobs WHERE id = ?", (job_id,)
+        )
+        assert row["status"] == "pending"
 
     def test_expired_jobs_get_marked_expired(self, db: Db):
         """Jobs past TTL are expired without producing rules."""
@@ -434,9 +434,11 @@ class TestTranscriptIngestTTL:
         row = db.fetchone("SELECT COUNT(*) AS n FROM rules")
         assert row["n"] == 0
 
-        # Job should no longer appear in pending list
-        pending = get_pending_ingest_jobs(db)
-        assert len(pending) == 0
+        # Job should no longer be in pending state
+        row = db.fetchone(
+            "SELECT status FROM transcript_ingest_jobs WHERE id = ?", (job_id,)
+        )
+        assert row["status"] == "expired"
 
 
 # ---------------------------------------------------------------------------

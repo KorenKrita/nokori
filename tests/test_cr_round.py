@@ -1,7 +1,7 @@
 """Code-review round: regression tests for reported issues."""
 
 from nokori.config import Config
-from nokori.db import open_db, log_injections_batch
+from nokori.db import open_db
 from nokori.models import Rule
 from nokori.search import bm25
 from nokori.utils.time import now_iso
@@ -9,7 +9,7 @@ from nokori.utils.time import now_iso
 
 def test_bm25_index_cache_ignores_updated_at(monkeypatch, tmp_path):
     monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
-    bm25.clear_index_cache()
+    bm25._INDEX_CACHE.clear()
     now = now_iso()
     rule = Rule(
         id="r1",
@@ -67,34 +67,6 @@ def test_export_atomic_replace(tmp_path, monkeypatch):
         )
         assert target.exists()
         assert not target.with_suffix(target.suffix + ".tmp").exists()
-    finally:
-        db.close()
-
-
-def test_hot_injection_creates_fire_event(monkeypatch, tmp_path):
-    """log_injections_batch creates fire events (replaced old hit_count logic)."""
-    monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
-    db = open_db(Config.from_env().db_path)
-    try:
-        now = now_iso()
-        with db.transaction() as tx:
-            tx.execute(
-                "INSERT INTO rules (id, short_id, schema_version, rule_version, "
-                "created_by_pipeline_version, runtime_policy_version, "
-                "trigger_canonical, action_instruction, "
-                "status, severity, project_scope, project_id, "
-                "created_at, updated_at) "
-                "VALUES (?,?,1,1,'v1','v1',?,?,?,?,?,?,?,?)",
-                (
-                    "id1", "abcd12", "t", "a", "active", "reminder",
-                    "global", None, now, now,
-                ),
-            )
-        log_injections_batch(db, "sess", "phash", [("id1", "hot")], now)
-        row = db.fetchone(
-            "SELECT COUNT(*) AS n FROM rule_fire_events WHERE rule_id = 'id1'"
-        )
-        assert row["n"] >= 1
     finally:
         db.close()
 

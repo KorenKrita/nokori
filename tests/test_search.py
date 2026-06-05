@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from nokori.models import Rule
 from nokori.models import ScoredResult
 from nokori.runtime.applicability import meets_min_evidence
-from nokori.runtime.selection import tier_results
+from nokori.runtime.selection import select_injection
 from nokori.search import bm25, ranker
 
 
@@ -66,9 +66,9 @@ def test_tier_hot_when_top1_dominant():
     ]
     bm = bm25.search("git push --force my branch", rules)
     fused = ranker.rrf_fuse(bm, [])
-    hot, warm = tier_results(fused)
-    assert hot
-    assert hot[0].rule.short_id == "aaa111"
+    sel = select_injection(fused, max_injection_chars=1500)
+    assert sel.hot
+    assert sel.hot[0].rule.short_id == "aaa111"
 
 
 def test_tier_preserves_ranked_results_before_status_filtering():
@@ -79,8 +79,8 @@ def test_tier_preserves_ranked_results_before_status_filtering():
     ]
     bm = bm25.search("git push --force", rules)
     fused = ranker.rrf_fuse(bm, [])
-    hot, warm = tier_results(fused)
-    all_results = hot + warm
+    sel = select_injection(fused, max_injection_chars=1500)
+    all_results = sel.hot + sel.warm
     assert any(r.rule.short_id == "aaa111" for r in all_results)
 
 
@@ -92,9 +92,9 @@ def test_tier_min_evidence_blocks_single_token_match():
     bm = bm25.search("thing", rules)
     fused = ranker.rrf_fuse(bm, [])
     eligible = [r for r in fused if meets_min_evidence(r)]
-    hot, warm = tier_results(eligible)
-    assert hot == []
-    assert warm == []
+    sel = select_injection(eligible, max_injection_chars=1500)
+    assert sel.hot == []
+    assert sel.warm == []
 
 
 def test_meets_min_evidence_does_not_use_fixed_cosine_threshold():
@@ -156,7 +156,7 @@ def test_perf_500_rules_under_50ms():
 
 def test_bm25_matches_chinese_trigger_zh():
     """trigger_canonical_zh content is indexed and searchable via BM25."""
-    bm25.clear_index_cache()
+    bm25._INDEX_CACHE.clear()
     rules = [
         _rule("zh001", "Force push to shared branch",
               trigger_canonical_zh="强制推送到共享分支",

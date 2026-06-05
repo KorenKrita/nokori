@@ -292,17 +292,3 @@ def select_injection(
     return SelectionResult(hot=hot, warm=warm, shadow_matches=shadow_matches)
 
 
-# ---------------------------------------------------------------------------
-# Legacy convenience wrapper
-# ---------------------------------------------------------------------------
-
-_DEFAULT_INJECTION_CHARS = 1500
-
-
-def tier_results(
-    results: list[ScoredResult],
-    max_injection_chars: int = _DEFAULT_INJECTION_CHARS,
-) -> tuple[list[ScoredResult], list[ScoredResult]]:
-    """Legacy wrapper returning (hot, warm) tuple from select_injection."""
-    sel = select_injection(results, max_injection_chars=max_injection_chars)
-    return sel.hot, sel.warm

@@ -62,10 +62,6 @@ def _claim_path(cfg: Config, key: str) -> Path:
     return cfg.data_dir / "hook_coalesce" / f"{digest}.json"
 
 
-def is_claimed(cfg: Config, key: str) -> bool:
-    return _claim_path(cfg, key).is_file()
-
-
 def try_claim(cfg: Config, key: str, *, cli_event: str = "") -> bool:
     """Return True if this process won the claim (should run hook logic)."""
     if not coalesce_enabled():

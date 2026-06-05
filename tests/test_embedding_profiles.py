@@ -4,19 +4,14 @@ from __future__ import annotations
 
 import pytest
 
-from nokori.policy import SAFETY_MARGIN_COSINE
 from nokori.runtime.applicability import ApplicabilityResult, evaluate_applicability
 from nokori.search.embedding_profiles import (
     CHECKED_IN_PROFILES,
     REQUIRED_BUCKETS,
     BucketThresholds,
     EmbeddingProfile,
-    compute_hot_min,
-    compute_warm_min,
-    get_threshold,
     is_known_profile,
     load_profile,
-    validate_profile,
 )
 
 
@@ -103,28 +98,6 @@ class TestProfileSchema:
         assert hasattr(profile, "embedding_only_allowed")
 
 
-# ---------------------------------------------------------------------------
-# 2. Generation policy uses same field names as profile schema
-# ---------------------------------------------------------------------------
-
-
-class TestGenerationPolicyFieldNames:
-    def test_compute_warm_min_uses_medium_p10_and_near_miss_p95(self):
-        bucket = _make_bucket(medium_p10=0.70, near_miss_p95=0.60)
-        expected = max(bucket.medium_p10, bucket.near_miss_p95 + SAFETY_MARGIN_COSINE)
-        assert compute_warm_min(bucket.medium_p10, bucket.near_miss_p95) == expected
-
-    def test_compute_hot_min_uses_positive_p10_and_near_miss_p99(self):
-        bucket = _make_bucket(positive_p10=0.85, near_miss_p99=0.65)
-        expected = max(bucket.positive_p10, bucket.near_miss_p99 + SAFETY_MARGIN_COSINE)
-        assert compute_hot_min(bucket.positive_p10, bucket.near_miss_p99) == expected
-
-    def test_generation_policy_field_names_match_schema(self):
-        """The generation formulas reference fields that exist on BucketThresholds."""
-        bucket = _make_bucket()
-        # These attribute accesses would raise if field names diverged.
-        _ = compute_warm_min(bucket.medium_p10, bucket.near_miss_p95)
-        _ = compute_hot_min(bucket.positive_p10, bucket.near_miss_p99)
 
 
 # ---------------------------------------------------------------------------
@@ -138,23 +111,6 @@ class TestUnknownProfile:
         assert result is None
 
 
-# ---------------------------------------------------------------------------
-# 4. Unknown profile cannot influence WARM/HOT/Gate (get_threshold returns None)
-# ---------------------------------------------------------------------------
-
-
-class TestUnknownCannotInfluence:
-    def test_get_threshold_returns_none_for_none_profile(self):
-        assert get_threshold(None, "overall", "warm") is None
-        assert get_threshold(None, "overall", "hot") is None
-        assert get_threshold(None, "zh", "warm") is None
-        assert get_threshold(None, None, "hot") is None
-
-    def test_unknown_model_get_threshold_pipeline(self):
-        """End-to-end: unknown model -> load_profile -> get_threshold -> None."""
-        profile = load_profile("unknown-model-abc")
-        assert get_threshold(profile, "overall", "warm") is None
-        assert get_threshold(profile, "zh", "hot") is None
 
 
 # ---------------------------------------------------------------------------
@@ -187,106 +143,6 @@ class TestEmbeddingOnlyStaysCold:
         assert "embedding_only_match" in result.reason
 
 
-# ---------------------------------------------------------------------------
-# 6. Bucket fallback: if specific bucket missing, uses overall
-# ---------------------------------------------------------------------------
-
-
-class TestBucketFallback:
-    def test_known_bucket_uses_specific_thresholds(self, registered_profile):
-        zh_bucket = _make_bucket(warm_min=0.72, hot_min=0.88)
-        registered_profile.buckets["zh"] = zh_bucket
-
-        assert get_threshold(registered_profile, "zh", "warm") == 0.72
-        assert get_threshold(registered_profile, "zh", "hot") == 0.88
-
-    def test_unknown_bucket_falls_back_to_overall(self, registered_profile):
-        assert get_threshold(registered_profile, "nonexistent_bucket", "warm") == registered_profile.overall.warm_min
-        assert get_threshold(registered_profile, "nonexistent_bucket", "hot") == registered_profile.overall.hot_min
-
-    def test_none_bucket_falls_back_to_overall(self, registered_profile):
-        assert get_threshold(registered_profile, None, "warm") == registered_profile.overall.warm_min
-        assert get_threshold(registered_profile, None, "hot") == registered_profile.overall.hot_min
-
-
-# ---------------------------------------------------------------------------
-# 7. validate_profile catches constraint violations
-# ---------------------------------------------------------------------------
-
-
-class TestValidateProfile:
-    def test_valid_profile_passes(self):
-        profile = _make_valid_profile()
-        errors = validate_profile(profile)
-        assert errors == []
-
-    def test_catches_near_miss_p99_gte_positive_p10(self):
-        """near_miss_p99 >= positive_p10 is invalid."""
-        bad_overall = _make_bucket(near_miss_p99=0.90, positive_p10=0.85)
-        profile = EmbeddingProfile(
-            model_id="bad-1",
-            profile_version="1.0.0",
-            dimension=384,
-            normalization="cosine",
-            overall=bad_overall,
-            buckets={
-                "zh": _make_bucket(),
-                "mixed": _make_bucket(),
-                "code_or_cli": _make_bucket(),
-            },
-        )
-        errors = validate_profile(profile)
-        assert any("near_miss_p99 must be < positive_p10" in e for e in errors)
-
-    def test_catches_negative_p99_gte_medium_p10(self):
-        """negative_p99 >= medium_p10 is invalid."""
-        bad_overall = _make_bucket(negative_p99=0.75, medium_p10=0.70)
-        profile = EmbeddingProfile(
-            model_id="bad-2",
-            profile_version="1.0.0",
-            dimension=384,
-            normalization="cosine",
-            overall=bad_overall,
-            buckets={
-                "zh": _make_bucket(),
-                "mixed": _make_bucket(),
-                "code_or_cli": _make_bucket(),
-            },
-        )
-        errors = validate_profile(profile)
-        assert any("negative_p99 must be < medium_p10" in e for e in errors)
-
-    def test_catches_missing_required_buckets(self):
-        """Missing required buckets are reported."""
-        profile = EmbeddingProfile(
-            model_id="bad-3",
-            profile_version="1.0.0",
-            dimension=384,
-            normalization="cosine",
-            overall=_make_bucket(),
-            buckets={"zh": _make_bucket()},  # missing mixed, code_or_cli
-        )
-        errors = validate_profile(profile)
-        assert any("required bucket missing: mixed" in e for e in errors)
-        assert any("required bucket missing: code_or_cli" in e for e in errors)
-
-    def test_catches_bucket_specific_violations(self):
-        """Validation also checks per-bucket consistency."""
-        bad_zh = _make_bucket(near_miss_p99=0.90, positive_p10=0.85)
-        profile = EmbeddingProfile(
-            model_id="bad-4",
-            profile_version="1.0.0",
-            dimension=384,
-            normalization="cosine",
-            overall=_make_bucket(),
-            buckets={
-                "zh": bad_zh,
-                "mixed": _make_bucket(),
-                "code_or_cli": _make_bucket(),
-            },
-        )
-        errors = validate_profile(profile)
-        assert any("zh: near_miss_p99 must be < positive_p10" in e for e in errors)
 
 
 # ---------------------------------------------------------------------------

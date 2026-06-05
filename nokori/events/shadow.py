@@ -90,39 +90,6 @@ def create_shadow_event(
     return event_id
 
 
-def get_shadow_events_for_rule(
-    db: Db,
-    rule_id: str,
-    *,
-    compatible_version: int | None = None,
-    window_days: int | None = None,
-) -> list[dict]:
-    """Fetch shadow events for a rule.
-
-    If compatible_version is specified, only events with matching shadow_rule_version
-    are returned (per section 12: promotion counts only version-compatible evidence).
-    """
-    where = ["rule_id = ?"]
-    params: list = [rule_id]
-
-    if compatible_version is not None:
-        where.append("shadow_rule_version = ?")
-        params.append(compatible_version)
-
-    if window_days is not None:
-        cutoff = _days_ago_iso(window_days)
-        where.append("created_at >= ?")
-        params.append(cutoff)
-
-    sql = (
-        "SELECT * FROM rule_shadow_events WHERE "
-        + " AND ".join(where)
-        + " ORDER BY created_at DESC"
-    )
-    rows = db.fetchall(sql, tuple(params))
-    return [dict(r) for r in rows]
-
-
 def count_shadow_evidence(
     db: Db,
     rule_id: str,

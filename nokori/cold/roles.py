@@ -517,19 +517,6 @@ def _normalize_role_output(role: str, data: dict[str, Any]) -> dict[str, Any]:
 parse_role_output = validate_role_output
 
 
-# --- Idempotency Key ---
-
-
-def job_key(role: str, model_id: str, input_hash: str) -> str:
-    """Deterministic job key for deduplication and caching.
-
-    Format: role:prompt_version:model_id:input_hash
-    """
-    if role not in PROMPT_VERSIONS:
-        raise ValueError(f"unknown role: {role}")
-    return f"{role}:{PROMPT_VERSIONS[role]}:{model_id}:{input_hash}"
-
-
 # --- Role Model Resolution ---
 
 PROVIDER_DEFAULT_MODEL: str = "claude-sonnet-4-6"

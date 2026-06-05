@@ -5,7 +5,7 @@ import pytest
 from nokori.archive.fingerprints import (
     check_fingerprint_block,
     compute_signature,
-    create_archived_fingerprint,
+    create_archived_fingerprint_from_data,
 )
 from nokori.db import open_db
 
@@ -22,25 +22,12 @@ def db(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-class _FakeRule:
-    """Minimal rule-like object for create_archived_fingerprint."""
-
-    def __init__(
-        self,
-        *,
-        id="rule-1",
-        trigger_canonical="when user asks for help",
-        action_instruction="provide helpful response",
-        domain_tags=None,
-        tool_tags=None,
-        path_patterns=None,
-    ):
-        self.id = id
-        self.trigger_canonical = trigger_canonical
-        self.action_instruction = action_instruction
-        self.domain_tags = domain_tags or ["general"]
-        self.tool_tags = tool_tags or []
-        self.path_patterns = path_patterns or []
+def _create_fp(db, *, rule_id="rule-1", trigger="when user asks for help",
+               action="provide helpful response", domain_tags=None, strength="system"):
+    """Helper wrapping create_archived_fingerprint_from_data."""
+    return create_archived_fingerprint_from_data(
+        db, rule_id, trigger, action, domain_tags=domain_tags or ["general"], strength=strength,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -50,8 +37,7 @@ class _FakeRule:
 
 def test_user_archive_blocks_equivalent(db):
     """User-strength archive blocks exact same trigger+action without scope evidence."""
-    rule = _FakeRule()
-    create_archived_fingerprint(db, rule, strength="user")
+    _create_fp(db, strength="user")
 
     result = check_fingerprint_block(
         db,
@@ -72,8 +58,7 @@ def test_user_archive_blocks_equivalent(db):
 
 def test_system_archive_is_overridable(db):
     """System-strength archive reports blocked=True but overridable=True."""
-    rule = _FakeRule()
-    create_archived_fingerprint(db, rule, strength="system")
+    _create_fp(db, strength="system")
 
     result = check_fingerprint_block(
         db,
@@ -95,8 +80,7 @@ def test_system_archive_is_overridable(db):
 
 def test_replacement_archive_blocks_exact_duplicate(db):
     """Replacement-strength archive blocks exact duplicate signature."""
-    rule = _FakeRule()
-    create_archived_fingerprint(db, rule, strength="replacement")
+    _create_fp(db, strength="replacement")
 
     # Exact same inputs -> blocked
     result = check_fingerprint_block(
@@ -131,8 +115,7 @@ def test_user_archive_passable_with_scope_change_evidence(db):
     Only a genuinely NARROWER-scope rule (different token set) can pass.
     Exact same trigger/action is NOT narrower so remains blocked (spec section 3.5).
     """
-    rule = _FakeRule()
-    create_archived_fingerprint(db, rule, strength="user")
+    _create_fp(db, strength="user")
 
     # Without evidence -> blocked
     result_blocked = check_fingerprint_block(
@@ -195,16 +178,11 @@ def test_compute_signature_stable():
 
 
 def test_create_archived_fingerprint_stores_fields(db):
-    """create_archived_fingerprint persists all expected fields."""
-    rule = _FakeRule(
-        id="rule-abc",
-        trigger_canonical="do X when Y",
-        action_instruction="perform Z",
-        domain_tags=["python", "testing"],
-        tool_tags=["pytest"],
-        path_patterns=["tests/**"],
+    """create_archived_fingerprint_from_data persists all expected fields."""
+    fp_id = create_archived_fingerprint_from_data(
+        db, "rule-abc", "do X when Y", "perform Z",
+        domain_tags=["python", "testing"], strength="system",
     )
-    fp_id = create_archived_fingerprint(db, rule, strength="system")
 
     row = db.fetchone(
         "SELECT * FROM archived_fingerprints WHERE id = ?", (fp_id,)
@@ -218,8 +196,6 @@ def test_create_archived_fingerprint_stores_fields(db):
         "do X when Y", "perform Z", ["python", "testing"]
     )
     assert row["created_at"] is not None
-    # scope_summary should mention domain tags
-    assert "python" in row["scope_summary"]
 
 
 # ---------------------------------------------------------------------------

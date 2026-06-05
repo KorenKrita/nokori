@@ -538,83 +538,6 @@ def fetch_shadow_rules(db: "Db", *, project_id: str | None) -> list:
     return [row_to_rule(r) for r in rows]
 
 
-def log_injections_batch(
-    db: "Db",
-    session_id: str,
-    prompt_hash: str,
-    entries: list[tuple[str, str]],
-    now: str,
-    *,
-    rules_by_id: dict | None = None,
-    decision_features_by_id: dict | None = None,
-    turn_index: int | None = None,
-    idf_pool_version: str | None = None,
-    runtime_policy_version: str | None = None,
-    embedding_profile_version: str | None = None,
-) -> None:
-    """Log fire events for injected rules with full snapshots per spec section 10.
-
-    entries: list of (rule_id, level) tuples.
-    rules_by_id: optional dict mapping rule_id -> rule row/object for snapshot extraction.
-    """
-    if not entries:
-        return
-    import uuid
-    from .policy import RUNTIME_POLICY_VERSION as RPV
-
-    rpv = runtime_policy_version or RPV
-    rules_map = rules_by_id or {}
-    features_map = decision_features_by_id or {}
-
-    with db.transaction() as tx:
-        for rule_id, level in entries:
-            event_id = str(uuid.uuid4())
-            rule = rules_map.get(rule_id)
-
-            trigger_snapshot = ""
-            action_snapshot = ""
-            rule_version = None
-            structured_snapshot = None
-
-            if rule is not None:
-                trigger_snapshot = getattr(rule, "trigger_canonical", "") or (rule.get("trigger_canonical", "") if isinstance(rule, dict) else "")
-                action_snapshot = getattr(rule, "action_instruction", "") or (rule.get("action_instruction", "") if isinstance(rule, dict) else "")
-                rule_version = getattr(rule, "rule_version", None) or (rule.get("rule_version") if isinstance(rule, dict) else None)
-                # Build structured snapshot for version-pinned evidence
-                _concepts = getattr(rule, "concepts", None) or (rule.get("concepts") if isinstance(rule, dict) else None)
-                _groups = getattr(rule, "required_concept_groups", None) or (rule.get("required_concept_groups") if isinstance(rule, dict) else None)
-                _excluded = getattr(rule, "excluded_contexts", None) or (rule.get("excluded_contexts") if isinstance(rule, dict) else None)
-                structured_snapshot = dumps_json({
-                    "concepts": loads_json(_concepts, []) if isinstance(_concepts, str) else (_concepts or []),
-                    "required_concept_groups": loads_json(_groups, []) if isinstance(_groups, str) else (_groups or []),
-                    "excluded_contexts": loads_json(_excluded, []) if isinstance(_excluded, str) else (_excluded or []),
-                })
-
-            decision_features = features_map.get(rule_id)
-            features_json = dumps_json(decision_features) if decision_features else None
-
-            tx.execute(
-                "INSERT INTO rule_fire_events "
-                "(id, rule_id, session_id, injected_rule_version, "
-                "injected_trigger_snapshot, injected_action_snapshot, "
-                "injected_structured_snapshot, "
-                "trigger_idf_pool_version, runtime_policy_version, "
-                "embedding_profile_version, "
-                "prompt_hash, turn_index, level, decision_features, created_at) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                (
-                    event_id, rule_id, session_id, rule_version,
-                    trigger_snapshot, action_snapshot, structured_snapshot,
-                    idf_pool_version, rpv, embedding_profile_version,
-                    prompt_hash, turn_index, level, features_json, now,
-                ),
-            )
-            tx.execute(
-                "UPDATE rules SET updated_at = ? WHERE id = ?",
-                (now, rule_id),
-            )
-
-
 def find_rule_id_by_injection(
     db: "Db", short_id: str, since_iso: str, *, session_id: str | None = None
 ) -> str | None:
@@ -699,7 +622,3 @@ def _delete_rule_cascade_tx(tx, rule_id: str) -> None:
     tx.execute("DELETE FROM rules WHERE id = ?", (rule_id,))
 
 
-def delete_rule_cascade(db: "Db", rule_id: str) -> None:
-    """Remove rule and dependent rows (foreign_keys=ON)."""
-    with db.transaction() as tx:
-        _delete_rule_cascade_tx(tx, rule_id)

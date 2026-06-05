@@ -9,7 +9,7 @@ from nokori.gate.blocker import format_injection
 from nokori.gate.marker import is_expired, strip_short_id_from_all_markers, Marker, MarkerRule
 from nokori.lifecycle.maintenance import _days_since_iso
 from nokori.models import Rule, ScoredResult
-from nokori.runtime.selection import tier_results
+from nokori.runtime.selection import select_injection
 
 
 def test_days_since_iso_clamps_negative():
@@ -103,6 +103,6 @@ def test_tier_singleton_requires_strong_match():
         rrf_score=0.008,
         matched_trigger_tokens=frozenset({"ab", "cd"}),
     )
-    hot, warm = tier_results([weak])
-    assert hot == []
-    assert len(warm) == 1
+    sel = select_injection([weak], max_injection_chars=1500)
+    assert sel.hot == []
+    assert len(sel.warm) == 1

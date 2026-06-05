@@ -119,21 +119,3 @@ def test_hook_search_skips_embed_when_server_not_ready(monkeypatch, tmp_path):
         db.close()
 
 
-def test_sessions_active_idle(monkeypatch, tmp_path):
-    monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
-    monkeypatch.setenv("NOKORI_SESSION_IDLE_SECONDS", "60")
-    cfg = Config.from_env()
-    from nokori.utils import sessions
-    sessions.register(cfg, "s1", "proj")
-    assert sessions.count_active_sessions(cfg) == 1
-    sessions.end(cfg, "s1")
-    assert sessions.count_active_sessions(cfg) == 0
-
-    sessions.register(cfg, "s2", "proj")
-    data = json.loads((cfg.sessions_dir / "s2.json").read_text(encoding="utf-8"))
-    data["last_activity"] = "2000-01-01T00:00:00Z"
-    (cfg.sessions_dir / "s2.json").write_text(json.dumps(data), encoding="utf-8")
-    assert sessions.count_active_sessions(cfg) == 0
-
-    sessions.touch(cfg, "s3")
-    assert sessions.count_active_sessions(cfg, exclude_session="other") >= 1

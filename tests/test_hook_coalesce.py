@@ -10,10 +10,10 @@ import pytest
 from nokori.config import Config
 from nokori.hooks import dispatch
 from nokori.hooks.coalesce import (
+    _claim_path,
     claim_key_for_event,
     coalesce_enabled,
     duplicate_passthrough,
-    is_claimed,
     prune_stale_claims,
     try_claim,
 )
@@ -104,7 +104,7 @@ def test_prune_stale_claims(cfg):
     try_claim(cfg, fresh_key, cli_event="session-start")
     assert prune_stale_claims(cfg, max_age_hours=24) >= 1
     assert not stale.exists()
-    assert is_claimed(cfg, fresh_key)
+    assert _claim_path(cfg, fresh_key).is_file()
 
 
 def test_coalesce_enabled_default(monkeypatch):

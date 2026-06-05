@@ -252,20 +252,6 @@ def enqueue_transcript_ingest(
     return job_id
 
 
-def get_pending_ingest_jobs(db: Db, limit: int = 10) -> list[dict]:
-    """Fetch pending transcript ingest jobs within TTL."""
-    now = _now_iso()
-    rows = db.fetchall(
-        "SELECT id, transcript_segment_ref, segment_hash, "
-        "extractor_prompt_version, retries, ttl_expires_at, created_at "
-        "FROM transcript_ingest_jobs "
-        "WHERE status = 'pending' AND ttl_expires_at > ? "
-        "ORDER BY created_at ASC LIMIT ?",
-        (now, limit),
-    )
-    return [dict(r) for r in rows]
-
-
 def expire_stale_ingest_jobs(db: Db) -> int:
     """Mark expired transcript ingest jobs as 'expired'. Return count."""
     now = _now_iso()
@@ -287,34 +273,3 @@ def expire_stale_ingest_jobs(db: Db) -> int:
     return len(ids)
 
 
-# --- General Pending Job Query ---
-
-
-def get_pending_jobs(db: Db, role: str | None = None, limit: int = 10) -> list[dict]:
-    """Fetch pending llm_jobs ready for retry.
-
-    Returns jobs that are pending with no next_retry_at, or whose
-    next_retry_at has passed.
-    """
-    now = _now_iso()
-    if role is not None:
-        rows = db.fetchall(
-            "SELECT id, role, model_id, prompt_version, input_hash, "
-            "retries, next_retry_at, created_at "
-            "FROM llm_jobs "
-            "WHERE role = ? AND status IN ('pending', 'failed') "
-            "AND (next_retry_at IS NULL OR next_retry_at <= ?) "
-            "ORDER BY created_at ASC LIMIT ?",
-            (role, now, limit),
-        )
-    else:
-        rows = db.fetchall(
-            "SELECT id, role, model_id, prompt_version, input_hash, "
-            "retries, next_retry_at, created_at "
-            "FROM llm_jobs "
-            "WHERE status IN ('pending', 'failed') "
-            "AND (next_retry_at IS NULL OR next_retry_at <= ?) "
-            "ORDER BY created_at ASC LIMIT ?",
-            (now, limit),
-        )
-    return [dict(r) for r in rows]

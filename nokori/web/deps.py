@@ -5,7 +5,6 @@ import secrets
 from fastapi import HTTPException, Request
 
 from nokori.config import Config
-from nokori.db import Db, open_db
 
 _cfg: Config | None = None
 
@@ -19,11 +18,6 @@ def get_config() -> Config:
     if _cfg is None:
         raise RuntimeError("config not initialized")
     return _cfg
-
-
-def get_db() -> Db:
-    cfg = get_config()
-    return open_db(cfg.db_path)
 
 
 WRITE_AUTH_COOKIE = "nokori_web_token"

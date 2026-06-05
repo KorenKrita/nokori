@@ -2,8 +2,8 @@
 
 | API | Meaning |
 |-----|---------|
-| `count_open_sessions` | `ended_at` unset — used by SessionEnd extract defer |
-| `count_active_sessions` / `list_active_sessions` | open + activity within `session_idle_seconds` — status UI |
+| `is_session_open` | `ended_at` unset — used by SessionEnd extract defer |
+| `list_active_sessions` | open + activity within `session_idle_seconds` — status UI |
 """
 from __future__ import annotations
 
@@ -49,20 +49,6 @@ def register(
     if project_id_from_git is not None:
         payload["project_id_from_git"] = project_id_from_git
     atomic_write_json(_path_for(cfg, session_id), payload)
-
-
-def get_project_id(cfg: Config, session_id: str) -> str | None:
-    """Cached project_id from SessionStart (avoids git on every UserPromptSubmit)."""
-    data = _read_record(cfg, session_id)
-    if data is None:
-        return None
-    pid = data.get("project_id")
-    return str(pid) if pid else None
-
-
-def get_project_id_from_git(cfg: Config, session_id: str) -> bool:
-    data = _read_record(cfg, session_id)
-    return bool(data.get("project_id_from_git")) if data else False
 
 
 def resolve_project_id_for_session(
@@ -138,21 +124,6 @@ def is_session_open(data: dict) -> bool:
     return not data.get("ended_at")
 
 
-def count_open_sessions(
-    cfg: Config,
-    *,
-    exclude_session: str | None = None,
-) -> int:
-    n = 0
-    for data in list_session_records(cfg):
-        sid = data.get("session_id")
-        if exclude_session and sid == exclude_session:
-            continue
-        if is_session_open(data):
-            n += 1
-    return n
-
-
 def is_active_record(
     data: dict,
     *,
@@ -183,25 +154,6 @@ def list_session_records(cfg: Config) -> list[dict]:
         data["_path"] = str(path)
         rows.append(data)
     return rows
-
-
-def count_active_sessions(
-    cfg: Config,
-    *,
-    exclude_session: str | None = None,
-    idle_seconds: int | None = None,
-) -> int:
-    """Count open sessions with recent activity (status UI; not used for extract defer)."""
-    idle = idle_seconds if idle_seconds is not None else cfg.session_idle_seconds
-    now = datetime.now(timezone.utc)
-    n = 0
-    for data in list_session_records(cfg):
-        sid = data.get("session_id")
-        if exclude_session and sid == exclude_session:
-            continue
-        if is_active_record(data, idle_seconds=idle, now=now):
-            n += 1
-    return n
 
 
 def list_active_sessions(

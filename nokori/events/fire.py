@@ -75,23 +75,6 @@ def create_fire_event(
     return event_id
 
 
-def mark_posthoc_label(
-    db: Db,
-    fire_event_id: str,
-    label: str,
-    reason_code: str,
-    score: float | None = None,
-) -> None:
-    """Update a fire event with posthoc evaluation results."""
-    with db.transaction() as tx:
-        tx.execute(
-            "UPDATE rule_fire_events "
-            "SET posthoc_label = ?, posthoc_reason_code = ?, posthoc_score = ? "
-            "WHERE id = ?",
-            (label, reason_code, score, fire_event_id),
-        )
-
-
 def update_first_observed_useful(db: Db, rule_id: str) -> None:
     """Set rules.first_observed_useful_at if NULL and an observed_useful fire event exists."""
     row = db.fetchone(

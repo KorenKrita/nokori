@@ -24,7 +24,7 @@ def test_git_fallback_does_not_overwrite_session_cache(monkeypatch, tmp_path):
         sessions.resolve_project_id_for_session(cfg, sid, "/any/cwd")
         == git_id
     )
-    assert sessions.get_project_id(cfg, sid) == git_id
+    assert sessions.resolve_project_id_for_session(cfg, sid, None) == git_id
 
 
 def test_git_resolved_id_refreshes_when_repo_changes(monkeypatch, tmp_path):
@@ -48,7 +48,7 @@ def test_git_resolved_id_refreshes_when_repo_changes(monkeypatch, tmp_path):
         sessions.resolve_project_id_for_session(cfg, sid, "/other/repo")
         == new_id
     )
-    assert sessions.get_project_id(cfg, sid) == new_id
+    assert sessions.resolve_project_id_for_session(cfg, sid, None) == new_id
 
 
 def test_non_git_cwd_change_refreshes_cache(monkeypatch, tmp_path):
@@ -72,7 +72,7 @@ def test_non_git_cwd_change_refreshes_cache(monkeypatch, tmp_path):
         sessions.resolve_project_id_for_session(cfg, sid, "/other/dir")
         == new_id
     )
-    assert sessions.get_project_id(cfg, sid) == new_id
+    assert sessions.resolve_project_id_for_session(cfg, sid, None) == new_id
 
 
 def test_no_cwd_returns_cached_project_id(monkeypatch, tmp_path):
