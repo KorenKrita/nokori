@@ -617,7 +617,7 @@ def _evaluate_trigger_evidence(
         distinct_min = _NORMAL_DISTINCT_MIN
         absolute_min = _NORMAL_ABSOLUTE_MIN
 
-    trigger_info_min = dynamic_threshold if dynamic_threshold else absolute_min
+    trigger_info_min = max(dynamic_threshold, absolute_min) if dynamic_threshold else absolute_min
 
     # Small pool additionally requires strong_variant OR concepts
     if pool_size < _SMALL_POOL_THRESHOLD:
