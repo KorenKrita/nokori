@@ -304,10 +304,14 @@ def save_editor(
 
         coerced = _coerce_field(field, raw)
         default = field.default
+        file_val = get_nested(doc, field.path)
 
         if _values_equal(field, coerced, default):
             if was_set:
-                removes.append(field.id)
+                # Remove only if user actively changed from a non-default file value.
+                # If file_val == coerced (both are default/empty), nothing changed — skip.
+                if file_val is not None and not _values_equal(field, _coerce_field(field, file_val), default):
+                    removes.append(field.id)
             continue
 
         if not was_set and _values_equal(field, coerced, default):
