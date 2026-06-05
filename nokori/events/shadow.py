@@ -154,7 +154,7 @@ def count_shadow_evidence(
         "SELECT shadow_label, session_id, context_fingerprint, prompt_hash, created_at "
         "FROM rule_shadow_events "
         "WHERE rule_id = ? AND shadow_rule_version = ? "
-        "AND shadow_label IS NOT NULL AND created_at >= ? "
+        "AND shadow_label IS NOT NULL AND shadow_label != 'unclear' AND created_at >= ? "
         f"{type_filter}"
         "ORDER BY created_at DESC LIMIT ?"
     )

@@ -209,12 +209,12 @@ def select_injection(
             u = compute_utility(sr, {}, selected_tokens_list=selected_tokens)
             if u <= 0:
                 continue
-            # Strong evidence per spec: Path A or full Path B
-            # Use the level field if set by applicability (hot/gate = strong evidence confirmed).
-            # Dynamic thresholds use conservative small-pool minimums (strictest gate).
+            # Strong evidence per spec 9.6: Path A or full Path B.
+            # sr.level=='gate' implies strong evidence; sr.level=='hot' does NOT
+            # (trusted rules get hot without strong evidence requirement).
             has_strong_evidence = (
                 (sr.strong_variant_phrase_hit and sr.required_concepts_match)
-                or (sr.level == "hot" or sr.level == "gate")
+                or sr.level == "gate"
                 or (
                     sr.trigger_idf_sum >= DYNAMIC_IDF_SMALL_POOL.absolute_trigger_info_min
                     and sr.trigger_coverage >= DYNAMIC_IDF_SMALL_POOL.trigger_coverage_min

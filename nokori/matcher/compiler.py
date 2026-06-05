@@ -352,6 +352,12 @@ def _compile_alias(
             f"Weak alias '{text}' must have non-empty requires_neighbor"
         )
 
+    if strength == "strong" and match_mode in ("any_alias", "phrase"):
+        if _is_single_generic_token(text):
+            raise CompilationError(
+                f"Strong alias '{text}' cannot be a single generic token"
+            )
+
     text_lower = text.lower()
     compiled_pattern: Optional[re.Pattern[str]] = None
     tokens: tuple[str, ...] = ()

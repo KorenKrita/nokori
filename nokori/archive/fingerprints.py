@@ -225,13 +225,12 @@ def _fingerprint_decision(
         }
 
     # User archive: blocks equivalent/broader. Only NARROWER rules may proceed
-    # when stronger evidence is provided (any non-empty string) AND
-    # (admission_judge_cited or synthetic_eval_passed) AND can_be_overridden (spec 3.5)
+    # when narrower scope + stronger evidence + admission judge cited + can_be_overridden (spec 3.5)
     if strength == "user":
         if (
             is_narrower_scope
             and stronger_evidence
-            and (admission_judge_cited or synthetic_eval_passed)
+            and admission_judge_cited
             and row["can_be_overridden_by_changed_scope"]
         ):
             return None

@@ -165,7 +165,7 @@ def is_circuit_breaker_open(db: Db, role: str, model_id: str | None = None) -> b
             1 for r in provider_rows
             if r["status"] == "failed" and _is_auth_rate_error(r["output_json"])
         )
-        if auth_failures >= 2:
+        if auth_failures >= 1:
             return True
 
     # Type 3: consecutive schema parse failures for this role+prompt_version

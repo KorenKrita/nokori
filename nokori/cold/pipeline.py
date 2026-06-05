@@ -27,7 +27,6 @@ from ..matcher.compiler import CompilationError, CompiledMatcher, compile_rule
 from ..eval.synthetic import SyntheticEvalResult, run_synthetic_eval
 from ..policy import (
     COLD_FAST_LANE,
-    ColdFastLaneThresholds,
     RUNTIME_POLICY_VERSION,
     SourceOrigin,
     ActivationOrigin,
@@ -101,6 +100,8 @@ def run_cold_pipeline(
     *,
     role_models: dict[str, str] | None = None,
     default_model: str | None = None,
+    role_max_tokens: dict[str, int] | None = None,
+    role_timeouts: dict[str, int] | None = None,
     idf_stats: IdfPoolStats | None = None,
     global_adversarial_cases: list[dict[str, Any]] | None = None,
     source_origin: SourceOrigin = "transcript_extraction",
@@ -135,6 +136,7 @@ def run_cold_pipeline(
         return _run_cold_pipeline_inner(
             db, llm, transcript_ref, extractor_output,
             role_models=role_models, default_model=default_model,
+            role_max_tokens=role_max_tokens, role_timeouts=role_timeouts,
             idf_stats=idf_stats, global_adversarial_cases=global_adversarial_cases,
             source_origin=source_origin,
         )
@@ -164,6 +166,8 @@ def _run_cold_pipeline_inner(
     *,
     role_models: dict[str, str] | None = None,
     default_model: str | None = None,
+    role_max_tokens: dict[str, int] | None = None,
+    role_timeouts: dict[str, int] | None = None,
     idf_stats: IdfPoolStats | None = None,
     global_adversarial_cases: list[dict[str, Any]] | None = None,
     source_origin: SourceOrigin = "transcript_extraction",
@@ -182,7 +186,9 @@ def _run_cold_pipeline_inner(
 
     # --- Stage a: Admission Judge ---
     admission_model = resolve_model_id("admission_judge", role_models, default_model)
-    decision, scores = _run_admission_judge(db, llm, candidate, admission_model)
+    decision, scores = _run_admission_judge(
+        db, llm, candidate, admission_model, role_max_tokens, role_timeouts
+    )
 
     if decision == "reject":
         return ColdPipelineResult(
@@ -196,7 +202,10 @@ def _run_cold_pipeline_inner(
     rule_data: dict[str, Any]
     if decision == "revise":
         rewriter_model = resolve_model_id("rule_rewriter", role_models, default_model)
-        rewritten = _run_rewriter(db, llm, candidate, scores, rewriter_model)
+        rewritten = _run_rewriter(
+            db, llm, candidate, scores, rewriter_model,
+            role_max_tokens, role_timeouts,
+        )
         if rewritten is None:
             return ColdPipelineResult(
                 status="rejected",
@@ -221,7 +230,8 @@ def _run_cold_pipeline_inner(
     # --- Stage c: Final Judge ---
     final_judge_model = resolve_model_id("final_judge", role_models, default_model)
     final_decision = _run_final_judge(
-        db, llm, rule_data, candidate.get("evidence_quotes", []), final_judge_model
+        db, llm, rule_data, candidate.get("evidence_quotes", []), final_judge_model,
+        role_max_tokens, role_timeouts,
     )
 
     if final_decision == "reject":
@@ -237,7 +247,9 @@ def _run_cold_pipeline_inner(
 
     # --- Stage d: Merge Planner ---
     merge_planner_model = resolve_model_id("merge_planner", role_models, default_model)
-    merge_op, merge_info = _run_merge_planner(db, llm, rule_data, merge_planner_model)
+    merge_op, merge_info = _run_merge_planner(
+        db, llm, rule_data, merge_planner_model, role_max_tokens, role_timeouts
+    )
 
     if merge_op == "reject_new":
         return ColdPipelineResult(
@@ -252,6 +264,7 @@ def _run_cold_pipeline_inner(
         split_results = _handle_split_required(
             db, llm, rule_data, role_models, default_model,
             transcript_ref, source_origin, idf_stats, global_adversarial_cases,
+            role_max_tokens, role_timeouts,
         )
         if split_results:
             return split_results[0]
@@ -307,7 +320,10 @@ def _run_cold_pipeline_inner(
 
     synthetic_eval_skipped = False
     try:
-        eval_cases = _generate_eval_cases(db, llm, rule_data, role_models, default_model)
+        eval_cases = _generate_eval_cases(
+            db, llm, rule_data, role_models, default_model,
+            role_max_tokens, role_timeouts,
+        )
     except (CircuitBreakerOpenError, ValueError):
         if target_status == "active":
             raise  # Active requires synthetic eval — propagate to pending
@@ -374,6 +390,7 @@ def _run_cold_pipeline_inner(
             synthetic_passed=synthetic_passed,
             fingerprint_clear=not fingerprint_conflict,
             matcher_compiled=True,
+            final_admission_passed=fast_lane_passed,
         ):
             return ColdPipelineResult(
                 status="rejected",
@@ -401,14 +418,24 @@ def _run_cold_pipeline_inner(
                 _merged_row = db.fetchone(
                     "SELECT trigger_canonical, trigger_variants, excluded_contexts, "
                     "concepts, required_concept_groups, near_miss_examples, "
-                    "action_instruction, rule_version "
+                    "action_instruction, rule_version, status, severity, "
+                    "first_observed_useful_at "
                     "FROM rules WHERE id = ?",
                     (target_id,),
                 )
                 if _merged_row is not None:
+                    _raw_variants = json.loads(_merged_row["trigger_variants"] or "[]")
+                    _variants = [
+                        v if isinstance(v, dict) else {
+                            "text": str(v),
+                            "kind": "weak_recall",
+                            "requires_concepts": [],
+                        }
+                        for v in _raw_variants
+                    ]
                     _recompile_data = {
                         "trigger_canonical": _merged_row["trigger_canonical"],
-                        "variants": json.loads(_merged_row["trigger_variants"] or "[]"),
+                        "variants": _variants,
                         "excluded_contexts": json.loads(_merged_row["excluded_contexts"] or "[]"),
                         "concepts": json.loads(_merged_row["concepts"] or "[]"),
                         "required_concept_groups": json.loads(_merged_row["required_concept_groups"] or "[]"),
@@ -422,7 +449,22 @@ def _run_cold_pipeline_inner(
 
                     _synth_ok = False
                     if _recompiled is not None:
-                        _synth_result = run_synthetic_eval(db, target_id, _recompile_data, _recompiled)
+                        _reeval_rule_data = {
+                            "id": target_id,
+                            "version": _merged_row["rule_version"],
+                            "status": _merged_row["status"],
+                            "severity": _merged_row["severity"],
+                            "first_observed_useful_at": _merged_row[
+                                "first_observed_useful_at"
+                            ],
+                        }
+                        _synth_result = run_synthetic_eval(
+                            _reeval_rule_data,
+                            _recompiled,
+                            idf_stats,
+                            eval_cases,
+                            global_adversarial_cases,
+                        )
                         _synth_ok = _synth_result is not None and _synth_result.passed
 
                     if not _synth_ok:
@@ -556,8 +598,27 @@ def _call_llm_role(
     return response
 
 
+def _role_max_tokens(
+    role: str, role_max_tokens: dict[str, int] | None
+) -> int:
+    if role_max_tokens and role_max_tokens.get(role):
+        return role_max_tokens[role]
+    return DEFAULT_MAX_TOKENS[role]
+
+
+def _role_timeout(role: str, role_timeouts: dict[str, int] | None) -> int:
+    if role_timeouts and role_timeouts.get(role):
+        return role_timeouts[role]
+    return DEFAULT_TIMEOUTS[role]
+
+
 def _run_admission_judge(
-    db: Db, llm, candidate: dict[str, Any], model_id: str
+    db: Db,
+    llm,
+    candidate: dict[str, Any],
+    model_id: str,
+    role_max_tokens: dict[str, int] | None = None,
+    role_timeouts: dict[str, int] | None = None,
 ) -> tuple[str, dict]:
     """Run admission judge on a candidate.
 
@@ -586,8 +647,8 @@ def _run_admission_judge(
             model_id=model_id,
             system=system_prompt,
             user=user_prompt,
-            max_tokens=DEFAULT_MAX_TOKENS["admission_judge"],
-            timeout=DEFAULT_TIMEOUTS["admission_judge"],
+            max_tokens=_role_max_tokens("admission_judge", role_max_tokens),
+            timeout=_role_timeout("admission_judge", role_timeouts),
         )
         result = validate_role_output("admission_judge", response)
         decision = result["decision"]
@@ -626,7 +687,13 @@ def _enforce_admission_policy(decision: str, scores: dict) -> str:
 
 
 def _run_rewriter(
-    db: Db, llm, candidate: dict[str, Any], judge_feedback: dict, model_id: str
+    db: Db,
+    llm,
+    candidate: dict[str, Any],
+    judge_feedback: dict,
+    model_id: str,
+    role_max_tokens: dict[str, int] | None = None,
+    role_timeouts: dict[str, int] | None = None,
 ) -> dict | None:
     """Run rule rewriter to improve a revisable candidate.
 
@@ -656,8 +723,8 @@ def _run_rewriter(
             model_id=model_id,
             system=system_prompt,
             user=user_prompt,
-            max_tokens=DEFAULT_MAX_TOKENS["rule_rewriter"],
-            timeout=DEFAULT_TIMEOUTS["rule_rewriter"],
+            max_tokens=_role_max_tokens("rule_rewriter", role_max_tokens),
+            timeout=_role_timeout("rule_rewriter", role_timeouts),
         )
         return validate_role_output("rule_rewriter", response)
     except CircuitBreakerOpenError:
@@ -667,7 +734,13 @@ def _run_rewriter(
 
 
 def _run_final_judge(
-    db: Db, llm, rule_data: dict[str, Any], original_evidence: list[str], model_id: str
+    db: Db,
+    llm,
+    rule_data: dict[str, Any],
+    original_evidence: list[str],
+    model_id: str,
+    role_max_tokens: dict[str, int] | None = None,
+    role_timeouts: dict[str, int] | None = None,
 ) -> str:
     """Run final judge on structured rule data.
 
@@ -699,8 +772,8 @@ def _run_final_judge(
             model_id=model_id,
             system=system_prompt,
             user=user_prompt,
-            max_tokens=DEFAULT_MAX_TOKENS["final_judge"],
-            timeout=DEFAULT_TIMEOUTS["final_judge"],
+            max_tokens=_role_max_tokens("final_judge", role_max_tokens),
+            timeout=_role_timeout("final_judge", role_timeouts),
         )
         result = validate_role_output("final_judge", response)
         return result["decision"]
@@ -711,7 +784,12 @@ def _run_final_judge(
 
 
 def _run_merge_planner(
-    db: Db, llm, rule_data: dict[str, Any], model_id: str
+    db: Db,
+    llm,
+    rule_data: dict[str, Any],
+    model_id: str,
+    role_max_tokens: dict[str, int] | None = None,
+    role_timeouts: dict[str, int] | None = None,
 ) -> tuple[str, dict[str, Any]]:
     """Run merge planner to check against existing rules.
 
@@ -748,8 +826,8 @@ def _run_merge_planner(
             model_id=model_id,
             system=system_prompt,
             user=user_prompt,
-            max_tokens=DEFAULT_MAX_TOKENS["merge_planner"],
-            timeout=DEFAULT_TIMEOUTS["merge_planner"],
+            max_tokens=_role_max_tokens("merge_planner", role_max_tokens),
+            timeout=_role_timeout("merge_planner", role_timeouts),
         )
         result = validate_role_output("merge_planner", response)
         operation = result["operation"]
@@ -1256,6 +1334,8 @@ def _generate_eval_cases(
     rule_data: dict[str, Any],
     role_models: dict[str, str] | None,
     default_model: str | None,
+    role_max_tokens: dict[str, int] | None = None,
+    role_timeouts: dict[str, int] | None = None,
 ) -> list[dict[str, Any]]:
     """Generate synthetic eval cases using the synthetic_eval_generator role."""
     from ..eval.synthetic import generate_eval_cases_prompt
@@ -1283,8 +1363,12 @@ def _generate_eval_cases(
             model_id=model_id,
             system=system_prompt,
             user=_prompt_text(prompt),
-            max_tokens=DEFAULT_MAX_TOKENS["synthetic_eval_generator"],
-            timeout=DEFAULT_TIMEOUTS["synthetic_eval_generator"],
+            max_tokens=_role_max_tokens(
+                "synthetic_eval_generator", role_max_tokens
+            ),
+            timeout=_role_timeout(
+                "synthetic_eval_generator", role_timeouts
+            ),
         )
         cases = json.loads(response)
         validate_role_output("synthetic_eval_generator", response)
@@ -1309,6 +1393,8 @@ def _handle_split_required(
     source_origin: SourceOrigin,
     idf_stats: IdfPoolStats | None,
     global_adversarial_cases: list[dict[str, Any]] | None,
+    role_max_tokens: dict[str, int] | None = None,
+    role_timeouts: dict[str, int] | None = None,
 ) -> list[ColdPipelineResult]:
     """Handle split_required by invoking rewriter to produce sub-rules, then re-process each.
 
@@ -1332,8 +1418,8 @@ def _handle_split_required(
         response = _call_llm_role(
             db, llm, role="rule_rewriter", model_id=rewriter_model,
             system=system_prompt, user=user_prompt,
-            max_tokens=DEFAULT_MAX_TOKENS["rule_rewriter"],
-            timeout=DEFAULT_TIMEOUTS["rule_rewriter"],
+            max_tokens=_role_max_tokens("rule_rewriter", role_max_tokens),
+            timeout=_role_timeout("rule_rewriter", role_timeouts),
         )
         data = json.loads(response)
         sub_rules = data.get("split_rules", []) if isinstance(data, dict) else []
@@ -1361,6 +1447,7 @@ def _handle_split_required(
         result = run_cold_pipeline(
             db, llm, transcript_ref, sub_extractor,
             role_models=role_models, default_model=default_model,
+            role_max_tokens=role_max_tokens, role_timeouts=role_timeouts,
             idf_stats=idf_stats, global_adversarial_cases=global_adversarial_cases,
             source_origin=source_origin,
         )
@@ -1416,12 +1503,28 @@ def _apply_non_destructive_merge(
     updates: list[str] = []
     params: list = []
 
+    def _variant_text(variant: Any) -> str:
+        return str(variant.get("text", "") if isinstance(variant, dict) else variant)
+
+    def _variant_entry(variant: Any) -> dict[str, Any]:
+        if isinstance(variant, dict):
+            return variant
+        return {
+            "text": str(variant),
+            "kind": "weak_recall",
+            "requires_concepts": [],
+        }
+
     # Merge new variants into existing
     new_variants = new_rule_data.get("variants", [])
     if new_variants:
-        current = json.loads(rule_row["trigger_variants"]) if rule_row["trigger_variants"] else []
-        current_texts = {v.get("text", "") for v in current}
-        added = [v for v in new_variants if v.get("text", "") not in current_texts]
+        raw_current = json.loads(rule_row["trigger_variants"]) if rule_row["trigger_variants"] else []
+        current = [_variant_entry(v) for v in raw_current]
+        normalized_new = [_variant_entry(v) for v in new_variants]
+        current_texts = {_variant_text(v) for v in current}
+        added = [
+            v for v in normalized_new if _variant_text(v) not in current_texts
+        ]
         if added:
             merged = current + added
             updates.append("trigger_variants = ?")
