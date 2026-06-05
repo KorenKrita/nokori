@@ -440,9 +440,9 @@ def _run_cold_pipeline_inner(
                         _recompiled = None
 
                     _synth_ok = False
-                    if _recompiled is not None and (
-                        eval_cases or global_adversarial_cases
-                    ):
+                    if _recompiled is None:
+                        _synth_ok = False
+                    elif eval_cases or global_adversarial_cases:
                         _reeval_rule_data = {
                             "id": target_id,
                             "version": _merged_row["rule_version"],
@@ -460,6 +460,10 @@ def _run_cold_pipeline_inner(
                             global_adversarial_cases,
                         )
                         _synth_ok = _synth_result is not None and _synth_result.passed
+                    else:
+                        # No eval cases available but compilation succeeded —
+                        # allow non-destructive merge (compilation validates structure).
+                        _synth_ok = True
 
                     if not _synth_ok:
                         # Revert merged fields via CAS (restore pre-merge values)
