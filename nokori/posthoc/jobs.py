@@ -399,6 +399,10 @@ def build_evaluator_input(db: Db, fire_event: dict) -> dict | None:
     )
     feedback = [dict(r) for r in feedback_rows]
 
+    # Spec 10.4: down-weight repeated feedback without transcript/tool evidence.
+    # Detect repeated low-evidence feedback from same source and annotate weight.
+    feedback = _annotate_feedback_weights(feedback)
+
     # Load actual transcript window content from posthoc_jobs redacted_window_json
     transcript_window_content = _load_transcript_window(
         db, fire_event_id, bounded_window_ref, transcript_window_ref
@@ -427,6 +431,26 @@ def build_evaluator_input(db: Db, fire_event: dict) -> dict | None:
         "decision_features": decision_features,
         "feedback_events": feedback,
     }
+
+
+def _annotate_feedback_weights(feedback: list[dict]) -> list[dict]:
+    """Down-weight repeated low-evidence feedback from the same source (spec 10.4)."""
+    if not feedback:
+        return feedback
+    source_counts: dict[str, int] = {}
+    result = []
+    for fb in feedback:
+        src = fb.get("source", "")
+        source_counts[src] = source_counts.get(src, 0) + 1
+        evidence_text = fb.get("evidence", "")
+        is_low_evidence = not evidence_text or len(evidence_text) < 30
+        repeat_count = source_counts[src]
+        if is_low_evidence and repeat_count > 1:
+            fb = {**fb, "weight": max(0.1, 1.0 / repeat_count)}
+        else:
+            fb = {**fb, "weight": 1.0}
+        result.append(fb)
+    return result
 
 
 def _load_transcript_window(
