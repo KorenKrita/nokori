@@ -210,19 +210,30 @@ def _fingerprint_decision(
 
     # Replacement blocks exact duplicates and weaker replacements only (spec section 11)
     if strength == "replacement":
-        if not exact_match:
-            return None
-        # exact_match = True means equivalent or weaker -> block
-        return {
-            "blocked": True,
-            "fingerprint_id": row["id"],
-            "archive_strength": strength,
-            "scope_summary": row["scope_summary"],
-            "blocked_trigger_area": row["blocked_trigger_area"],
-            "blocked_action_area": row["blocked_action_area"],
-            "reason": "replacement_blocks_equivalent_or_weaker",
-            "overridable": True,
-        }
+        if exact_match:
+            return {
+                "blocked": True,
+                "fingerprint_id": row["id"],
+                "archive_strength": strength,
+                "scope_summary": row["scope_summary"],
+                "blocked_trigger_area": row["blocked_trigger_area"],
+                "blocked_action_area": row["blocked_action_area"],
+                "reason": "replacement_blocks_equivalent_or_weaker",
+                "overridable": True,
+            }
+        # Non-exact fuzzy match: block if new rule is broader/weaker (not narrower)
+        if not is_narrower_scope:
+            return {
+                "blocked": True,
+                "fingerprint_id": row["id"],
+                "archive_strength": strength,
+                "scope_summary": row["scope_summary"],
+                "blocked_trigger_area": row["blocked_trigger_area"],
+                "blocked_action_area": row["blocked_action_area"],
+                "reason": "replacement_blocks_weaker_replacement",
+                "overridable": True,
+            }
+        return None
 
     # User archive: blocks equivalent/broader. Only NARROWER rules may proceed
     # when narrower scope + stronger evidence + admission judge cited + can_be_overridden (spec 3.5)
