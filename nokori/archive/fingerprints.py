@@ -141,7 +141,7 @@ def check_fingerprint_block(
     trigger_canonical: str,
     action_instruction: str,
     domain_tags: list[str] | None = None,
-    scope_change_evidence: str | None = None,
+    stronger_evidence: str | None = None,
     synthetic_eval_passed: bool = True,
     admission_judge_cited: bool = False,
 ) -> dict | None:
@@ -149,9 +149,15 @@ def check_fingerprint_block(
 
     Returns blocking fingerprint info dict or None if not blocked.
 
+    Args:
+        stronger_evidence: Any non-empty string constitutes sufficient future
+            evidence to override a system-strength archive block (when combined
+            with other conditions). Replaces the former scope_change_evidence
+            parameter which required specific scope-change content.
+
     Blocking logic (plan sections 3.5 and 11):
-      user strength: blocked unless scope_change_evidence provided.
-      system strength: blocked but overridable with BOTH scope_change_evidence
+      user strength: blocked unless stronger_evidence provided.
+      system strength: blocked but overridable with BOTH stronger_evidence
           AND synthetic_eval_passed.
       replacement strength: blocks exact duplicates only.
     """
@@ -167,7 +173,7 @@ def check_fingerprint_block(
     if exact_row is not None:
         return _fingerprint_decision(
             exact_row,
-            scope_change_evidence=scope_change_evidence,
+            stronger_evidence=stronger_evidence,
             exact_match=True,
             is_narrower_scope=False,  # exact match = same scope
             synthetic_eval_passed=synthetic_eval_passed,
@@ -183,7 +189,7 @@ def check_fingerprint_block(
     )
     return _fingerprint_decision(
         row,
-        scope_change_evidence=scope_change_evidence,
+        stronger_evidence=stronger_evidence,
         exact_match=False,
         is_narrower_scope=is_narrower,
         synthetic_eval_passed=synthetic_eval_passed,
@@ -194,7 +200,7 @@ def check_fingerprint_block(
 def _fingerprint_decision(
     row,
     *,
-    scope_change_evidence: str | None,
+    stronger_evidence: str | None,
     exact_match: bool,
     is_narrower_scope: bool = False,
     synthetic_eval_passed: bool = True,
@@ -219,12 +225,12 @@ def _fingerprint_decision(
         }
 
     # User archive: blocks equivalent/broader. Only NARROWER rules may proceed
-    # when scope change evidence is explicit AND (admission_judge_cited or
-    # synthetic_eval_passed) AND can_be_overridden (spec 3.5)
+    # when stronger evidence is provided (any non-empty string) AND
+    # (admission_judge_cited or synthetic_eval_passed) AND can_be_overridden (spec 3.5)
     if strength == "user":
         if (
             is_narrower_scope
-            and scope_change_evidence
+            and stronger_evidence
             and (admission_judge_cited or synthetic_eval_passed)
             and row["can_be_overridden_by_changed_scope"]
         ):
@@ -241,10 +247,10 @@ def _fingerprint_decision(
         }
 
     # System archive: weak negative memory, overridable ONLY when BOTH
-    # scope_change_evidence is provided AND synthetic_eval_passed is True.
+    # stronger_evidence is provided (any non-empty string) AND synthetic_eval_passed.
     if strength == "system":
         if (
-            scope_change_evidence
+            stronger_evidence
             and synthetic_eval_passed
             and row["can_be_overridden_by_changed_scope"]
         ):
@@ -274,10 +280,11 @@ def _find_related_fingerprint(
         "blocked_action_area, archive_strength, "
         "can_be_overridden_by_changed_scope, rule_id, created_at "
         "FROM archived_fingerprints "
-        "WHERE archive_strength IN ('user','system')",
+        "WHERE archive_strength IN ('user','system','replacement')",
     )
     best = None
     best_score = 0.0
+    best_strength = None
     for row in rows:
         old_tokens = _content_tokens(
             f"{row['blocked_trigger_area']} {row['blocked_action_area']}"
@@ -290,7 +297,11 @@ def _find_related_fingerprint(
         if score > best_score:
             best = row
             best_score = score
-    return best if best_score >= 0.85 else None
+            best_strength = row["archive_strength"]
+    # Replacement fingerprints require a stricter threshold (0.85) for fuzzy match
+    # to approximate "weaker replacement" detection; user/system use 0.75.
+    threshold = 0.85 if best_strength == "replacement" else 0.75
+    return best if best_score >= threshold else None
 
 
 def _is_narrower_scope(

@@ -66,7 +66,7 @@ class TestRulesStatusConstraint:
         with db.transaction() as conn:
             _insert_rule(conn, status=valid_status)
 
-    @pytest.mark.parametrize("invalid_status", ["merged", "dormant", "draft", ""])
+    @pytest.mark.parametrize("invalid_status", ["merged", "dormant", "draft", "", "extracted", "quarantined"])
     def test_invalid_statuses_rejected(self, db, invalid_status):
         with pytest.raises(sqlite3.IntegrityError):
             with db.transaction() as conn:

@@ -151,7 +151,7 @@ def test_user_archive_passable_with_scope_change_evidence(db):
         trigger_canonical="when user asks for help",
         action_instruction="provide helpful response",
         domain_tags=["general"],
-        scope_change_evidence="narrower scope: only applies to Python files",
+        stronger_evidence="narrower scope: only applies to Python files",
     )
     assert result_same is not None
     assert result_same["blocked"] is True
@@ -163,7 +163,7 @@ def test_user_archive_passable_with_scope_change_evidence(db):
         trigger_canonical="when user asks for help in Python specifically with pytest",
         action_instruction="provide pytest-specific test guidance",
         domain_tags=["python", "testing"],
-        scope_change_evidence="narrower: only pytest context, not general help",
+        stronger_evidence="narrower: only pytest context, not general help",
     )
     # Different enough to not match the exact signature, and narrower logic applies
     assert result_narrower is None

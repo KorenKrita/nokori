@@ -114,18 +114,18 @@ def run_all_pending_transitions(db: Db) -> list[TransitionResult]:
 
 
 def _aggregate_fire_evidence(db: Db, rule_id: str, window_days: int = 30) -> dict:
-    """Count fire event labels using last-N-events window (section 3.4).
+    """Count fire event labels using BOTH count window (last 10) AND time window (30 days) per spec 3.4.
 
-    recent_event_window = last 10 evaluated fire events (count-based, not time-based).
+    Uses BOTH count window (last 10) AND time window (30 days) per spec 3.4.
     Harmful events are counted lifetime — they do NOT decay by time alone.
     """
-    # Uses count-based window only (LIMIT N). Spec 3.4 says 'last 10 evaluated fire events'.
-    # Time-based filtering removed to prevent losing events that are within last 10 but older than 30 days.
+    cutoff = _days_ago_iso(window_days)
     recent_rows = db.fetchall(
         "SELECT posthoc_label, posthoc_reason_code, session_id FROM rule_fire_events "
         "WHERE rule_id = ? AND posthoc_label IS NOT NULL AND posthoc_label != 'unclear' "
+        "AND created_at >= ? "
         "ORDER BY created_at DESC LIMIT ?",
-        (rule_id, RECENT_EVENT_WINDOW),
+        (rule_id, cutoff, RECENT_EVENT_WINDOW),
     )
 
     counts: dict[str, int | float] = {
@@ -409,8 +409,11 @@ def _evaluate_candidate(db: Db, row, rule_version: int) -> TransitionResult:
     # This prevents inflated counts from repeated events within the same task.
     task_deduped_count = shadow.get("task_deduped_count", evaluated_count)
 
-    # Shadow FP mapping: shadow 'irrelevant' + 'near_miss' → FP numerator.
-    # 'risky' maps to harmful (suppression trigger), not FP.
+    # Shadow-to-posthoc reason_code mapping:
+    #   'irrelevant'  -> irrelevant_not_applicable (FP: rule fired but was not relevant)
+    #   'near_miss'   -> irrelevant_not_applicable (FP: close but should not have matched)
+    #   'risky'       -> harmful_wrong_scope (suppression signal, NOT counted as FP)
+    # FP numerator = irrelevant + near_miss (closest posthoc FP equivalents).
     shadow_fp_numerator = shadow.get("irrelevant", 0) + shadow.get("near_miss", 0)
     shadow_fp_rate = (
         shadow_fp_numerator / max(1, task_deduped_count)
@@ -489,12 +492,12 @@ def _evaluate_candidate(db: Db, row, rule_version: int) -> TransitionResult:
             "LIMIT 1",
             (rule_id,),
         )
-        # Also check direct feedback referencing this rule's shadow events
+        # Also check feedback on fire events for this rule with agent_miss source
         shadow_feedback_row = db.fetchone(
             "SELECT 1 FROM rule_feedback_events "
             "WHERE source = 'agent_miss' "
             "AND fire_event_id IN ("
-            "  SELECT id FROM rule_shadow_events WHERE rule_id = ?"
+            "  SELECT id FROM rule_fire_events WHERE rule_id = ?"
             ") LIMIT 1",
             (rule_id,),
         )
@@ -689,23 +692,34 @@ def _evaluate_suppressed(db: Db, row, rule_version: int) -> TransitionResult:
         )
         return TransitionResult(rule_id, old_status, "archived", reason, applied)
 
-    # Check suppression TTL expiry with no recovery
+    # Check TTL FIRST — prevents recovery after TTL expiry
     suppressed_at = parse_iso(row["suppressed_at"])
+    ttl_expired = False
     if suppressed_at is not None:
         ttl_deadline = suppressed_at + timedelta(days=SUPPRESSION_TTL_DAYS)
-        if datetime.now(timezone.utc) > ttl_deadline:
-            # No recovery evidence before TTL (spec: archive if recovery is impossible)
-            would_help_high = shadow.get("would_help_high", 0)
-            if would_help_high < SUPPRESSED_TO_ACTIVE.shadow_recovery_would_help_high_min:
-                reason = "no_recovery_before_ttl"
-                applied = _apply_transition(
-                    db, rule_id, rule_version, old_status, "archived", rpv, reason
-                )
-                return TransitionResult(
-                    rule_id, old_status, "archived", reason, applied
-                )
+        ttl_expired = datetime.now(timezone.utc) > ttl_deadline
 
-    # Check suppressed -> active (recovery)
+    if ttl_expired:
+        # TTL expired AND recovery evidence insufficient → archive
+        would_help_high = shadow.get("would_help_high", 0)
+        if would_help_high < SUPPRESSED_TO_ACTIVE.shadow_recovery_would_help_high_min:
+            reason = "no_recovery_before_ttl"
+            applied = _apply_transition(
+                db, rule_id, rule_version, old_status, "archived", rpv, reason
+            )
+            return TransitionResult(
+                rule_id, old_status, "archived", reason, applied
+            )
+        # TTL expired but recovery evidence exists — still archive (no recovery after TTL)
+        reason = "ttl_expired"
+        applied = _apply_transition(
+            db, rule_id, rule_version, old_status, "archived", rpv, reason
+        )
+        return TransitionResult(
+            rule_id, old_status, "archived", reason, applied
+        )
+
+    # TTL NOT expired — check suppressed -> active (recovery)
     th = SUPPRESSED_TO_ACTIVE
     would_help_high = shadow.get("would_help_high", 0)
     distinct_sessions = shadow.get("distinct_sessions", 0)

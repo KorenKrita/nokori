@@ -529,14 +529,12 @@ def _build_trigger_anchors(
                     anchor_tokens.add(tok)
 
     # Collect strong variant phrase anchors only.
+    # Don't add phrase tokens to anchor_tokens when the full phrase is already
+    # in anchor_phrases — only add tokens that are NOT part of any anchor_phrase.
     for variant in variants:
         if variant.kind != "strong_anchor":
             continue
         anchor_phrases.append(variant.text_lower)
-        tokens = _tokenize(variant.text)
-        for tok in tokens:
-            if tok not in GENERIC_TOKENS:
-                anchor_tokens.add(tok)
 
     # Add high-IDF trigger terms from canonical trigger text
     if canonical_trigger_text:
@@ -544,6 +542,12 @@ def _build_trigger_anchors(
         for tok in canonical_tokens:
             if tok not in GENERIC_TOKENS and tok not in GENERIC_ACTION_WORDS:
                 anchor_tokens.add(tok)
+
+    # Remove tokens that are part of any anchor_phrase to avoid double-counting
+    phrase_member_tokens: set[str] = set()
+    for phrase in anchor_phrases:
+        phrase_member_tokens.update(_tokenize(phrase))
+    anchor_tokens -= phrase_member_tokens
 
     total = len(anchor_tokens) + len(anchor_phrases)
 

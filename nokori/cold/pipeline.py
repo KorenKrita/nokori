@@ -19,7 +19,6 @@ import hashlib
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from html import escape as html_escape
 from typing import Any
 
 from ..archive.fingerprints import check_fingerprint_block
@@ -49,6 +48,8 @@ from .jobs import (
     mark_job_failed,
 )
 from .roles import (
+    DEFAULT_MAX_TOKENS,
+    DEFAULT_TIMEOUTS,
     PROMPT_VERSIONS,
     resolve_model_id,
     validate_role_output,
@@ -203,6 +204,15 @@ def _run_cold_pipeline_inner(
                 rejection_reason="rewriter_failed",
                 scores=scores,
             )
+        # Deterministic scope check: reject if rewriter broadened scope
+        original_rule_data = _candidate_to_rule_data(candidate)
+        if _rewriter_broadened_scope(original_rule_data, rewritten):
+            return ColdPipelineResult(
+                status="rejected",
+                rule_id=None,
+                rejection_reason="rewriter_broadened_scope",
+                scores=scores,
+            )
         rule_data = rewritten
     else:
         # Build structured rule_data from extractor candidate for accepted path
@@ -295,12 +305,14 @@ def _run_cold_pipeline_inner(
     if idf_stats is None:
         idf_stats = _build_idf_stats_from_db(db)
 
+    synthetic_eval_skipped = False
     try:
         eval_cases = _generate_eval_cases(db, llm, rule_data, role_models, default_model)
     except (CircuitBreakerOpenError, ValueError):
         if target_status == "active":
             raise  # Active requires synthetic eval — propagate to pending
         eval_cases = []  # Candidate can proceed without eval
+        synthetic_eval_skipped = True
     if eval_cases:
         eval_rule_data = {
             "id": "",
@@ -469,6 +481,7 @@ def _run_cold_pipeline_inner(
         source_origin=source_origin,
         transcript_ref=transcript_ref,
         scores=scores,
+        synthetic_eval_skipped=synthetic_eval_skipped,
     )
 
     _apply_merge_side_effects(db, rule_id, merge_op, merge_info)
@@ -487,8 +500,9 @@ def _run_cold_pipeline_inner(
 
 
 def _prompt_text(value: str) -> str:
-    """Escape untrusted text before embedding in XML-like prompt delimiters."""
-    return html_escape(value, quote=False)
+    """Fence untrusted content with unique boundary markers (spec section 5)."""
+    boundary = "---UNTRUSTED-CONTENT-BOUNDARY---"
+    return f"{boundary}\n{value}\n{boundary}"
 
 
 def _llm_input_hash(role: str, system: str, user: str, model_id: str = "") -> str:
@@ -572,8 +586,8 @@ def _run_admission_judge(
             model_id=model_id,
             system=system_prompt,
             user=user_prompt,
-            max_tokens=2000,
-            timeout=30,
+            max_tokens=DEFAULT_MAX_TOKENS["admission_judge"],
+            timeout=DEFAULT_TIMEOUTS["admission_judge"],
         )
         result = validate_role_output("admission_judge", response)
         decision = result["decision"]
@@ -642,8 +656,8 @@ def _run_rewriter(
             model_id=model_id,
             system=system_prompt,
             user=user_prompt,
-            max_tokens=4000,
-            timeout=30,
+            max_tokens=DEFAULT_MAX_TOKENS["rule_rewriter"],
+            timeout=DEFAULT_TIMEOUTS["rule_rewriter"],
         )
         return validate_role_output("rule_rewriter", response)
     except CircuitBreakerOpenError:
@@ -685,8 +699,8 @@ def _run_final_judge(
             model_id=model_id,
             system=system_prompt,
             user=user_prompt,
-            max_tokens=2000,
-            timeout=30,
+            max_tokens=DEFAULT_MAX_TOKENS["final_judge"],
+            timeout=DEFAULT_TIMEOUTS["final_judge"],
         )
         result = validate_role_output("final_judge", response)
         return result["decision"]
@@ -734,8 +748,8 @@ def _run_merge_planner(
             model_id=model_id,
             system=system_prompt,
             user=user_prompt,
-            max_tokens=2000,
-            timeout=30,
+            max_tokens=DEFAULT_MAX_TOKENS["merge_planner"],
+            timeout=DEFAULT_TIMEOUTS["merge_planner"],
         )
         result = validate_role_output("merge_planner", response)
         operation = result["operation"]
@@ -851,6 +865,7 @@ def insert_rule_from_pipeline(
     source_origin: SourceOrigin = "transcript_extraction",
     transcript_ref: str | None = None,
     scores: dict | None = None,
+    synthetic_eval_skipped: bool = False,
 ) -> str:
     """Insert a rule from the cold pipeline into the rules table.
 
@@ -922,10 +937,12 @@ def insert_rule_from_pipeline(
             "domain_tags, tool_tags, path_patterns, language_hints, "
             "evidence_quotes, "
             "quality_score, evidence_support_score, specificity_score, retrieval_readiness_score, "
+            "observed_usefulness_score, plausible_usefulness_score, false_positive_score, harmful_score, "
             "source_origin, activation_origin, transcript_ref, "
+            "synthetic_eval_skipped, "
             "created_at, updated_at"
             ") VALUES ("
-            "?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?"
+            "?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?"
             ")",
             (
                 rule_id,
@@ -961,9 +978,14 @@ def insert_rule_from_pipeline(
                 scores.get("evidence_support", 0.0),
                 scores.get("trigger_specificity", 0.0),
                 scores.get("retrieval_readiness", 0.0),
+                0.0,  # observed_usefulness_score
+                0.0,  # plausible_usefulness_score
+                0.0,  # false_positive_score
+                0.0,  # harmful_score
                 source_origin,
                 activation_origin,
                 transcript_ref,
+                1 if synthetic_eval_skipped else 0,
                 now,
                 now,
             ),
@@ -1016,6 +1038,30 @@ def insert_rule_from_pipeline(
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
+
+def _rewriter_broadened_scope(original: dict[str, Any], rewritten: dict[str, Any]) -> bool:
+    """Check if the rewriter broadened the rule's scope beyond the original candidate.
+
+    Returns True (reject) if the rewritten rule has MORE required_concept_groups
+    or expanded domain_tags compared to the original.
+    """
+    original_groups = original.get("required_concept_groups", [])
+    rewritten_groups = rewritten.get("required_concept_groups", [])
+
+    # More concept groups = broader matching surface
+    if len(rewritten_groups) > len(original_groups):
+        return True
+
+    # Check domain_tags expansion
+    original_tags = set(original.get("scope", {}).get("domain_tags", []))
+    rewritten_tags = set(rewritten.get("scope", {}).get("domain_tags", []))
+
+    # Rewritten has tags not present in original = broader scope
+    if rewritten_tags - original_tags:
+        return True
+
+    return False
 
 
 def _candidate_to_rule_data(candidate: dict[str, Any]) -> dict[str, Any]:
@@ -1237,8 +1283,8 @@ def _generate_eval_cases(
             model_id=model_id,
             system=system_prompt,
             user=_prompt_text(prompt),
-            max_tokens=4000,
-            timeout=30,
+            max_tokens=DEFAULT_MAX_TOKENS["synthetic_eval_generator"],
+            timeout=DEFAULT_TIMEOUTS["synthetic_eval_generator"],
         )
         cases = json.loads(response)
         validate_role_output("synthetic_eval_generator", response)
@@ -1286,7 +1332,8 @@ def _handle_split_required(
         response = _call_llm_role(
             db, llm, role="rule_rewriter", model_id=rewriter_model,
             system=system_prompt, user=user_prompt,
-            max_tokens=6000, timeout=45,
+            max_tokens=DEFAULT_MAX_TOKENS["rule_rewriter"],
+            timeout=DEFAULT_TIMEOUTS["rule_rewriter"],
         )
         data = json.loads(response)
         sub_rules = data.get("split_rules", []) if isinstance(data, dict) else []

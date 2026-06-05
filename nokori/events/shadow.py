@@ -33,6 +33,7 @@ def create_shadow_event(
     matched_level: str,
     decision_features: dict,
     *,
+    bounded_window_ref: str | None = None,
     idf_pool_version: str | None = None,
     runtime_policy_version: str | None = None,
     embedding_profile_version: str | None = None,
@@ -60,10 +61,11 @@ def create_shadow_event(
             "INSERT INTO rule_shadow_events "
             "(id, rule_id, session_id, shadow_rule_version, "
             "shadow_trigger_snapshot, shadow_action_snapshot, shadow_structured_snapshot, "
-            "status_at_match, shadow_type, prompt_hash, matched_level, decision_features, "
+            "status_at_match, shadow_type, prompt_hash, bounded_window_ref, "
+            "matched_level, decision_features, "
             "trigger_idf_pool_version, runtime_policy_version, embedding_profile_version, "
             "context_fingerprint, created_at) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 event_id,
                 rule.id,
@@ -75,6 +77,7 @@ def create_shadow_event(
                 status_at_match,
                 shadow_type,
                 prompt_hash,
+                bounded_window_ref,
                 matched_level,
                 dumps_json(decision_features),
                 idf_pool_version,

@@ -208,7 +208,10 @@ def compute_pool_version(
 
 
 def _trigger_tokens_for_rule(rule) -> set[str]:
-    """Extract tokens from trigger_canonical + trigger_variants fields only."""
+    """Extract tokens from trigger_canonical + trigger_variants fields only.
+
+    Filters out GENERIC_TOKENS to avoid polluting document frequency counts.
+    """
     tokens: set[str] = set()
     tokens.update(tokenize(rule.trigger_canonical))
     if rule.trigger_canonical_zh:
@@ -219,6 +222,7 @@ def _trigger_tokens_for_rule(rule) -> set[str]:
     for v in rule.trigger_variants_zh:
         text = v.get("text") if isinstance(v, dict) else v
         tokens.update(tokenize(str(text or "")))
+    tokens = {t for t in tokens if t not in GENERIC_TOKENS}
     return tokens
 
 
@@ -251,9 +255,12 @@ def build_idf_stats(
         return _EMPTY_POOL_STATS
 
     # Compute df_trigger(t) for each token across trigger fields
+    # GENERIC_TOKENS are filtered out in _trigger_tokens_for_rule already,
+    # but apply belt-and-suspenders filter here as well.
     df: Counter[str] = Counter()
     for rule in pool:
         rule_tokens = _trigger_tokens_for_rule(rule)
+        rule_tokens = {t for t in rule_tokens if t not in GENERIC_TOKENS}
         df.update(rule_tokens)
 
     # Select absolute_trigger_info_min based on pool size

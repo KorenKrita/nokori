@@ -7,6 +7,7 @@ promotion targets, or desired labels.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from typing import Any
 
@@ -235,6 +236,7 @@ def parse_posthoc_output(raw_json: str) -> dict:
 
 
 def compute_attribution_weight(posthoc_output: dict) -> float:
+    # Attribution weight is for informational/audit purposes only; lifecycle uses event counts.
     """Compute attribution weight from posthoc output.
 
     From section 10.2:
@@ -275,6 +277,16 @@ def compute_attribution_weight(posthoc_output: dict) -> float:
 # ---------------------------------------------------------------------------
 
 
+_POSTHOC_RESULT_CACHE: dict[str, dict | None] = {}
+_POSTHOC_CACHE_MAX_SIZE: int = 256
+
+
+def _compute_input_hash(evaluator_input: dict) -> str:
+    """Compute a stable hash of the evaluator input for idempotency."""
+    serialized = json.dumps(evaluator_input, sort_keys=True, default=str)
+    return hashlib.sha256(serialized.encode()).hexdigest()
+
+
 def run_posthoc_evaluation(llm: Any, evaluator_input: dict) -> dict | None:
     """Call LLM with posthoc role, parse and validate output.
 
@@ -287,6 +299,11 @@ def run_posthoc_evaluation(llm: Any, evaluator_input: dict) -> dict | None:
         Validated posthoc output dict with added 'attribution_weight' field,
         or None if LLM call fails or output is unparseable.
     """
+    # Idempotency: check if this exact input was already processed
+    input_hash = _compute_input_hash(evaluator_input)
+    if input_hash in _POSTHOC_RESULT_CACHE:
+        return _POSTHOC_RESULT_CACHE[input_hash]
+
     user_message = build_posthoc_prompt(evaluator_input)
 
     try:
@@ -304,4 +321,11 @@ def run_posthoc_evaluation(llm: Any, evaluator_input: dict) -> dict | None:
         return None
 
     result["attribution_weight"] = compute_attribution_weight(result)
+
+    # Cache the result (evict oldest if at capacity)
+    if len(_POSTHOC_RESULT_CACHE) >= _POSTHOC_CACHE_MAX_SIZE:
+        oldest_key = next(iter(_POSTHOC_RESULT_CACHE))
+        del _POSTHOC_RESULT_CACHE[oldest_key]
+    _POSTHOC_RESULT_CACHE[input_hash] = result
+
     return result

@@ -4,7 +4,7 @@ Evaluates a CompiledMatcher against prompt text and optional tool/path/tag
 context. Produces a MatchResult with all matched concept/group/variant/exclusion
 details and trigger coverage.
 
-No LLM calls. No imports from other nokori modules. Uses only stdlib + re.
+No LLM calls. Uses stdlib + re + shared policy/applicability imports.
 """
 
 from __future__ import annotations
@@ -20,6 +20,15 @@ from nokori.matcher.compiler import (
     CompiledExcludedContext,
     CompiledMatcher,
     CompiledVariant,
+)
+from nokori.policy import (
+    DYNAMIC_IDF_NORMAL,
+    DYNAMIC_IDF_SMALL_POOL,
+    SMALL_POOL_THRESHOLD,
+)
+from nokori.runtime.applicability import (
+    _trigger_evidence_passes,
+    _strong_trigger_evidence,
 )
 
 # ---------------------------------------------------------------------------
@@ -246,7 +255,7 @@ def _evaluate_excluded_context(
     elif ctx.scope == "prompt_only":
         search_text = prompt_only_lower
     elif ctx.scope == "global":
-        search_text = text_lower
+        search_text = prompt_only_lower
     elif ctx.scope == "near_trigger_span":
         search_texts = _near_trigger_window_texts(
             text_lower,
@@ -500,6 +509,8 @@ def evaluate_match(
             import math
             seen_terms: set[str] = set()
             for token in matched_anchors:
+                if ' ' in token:
+                    continue
                 if token in seen_terms:
                     continue
                 seen_terms.add(token)
@@ -566,15 +577,16 @@ def evaluate_match(
 
 # ---------------------------------------------------------------------------
 # Trigger evidence pass/fail evaluation (spec section 9.3)
+#
+# Canonical implementations live in nokori.runtime.applicability. The adapters
+# below translate the idf_stats dict interface used by evaluate_match into the
+# scalar parameters expected by the canonical functions.
+#
+# Note on strong_variant_phrase_hit path: the synthetic eval validation for
+# variants is enforced at compilation/insertion time (compile_rule rejects
+# unvalidated strong_anchors), not at runtime. This documents that the spec
+# requirement is handled by the cold pipeline's compilation gate.
 # ---------------------------------------------------------------------------
-
-_SMALL_POOL_THRESHOLD = 20
-_SMALL_POOL_COVERAGE_MIN = 0.40
-_SMALL_POOL_ABSOLUTE_MIN = 2.40
-_SMALL_POOL_DISTINCT_MIN = 2
-_NORMAL_COVERAGE_MIN = 0.25
-_NORMAL_ABSOLUTE_MIN = 1.20
-_NORMAL_DISTINCT_MIN = 1
 
 
 def _evaluate_trigger_evidence(
@@ -586,62 +598,57 @@ def _evaluate_trigger_evidence(
     distinct_trigger_terms: int,
     idf_stats: Optional[dict],
 ) -> bool:
-    """Evaluate whether trigger evidence passes (spec section 9.3 paths A/B/C).
-
-    Path A: strong_variant_phrase_hit AND required_concepts_match
-    Path B: trigger_idf_sum >= threshold AND coverage >= min AND concepts AND distinct >= min
-    Path C: trigger_idf_sum >= 1.5 * threshold AND concepts AND distinct >= min
-
-    N=0: only Path A available (dynamic IDF unavailable).
-    N<20: stricter thresholds. Require strong_variant OR concepts in addition to IDF.
-    """
-    # Path A is always available
-    if strong_variant_phrase_hit and required_concepts_match:
-        return True
-
+    """Adapter: delegates to applicability._trigger_evidence_passes."""
     if idf_stats is None:
-        return False
-
-    pool_size = idf_stats.get("pool_size", 0)
-    if pool_size == 0:
-        return False
-
-    # Determine thresholds based on pool size
-    dynamic_threshold = idf_stats.get("dynamic_threshold")
-    if pool_size < _SMALL_POOL_THRESHOLD:
-        coverage_min = _SMALL_POOL_COVERAGE_MIN
-        distinct_min = _SMALL_POOL_DISTINCT_MIN
-        absolute_min = _SMALL_POOL_ABSOLUTE_MIN
+        pool_size = 0
+        idf_stats_available = False
+        dynamic_trigger_info_min = None
     else:
-        coverage_min = _NORMAL_COVERAGE_MIN
-        distinct_min = _NORMAL_DISTINCT_MIN
-        absolute_min = _NORMAL_ABSOLUTE_MIN
+        pool_size = idf_stats.get("pool_size", 0)
+        idf_stats_available = pool_size > 0
+        dynamic_trigger_info_min = idf_stats.get("dynamic_threshold")
 
-    trigger_info_min = max(dynamic_threshold, absolute_min) if dynamic_threshold else absolute_min
+    return _trigger_evidence_passes(
+        strong_variant_phrase_hit=strong_variant_phrase_hit,
+        required_concepts_match=required_concepts_match,
+        trigger_idf_sum=trigger_idf_sum,
+        trigger_coverage=trigger_coverage,
+        distinct_trigger_terms=distinct_trigger_terms,
+        idf_stats_available=idf_stats_available,
+        pool_size=pool_size,
+        dynamic_trigger_info_min=dynamic_trigger_info_min,
+    )
 
-    # Small pool additionally requires strong_variant OR concepts
-    if pool_size < _SMALL_POOL_THRESHOLD:
-        if not (strong_variant_phrase_hit or required_concepts_match):
-            return False
 
-    # Path B
-    if (
-        trigger_idf_sum >= trigger_info_min
-        and trigger_coverage >= coverage_min
-        and required_concepts_match
-        and distinct_trigger_terms >= distinct_min
-    ):
-        return True
+def _evaluate_strong_trigger_evidence(
+    *,
+    strong_variant_phrase_hit: bool,
+    required_concepts_match: bool,
+    trigger_idf_sum: float,
+    trigger_coverage: float,
+    distinct_trigger_terms: int,
+    idf_stats: Optional[dict],
+) -> bool:
+    """Adapter: delegates to applicability._strong_trigger_evidence."""
+    if idf_stats is None:
+        pool_size = 0
+        idf_stats_available = False
+        dynamic_trigger_info_min = None
+    else:
+        pool_size = idf_stats.get("pool_size", 0)
+        idf_stats_available = pool_size > 0
+        dynamic_trigger_info_min = idf_stats.get("dynamic_threshold")
 
-    # Path C (relaxed coverage, stricter IDF)
-    if (
-        trigger_idf_sum >= 1.5 * trigger_info_min
-        and required_concepts_match
-        and distinct_trigger_terms >= distinct_min
-    ):
-        return True
-
-    return False
+    return _strong_trigger_evidence(
+        strong_variant_phrase_hit=strong_variant_phrase_hit,
+        required_concepts_match=required_concepts_match,
+        trigger_idf_sum=trigger_idf_sum,
+        trigger_coverage=trigger_coverage,
+        distinct_trigger_terms=distinct_trigger_terms,
+        idf_stats_available=idf_stats_available,
+        pool_size=pool_size,
+        dynamic_trigger_info_min=dynamic_trigger_info_min,
+    )
 
 
 def compute_dynamic_threshold(pool_size: int) -> dict:
@@ -650,7 +657,7 @@ def compute_dynamic_threshold(pool_size: int) -> dict:
     Given a pool_size (N = number of rules in the active pool), computes:
       - rare_df: floor(N * 0.10) clamped to min 1
       - idf_10pct: log(1 + (N - rare_df + 0.5) / (rare_df + 0.5))
-      - dynamic_trigger_info_min: max(idf_10pct, absolute_min)
+      - dynamic_trigger_info_min = max(2 * idf_10pct, absolute_min)
 
     This allows callers to validate their passed dynamic_threshold against
     the spec-defined formula.
@@ -669,15 +676,16 @@ def compute_dynamic_threshold(pool_size: int) -> dict:
             "rare_df": 0,
             "idf_10pct": 0.0,
             "dynamic_trigger_info_min": 0.0,
+            "dynamic_threshold": 0.0,
         }
 
     rare_df = max(1, math.ceil(pool_size * 0.10))
     idf_10pct = math.log(1 + (pool_size - rare_df + 0.5) / (rare_df + 0.5))
 
-    if pool_size < _SMALL_POOL_THRESHOLD:
-        absolute_min = _SMALL_POOL_ABSOLUTE_MIN
+    if pool_size < SMALL_POOL_THRESHOLD:
+        absolute_min = DYNAMIC_IDF_SMALL_POOL.absolute_trigger_info_min
     else:
-        absolute_min = _NORMAL_ABSOLUTE_MIN
+        absolute_min = DYNAMIC_IDF_NORMAL.absolute_trigger_info_min
 
     # Spec: dynamic_trigger_info_min = 2 * idf_10pct; trigger_info_min = max(dynamic, absolute)
     dynamic_trigger_info_min = max(2 * idf_10pct, absolute_min)
@@ -687,48 +695,5 @@ def compute_dynamic_threshold(pool_size: int) -> dict:
         "rare_df": rare_df,
         "idf_10pct": idf_10pct,
         "dynamic_trigger_info_min": dynamic_trigger_info_min,
+        "dynamic_threshold": dynamic_trigger_info_min,
     }
-
-
-def _evaluate_strong_trigger_evidence(
-    *,
-    strong_variant_phrase_hit: bool,
-    required_concepts_match: bool,
-    trigger_idf_sum: float,
-    trigger_coverage: float,
-    distinct_trigger_terms: int,
-    idf_stats: Optional[dict],
-) -> bool:
-    """Strong trigger evidence = Path A or full Path B (not relaxed Path C)."""
-    if strong_variant_phrase_hit and required_concepts_match:
-        return True
-
-    if idf_stats is None:
-        return False
-
-    pool_size = idf_stats.get("pool_size", 0)
-    if pool_size == 0:
-        return False
-
-    dynamic_threshold = idf_stats.get("dynamic_threshold")
-    if pool_size < _SMALL_POOL_THRESHOLD:
-        coverage_min = _SMALL_POOL_COVERAGE_MIN
-        distinct_min = _SMALL_POOL_DISTINCT_MIN
-        absolute_min = _SMALL_POOL_ABSOLUTE_MIN
-    else:
-        coverage_min = _NORMAL_COVERAGE_MIN
-        distinct_min = _NORMAL_DISTINCT_MIN
-        absolute_min = _NORMAL_ABSOLUTE_MIN
-
-    trigger_info_min = max(dynamic_threshold, absolute_min) if dynamic_threshold else absolute_min
-
-    # Strong = only Path B (full thresholds, not relaxed Path C)
-    if (
-        trigger_idf_sum >= trigger_info_min
-        and trigger_coverage >= coverage_min
-        and required_concepts_match
-        and distinct_trigger_terms >= distinct_min
-    ):
-        return True
-
-    return False

@@ -26,7 +26,7 @@ def create_fire_event(
     event_id = str(uuid.uuid4())
     now = now_iso()
 
-    resolved_decision_reason = decision_reason or decision_features.get("decision_reason")
+    resolved_decision_reason = decision_reason or (decision_features.get("decision_reason") if decision_features else None)
 
     injected_structured_snapshot = dumps_json({
         "concepts": loads_json(rule.concepts, []),

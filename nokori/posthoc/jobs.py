@@ -244,10 +244,12 @@ def submit_feedback(
         return None
 
     # Recency check: fire event must be from this session or within 24h
-    if session_id and fire_row["session_id"] != session_id:
-        from datetime import datetime, timedelta, timezone
-        from ..utils.time import parse_iso
+    from datetime import datetime, timedelta, timezone
+    from ..utils.time import parse_iso
 
+    if session_id and fire_row["session_id"] == session_id:
+        pass  # Same session, no recency constraint
+    else:
         fire_time = parse_iso(fire_row["created_at"])
         if fire_time and (datetime.now(timezone.utc) - fire_time) > timedelta(hours=24):
             return None
@@ -423,12 +425,13 @@ def _load_transcript_window(
             return content
 
     # The bounded_window_ref may contain inline content (stored during session_end)
-    # or be a reference identifier. Short refs (< 64 chars) are just hash IDs
-    # without real content — mark as unclear rather than wrapping as fake content.
+    # or be a reference identifier. Refs that look like hex hashes (16-64 hex chars)
+    # are just IDs without real content — mark as unclear rather than wrapping as fake content.
+    import re as _re
     ref = bounded_window_ref or transcript_window_ref
     if ref:
-        if len(ref) > 64:
-            return ref
-        return None
+        if _re.match(r'^[0-9a-f]{16,64}$', ref):
+            return None
+        return ref
 
     return None

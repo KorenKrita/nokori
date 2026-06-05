@@ -11,6 +11,7 @@ from ..config import Config
 from ..db import (
     SCHEMA_VERSION,
     dumps_json,
+    loads_json,
     fetch_rules,
     fetch_short_ids,
     open_db,
@@ -116,8 +117,8 @@ def run_export(args: argparse.Namespace, cfg: Config) -> int:
                 "severity": r.severity,
                 "trigger_canonical": r.trigger_canonical,
                 "trigger_canonical_zh": r.trigger_canonical_zh,
-                "trigger_variants": r.trigger_variants,
-                "trigger_variants_zh": r.trigger_variants_zh,
+                "trigger_variants": r.trigger_variants if isinstance(r.trigger_variants, list) else loads_json(r.trigger_variants, []),
+                "trigger_variants_zh": r.trigger_variants_zh if isinstance(r.trigger_variants_zh, list) else loads_json(r.trigger_variants_zh, []),
                 "search_terms": r.search_terms,
                 "action_instruction": r.action_instruction,
                 "action_instruction_zh": r.action_instruction_zh,

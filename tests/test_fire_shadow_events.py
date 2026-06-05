@@ -339,7 +339,7 @@ class TestCreateShadowEvent:
                 "candidate",
                 "candidate_probe",
                 "hash_x",
-                "warm",
+                "warm_candidate",
                 {"sim": 0.7},
                 context_fingerprint=fp,
             )
@@ -358,7 +358,7 @@ class TestCreateShadowEvent:
             rule = _insert_rule(db, status="candidate")
             eid_candidate = create_shadow_event(
                 db, rule, "s1", "candidate", "candidate_probe",
-                "hash_a", "hot", {"sim": 0.8},
+                "hash_a", "hot_candidate", {"sim": 0.8},
             )
             row = db.fetchone(
                 "SELECT status_at_match FROM rule_shadow_events WHERE id = ?",
@@ -369,7 +369,7 @@ class TestCreateShadowEvent:
             rule_supp = _insert_rule(db, status="suppressed")
             eid_suppressed = create_shadow_event(
                 db, rule_supp, "s2", "suppressed", "suppression_recovery",
-                "hash_b", "warm", {"sim": 0.6},
+                "hash_b", "warm_candidate", {"sim": 0.6},
             )
             row2 = db.fetchone(
                 "SELECT status_at_match FROM rule_shadow_events WHERE id = ?",
@@ -391,14 +391,14 @@ class TestCountShadowEvidence:
 
             eid1 = create_shadow_event(
                 db, rule, "s1", "candidate", "candidate_probe",
-                "hash_dup", "hot", {"sim": 0.9},
+                "hash_dup", "hot_candidate", {"sim": 0.9},
                 context_fingerprint=fp,
             )
             mark_shadow_label(db, eid1, "would_help_high")
 
             eid2 = create_shadow_event(
                 db, rule, "s2", "candidate", "candidate_probe",
-                "hash_dup", "hot", {"sim": 0.9},
+                "hash_dup", "hot_candidate", {"sim": 0.9},
                 context_fingerprint=fp,
             )
             mark_shadow_label(db, eid2, "would_help_high")
@@ -421,7 +421,7 @@ class TestCountShadowEvidence:
             # Event with version 1
             eid1 = create_shadow_event(
                 db, rule_v1, "s1", "candidate", "candidate_probe",
-                "hash_1", "hot", {"sim": 0.9},
+                "hash_1", "hot_candidate", {"sim": 0.9},
                 context_fingerprint="fp_unique_1",
             )
             mark_shadow_label(db, eid1, "would_help_high")
@@ -445,7 +445,7 @@ class TestCountShadowEvidence:
                         "candidate",
                         "candidate_probe",
                         "hash_2",
-                        "hot",
+                        "hot_candidate",
                         dumps_json({"sim": 0.8}),
                         "fp_unique_2",
                         "would_help_low",
@@ -476,7 +476,7 @@ class TestIsDuplicateShadowContext:
             fp = compute_context_fingerprint("hash_z", "tool_b", 5)
             create_shadow_event(
                 db, rule, "s1", "candidate", "candidate_probe",
-                "hash_z", "hot", {"sim": 0.9},
+                "hash_z", "hot_candidate", {"sim": 0.9},
                 context_fingerprint=fp,
             )
             assert is_duplicate_shadow_context(db, rule.id, fp) is True
@@ -509,12 +509,12 @@ class TestRunShadowCounterfactualEvaluation:
             # Create shadow events without labels
             eid1 = create_shadow_event(
                 db, rule, "s_eval_1", "candidate", "candidate_probe",
-                "hash_eval_1", "hot", {"sim": 0.9},
+                "hash_eval_1", "hot_candidate", {"sim": 0.9},
                 context_fingerprint="fp_eval_1",
             )
             eid2 = create_shadow_event(
                 db, rule, "s_eval_2", "candidate", "candidate_probe",
-                "hash_eval_2", "warm", {"sim": 0.7},
+                "hash_eval_2", "warm_candidate", {"sim": 0.7},
                 context_fingerprint="fp_eval_2",
             )
 
@@ -565,7 +565,7 @@ class TestRunShadowCounterfactualEvaluation:
 
             eid = create_shadow_event(
                 db, rule, "s_fail", "suppressed", "suppression_recovery",
-                "hash_fail", "hot", {"sim": 0.8},
+                "hash_fail", "hot_candidate", {"sim": 0.8},
                 context_fingerprint="fp_fail",
             )
 

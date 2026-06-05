@@ -832,11 +832,12 @@ class TestSuppressedToArchived:
         finally:
             db.close()
 
-    def test_recovery_evidence_prevents_ttl_archive(self, tmp_path):
-        """Sufficient would_help_high prevents TTL archive."""
+    def test_recovery_before_ttl_expiry_succeeds(self, tmp_path):
+        """Recovery evidence BEFORE TTL expiry allows promotion to active."""
         db = _fresh_db(tmp_path)
         try:
-            suppressed_at = _utcnow_iso(-(SUPPRESSION_TTL_DAYS + 1))
+            # Not yet expired (within TTL)
+            suppressed_at = _utcnow_iso(-5)
             rid = _insert_rule(db, status="suppressed", suppressed_at=suppressed_at)
 
             sess1 = str(uuid.uuid4())
@@ -848,8 +849,28 @@ class TestSuppressedToArchived:
             _insert_shadow_event(db, rid, session_id=sess2, label="would_help_high", shadow_type="suppression_recovery")
 
             result = evaluate_transitions(db, rid)
-            # Should recover to active instead of archiving
+            # Recovery before TTL expiry → active
             assert result.new_status == "active"
+        finally:
+            db.close()
+
+    def test_recovery_after_ttl_expiry_archives_regardless(self, tmp_path):
+        """After TTL expiry, recovery evidence does NOT prevent archival (spec M14)."""
+        db = _fresh_db(tmp_path)
+        try:
+            suppressed_at = _utcnow_iso(-(SUPPRESSION_TTL_DAYS + 1))
+            rid = _insert_rule(db, status="suppressed", suppressed_at=suppressed_at)
+
+            sess1 = str(uuid.uuid4())
+            sess2 = str(uuid.uuid4())
+
+            _insert_shadow_event(db, rid, session_id=sess1, label="would_help_high", shadow_type="suppression_recovery")
+            _insert_shadow_event(db, rid, session_id=sess1, label="would_help_high", shadow_type="suppression_recovery")
+            _insert_shadow_event(db, rid, session_id=sess2, label="would_help_high", shadow_type="suppression_recovery")
+
+            result = evaluate_transitions(db, rid)
+            # TTL expired → archived regardless of recovery evidence
+            assert result.new_status == "archived"
         finally:
             db.close()
 
@@ -1340,86 +1361,60 @@ class TestCASConcurrency:
 # ---------------------------------------------------------------------------
 
 
-class TestFireEventWindowCountOnly:
-    """Fire events older than 30 days still count if within last 10 evaluated.
+class TestFireEventDualWindow:
+    """Fire evidence uses BOTH count window (last 10) AND time window (30 days).
 
-    Since time-based filtering was removed (spec 3.4), the window is purely
-    count-based (LIMIT 10). Events from 60+ days ago still participate if
-    they are among the most recent 10 evaluated events for that rule.
+    Spec 3.4: metrics computed over events within both windows simultaneously.
+    Events older than 30 days are excluded even if among last 10.
     """
 
-    def test_old_events_within_last_10_still_count_for_suppression(self, tmp_path):
-        """Fire events older than 30 days still trigger suppression if in last 10."""
+    def test_recent_irrelevant_events_trigger_suppression(self, tmp_path):
+        """Recent irrelevant events within both windows trigger suppression."""
         db = _fresh_db(tmp_path)
         try:
             rid = _insert_rule(db, status="active")
-
             sess1 = str(uuid.uuid4())
 
-            # Insert 3 irrelevant events from 60 days ago (well beyond 30-day window).
-            # These should still count because they are within the last 10 evaluated.
-            _insert_fire_event(
-                db, rid, session_id=sess1, label="irrelevant",
-                reason_code="irrelevant_not_applicable", days_ago=60,
-            )
-            _insert_fire_event(
-                db, rid, session_id=sess1, label="irrelevant",
-                reason_code="irrelevant_not_applicable", days_ago=55,
-            )
-            _insert_fire_event(
-                db, rid, session_id=sess1, label="irrelevant",
-                reason_code="irrelevant_not_applicable", days_ago=50,
-            )
-            # 2 more recent events (still within last 5)
-            _insert_fire_event(
-                db, rid, session_id=sess1, label="plausible_useful",
-                reason_code="useful_prevented_error", days_ago=2,
-            )
-            _insert_fire_event(
-                db, rid, session_id=sess1, label="plausible_useful",
-                reason_code="useful_improved_quality", days_ago=1,
-            )
+            # 3 irrelevant within 30 days → suppression
+            _insert_fire_event(db, rid, session_id=sess1, label="irrelevant",
+                               reason_code="irrelevant_not_applicable", days_ago=10)
+            _insert_fire_event(db, rid, session_id=sess1, label="irrelevant",
+                               reason_code="irrelevant_not_applicable", days_ago=8)
+            _insert_fire_event(db, rid, session_id=sess1, label="irrelevant",
+                               reason_code="irrelevant_not_applicable", days_ago=5)
+            _insert_fire_event(db, rid, session_id=sess1, label="plausible_useful",
+                               reason_code="useful_prevented_error", days_ago=2)
+            _insert_fire_event(db, rid, session_id=sess1, label="plausible_useful",
+                               reason_code="useful_improved_quality", days_ago=1)
 
             result = evaluate_transitions(db, rid)
-            # 3 irrelevant in last 5 evaluated fire events -> suppression
             assert result.new_status == "suppressed"
         finally:
             db.close()
 
-    def test_old_events_counted_toward_trusted_promotion(self, tmp_path):
-        """Old observed_useful events within last 10 count for active->trusted."""
+    def test_old_events_excluded_from_dual_window(self, tmp_path):
+        """Events older than 30 days are excluded even if within last 10."""
         db = _fresh_db(tmp_path)
         try:
             rid = _insert_rule(db, status="active")
-
             sess1 = str(uuid.uuid4())
             sess2 = str(uuid.uuid4())
 
-            # 3 observed_useful from 45 days ago (beyond 30-day window)
-            _insert_fire_event(
-                db, rid, session_id=sess1, label="observed_useful",
-                reason_code="useful_prevented_error", days_ago=45,
-            )
-            _insert_fire_event(
-                db, rid, session_id=sess1, label="observed_useful",
-                reason_code="useful_improved_quality", days_ago=42,
-            )
-            _insert_fire_event(
-                db, rid, session_id=sess2, label="observed_useful",
-                reason_code="useful_followed_preference", days_ago=40,
-            )
-            # 2 recent plausible to reach evaluated >= 5
-            _insert_fire_event(
-                db, rid, session_id=sess1, label="plausible_useful",
-                reason_code="useful_improved_quality", days_ago=2,
-            )
-            _insert_fire_event(
-                db, rid, session_id=sess2, label="plausible_useful",
-                reason_code="useful_prevented_error", days_ago=1,
-            )
+            # 3 observed_useful from 45 days ago → excluded by time window
+            _insert_fire_event(db, rid, session_id=sess1, label="observed_useful",
+                               reason_code="useful_prevented_error", days_ago=45)
+            _insert_fire_event(db, rid, session_id=sess1, label="observed_useful",
+                               reason_code="useful_improved_quality", days_ago=42)
+            _insert_fire_event(db, rid, session_id=sess2, label="observed_useful",
+                               reason_code="useful_followed_preference", days_ago=40)
+            # 2 recent → total evaluated = 2, below threshold for trusted
+            _insert_fire_event(db, rid, session_id=sess1, label="plausible_useful",
+                               reason_code="useful_improved_quality", days_ago=2)
+            _insert_fire_event(db, rid, session_id=sess2, label="plausible_useful",
+                               reason_code="useful_prevented_error", days_ago=1)
 
             result = evaluate_transitions(db, rid)
-            # Old events are within last 10, so observed_useful >= 3, sessions >= 2 -> trusted
-            assert result.new_status == "trusted"
+            # Old events excluded → insufficient for promotion
+            assert result.new_status is None
         finally:
             db.close()
