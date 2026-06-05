@@ -135,6 +135,7 @@ def _insert_fire_event(
     session_id: str | None = None,
     label: str | None = None,
     reason_code: str | None = None,
+    posthoc_score: float | None = None,
     days_ago: float = 0,
 ) -> str:
     eid = str(uuid.uuid4())
@@ -144,9 +145,9 @@ def _insert_fire_event(
         tx.execute(
             "INSERT INTO rule_fire_events "
             "(id, rule_id, session_id, posthoc_label, posthoc_reason_code, "
-            "level, created_at) "
-            "VALUES (?,?,?,?,?,?,?)",
-            (eid, rule_id, sid, label, reason_code, "warm", ts),
+            "posthoc_score, level, created_at) "
+            "VALUES (?,?,?,?,?,?,?,?)",
+            (eid, rule_id, sid, label, reason_code, posthoc_score, "warm", ts),
         )
     return eid
 
@@ -501,6 +502,54 @@ class TestActiveToTrusted:
             )
             assert row["status"] == "trusted"
             assert row["runtime_policy_version"] == RUNTIME_POLICY_VERSION
+        finally:
+            db.close()
+
+    def test_legacy_null_posthoc_score_counts_as_strong_attribution(self, tmp_path):
+        db = _fresh_db(tmp_path)
+        try:
+            rid = _insert_rule(db, status="active")
+            sess1 = str(uuid.uuid4())
+            sess2 = str(uuid.uuid4())
+
+            _insert_fire_event(db, rid, session_id=sess1, label="observed_useful",
+                               reason_code="useful_prevented_error")
+            _insert_fire_event(db, rid, session_id=sess1, label="observed_useful",
+                               reason_code="useful_improved_quality")
+            _insert_fire_event(db, rid, session_id=sess2, label="observed_useful",
+                               reason_code="useful_followed_preference")
+            _insert_fire_event(db, rid, session_id=sess1, label="plausible_useful",
+                               reason_code="useful_improved_quality")
+            _insert_fire_event(db, rid, session_id=sess2, label="plausible_useful",
+                               reason_code="useful_prevented_error")
+
+            result = evaluate_transitions(db, rid)
+
+            assert result.new_status == "trusted"
+        finally:
+            db.close()
+
+    def test_weak_observed_useful_score_does_not_promote_to_trusted(self, tmp_path):
+        db = _fresh_db(tmp_path)
+        try:
+            rid = _insert_rule(db, status="active")
+            sess1 = str(uuid.uuid4())
+            sess2 = str(uuid.uuid4())
+
+            _insert_fire_event(db, rid, session_id=sess1, label="observed_useful",
+                               reason_code="useful_prevented_error", posthoc_score=0.5)
+            _insert_fire_event(db, rid, session_id=sess1, label="observed_useful",
+                               reason_code="useful_improved_quality", posthoc_score=0.5)
+            _insert_fire_event(db, rid, session_id=sess2, label="observed_useful",
+                               reason_code="useful_followed_preference", posthoc_score=0.5)
+            _insert_fire_event(db, rid, session_id=sess1, label="plausible_useful",
+                               reason_code="useful_improved_quality", posthoc_score=0.3)
+            _insert_fire_event(db, rid, session_id=sess2, label="plausible_useful",
+                               reason_code="useful_prevented_error", posthoc_score=0.3)
+
+            result = evaluate_transitions(db, rid)
+
+            assert result.new_status is None
         finally:
             db.close()
 
