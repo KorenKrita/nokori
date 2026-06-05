@@ -2,6 +2,7 @@ import json
 import subprocess
 import sys
 import time
+from dataclasses import replace
 from datetime import datetime, timezone
 
 def _set_rule_lifecycle(
@@ -133,6 +134,27 @@ def test_pre_tool_use_blocks_when_marker_present(tmp_path):
     assert _gate_denied(out)
     assert short in _gate_deny_reason(out)
     assert "decision" not in out
+
+
+def test_gate_marker_keeps_decision_features(tmp_path):
+    from nokori.config import Config
+    from nokori.gate import marker as marker_io
+
+    short = _add_high_active(tmp_path, "force push to main", "use lease",
+                             variants=["git push --force"])
+    sess = "s-test-marker-features"
+    _run("hook", "user-prompt-submit",
+         env_extra={"NOKORI_DATA_DIR": str(tmp_path)},
+         stdin=json.dumps({"session_id": sess, "cwd": str(tmp_path),
+                           "prompt": "git push --force the branch"}))
+    cfg = replace(Config.from_env(), data_dir=tmp_path)
+    marker = marker_io.read_latest_marker(cfg, sess)
+
+    assert marker is not None
+    assert marker.rules
+    rule = next(r for r in marker.rules if r.short_id == short)
+    assert rule.decision_features is not None
+    assert rule.decision_features["required_concepts_match"] is True
 
 
 def test_pre_tool_use_passes_when_no_marker(tmp_path):

@@ -182,6 +182,20 @@ def _validate_matcher_structure(rec: dict) -> str | None:
     return None
 
 
+def _import_status(rec: dict) -> str:
+    """Import preserves archive vetoes; all other records re-enter as candidates."""
+    return "archived" if rec.get("status", "candidate") == "archived" else "candidate"
+
+
+def _import_source_origin(rec: dict) -> str:
+    """Imported non-archive records are external source material, not trusted state."""
+    return (
+        rec.get("source_origin", "transcript_extraction")
+        if rec.get("status", "candidate") == "archived"
+        else "external_source_material"
+    )
+
+
 def run_export(args: argparse.Namespace, cfg: Config) -> int:
     target = Path(args.path).expanduser().resolve()
     db = open_db(cfg.db_path)
@@ -313,9 +327,9 @@ def run_import(args: argparse.Namespace, cfg: Config) -> int:
                 dumps_json(rec.get("domain_tags") or []),
                 dumps_json(rec.get("tool_tags") or []),
                 dumps_json(rec.get("path_patterns") or []),
-                rec.get("status", "candidate"),
+                _import_status(rec),
                 rec.get("severity", "reminder"),
-                rec.get("source_origin", "transcript_extraction"),
+                _import_source_origin(rec),
                 rec.get("project_scope", "project"),
                 rec.get("project_id"),
                 rec.get("archived_reason"),

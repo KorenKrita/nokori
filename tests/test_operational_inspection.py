@@ -531,6 +531,7 @@ class TestWebRetrieveApi:
             assert "search_only_match" in df
             assert "embedding_only_match" in df
             assert "matched_trigger_tokens" in df
+            assert "decision_reason" in df
 
     def test_retrieve_returns_eligibility(self, client):
         resp = client.post(
@@ -544,6 +545,8 @@ class TestWebRetrieveApi:
             assert "decision" in elig
             assert "eligible" in elig
             assert "reason" in elig
+            assert "trigger_evidence_passed" in elig
+            assert "penalties" in elig
 
     def test_retrieve_returns_ranking_utility(self, client):
         resp = client.post(

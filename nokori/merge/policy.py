@@ -539,7 +539,7 @@ def validate_merge_transaction(
     4. Final admission policy (final_admission_passed)
 
     For update_existing_fields: treated as destructive when the operation
-    changes trigger/variants/concepts/exclusions. Check via merge_decision
+    changes trigger/variants/concepts/excluded_contexts. Check via merge_decision
     lineage_record metadata if available; otherwise treat all
     update_existing_fields as requiring validation.
 
@@ -557,13 +557,19 @@ def validate_merge_transaction(
         return True
 
     # For update_existing_fields: only require full validation if changes
-    # touch trigger/variants/concepts/exclusions. Use lineage_record metadata
+    # touch trigger/variants/concepts/excluded_contexts. Use lineage_record metadata
     # to determine scope; if metadata unavailable, require validation.
     if merge_decision.operation == "update_existing_fields":
         requires_validation = True
         lineage = merge_decision.lineage_record
         if lineage and isinstance(lineage.get("changed_fields"), (list, tuple)):
-            sensitive_fields = {"trigger_canonical", "trigger_variants", "concepts", "exclusions"}
+            sensitive_fields = {
+                "trigger_canonical",
+                "variants",
+                "trigger_variants",
+                "concepts",
+                "excluded_contexts",
+            }
             changed = set(lineage["changed_fields"])
             requires_validation = bool(changed & sensitive_fields)
         if not requires_validation:
@@ -609,7 +615,7 @@ def _lineage(target_id: str | None, operation: str, reason: str) -> dict:
 
 
 def _new_evidence_improves(existing_rule: dict, new_rule_data: dict) -> bool:
-    """Check whether the new rule has MORE variants, concepts, exclusions, or near_miss_examples.
+    """Check whether the new rule has MORE variants, concepts, excluded_contexts, or near_miss_examples.
 
     Returns True only if the new rule provides strictly more evidence in at
     least one of these dimensions without reducing any other.
@@ -624,12 +630,20 @@ def _new_evidence_improves(existing_rule: dict, new_rule_data: dict) -> bool:
             return len(parsed) if isinstance(parsed, list) else 0
         return 0
 
-    fields = ("trigger_variants", "concepts", "exclusions", "near_miss_examples")
+    fields = ("variant_count", "concepts", "excluded_contexts", "near_miss_examples")
 
     has_improvement = False
     for field in fields:
-        existing_count = _len(existing_rule, field)
-        new_count = _len(new_rule_data, field)
+        if field == "variant_count":
+            existing_count = _len(existing_rule, "trigger_variants") or _len(
+                existing_rule, "variants"
+            )
+            new_count = _len(new_rule_data, "variants") or _len(
+                new_rule_data, "trigger_variants"
+            )
+        else:
+            existing_count = _len(existing_rule, field)
+            new_count = _len(new_rule_data, field)
         if new_count < existing_count:
             return False
         if new_count > existing_count:

@@ -17,7 +17,7 @@ from ..utils.host import Host
 from ..utils.logging import get_logger
 from ..utils.prompt_text import normalize_prompt_for_hash
 from ..utils.transcript import resolve_transcript_path, transcript_resolve_failure_reason
-from .prompt_inject import RetrieveFailed, inject_for_prompt
+from .prompt_inject import RetrieveFailed, _build_decision_features, inject_for_prompt
 
 log = get_logger("nokori.hooks.cursor_deferred")
 
@@ -117,7 +117,7 @@ def maybe_deferred_pre_tool_use(
                 runtime_policy_version=r.runtime_policy_version,
                 trigger_idf_pool_version=r.trigger_idf_pool_version,
                 embedding_profile_version=r.embedding_profile_version,
-                decision_features=getattr(r, "decision_features", None),
+                decision_features=_build_decision_features(r),
             )
             for r in gate_hot
         ]

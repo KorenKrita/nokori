@@ -122,6 +122,7 @@ class ScoredResult:
     # Concept / context evidence
     required_concepts_match: bool = False
     excluded_context_hit: bool = False
+    excluded_context_override_passed: bool = False
 
     # Match source flags
     action_only_match: bool = False
@@ -142,6 +143,8 @@ class ScoredResult:
     # Ranking
     ranking_utility: float = 0.0
     decision_reason: str = ""
+    trigger_evidence_passed: bool = False
+    decision_penalties: tuple[str, ...] = ()
     level: InjectionLevel | None = None
 
 

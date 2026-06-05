@@ -152,6 +152,7 @@ def test_no_gate_marker_when_injection_empty(monkeypatch, tmp_path):
 
 def test_decision_features_include_decision_reason():
     from nokori.hooks.prompt_inject import _build_decision_features
+    from nokori.web.models import DecisionFeaturesOut
 
     features = _build_decision_features(
         SimpleNamespace(
@@ -169,6 +170,12 @@ def test_decision_features_include_decision_reason():
     )
 
     assert features["decision_reason"] == (
+        "active with observed useful + strong trigger evidence"
+    )
+    assert features["weak_variant_recall_hit"] is False
+    assert features["excluded_context_override_passed"] is False
+    assert features["action_only_match"] is False
+    assert DecisionFeaturesOut(**features).decision_reason == (
         "active with observed useful + strong trigger evidence"
     )
 
@@ -204,6 +211,48 @@ def test_record_fire_events_passes_turn_index(monkeypatch):
     )
 
     assert captured["turn_index"] == 7
+
+
+def test_record_shadow_events_passes_runtime_policy_version(monkeypatch):
+    from nokori.hooks import prompt_inject as pinject
+
+    captured = {}
+
+    def fake_create_shadow_event(*_args, **kwargs):
+        captured["runtime_policy_version"] = kwargs.get("runtime_policy_version")
+        return "shadow-1"
+
+    monkeypatch.setattr(pinject, "create_shadow_event", fake_create_shadow_event)
+    monkeypatch.setattr(pinject, "is_duplicate_shadow_context", lambda *_args: False)
+    result = SimpleNamespace(
+        rule=SimpleNamespace(id="rule-1", status="candidate"),
+        trigger_idf_sum=0.0,
+        trigger_coverage=0.0,
+        distinct_trigger_terms=0,
+        strong_variant_phrase_hit=False,
+        weak_variant_recall_hit=True,
+        required_concepts_match=True,
+        excluded_context_hit=False,
+        excluded_context_override_passed=False,
+        action_only_match=False,
+        search_only_match=False,
+        embedding_only_match=False,
+        matched_trigger_tokens=frozenset(),
+        matched_variant_tokens=frozenset(),
+        bm25_score=0.0,
+        cosine=None,
+        rrf_score=0.0,
+        decision_reason="test",
+        trigger_idf_pool_version="idf",
+        runtime_policy_version="policy-v1",
+        embedding_profile_version="embed",
+    )
+
+    pinject._record_shadow_events(
+        SimpleNamespace(), "session-1", "prompt-hash", [result], turn_index=7
+    )
+
+    assert captured["runtime_policy_version"] == "policy-v1"
 
 
 def test_inject_for_prompt_records_only_rendered_entries(monkeypatch):

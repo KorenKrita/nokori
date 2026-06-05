@@ -134,8 +134,8 @@ function ResultSection({ title, items, level }: { title: string; items: ScoredRe
               <span>BM25: {sr.bm25_score.toFixed(2)}</span>
               {sr.cosine !== null && <span>Cosine: {sr.cosine.toFixed(3)}</span>}
               <span>RRF: {sr.rrf_score.toFixed(4)}</span>
-              {sr.matched_tokens.length > 0 && (
-                <span>Tokens: {sr.matched_tokens.join(', ')}</span>
+              {sr.decision_features.matched_trigger_tokens.length > 0 && (
+                <span>Tokens: {sr.decision_features.matched_trigger_tokens.join(', ')}</span>
               )}
             </div>
           </div>

@@ -21,7 +21,7 @@ from ..utils.hook_response import user_prompt_submit_response
 from ..utils.host import Host, effective_session_id
 from ..utils.logging import get_logger
 from ..utils.time import iso_of, now_iso
-from .prompt_inject import RetrieveFailed, inject_for_prompt
+from .prompt_inject import RetrieveFailed, _build_decision_features, inject_for_prompt
 
 log = get_logger("nokori.hooks.user_prompt_submit")
 
@@ -84,7 +84,7 @@ def _update_gate_marker(
                     runtime_policy_version=r.runtime_policy_version,
                     trigger_idf_pool_version=r.trigger_idf_pool_version,
                     embedding_profile_version=r.embedding_profile_version,
-                    decision_features=getattr(r, "decision_features", None),
+                    decision_features=_build_decision_features(r),
                 )
                 for r in gate_rules
             ],

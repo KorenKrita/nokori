@@ -54,4 +54,6 @@ def merge_scored_fields(
         cosine=embed_result.cosine,
         embedding_only_match=embedding_only,
         embedding_profile_bucket=embed_result.embedding_profile_bucket,
+        embedding_profile_version=embed_result.embedding_profile_version,
+        embedding_profile_unknown=embed_result.embedding_profile_unknown,
     )

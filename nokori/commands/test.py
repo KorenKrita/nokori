@@ -24,6 +24,7 @@ def _format_eligibility(r, pool_size: int) -> str:
         strong_variant_phrase_hit=r.strong_variant_phrase_hit,
         required_concepts_match=r.required_concepts_match,
         excluded_context_hit=r.excluded_context_hit,
+        excluded_context_override_passed=r.excluded_context_override_passed,
         action_only_match=r.action_only_match,
         search_only_match=r.search_only_match,
         embedding_only_match=r.embedding_only_match,

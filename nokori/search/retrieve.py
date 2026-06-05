@@ -101,6 +101,11 @@ def _apply_runtime_applicability(
     idf_stats,
     cfg: Config,
 ) -> ScoredResult | None:
+    embedding_profile_version = (
+        result.embedding_profile_version
+        if result.embedding_profile_version is not None
+        else ("unknown" if result.embedding_profile_unknown else None)
+    )
     if (
         result.rule.schema_version < SCHEMA_VERSION
         and not loads_json(result.rule.concepts, [])
@@ -112,8 +117,10 @@ def _apply_runtime_applicability(
         return replace(
             result,
             trigger_idf_pool_version=idf_stats.pool_version,
-            embedding_profile_version=cfg.embed_model or "unknown",
+            embedding_profile_version=embedding_profile_version,
             runtime_policy_version=RUNTIME_POLICY_VERSION,
+            trigger_evidence_passed=True,
+            decision_penalties=(),
             level=level,
             decision_reason="legacy unstructured rule: fielded minimum evidence passed",
         )
@@ -130,7 +137,17 @@ def _apply_runtime_applicability(
     except CompilationError:
         if result.rule.schema_version >= SCHEMA_VERSION:
             return None
-        return result if meets_min_evidence(result) else None
+        if not meets_min_evidence(result):
+            return None
+        return replace(
+            result,
+            trigger_idf_pool_version=idf_stats.pool_version,
+            embedding_profile_version=embedding_profile_version,
+            runtime_policy_version=RUNTIME_POLICY_VERSION,
+            trigger_evidence_passed=True,
+            decision_penalties=(),
+            decision_reason="legacy unstructured rule: fielded minimum evidence passed",
+        )
 
     match = evaluate_match(matcher, prompt)
     trigger_tokens = set(result.matched_trigger_tokens)
@@ -178,13 +195,16 @@ def _apply_runtime_applicability(
         weak_variant_recall_hit=bool(match.weak_variant_hits),
         required_concepts_match=match.required_concepts_match,
         excluded_context_hit=bool(match.excluded_context_hits),
+        excluded_context_override_passed=match.excluded_context_override_passed,
         action_only_match=match.action_only_match,
         search_only_match=match.search_only_match,
         matched_trigger_tokens=frozenset(trigger_tokens),
         trigger_idf_pool_version=idf_stats.pool_version,
-        embedding_profile_version=cfg.embed_model or "unknown",
+        embedding_profile_version=embedding_profile_version,
         runtime_policy_version=RUNTIME_POLICY_VERSION,
         decision_reason=applicability.reason,
+        trigger_evidence_passed=applicability.trigger_evidence_passed,
+        decision_penalties=tuple(applicability.penalties),
         level=level,
     )
 

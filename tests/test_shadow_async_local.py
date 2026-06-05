@@ -190,6 +190,43 @@ class TestShadowPoolHotTier:
         finally:
             db.close()
 
+    def test_hook_records_global_shadow_without_project_id(self, monkeypatch, tmp_path):
+        """Global candidate rules still gather shadow evidence when cwd has no project."""
+        monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+        cfg = Config.from_env()
+        db = open_db(cfg.db_path)
+        try:
+            _make_rule(
+                db,
+                id_="global-candidate",
+                status="candidate",
+                project_scope="global",
+                project_id=None,
+            )
+            _make_rule(
+                db,
+                id_="project-candidate",
+                status="candidate",
+                project_scope="project",
+                project_id="other-proj",
+            )
+            from nokori.hooks.user_prompt_submit import handle
+
+            with patch("nokori.utils.sessions.resolve_project_id_for_session",
+                       return_value=None):
+                handle({
+                    "session_id": "s-shadow-global",
+                    "prompt": "trigger global candidate",
+                    "cwd": str(tmp_path),
+                }, cfg, host=Host.CLAUDE)
+
+            events = db.fetchall(
+                "SELECT rule_id FROM rule_shadow_events ORDER BY rule_id"
+            )
+            assert [row["rule_id"] for row in events] == ["global-candidate"]
+        finally:
+            db.close()
+
 
 class TestShadowHitEvidence:
     def test_shadow_hit_adds_evidence(self, monkeypatch, tmp_path):

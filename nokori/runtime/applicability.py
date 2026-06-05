@@ -65,13 +65,6 @@ def meets_min_evidence(r: ScoredResult) -> bool:
     if len(r.matched_trigger_tokens) >= 1 and len(r.matched_variant_tokens) >= 1:
         return True
 
-    # Embedding-only with strong cosine: pre-filter pass only.
-    # NOTE: embedding_only_match results are always COLD in evaluate_applicability
-    # (they lack trigger evidence), so this branch does not influence WARM/HOT/Gate.
-    # Retained as a pre-filter for hybrid results that have cosine + partial triggers.
-    if r.cosine is not None and r.cosine >= 0.55:
-        return True
-
     # Action-only or search-only matches without trigger evidence are weak.
     if r.action_only_match or r.search_only_match:
         return False

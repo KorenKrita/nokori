@@ -282,6 +282,44 @@ def test_validate_merge_transaction_non_destructive_always_passes():
         ) is True
 
 
+def test_validate_merge_transaction_excluded_context_change_requires_gates():
+    decision = MergeDecision(
+        operation="update_existing_fields",
+        target_rule_id="rule-1",
+        reason="changed exclusion",
+        requires_synthetic_reeval=False,
+        lineage_record={"changed_fields": ["excluded_contexts"]},
+    )
+
+    assert validate_merge_transaction(
+        {"id": "rule-1"},
+        {"excluded_contexts": [{"id": "ex1"}]},
+        decision,
+        synthetic_passed=False,
+        fingerprint_clear=True,
+        matcher_compiled=True,
+    ) is False
+
+
+def test_validate_merge_transaction_variant_alias_change_requires_gates():
+    decision = MergeDecision(
+        operation="update_existing_fields",
+        target_rule_id="rule-1",
+        reason="changed variants",
+        requires_synthetic_reeval=False,
+        lineage_record={"changed_fields": ["variants"]},
+    )
+
+    assert validate_merge_transaction(
+        {"id": "rule-1"},
+        {"variants": [{"text": "git push --force"}]},
+        decision,
+        synthetic_passed=False,
+        fingerprint_clear=True,
+        matcher_compiled=True,
+    ) is False
+
+
 # ---------------------------------------------------------------------------
 # 9. Complementary -> keep_both
 # ---------------------------------------------------------------------------
@@ -385,6 +423,25 @@ def test_update_existing_fields_with_improvement():
     assert result.operation == "update_existing_fields"
     assert result.lineage_record is not None
     assert result.lineage_record["operation"] == "update_existing_fields"
+
+
+def test_update_existing_fields_with_excluded_context_improvement():
+    """equivalent + safe + unchanged action + more exclusions -> update_existing_fields."""
+    existing = _existing(
+        status="active",
+        action_instruction="always use semicolons",
+    )
+    planner = _planner(
+        relation="equivalent",
+        quality_winner="new",
+        confidence=0.9,
+    )
+    new_rule = _new_rule(action_instruction="always use semicolons")
+    new_rule["excluded_contexts"] = [{"id": "ex1", "patterns": ["generated file"]}]
+
+    result = apply_merge_policy(planner, existing, new_rule)
+
+    assert result.operation == "update_existing_fields"
 
 
 # ---------------------------------------------------------------------------

@@ -122,6 +122,7 @@ def _evaluate_single_case(
         strong_variant_phrase_hit=len(match_result.strong_variant_hits) > 0,
         required_concepts_match=match_result.required_concepts_match,
         excluded_context_hit=len(match_result.excluded_context_hits) > 0,
+        excluded_context_override_passed=match_result.excluded_context_override_passed,
         action_only_match=match_result.action_only_match,
         search_only_match=match_result.search_only_match,
         embedding_only_match=False,
@@ -145,6 +146,7 @@ def _evaluate_single_case(
         "required_concepts_match": match_result.required_concepts_match,
         "strong_variant_hits": list(match_result.strong_variant_hits),
         "excluded_context_hits": list(match_result.excluded_context_hits),
+        "excluded_context_override_passed": match_result.excluded_context_override_passed,
         "case_passed": case_passed,
         "reason": applicability_result.reason,
     }

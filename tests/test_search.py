@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 
 from nokori.models import Rule
+from nokori.models import ScoredResult
 from nokori.runtime.applicability import meets_min_evidence
 from nokori.runtime.selection import tier_results
 from nokori.search import bm25, ranker
@@ -94,6 +95,30 @@ def test_tier_min_evidence_blocks_single_token_match():
     hot, warm = tier_results(eligible)
     assert hot == []
     assert warm == []
+
+
+def test_meets_min_evidence_does_not_use_fixed_cosine_threshold():
+    rules = [_rule("aaa111", "force push to main", action="use lease")]
+    result = bm25.ScoredResult(rule=rules[0], cosine=0.99)
+    assert meets_min_evidence(result) is False
+
+
+def test_rrf_fuse_preserves_embedding_profile_metadata():
+    rule = _rule("aaa111", "force push to main", action="use lease")
+    bm = ScoredResult(rule=rule, matched_trigger_tokens=frozenset({"force"}))
+    emb = ScoredResult(
+        rule=rule,
+        cosine=0.92,
+        embedding_profile_bucket="code_or_cli",
+        embedding_profile_version="profile-v1",
+        embedding_profile_unknown=False,
+    )
+
+    fused = ranker.rrf_fuse([bm], [emb])
+
+    assert fused[0].embedding_profile_bucket == "code_or_cli"
+    assert fused[0].embedding_profile_version == "profile-v1"
+    assert fused[0].embedding_profile_unknown is False
 
 
 def test_chinese_query():

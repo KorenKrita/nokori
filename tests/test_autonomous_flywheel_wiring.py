@@ -212,5 +212,22 @@ def test_cli_edit_rejects_manual_trust(tmp_path, monkeypatch):
         capture_output=True,
     )
 
-    assert result.returncode == 1
-    assert "manual lifecycle" in result.stderr
+    assert result.returncode == 2
+    assert "invalid choice" in result.stderr
+    assert "trusted" in result.stderr
+
+
+def test_cli_edit_status_help_exposes_archive_only(tmp_path, monkeypatch):
+    env = os.environ.copy()
+    env["NOKORI_DATA_DIR"] = str(tmp_path)
+    result = subprocess.run(
+        [sys.executable, "-m", "nokori", "edit", "--help"],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        text=True,
+        capture_output=True,
+    )
+
+    assert result.returncode == 0
+    assert "{archived}" in result.stdout
+    assert "{active,trusted,suppressed,archived}" not in result.stdout

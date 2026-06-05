@@ -48,9 +48,35 @@ export interface ScoredResult {
   bm25_score: number
   cosine: number | null
   rrf_score: number
-  matched_tokens: string[]
-  has_trigger_variant_match: boolean
-  retrieval_hot: boolean
+  ranking_utility: number
+  decision_reason: string
+  decision_features: {
+    trigger_idf_sum: number
+    trigger_coverage: number
+    distinct_trigger_terms: number
+    strong_variant_phrase_hit: boolean
+    weak_variant_recall_hit: boolean
+    required_concepts_match: boolean
+    excluded_context_hit: boolean
+    excluded_context_override_passed: boolean
+    action_only_match: boolean
+    search_only_match: boolean
+    embedding_only_match: boolean
+    embedding_cosine?: number
+    embedding_profile_bucket?: string
+    matched_trigger_tokens: string[]
+    matched_variant_tokens: string[]
+    matched_action_tokens?: string[]
+    matched_search_tokens?: string[]
+    decision_reason: string
+  }
+  eligibility: {
+    decision: string
+    eligible: boolean
+    reason: string
+    trigger_evidence_passed: boolean
+    penalties: string[]
+  }
 }
 
 export interface DashboardData {

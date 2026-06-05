@@ -213,6 +213,83 @@ def test_import_forces_current_schema_policy_and_keeps_structure(tmp_path):
     assert json.loads(row["required_concept_groups"])
 
 
+def test_import_rehydrates_formal_rule_as_external_candidate(tmp_path):
+    from nokori.db import open_db
+
+    data = tmp_path / "data"
+    out = tmp_path / "formal_rule.json"
+    trigger = "force push shared branch"
+    payload = {
+        "format": "nokori-export",
+        "version": 6,
+        "rules": [
+            {
+                "id": "00000000-0000-4000-8000-000000000114",
+                "short_id": "abc114",
+                "trigger_canonical": trigger,
+                **_v6_structure(trigger),
+                "action_instruction": "use --force-with-lease",
+                "status": "trusted",
+                "source_origin": "transcript_extraction",
+            }
+        ],
+    }
+    out.write_text(json.dumps(payload), encoding="utf-8")
+
+    r = _run("import", str(out), env_extra={"NOKORI_DATA_DIR": str(data)})
+
+    assert r.returncode == 0, r.stderr
+    db = open_db(data / "rules.db")
+    try:
+        row = db.fetchone(
+            "SELECT status, source_origin, activation_origin FROM rules WHERE short_id = ?",
+            ("abc114",),
+        )
+    finally:
+        db.close()
+    assert row["status"] == "candidate"
+    assert row["source_origin"] == "external_source_material"
+    assert row["activation_origin"] is None
+
+
+def test_import_preserves_archived_negative_memory(tmp_path):
+    from nokori.db import open_db
+
+    data = tmp_path / "data"
+    out = tmp_path / "archived_rule.json"
+    payload = {
+        "format": "nokori-export",
+        "version": 6,
+        "rules": [
+            {
+                "id": "00000000-0000-4000-8000-000000000115",
+                "short_id": "abc115",
+                "trigger_canonical": "old unsafe rule",
+                "action_instruction": "do not restore",
+                "status": "archived",
+                "source_origin": "transcript_extraction",
+                "archived_reason": "user_archive",
+            }
+        ],
+    }
+    out.write_text(json.dumps(payload), encoding="utf-8")
+
+    r = _run("import", str(out), env_extra={"NOKORI_DATA_DIR": str(data)})
+
+    assert r.returncode == 0, r.stderr
+    db = open_db(data / "rules.db")
+    try:
+        row = db.fetchone(
+            "SELECT status, source_origin, archived_reason FROM rules WHERE short_id = ?",
+            ("abc115",),
+        )
+    finally:
+        db.close()
+    assert row["status"] == "archived"
+    assert row["source_origin"] == "transcript_extraction"
+    assert row["archived_reason"] == "user_archive"
+
+
 def test_import_rejects_oversized_trigger(tmp_path):
     data = tmp_path / "data"
     out = tmp_path / "huge.json"

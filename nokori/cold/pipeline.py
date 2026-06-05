@@ -403,7 +403,9 @@ def _run_cold_pipeline_inner(
             _apply_non_destructive_merge(db, target_id, rule_data, merge_op, merge_info)
 
             # Spec 6.5: re-run synthetic eval if variants or excluded_contexts changed
-            _merge_changed_variants = bool(rule_data.get("variants"))
+            _merge_changed_variants = bool(
+                rule_data.get("variants") or rule_data.get("trigger_variants")
+            )
             _merge_changed_excluded = bool(rule_data.get("excluded_contexts"))
             if _merge_changed_variants or _merge_changed_excluded:
                 # Reload merged rule for re-compilation

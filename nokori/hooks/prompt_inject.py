@@ -45,11 +45,17 @@ def _fetch_formal_and_shadow(
         formal_rules = fetch_rules(
             db, statuses=("active", "trusted"), project_id=project_id
         )
-    shadow_rules = (
-        fetch_shadow_rules(db, project_id=project_id)
-        if project_id and cfg.promotion_enabled
-        else []
-    )
+    if cfg.promotion_enabled:
+        if project_id is None:
+            shadow_rules = [
+                r
+                for r in fetch_shadow_rules(db, project_id=None)
+                if r.project_scope == "global"
+            ]
+        else:
+            shadow_rules = fetch_shadow_rules(db, project_id=project_id)
+    else:
+        shadow_rules = []
     return formal_rules, shadow_rules
 
 
@@ -60,8 +66,17 @@ def _build_decision_features(r) -> dict:
         "trigger_coverage": r.trigger_coverage,
         "distinct_trigger_terms": r.distinct_trigger_terms,
         "strong_variant_phrase_hit": r.strong_variant_phrase_hit,
+        "weak_variant_recall_hit": getattr(r, "weak_variant_recall_hit", False),
         "required_concepts_match": r.required_concepts_match,
         "excluded_context_hit": r.excluded_context_hit,
+        "excluded_context_override_passed": getattr(
+            r, "excluded_context_override_passed", False
+        ),
+        "action_only_match": getattr(r, "action_only_match", False),
+        "search_only_match": getattr(r, "search_only_match", False),
+        "embedding_only_match": getattr(r, "embedding_only_match", False),
+        "matched_trigger_tokens": sorted(getattr(r, "matched_trigger_tokens", ())),
+        "matched_variant_tokens": sorted(getattr(r, "matched_variant_tokens", ())),
         "decision_reason": getattr(r, "decision_reason", ""),
         "bm25_score": r.bm25_score,
         "cosine": r.cosine,
@@ -161,6 +176,7 @@ def _record_shadow_events(
                 matched_level="hot_candidate" if r.strong_variant_phrase_hit else "warm_candidate",
                 decision_features=_build_decision_features(r),
                 idf_pool_version=r.trigger_idf_pool_version,
+                runtime_policy_version=r.runtime_policy_version,
                 embedding_profile_version=r.embedding_profile_version,
                 context_fingerprint=fp,
             )
@@ -220,7 +236,7 @@ def inject_for_prompt(
         )
 
     # Record shadow events for candidate/suppressed matches (fingerprint dedup)
-    if record_shadow_hits and project_id:
+    if record_shadow_hits:
         _record_shadow_events(
             db, session_id, ph, shadow_hot + shadow_warm,
             turn_index=turn_index,

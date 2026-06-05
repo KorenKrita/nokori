@@ -41,6 +41,7 @@ def _scored_to_dict(sr) -> dict:
         "weak_variant_recall_hit": sr.weak_variant_recall_hit,
         "required_concepts_match": sr.required_concepts_match,
         "excluded_context_hit": sr.excluded_context_hit,
+        "excluded_context_override_passed": sr.excluded_context_override_passed,
         "action_only_match": sr.action_only_match,
         "search_only_match": sr.search_only_match,
         "embedding_only_match": sr.embedding_only_match,
@@ -48,6 +49,7 @@ def _scored_to_dict(sr) -> dict:
         "matched_variant_tokens": sorted(sr.matched_variant_tokens),
         "matched_action_tokens": sorted(sr.matched_action_tokens),
         "matched_search_tokens": sorted(sr.matched_search_tokens),
+        "decision_reason": sr.decision_reason,
     }
     if sr.cosine is not None:
         decision_features["embedding_cosine"] = sr.cosine
@@ -60,6 +62,8 @@ def _scored_to_dict(sr) -> dict:
         "decision": level if level else "cold",
         "eligible": level is not None and level != "cold",
         "reason": sr.decision_reason,
+        "trigger_evidence_passed": sr.trigger_evidence_passed,
+        "penalties": list(sr.decision_penalties),
     }
 
     return {

@@ -594,6 +594,7 @@ class DecisionFeatures:
     weak_variant_recall_hit: bool
     required_concepts_match: bool
     excluded_context_hit: bool
+    excluded_context_override_passed: bool
     action_only_match: bool
     search_only_match: bool
     embedding_only_match: bool
@@ -612,6 +613,7 @@ class DecisionFeatures:
             "weak_variant_recall_hit": self.weak_variant_recall_hit,
             "required_concepts_match": self.required_concepts_match,
             "excluded_context_hit": self.excluded_context_hit,
+            "excluded_context_override_passed": self.excluded_context_override_passed,
             "action_only_match": self.action_only_match,
             "search_only_match": self.search_only_match,
             "embedding_only_match": self.embedding_only_match,
@@ -632,12 +634,13 @@ class DecisionFeatures:
             trigger_coverage=data["trigger_coverage"],
             distinct_trigger_terms=data["distinct_trigger_terms"],
             strong_variant_phrase_hit=data["strong_variant_phrase_hit"],
-            weak_variant_recall_hit=data["weak_variant_recall_hit"],
+            weak_variant_recall_hit=data.get("weak_variant_recall_hit", False),
             required_concepts_match=data["required_concepts_match"],
             excluded_context_hit=data["excluded_context_hit"],
-            action_only_match=data["action_only_match"],
-            search_only_match=data["search_only_match"],
-            embedding_only_match=data["embedding_only_match"],
+            excluded_context_override_passed=data.get("excluded_context_override_passed", False),
+            action_only_match=data.get("action_only_match", False),
+            search_only_match=data.get("search_only_match", False),
+            embedding_only_match=data.get("embedding_only_match", False),
             embedding_cosine=data.get("embedding_cosine"),
             embedding_profile_bucket=data.get("embedding_profile_bucket"),
             matched_trigger_tokens=tuple(data.get("matched_trigger_tokens", ())),

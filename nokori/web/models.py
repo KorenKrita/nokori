@@ -22,6 +22,7 @@ class DecisionFeaturesOut(BaseModel):
     weak_variant_recall_hit: bool
     required_concepts_match: bool
     excluded_context_hit: bool
+    excluded_context_override_passed: bool = False
     action_only_match: bool
     search_only_match: bool
     embedding_only_match: bool

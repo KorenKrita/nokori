@@ -33,6 +33,7 @@ def test_help_lists_subcommands(tmp_path, monkeypatch):
     for cmd in ("add", "list", "show", "dismiss", "test", "extract", "status",
                 "install", "health", "maintain", "export", "import"):
         assert cmd in r.stdout, f"{cmd} missing from --help"
+    assert "reset" not in r.stdout
 
 
 def test_status_on_empty_db(tmp_path, monkeypatch):

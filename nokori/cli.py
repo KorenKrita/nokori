@@ -64,7 +64,7 @@ def _build_parser() -> argparse.ArgumentParser:
     sp_edit.add_argument("--terms-en", default=None, help="comma-separated English terms")
     sp_edit.add_argument("--terms-zh", default=None, help="comma-separated Chinese terms")
     sp_edit.add_argument("--severity", default=None, choices=("reminder", "high_risk", "gate_eligible"))
-    sp_edit.add_argument("--status", default=None, choices=("active", "trusted", "suppressed", "archived"))
+    sp_edit.add_argument("--status", default=None, choices=("archived",))
 
     sp_test = sub.add_parser("test", help="simulate retrieval for a prompt")
     sp_test.add_argument("prompt", help="user prompt to simulate")
@@ -93,13 +93,6 @@ def _build_parser() -> argparse.ArgumentParser:
         help="connectivity checks: db, hooks, LLM, embedding readiness",
     )
     sub.add_parser("maintain", help="run maintenance jobs now")
-    sp_reset = sub.add_parser("reset", help="reset the database (destructive)")
-    sp_reset.add_argument(
-        "--force",
-        action="store_true",
-        help="skip confirmation prompt",
-    )
-
     sp_export = sub.add_parser("export", help="export rules to JSON")
     sp_export.add_argument("path")
     sp_import = sub.add_parser("import", help="import rules from JSON")
@@ -225,10 +218,6 @@ def _dispatch(args: argparse.Namespace, cfg: Config) -> int:
         from .commands import maintain
 
         return maintain.run(args, cfg)
-    if cmd == "reset":
-        from .commands import reset
-
-        return reset.run(args, cfg)
     if cmd == "export":
         from .commands import export_import
 
