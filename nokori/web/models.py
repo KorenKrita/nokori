@@ -194,50 +194,6 @@ class RuleResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-class RuleOut(BaseModel):
-    id: str
-    short_id: str
-    trigger_text: str
-    trigger_variants: list[str | dict]
-    trigger_variants_zh: list[str]
-    search_terms: dict[str, list[str]]
-    behavior: str | None
-    action: str
-    rationale: str | None
-    source_type: str
-    confidence: str
-    status: str
-    evidence_score: int
-    evidence_log: list[dict]
-    hit_count: int
-    last_hit: str | None
-    shadow_hit_count: int
-    promotion_evidence: list[dict]
-    project_scope: str
-    project_id: str | None
-    superseded_by: str | None
-    archived_reason: str | None
-    created_at: str
-    updated_at: str
-    trigger_text_zh: str | None = None
-    behavior_zh: str | None = None
-    action_zh: str | None = None
-    rationale_zh: str | None = None
-
-
-class RuleEdit(BaseModel):
-    trigger_text: str | None = None
-    action: str | None = None
-    rationale: str | None = None
-    confidence: str | None = None
-    status: str | None = None
-    trigger_variants: list[str | dict] | None = None
-    trigger_variants_zh: list[str] | None = None
-    search_terms: dict[str, list[str]] | None = None
-    trigger_text_zh: str | None = None
-    behavior_zh: str | None = None
-    action_zh: str | None = None
-    rationale_zh: str | None = None
 
 
 class RetrieveRequest(BaseModel):

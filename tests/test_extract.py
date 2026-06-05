@@ -495,9 +495,7 @@ def test_extractor_parses_zh_fields():
     assert ok and len(cands) == 1
     c = cands[0]
     assert c.trigger_text_zh == "强制推送到共享分支"
-    assert c.behavior_zh == "使用 git push --force"
     assert c.action_zh == "使用 --force-with-lease"
-    assert c.rationale_zh == "强推会覆盖同事的工作"
 
 
 def test_extractor_zh_fields_none_when_missing():
@@ -518,6 +516,4 @@ def test_extractor_zh_fields_none_when_missing():
     assert ok and len(cands) == 1
     c = cands[0]
     assert c.trigger_text_zh is None
-    assert c.behavior_zh is None
     assert c.action_zh is None
-    assert c.rationale_zh is None

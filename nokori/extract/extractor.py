@@ -33,9 +33,7 @@ class Candidate:
     confidence: str
     evidence_quotes: list[str] = dataclasses.field(default_factory=list)
     trigger_text_zh: str | None = None
-    behavior_zh: str | None = None
     action_zh: str | None = None
-    rationale_zh: str | None = None
     trigger_variants_zh: list[str] = dataclasses.field(default_factory=list)
 
 
@@ -144,9 +142,7 @@ def _coerce(item: dict) -> Candidate:
             terms[str(lang)] = cleaned
     terms = normalize_search_terms(terms)
     trigger_text_zh = _opt_str(item, "trigger_zh")
-    behavior_zh = _opt_str(item, "behavior_zh")
     action_zh = _opt_str(item, "action_zh")
-    rationale_zh = _opt_str(item, "rationale_zh")
     variants_zh_raw = item.get("trigger_variants_zh") or []
     if not isinstance(variants_zh_raw, list):
         variants_zh_raw = []
@@ -166,8 +162,6 @@ def _coerce(item: dict) -> Candidate:
         confidence=confidence,
         evidence_quotes=evidence_quotes,
         trigger_text_zh=trigger_text_zh,
-        behavior_zh=behavior_zh,
         action_zh=action_zh,
-        rationale_zh=rationale_zh,
         trigger_variants_zh=trigger_variants_zh,
     )

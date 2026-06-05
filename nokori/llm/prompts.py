@@ -76,11 +76,9 @@ Each item:
   "trigger_variants_zh": ["<2-3 Chinese alternative phrasings of trigger_variants; concise, same scope>"],
   "search_terms": {"en": ["<Latin-script retrieval terms>"], "zh": ["<CJK retrieval terms from the user, if any>"]},
   "behavior": "<what the assistant did wrong or the old approach>",
-  "behavior_zh": "<Chinese translation of behavior>",
   "action": "<imperative general pattern; 1-2 sentences — match correction scope; cover all issues if multiple in one message; do not broaden a specific rejection into a blanket rule; no specific paths/filenames from the transcript>",
   "action_zh": "<Chinese translation of action — imperative, same scope>",
   "rationale": "<one sentence evidence from the transcript>",
-  "rationale_zh": "<Chinese translation of rationale>",
   "evidence_quotes": ["<verbatim substring from the transcript that proves the user correction/preference — copy-paste, do not paraphrase; 1-3 quotes, each 20-200 chars>"],
   "source_type": "correction" | "preference" | "solution" | "anti_pattern",
   "confidence": "high" | "medium" | "low"

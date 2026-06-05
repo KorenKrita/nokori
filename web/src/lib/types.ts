@@ -15,11 +15,9 @@ export interface Rule {
   trigger_variants?: TriggerVariant[]
   trigger_variants_zh?: string[]
   search_terms?: Record<string, string[]>
-  behavior?: string | null
   action?: string
   action_instruction?: string
   action_instruction_zh?: string | null
-  rationale?: string | null
   source_type?: string
   source_origin?: string
   confidence?: string
@@ -38,9 +36,7 @@ export interface Rule {
   created_at: string
   updated_at: string
   trigger_text_zh?: string | null
-  behavior_zh?: string | null
   action_zh?: string | null
-  rationale_zh?: string | null
 }
 
 export interface ScoredResult {
