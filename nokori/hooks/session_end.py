@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 
 from ..config import Config
-from ..db import open_db, dumps_json
+from ..db import open_db
 from ..errors import DbError
 from ..gate import prompt_ack
 from ..posthoc import enqueue_posthoc_for_session
@@ -89,21 +89,9 @@ def _populate_transcript_windows(
     Uses windowing module to compute topic-shift-bounded windows per fire event.
     Attempts to use embedding-based topic shift detection if search.embedding is available.
     """
-    # Try to obtain an embedding_fn for enhanced topic shift detection
+    # Spec section 10: session_end must only enqueue and return immediately.
+    # Embedding-based topic shift is deferred to the posthoc background worker.
     embedding_fn = None
-    if cfg is not None:
-        try:
-            from ..search.embedding import EmbeddingClient
-
-            client = EmbeddingClient(cfg)
-            if client.configured():
-                def _embed(text: str) -> list[float]:
-                    vectors = client.embed(text, timeout=5)
-                    return vectors[0] if vectors else []
-
-                embedding_fn = _embed
-        except Exception:
-            pass  # Gracefully degrade to lexical-only
 
     # Get fire events for this session that have pending posthoc jobs
     rows = db.fetchall(

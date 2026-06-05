@@ -11,7 +11,6 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 from ..db import Db
-from ..events.fire import count_evaluated_fire_events
 from ..events.shadow import count_shadow_evidence
 from ..policy import (
     ACTIVE_TO_SUPPRESSED,
@@ -24,7 +23,6 @@ from ..policy import (
     RECENT_EVENT_WINDOW,
     RECENT_TIME_WINDOW_DAYS,
     RUNTIME_POLICY_VERSION,
-    SHADOW_EVENT_WINDOW,
     SUPPRESSED_TO_ACTIVE,
     SUPPRESSED_TO_ARCHIVED,
     SUPPRESSION_TTL_DAYS,
@@ -639,15 +637,16 @@ def _evaluate_trusted(db: Db, row, rule_version: int) -> TransitionResult:
     irrelevant = fire.get("irrelevant", 0)
 
     # Rate-based decay requires minimum_rate_denominator (spec 3.4)
-    # Decay uses windowed harmful (spec 3.3 'harmful_count=0' in recent window);
-    # suppression handles lifetime harmful.
-    recent_harmful_for_decay = fire.get("harmful", 0)
+    # Spec 3.3 'harmful_count = 0' — use lifetime harmful for consistency.
+    # Suppression guard above catches lifetime_harmful >= 1 first, but
+    # defensive: if suppression thresholds ever change, decay still won't
+    # promote a rule with any historical harm.
     if (
         total_evaluated >= th.evaluated_fire_count_in_recent_window_min
         and total_evaluated >= MINIMUM_RATE_DENOMINATOR
         and observed_useful <= th.observed_useful_count_in_recent_window_max
         and irrelevant >= th.irrelevant_count_in_recent_window_min
-        and recent_harmful_for_decay <= th.harmful_count_max
+        and lifetime_harmful <= th.harmful_count_max
         and fp_rate >= th.recent_false_positive_rate_min
     ):
         reason = (

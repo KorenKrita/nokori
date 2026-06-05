@@ -150,4 +150,5 @@ def select_gate_rules(hot):
         for r in hot
         if r.rule.status == "trusted"
         and r.rule.severity == "gate_eligible"
+        and getattr(r, "level", None) == "gate"
     ]

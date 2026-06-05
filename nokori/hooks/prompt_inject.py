@@ -105,6 +105,33 @@ def _record_fire_events(
             log.info("fire event creation failed rule=%s: %s", r.rule.id, e)
 
 
+def _record_rendered_fire_events(
+    db: Db,
+    session_id: str,
+    ph: str,
+    hot: list,
+    warm: list,
+    rendered_entries: list[tuple[str, str]],
+    *,
+    turn_index: int | None = None,
+    prompt_text: str | None = None,
+) -> None:
+    results_by_id = {r.rule.id: r for r in [*hot, *warm]}
+    for rule_id, level in rendered_entries:
+        result = results_by_id.get(rule_id)
+        if result is None:
+            continue
+        _record_fire_events(
+            db,
+            session_id,
+            ph,
+            [result],
+            level,
+            turn_index=turn_index,
+            prompt_text=prompt_text,
+        )
+
+
 _SHADOW_TYPE_BY_STATUS = {
     "candidate": "candidate_probe",
     "suppressed": "suppression_recovery",
@@ -112,14 +139,15 @@ _SHADOW_TYPE_BY_STATUS = {
 
 
 def _record_shadow_events(
-    db: Db, session_id: str, ph: str, results: list
+    db: Db, session_id: str, ph: str, results: list,
+    *, turn_index: int | None = None,
 ) -> None:
     """Create shadow events for candidate/suppressed matches with fingerprint dedup."""
     for r in results:
         shadow_type = _SHADOW_TYPE_BY_STATUS.get(r.rule.status)
         if shadow_type is None:
             continue
-        fp = compute_context_fingerprint(ph)
+        fp = compute_context_fingerprint(ph, turn_index=turn_index)
         if is_duplicate_shadow_context(db, r.rule.id, fp):
             continue
         try:
@@ -173,26 +201,30 @@ def inject_for_prompt(
     normalized = normalize_prompt_for_hash(prompt)
     ph = prompt_hash(normalized or prompt)
 
-    # Record fire events for injected rules
+    text, rendered_entries = format_injection(
+        hot, warm, max_chars=cfg.max_injection_chars, dismiss_phrase=cfg.dismiss_phrase
+    )
+
+    # Record only rules that were actually rendered into the prompt. HOT rules
+    # may spill into WARM when the injection budget is tight.
     if record_injections:
-        _record_fire_events(
-            db, session_id, ph, hot, "hot",
-            turn_index=turn_index, prompt_text=prompt,
-        )
-        _record_fire_events(
-            db, session_id, ph, warm, "warm",
-            turn_index=turn_index, prompt_text=prompt,
+        _record_rendered_fire_events(
+            db,
+            session_id,
+            ph,
+            hot,
+            warm,
+            rendered_entries,
+            turn_index=turn_index,
+            prompt_text=prompt,
         )
 
     # Record shadow events for candidate/suppressed matches (fingerprint dedup)
     if record_shadow_hits and project_id:
         _record_shadow_events(
-            db, session_id, ph, shadow_hot + shadow_warm
+            db, session_id, ph, shadow_hot + shadow_warm,
+            turn_index=turn_index,
         )
-
-    text, rendered_entries = format_injection(
-        hot, warm, max_chars=cfg.max_injection_chars, dismiss_phrase=cfg.dismiss_phrase
-    )
 
     return PromptInjectOutcome(
         hot=hot,
