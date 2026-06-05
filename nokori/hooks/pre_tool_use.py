@@ -98,13 +98,16 @@ def _has_tool_evidence(rule, payload: dict) -> bool:
 
     tokens = {
         t
-        for t in re.findall(r"[a-z0-9_+-]{3,}", f"{trigger} {action}".lower())
-        if t not in {"the", "and", "for", "with", "before", "after", "rule"}
+        for t in re.findall(r"[a-z0-9_+-]{4,}", f"{trigger} {action}".lower())
+        if t not in {"the", "and", "for", "with", "before", "after", "rule",
+                     "when", "that", "this", "from", "into", "also", "have",
+                     "been", "will", "should", "must", "always", "never"}
     }
     if not tokens:
         return False
-    hits = {t for t in tokens if t in haystack}
-    return len(hits) >= min(2, len(tokens))
+    # Word-boundary match to avoid substring false positives in paths/identifiers
+    hits = {t for t in tokens if re.search(r'\b' + re.escape(t) + r'\b', haystack)}
+    return len(hits) >= max(2, len(tokens) // 2)
 
 
 def _run_gate(payload: dict, cfg: Config, session_id: str, host) -> dict:
