@@ -384,17 +384,80 @@ def validate_role_output(role: str, raw_json_str: str) -> dict[str, Any]:
     if role not in ROLE_SCHEMAS:
         raise ValueError(f"unknown role: {role}")
 
+    from ..llm.json_payload import parse_json_payload
+
     try:
         data = json.loads(raw_json_str)
-    except json.JSONDecodeError as e:
-        raise ValueError(f"{role}: invalid JSON: {e}") from e
+    except json.JSONDecodeError:
+        data = parse_json_payload(raw_json_str)
+        if data is None:
+            raise ValueError(f"{role}: invalid JSON: could not extract JSON from response")
 
     if not isinstance(data, dict):
         raise ValueError(f"{role}: expected JSON object at top level, got {type(data).__name__}")
 
+    data = _normalize_role_output(role, data)
+
     errors = _validate_type(data, ROLE_SCHEMAS[role], "$")
     if errors:
         raise ValueError(f"{role}: schema validation failed: {'; '.join(errors)}")
+
+    return data
+
+
+_ADMISSION_SCORE_KEYS = (
+    "overall_quality", "evidence_support", "trigger_specificity",
+    "action_clarity", "scope_control", "generalization_safety", "retrieval_readiness",
+)
+
+
+def _normalize_role_output(role: str, data: dict[str, Any]) -> dict[str, Any]:
+    """Fix common LLM schema deviations before validation."""
+    if role == "admission_judge":
+        # Fix 1: scores flattened to top level
+        if "scores" not in data:
+            scores = {}
+            for k in _ADMISSION_SCORE_KEYS:
+                if k in data:
+                    scores[k] = data.pop(k)
+            if scores:
+                data["scores"] = scores
+        # Fix 2: numeric strings -> float
+        if isinstance(data.get("scores"), dict):
+            for k, v in data["scores"].items():
+                if isinstance(v, str):
+                    try:
+                        data["scores"][k] = float(v)
+                    except ValueError:
+                        pass
+        # Fix 3: missing reasoning
+        if "reasoning" not in data:
+            data["reasoning"] = data.pop("rationale", data.pop("reason", data.pop("explanation", "")))
+
+    elif role == "final_judge":
+        # Fix: missing evidence_citations
+        if "evidence_citations" not in data:
+            data["evidence_citations"] = data.pop("citations", data.pop("evidence", []))
+        if isinstance(data.get("evidence_citations"), str):
+            data["evidence_citations"] = [data["evidence_citations"]]
+        if "reasoning" not in data:
+            data["reasoning"] = data.pop("rationale", data.pop("reason", data.pop("explanation", "")))
+
+    elif role == "merge_planner":
+        # Fix: target_rule_ids missing or as single string
+        if "target_rule_ids" not in data:
+            tid = data.pop("target_rule_id", data.pop("target_id", None))
+            data["target_rule_ids"] = [tid] if tid else []
+        if isinstance(data.get("target_rule_ids"), str):
+            data["target_rule_ids"] = [data["target_rule_ids"]]
+        if "reason" not in data:
+            data["reason"] = data.pop("reasoning", data.pop("rationale", ""))
+        # Fix: confidence as string
+        if isinstance(data.get("confidence"), str):
+            try:
+                data["confidence"] = float(data["confidence"])
+            except ValueError:
+                data["confidence"] = 0.5
 
     return data
 
