@@ -119,7 +119,8 @@ def _aggregate_fire_evidence(db: Db, rule_id: str, window_days: int = 30) -> dic
     recent_event_window = last 10 evaluated fire events (count-based, not time-based).
     Harmful events are counted lifetime — they do NOT decay by time alone.
     """
-    # Last N evaluated events (count-based, not time-based), excluding unclear (spec 3.4)
+    # Uses count-based window only (LIMIT N). Spec 3.4 says 'last 10 evaluated fire events'.
+    # Time-based filtering removed to prevent losing events that are within last 10 but older than 30 days.
     recent_rows = db.fetchall(
         "SELECT posthoc_label, posthoc_reason_code, session_id FROM rule_fire_events "
         "WHERE rule_id = ? AND posthoc_label IS NOT NULL AND posthoc_label != 'unclear' "
@@ -404,14 +405,16 @@ def _evaluate_candidate(db: Db, row, rule_version: int) -> TransitionResult:
         + shadow.get("near_miss", 0)
     )
     distinct_sessions = shadow.get("distinct_sessions", 0)
+    # Use task-deduped count as effective sample count for promotion thresholds.
+    # This prevents inflated counts from repeated events within the same task.
+    task_deduped_count = shadow.get("task_deduped_count", evaluated_count)
 
-    # Shadow FP: numerator = irrelevant + risky (scope errors); denominator = evaluated (no unclear)
-    # Spec: false_positive_event = irrelevant_not_applicable OR harmful_wrong_scope etc.
-    # For shadow events: 'irrelevant' and 'near_miss' map to false positives
+    # Shadow FP mapping: shadow 'irrelevant' + 'near_miss' → FP numerator.
+    # 'risky' maps to harmful (suppression trigger), not FP.
     shadow_fp_numerator = shadow.get("irrelevant", 0) + shadow.get("near_miss", 0)
     shadow_fp_rate = (
-        shadow_fp_numerator / max(1, evaluated_count)
-        if evaluated_count > 0
+        shadow_fp_numerator / max(1, task_deduped_count)
+        if task_deduped_count > 0
         else 0.0
     )
 
@@ -548,10 +551,23 @@ def _evaluate_active(db: Db, row, rule_version: int) -> TransitionResult:
         return TransitionResult(rule_id, old_status, "suppressed", reason, applied)
 
     # Check active -> trusted (slow upgrade)
+    # INVARIANT: trusted promotion uses ONLY fire events (observed_useful), never shadow/counterfactual
     th = ACTIVE_TO_TRUSTED
     observed_useful = fire.get("observed_useful", 0)
     total_evaluated = fire.get("total_evaluated", 0)
     distinct_sessions = fire.get("distinct_observed_useful_sessions", 0)
+
+    # Defensive guard: reject if shadow evidence was accidentally mixed into fire aggregation.
+    # The _aggregate_fire_evidence query only reads rule_fire_events, but verify the counts
+    # are sourced exclusively from real injection observations.
+    if fire.get("_source") == "shadow":
+        log.error(
+            "trusted promotion rejected: fire evidence contaminated with shadow data rule=%s",
+            rule_id,
+        )
+        return TransitionResult(
+            rule_id, old_status, None, "shadow_evidence_contamination", False
+        )
 
     # Rate-based promotion NOT allowed below minimum_rate_denominator (spec 3.4)
     # Spec 3.3: harmful_count = 0 for trusted promotion. Per spec 3.4:
@@ -678,9 +694,9 @@ def _evaluate_suppressed(db: Db, row, rule_version: int) -> TransitionResult:
     if suppressed_at is not None:
         ttl_deadline = suppressed_at + timedelta(days=SUPPRESSION_TTL_DAYS)
         if datetime.now(timezone.utc) > ttl_deadline:
-            # No recovery evidence before TTL (spec: archive if no recovery evidence)
+            # No recovery evidence before TTL (spec: archive if recovery is impossible)
             would_help_high = shadow.get("would_help_high", 0)
-            if would_help_high == 0:
+            if would_help_high < SUPPRESSED_TO_ACTIVE.shadow_recovery_would_help_high_min:
                 reason = "no_recovery_before_ttl"
                 applied = _apply_transition(
                     db, rule_id, rule_version, old_status, "archived", rpv, reason

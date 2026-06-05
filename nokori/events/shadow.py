@@ -134,7 +134,8 @@ def count_shadow_evidence(
     Uses SHADOW_EVENT_WINDOW (last N evaluated events) per spec section 3.4.
     Optionally filters by shadow_type (candidate_probe or suppression_recovery).
     Optionally filters to events created after since_iso (for recovery evidence).
-    Returns counts by label plus distinct_sessions, unique_contexts, and per_session_counts.
+    Returns counts by label plus distinct_sessions, unique_contexts, per_session_counts,
+    and task_deduped_count (semantic task-level dedup within sessions).
     """
     cutoff = since_iso if since_iso else _days_ago_iso(window_days)
 
@@ -147,7 +148,7 @@ def count_shadow_evidence(
     params.append(event_limit)
 
     sql = (
-        "SELECT shadow_label, session_id, context_fingerprint "
+        "SELECT shadow_label, session_id, context_fingerprint, prompt_hash, created_at "
         "FROM rule_shadow_events "
         "WHERE rule_id = ? AND shadow_rule_version = ? "
         "AND shadow_label IS NOT NULL AND created_at >= ? "
@@ -172,6 +173,8 @@ def count_shadow_evidence(
     per_session_strong: dict[str, int] = {}
     # Per-session unique context counts for diversity check
     per_session_contexts: dict[str, set] = {}
+    # Collect fingerprint-deduped rows for task-level dedup pass
+    deduped_rows: list[dict] = []
 
     for row in rows:
         fp = row["context_fingerprint"]
@@ -196,6 +199,8 @@ def count_shadow_evidence(
             if fp is not None:
                 per_session_contexts[sid].add(fp)
 
+        deduped_rows.append(dict(row))
+
     # Best single-session strong count
     best_single_session_strong = max(per_session_strong.values()) if per_session_strong else 0
 
@@ -205,13 +210,86 @@ def count_shadow_evidence(
         len(per_session_contexts.get(best_session_id, set())) if best_session_id else 0
     )
 
+    # --- Semantic task-level dedup ---
+    # Within each session, events sharing prompt_hash prefix (first 8 chars) or
+    # occurring within 3 consecutive turn_indexes likely belong to the same task
+    # and count as ONE sample.
+    task_deduped_count = _compute_task_deduped_count(deduped_rows)
+
     return {
         **counts,
         "distinct_sessions": len(sessions),
         "unique_contexts": unique_contexts,
         "best_single_session_strong": best_single_session_strong,
         "best_single_session_contexts": best_single_session_contexts,
+        "task_deduped_count": task_deduped_count,
     }
+
+
+def _compute_task_deduped_count(deduped_rows: list[dict]) -> int:
+    """Compute task-level deduped sample count from fingerprint-deduped rows.
+
+    Groups events by session_id. Within each session, events that share the same
+    prompt_hash prefix (first 8 chars) OR occur within 3 consecutive positions
+    (by created_at ordering) are collapsed into a single task sample.
+
+    Returns the effective sample count after task dedup.
+    """
+    if not deduped_rows:
+        return 0
+
+    # Group by session
+    by_session: dict[str, list[dict]] = {}
+    no_session: list[dict] = []
+    for row in deduped_rows:
+        sid = row.get("session_id")
+        if sid:
+            by_session.setdefault(sid, []).append(row)
+        else:
+            no_session.append(row)
+
+    total_tasks = 0
+
+    for _sid, session_rows in by_session.items():
+        # Sort by created_at for consecutive-event grouping (proxy for turn order)
+        session_rows.sort(key=lambda r: r.get("created_at") or "")
+        # Track which rows have been assigned to a task group
+        assigned = [False] * len(session_rows)
+
+        for i in range(len(session_rows)):
+            if assigned[i]:
+                continue
+            # Start a new task group from this row
+            assigned[i] = True
+            group_prefix = (session_rows[i].get("prompt_hash") or "")[:8]
+            group_max_pos = i
+
+            for j in range(i + 1, len(session_rows)):
+                if assigned[j]:
+                    continue
+                j_prefix = (session_rows[j].get("prompt_hash") or "")[:8]
+
+                # Same task if prompt_hash prefix matches
+                same_prefix = (
+                    group_prefix
+                    and j_prefix
+                    and group_prefix == j_prefix
+                )
+                # Same task if within 3 consecutive positions in session order
+                consecutive = (j - group_max_pos) <= 3
+
+                if same_prefix or consecutive:
+                    assigned[j] = True
+                    # Expand group position range
+                    if j > group_max_pos:
+                        group_max_pos = j
+
+            total_tasks += 1
+
+    # Events without session_id each count as one task
+    total_tasks += len(no_session)
+
+    return total_tasks
 
 
 def is_duplicate_shadow_context(

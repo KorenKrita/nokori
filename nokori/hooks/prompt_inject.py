@@ -77,8 +77,16 @@ def _record_fire_events(
     level: str,
     *,
     turn_index: int | None = None,
+    prompt_text: str | None = None,
 ) -> None:
     """Create fire events for injected WARM/HOT rules."""
+    # Store actual prompt text (truncated to 4000 chars) for posthoc evaluator access,
+    # instead of just a hash reference.
+    if prompt_text and len(prompt_text) > 64:
+        bounded_ref = prompt_text[:4000]
+    else:
+        bounded_ref = f"session:{session_id}:prompt:{ph}"
+
     for r in results:
         try:
             create_fire_event(
@@ -91,7 +99,7 @@ def _record_fire_events(
                 decision_features=_build_decision_features(r),
                 idf_pool_version=getattr(r, "trigger_idf_pool_version", None),
                 embedding_profile_version=r.embedding_profile_version,
-                bounded_window_ref=f"session:{session_id}:prompt:{ph}",
+                bounded_window_ref=bounded_ref,
             )
         except Exception as e:
             log.info("fire event creation failed rule=%s: %s", r.rule.id, e)
@@ -167,8 +175,14 @@ def inject_for_prompt(
 
     # Record fire events for injected rules
     if record_injections:
-        _record_fire_events(db, session_id, ph, hot, "hot", turn_index=turn_index)
-        _record_fire_events(db, session_id, ph, warm, "warm", turn_index=turn_index)
+        _record_fire_events(
+            db, session_id, ph, hot, "hot",
+            turn_index=turn_index, prompt_text=prompt,
+        )
+        _record_fire_events(
+            db, session_id, ph, warm, "warm",
+            turn_index=turn_index, prompt_text=prompt,
+        )
 
     # Record shadow events for candidate/suppressed matches (fingerprint dedup)
     if record_shadow_hits and project_id:

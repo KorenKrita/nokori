@@ -409,6 +409,59 @@ def find_merge_neighbors(db: Db, rule_data: dict, limit: int = 10) -> list[dict]
         if score > 0:
             candidates[row_id] = (_row_to_dict(row), score)
 
+    # Embedding-based recall: augment BM25/token candidates with cosine similarity.
+    try:
+        from ..search.embedding import (
+            EmbeddingClient,
+            _cosine,
+            _deserialize,
+        )
+        from ..config import Config
+        from ..utils.sql_batch import batched
+
+        cfg = Config.load()
+        if cfg.embed_enabled and cfg.embed_base_url and cfg.embed_model:
+            client = EmbeddingClient(cfg)
+            query_text = f"{trigger} {action_text}"
+            qvecs = client.embed(query_text, timeout=5)
+            if qvecs:
+                qvec = qvecs[0]
+                # Fetch embeddings for active/trusted rules
+                active_rows = db.fetchall(
+                    "SELECT rule_id, chunk_index, embedding FROM rule_embeddings "
+                    "WHERE model_version = ?",
+                    (cfg.embed_model,),
+                )
+                by_rule: dict[str, list[list[float]]] = {}
+                for erow in active_rows:
+                    try:
+                        vec = _deserialize(erow["embedding"])
+                    except ValueError:
+                        continue
+                    by_rule.setdefault(erow["rule_id"], []).append(vec)
+
+                for rule_id, embeddings in by_rule.items():
+                    if rule_id == exclude_id:
+                        continue
+                    best_cos = max(_cosine(qvec, emb) for emb in embeddings)
+                    if best_cos > 0.7:
+                        # Add or boost existing candidate
+                        embedding_bonus = best_cos * 2.5
+                        if rule_id in candidates:
+                            existing_dict, existing_score = candidates[rule_id]
+                            candidates[rule_id] = (existing_dict, existing_score + embedding_bonus)
+                        else:
+                            # Fetch the rule row for this candidate
+                            rule_row = db.fetchone(
+                                f"SELECT {RULE_COLUMNS} FROM rules "
+                                "WHERE id = ? AND status != 'archived'",
+                                (rule_id,),
+                            )
+                            if rule_row:
+                                candidates[rule_id] = (_row_to_dict(rule_row), embedding_bonus)
+    except Exception:
+        pass  # Embedding recall is optional; skip gracefully if unavailable.
+
     # Recent fallback: include recently updated rules not yet matched (spec 8.1)
     if len(candidates) < limit:
         recent_rows = db.fetchall(
@@ -426,6 +479,7 @@ def find_merge_neighbors(db: Db, rule_data: dict, limit: int = 10) -> list[dict]
         "SELECT rule_id FROM archived_fingerprints "
         "WHERE archive_strength IN ('user', 'system') LIMIT 10"
     )
+    archived_fingerprint_ids = {r["rule_id"] for r in fp_rows}
     # Fingerprints are passed for negative memory awareness in merge planning,
     # but don't add to positive candidates — they inform the planner that
     # certain areas are blocked.
@@ -434,7 +488,14 @@ def find_merge_neighbors(db: Db, rule_data: dict, limit: int = 10) -> list[dict]
     sorted_candidates = sorted(
         candidates.values(), key=lambda x: x[1], reverse=True
     )
-    return [entry[0] for entry in sorted_candidates[:limit]]
+    results = []
+    for entry in sorted_candidates[:limit]:
+        candidate_dict = {**entry[0], "archived_fingerprints": [
+            fp_id for fp_id in archived_fingerprint_ids
+            if fp_id == entry[0].get("id")
+        ]}
+        results.append(candidate_dict)
+    return results
 
 
 # ---------------------------------------------------------------------------

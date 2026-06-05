@@ -40,7 +40,7 @@ def handle(payload: dict, cfg: Config, *, host: Host) -> dict:
 
         # Store bounded transcript windows in posthoc_jobs.redacted_window_json
         if session_turns:
-            _populate_transcript_windows(db, session_id, session_turns)
+            _populate_transcript_windows(db, session_id, session_turns, cfg)
 
         log.info("enqueued posthoc jobs session=%s", session_id)
     except Exception as e:
@@ -82,12 +82,29 @@ def _extract_session_turns(payload: dict) -> list[dict]:
 
 
 def _populate_transcript_windows(
-    db, session_id: str, session_turns: list[dict]
+    db, session_id: str, session_turns: list[dict], cfg: Config | None = None
 ) -> None:
     """Store bounded transcript window content for each pending posthoc job.
 
     Uses windowing module to compute topic-shift-bounded windows per fire event.
+    Attempts to use embedding-based topic shift detection if search.embedding is available.
     """
+    # Try to obtain an embedding_fn for enhanced topic shift detection
+    embedding_fn = None
+    if cfg is not None:
+        try:
+            from ..search.embedding import EmbeddingClient
+
+            client = EmbeddingClient(cfg)
+            if client.configured():
+                def _embed(text: str) -> list[float]:
+                    vectors = client.embed(text, timeout=5)
+                    return vectors[0] if vectors else []
+
+                embedding_fn = _embed
+        except Exception:
+            pass  # Gracefully degrade to lexical-only
+
     # Get fire events for this session that have pending posthoc jobs
     rows = db.fetchall(
         "SELECT pj.id AS job_id, fe.turn_index, fe.rule_id "
@@ -115,7 +132,9 @@ def _populate_transcript_windows(
                 pass
 
         # Compute bounded window using topic shift detection
-        window_turns = compute_event_window(session_turns, turn_index, tool_tags)
+        window_turns = compute_event_window(
+            session_turns, turn_index, tool_tags, embedding_fn=embedding_fn
+        )
         window_content = extract_window_content(window_turns)
 
         if window_content:

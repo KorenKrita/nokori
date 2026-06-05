@@ -28,6 +28,7 @@ from ..matcher.compiler import CompilationError, CompiledMatcher, compile_rule
 from ..eval.synthetic import SyntheticEvalResult, run_synthetic_eval
 from ..policy import (
     COLD_FAST_LANE,
+    ColdFastLaneThresholds,
     RUNTIME_POLICY_VERSION,
     SourceOrigin,
     ActivationOrigin,
@@ -374,7 +375,74 @@ def _run_cold_pipeline_inner(
         existing_rule = merge_info.get("existing_rule") or {}
         target_id = existing_rule.get("id")
         if target_id:
+            # Snapshot fields that require synthetic re-eval if changed (spec 6.5)
+            _pre_variants = existing_rule.get("trigger_variants")
+            _pre_excluded = existing_rule.get("excluded_contexts")
+
             _apply_non_destructive_merge(db, target_id, rule_data, merge_op, merge_info)
+
+            # Spec 6.5: re-run synthetic eval if variants or excluded_contexts changed
+            _merge_changed_variants = bool(rule_data.get("variants"))
+            _merge_changed_excluded = bool(rule_data.get("excluded_contexts"))
+            if _merge_changed_variants or _merge_changed_excluded:
+                # Reload merged rule for re-compilation
+                _merged_row = db.fetchone(
+                    "SELECT trigger_canonical, trigger_variants, excluded_contexts, "
+                    "concepts, required_concept_groups, near_miss_examples, "
+                    "action_instruction, rule_version "
+                    "FROM rules WHERE id = ?",
+                    (target_id,),
+                )
+                if _merged_row is not None:
+                    _recompile_data = {
+                        "trigger_canonical": _merged_row["trigger_canonical"],
+                        "variants": json.loads(_merged_row["trigger_variants"] or "[]"),
+                        "excluded_contexts": json.loads(_merged_row["excluded_contexts"] or "[]"),
+                        "concepts": json.loads(_merged_row["concepts"] or "[]"),
+                        "required_concept_groups": json.loads(_merged_row["required_concept_groups"] or "[]"),
+                        "near_miss_examples": json.loads(_merged_row["near_miss_examples"] or "[]"),
+                        "action_instruction": _merged_row["action_instruction"],
+                    }
+                    try:
+                        _recompiled = compile_rule(_recompile_data)
+                    except CompilationError:
+                        _recompiled = None
+
+                    _synth_ok = False
+                    if _recompiled is not None:
+                        _synth_result = run_synthetic_eval(db, target_id, _recompile_data, _recompiled)
+                        _synth_ok = _synth_result is not None and _synth_result.passed
+
+                    if not _synth_ok:
+                        # Revert merged fields via CAS (restore pre-merge values)
+                        _revert_version = _merged_row["rule_version"]
+                        _now_revert = datetime.now(timezone.utc).isoformat(timespec="seconds")
+                        _revert_sets = []
+                        _revert_params: list = []
+                        if _merge_changed_variants and _pre_variants is not None:
+                            _revert_sets.append("trigger_variants = ?")
+                            _revert_params.append(_pre_variants if isinstance(_pre_variants, str) else dumps_json(_pre_variants))
+                        if _merge_changed_excluded and _pre_excluded is not None:
+                            _revert_sets.append("excluded_contexts = ?")
+                            _revert_params.append(_pre_excluded if isinstance(_pre_excluded, str) else dumps_json(_pre_excluded))
+                        if _revert_sets:
+                            _revert_sets.append("rule_version = rule_version + 1")
+                            _revert_sets.append("updated_at = ?")
+                            _revert_params.append(_now_revert)
+                            _revert_params.extend([target_id, _revert_version])
+                            with db.transaction() as tx:
+                                tx.execute(
+                                    f"UPDATE rules SET {', '.join(_revert_sets)} "
+                                    "WHERE id = ? AND rule_version = ?",
+                                    tuple(_revert_params),
+                                )
+                        return ColdPipelineResult(
+                            status="rejected",
+                            rule_id=None,
+                            rejection_reason="post_merge_synthetic_eval_failed",
+                            scores=scores,
+                        )
+
             record_lineage(db, target_id, None, merge_op, merge_info.get("merge_rationale", ""))
             return ColdPipelineResult(
                 status="merged",
@@ -762,7 +830,7 @@ def _check_cold_fast_lane(
         return False
 
     # Merge operation must not require split/rewrite (spec 3.3 condition 9)
-    if merge_op in ("split_required", "reject_new"):
+    if merge_op in thresholds.merge_operation_must_not_require:
         return False
 
     return True
@@ -837,6 +905,7 @@ def insert_rule_from_pipeline(
     path_patterns_json = dumps_json(scope.get("file_or_path_patterns", []))
     language_hints_json = dumps_json(rule_data.get("language_hints", []))
     evidence_quotes_json = dumps_json(rule_data.get("evidence_quotes", []))
+    non_generalization_boundaries_json = dumps_json(rule_data.get("non_generalization_boundaries", []))
 
     with db.transaction() as tx:
         tx.execute(
@@ -846,6 +915,7 @@ def insert_rule_from_pipeline(
             "status, severity, "
             "trigger_canonical, trigger_canonical_zh, "
             "concepts, concept_aliases, required_concept_groups, excluded_contexts, "
+            "non_generalization_boundaries, "
             "near_miss_examples, trigger_variants, trigger_variants_zh, search_terms, "
             "action_instruction, action_instruction_zh, "
             "allowed_behavior, forbidden_behavior, "
@@ -855,7 +925,7 @@ def insert_rule_from_pipeline(
             "source_origin, activation_origin, transcript_ref, "
             "created_at, updated_at"
             ") VALUES ("
-            "?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?"
+            "?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?"
             ")",
             (
                 rule_id,
@@ -873,6 +943,7 @@ def insert_rule_from_pipeline(
                 concept_aliases_json,
                 required_concept_groups_json,
                 excluded_contexts_json,
+                non_generalization_boundaries_json,
                 near_miss_json,
                 variants_json,
                 variants_zh_json,

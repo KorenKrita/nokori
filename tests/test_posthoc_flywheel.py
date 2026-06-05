@@ -687,3 +687,99 @@ class TestFullFlywheelLoop:
             assert rule_row["status"] == "suppressed"
         finally:
             db.close()
+
+
+# ---------------------------------------------------------------------------
+# 12. submit_feedback validation and rate limiting
+# ---------------------------------------------------------------------------
+
+
+class TestSubmitFeedback:
+    """Tests for nokori.posthoc.jobs.submit_feedback."""
+
+    def test_valid_submission_returns_id(self, tmp_path):
+        from nokori.posthoc.jobs import submit_feedback
+
+        db = _make_db(tmp_path)
+        try:
+            rule = _insert_rule(db)
+            session = "session_feedback_1"
+            eid = _create_fire_event_with_window(db, rule, session)
+
+            result = submit_feedback(
+                db,
+                fire_event_id=eid,
+                source="agent_cli",
+                label="helped",
+                confidence=0.9,
+                evidence="The rule prevented a bug",
+                session_id=session,
+            )
+            assert result is not None
+            # Result should be a UUID string
+            assert len(result) == 36
+        finally:
+            db.close()
+
+    def test_invalid_label_returns_none(self, tmp_path):
+        from nokori.posthoc.jobs import submit_feedback
+
+        db = _make_db(tmp_path)
+        try:
+            rule = _insert_rule(db)
+            session = "session_feedback_2"
+            eid = _create_fire_event_with_window(db, rule, session)
+
+            result = submit_feedback(
+                db,
+                fire_event_id=eid,
+                source="agent_cli",
+                label="super_helpful",  # invalid label
+                confidence=0.8,
+                evidence="evidence text",
+                session_id=session,
+            )
+            assert result is None
+        finally:
+            db.close()
+
+    def test_rate_limiting_sixth_returns_none(self, tmp_path):
+        from nokori.posthoc.jobs import submit_feedback
+
+        db = _make_db(tmp_path)
+        try:
+            rule = _insert_rule(db)
+            session = "session_feedback_3"
+
+            # Create 6 fire events (one per feedback submission)
+            eids = []
+            for _ in range(6):
+                eid = _create_fire_event_with_window(db, rule, session)
+                eids.append(eid)
+
+            # First 5 should succeed
+            for i in range(5):
+                result = submit_feedback(
+                    db,
+                    fire_event_id=eids[i],
+                    source="agent_cli",
+                    label="helped",
+                    confidence=0.85,
+                    evidence=f"evidence {i}",
+                    session_id=session,
+                )
+                assert result is not None, f"Submission {i+1} should succeed"
+
+            # 6th should be rate-limited
+            result = submit_feedback(
+                db,
+                fire_event_id=eids[5],
+                source="agent_cli",
+                label="helped",
+                confidence=0.85,
+                evidence="evidence 5",
+                session_id=session,
+            )
+            assert result is None
+        finally:
+            db.close()

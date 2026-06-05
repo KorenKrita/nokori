@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS rules (
     required_concept_groups TEXT NOT NULL DEFAULT '[]',
     excluded_contexts TEXT NOT NULL DEFAULT '[]',
     evidence_quotes TEXT NOT NULL DEFAULT '[]',
+    non_generalization_boundaries TEXT NOT NULL DEFAULT '[]',
     near_miss_examples TEXT NOT NULL DEFAULT '[]',
     trigger_variants TEXT NOT NULL DEFAULT '[]',
     trigger_variants_zh TEXT NOT NULL DEFAULT '[]',
@@ -419,6 +420,7 @@ def row_to_rule(row):
         concept_aliases=row["concept_aliases"],
         required_concept_groups=row["required_concept_groups"],
         excluded_contexts=row["excluded_contexts"],
+        non_generalization_boundaries=row["non_generalization_boundaries"],
         near_miss_examples=loads_json(row["near_miss_examples"], []),
         trigger_variants=loads_json(row["trigger_variants"], []),
         trigger_variants_zh=loads_json(row["trigger_variants_zh"], []),
@@ -460,6 +462,7 @@ RULE_COLUMNS = (
     "status, severity, "
     "trigger_canonical, trigger_canonical_zh, "
     "concepts, concept_aliases, required_concept_groups, excluded_contexts, "
+    "non_generalization_boundaries, "
     "near_miss_examples, trigger_variants, trigger_variants_zh, search_terms, "
     "action_instruction, action_instruction_zh, "
     "allowed_behavior, forbidden_behavior, "

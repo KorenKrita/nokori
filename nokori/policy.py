@@ -170,6 +170,7 @@ class ColdFastLaneThresholds:
     global_adversarial_failures_max: int = 0
     archived_fingerprint_conflict: bool = False
     final_judge_decision: str = "accept_active"
+    merge_operation_must_not_require: tuple = ("split_required", "reject_new")
 
 
 @dataclass(frozen=True)

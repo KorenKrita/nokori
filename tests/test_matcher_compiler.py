@@ -751,3 +751,52 @@ class TestTriggerEvidencePassFail:
         matcher = self._compile_simple_rule()
         result = evaluate_match(matcher, "some other text with different words")
         assert result.trigger_evidence_passed is False
+
+
+# ---------------------------------------------------------------------------
+# 13. compute_dynamic_threshold formula correctness
+# ---------------------------------------------------------------------------
+
+
+class TestComputeDynamicThreshold:
+    """Tests for nokori.matcher.runtime.compute_dynamic_threshold."""
+
+    def test_n_zero_returns_zeros(self):
+        from nokori.matcher.runtime import compute_dynamic_threshold
+
+        result = compute_dynamic_threshold(0)
+        assert result["pool_size"] == 0
+        assert result["rare_df"] == 0
+        assert result["idf_10pct"] == 0.0
+        assert result["dynamic_trigger_info_min"] == 0.0
+
+    def test_small_pool_uses_higher_absolute_min(self):
+        from nokori.matcher.runtime import compute_dynamic_threshold
+
+        result = compute_dynamic_threshold(10)
+        # pool_size < 20 -> absolute_min = 2.40
+        assert result["dynamic_trigger_info_min"] >= 2.40
+
+    def test_large_pool_uses_lower_absolute_min(self):
+        from nokori.matcher.runtime import compute_dynamic_threshold
+
+        result = compute_dynamic_threshold(50)
+        # pool_size >= 20 -> absolute_min = 1.20
+        assert result["dynamic_trigger_info_min"] >= 1.20
+
+    def test_formula_correctness(self):
+        import math
+        from nokori.matcher.runtime import compute_dynamic_threshold
+
+        result = compute_dynamic_threshold(100)
+
+        # rare_df = ceil(100 * 0.10) = 10
+        assert result["rare_df"] == 10
+
+        # idf_10pct = log(1 + (100 - 10 + 0.5) / (10 + 0.5))
+        expected_idf_10pct = math.log(1 + (100 - 10 + 0.5) / (10 + 0.5))
+        assert abs(result["idf_10pct"] - expected_idf_10pct) < 1e-9
+
+        # dynamic_trigger_info_min = max(2 * idf_10pct, 1.20)
+        expected_min = max(2 * expected_idf_10pct, 1.20)
+        assert abs(result["dynamic_trigger_info_min"] - expected_min) < 1e-9

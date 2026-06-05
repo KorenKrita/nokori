@@ -1333,3 +1333,93 @@ class TestCASConcurrency:
             assert row["rule_version"] == 2
         finally:
             db.close()
+
+
+# ---------------------------------------------------------------------------
+# 16. Fire event window is count-based (last 10), not time-based
+# ---------------------------------------------------------------------------
+
+
+class TestFireEventWindowCountOnly:
+    """Fire events older than 30 days still count if within last 10 evaluated.
+
+    Since time-based filtering was removed (spec 3.4), the window is purely
+    count-based (LIMIT 10). Events from 60+ days ago still participate if
+    they are among the most recent 10 evaluated events for that rule.
+    """
+
+    def test_old_events_within_last_10_still_count_for_suppression(self, tmp_path):
+        """Fire events older than 30 days still trigger suppression if in last 10."""
+        db = _fresh_db(tmp_path)
+        try:
+            rid = _insert_rule(db, status="active")
+
+            sess1 = str(uuid.uuid4())
+
+            # Insert 3 irrelevant events from 60 days ago (well beyond 30-day window).
+            # These should still count because they are within the last 10 evaluated.
+            _insert_fire_event(
+                db, rid, session_id=sess1, label="irrelevant",
+                reason_code="irrelevant_not_applicable", days_ago=60,
+            )
+            _insert_fire_event(
+                db, rid, session_id=sess1, label="irrelevant",
+                reason_code="irrelevant_not_applicable", days_ago=55,
+            )
+            _insert_fire_event(
+                db, rid, session_id=sess1, label="irrelevant",
+                reason_code="irrelevant_not_applicable", days_ago=50,
+            )
+            # 2 more recent events (still within last 5)
+            _insert_fire_event(
+                db, rid, session_id=sess1, label="plausible_useful",
+                reason_code="useful_prevented_error", days_ago=2,
+            )
+            _insert_fire_event(
+                db, rid, session_id=sess1, label="plausible_useful",
+                reason_code="useful_improved_quality", days_ago=1,
+            )
+
+            result = evaluate_transitions(db, rid)
+            # 3 irrelevant in last 5 evaluated fire events -> suppression
+            assert result.new_status == "suppressed"
+        finally:
+            db.close()
+
+    def test_old_events_counted_toward_trusted_promotion(self, tmp_path):
+        """Old observed_useful events within last 10 count for active->trusted."""
+        db = _fresh_db(tmp_path)
+        try:
+            rid = _insert_rule(db, status="active")
+
+            sess1 = str(uuid.uuid4())
+            sess2 = str(uuid.uuid4())
+
+            # 3 observed_useful from 45 days ago (beyond 30-day window)
+            _insert_fire_event(
+                db, rid, session_id=sess1, label="observed_useful",
+                reason_code="useful_prevented_error", days_ago=45,
+            )
+            _insert_fire_event(
+                db, rid, session_id=sess1, label="observed_useful",
+                reason_code="useful_improved_quality", days_ago=42,
+            )
+            _insert_fire_event(
+                db, rid, session_id=sess2, label="observed_useful",
+                reason_code="useful_followed_preference", days_ago=40,
+            )
+            # 2 recent plausible to reach evaluated >= 5
+            _insert_fire_event(
+                db, rid, session_id=sess1, label="plausible_useful",
+                reason_code="useful_improved_quality", days_ago=2,
+            )
+            _insert_fire_event(
+                db, rid, session_id=sess2, label="plausible_useful",
+                reason_code="useful_prevented_error", days_ago=1,
+            )
+
+            result = evaluate_transitions(db, rid)
+            # Old events are within last 10, so observed_useful >= 3, sessions >= 2 -> trusted
+            assert result.new_status == "trusted"
+        finally:
+            db.close()

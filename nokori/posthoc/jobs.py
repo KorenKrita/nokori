@@ -349,6 +349,13 @@ def build_evaluator_input(db: Db, fire_event: dict) -> dict | None:
     # Neutral phrasing: "a prior reminder suggested X" (not authoritative rule)
     suggestion_text = action_snapshot if action_snapshot else trigger_snapshot
 
+    # Use bounded_window_ref as injection_context if it contains actual prompt text
+    # (> 64 chars means it's real content, not just a hash reference).
+    if bounded_window_ref and len(bounded_window_ref) > 64:
+        injection_context = bounded_window_ref
+    else:
+        injection_context = trigger_snapshot
+
     decision_features = loads_json(
         fire_event.get("decision_features"), {}
     )
@@ -374,7 +381,7 @@ def build_evaluator_input(db: Db, fire_event: dict) -> dict | None:
         "fire_event_id": fire_event_id,
         "session_id": fire_event.get("session_id"),
         "injected_suggestion": suggestion_text,
-        "injection_context": trigger_snapshot,
+        "injection_context": injection_context,
         "transcript_window": transcript_window_content,
         "feedback": feedback_text,
         "suggestion": {

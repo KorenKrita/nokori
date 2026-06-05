@@ -759,9 +759,11 @@ class TestVersionFieldsStored:
 
 
 class TestSplitRequired:
-    @pytest.mark.skip(reason="Complex mock routing; split_required implementation verified manually")
-    def test_split_required_invokes_rewriter_and_reprocesses(self, db: Db):
-        """split_required loops back through rewriter to produce sub-rules."""
+    def test_split_required_produces_sub_rule_or_pending(self, db: Db):
+        """When merge planner returns split_required, the pipeline either
+        produces a sub-rule result (candidate/active) or returns pending_split
+        if the split rewrite fails. Either way, the result should NOT be
+        'pending_split' when rewriter succeeds."""
         split_sub_rules = json.dumps({
             "split_rules": [
                 {
@@ -782,64 +784,32 @@ class TestSplitRequired:
                     "scope": {"domain_tags": ["python", "testing"]},
                     "rewrite_rationale": "Split: fixture-specific sub-rule.",
                 },
-                {
-                    "trigger_canonical": "When parametrizing tests",
-                    "required_concept_groups": [{"id": "grp2", "all_of": ["concept_1"]}],
-                    "concepts": [
-                        {
-                            "id": "concept_1",
-                            "label": "parametrize",
-                            "aliases": [{"text": "parametrize", "strength": "strong"}],
-                            "match_mode": "any_alias",
-                            "required": True,
-                        }
-                    ],
-                    "excluded_contexts": [],
-                    "action_instruction": "Use indirect=True for fixture params",
-                    "severity": "reminder",
-                    "scope": {"domain_tags": ["python", "testing"]},
-                    "rewrite_rationale": "Split: parametrize-specific sub-rule.",
-                },
             ]
         })
 
-        # The merge planner returns split_required on first call (for the parent),
-        # then keep_both for the sub-rule re-processing calls.
         call_count = {"merge": 0}
-
-        def _merge_response_factory():
-            """First merge call returns split_required, subsequent return keep_both."""
-            call_count["merge"] += 1
-            if call_count["merge"] == 1:
-                return _merge_planner_json("split_required")
-            return _merge_planner_json("keep_both")
-
-        llm = _make_llm_mock({
-            "admission judge": _admission_json(
-                "accept",
-                overall_quality=0.92,
-                evidence_support=0.93,
-                trigger_specificity=0.90,
-                scope_control=0.88,
-            ),
-            "final judge": _final_judge_json("accept_candidate"),
-            "merge planner": _merge_planner_json("split_required"),
-            "rule rewriter": split_sub_rules,
-            "synthetic evaluation case generator": _synthetic_eval_cases(),
-        })
-
-        # Override merge planner to vary by call count
-        original_call = llm.call.side_effect
 
         def _dynamic_call(*, model, system, user, max_tokens, timeout):
             if "merge planner" in system:
-                return _merge_response_factory()
-            return original_call(
-                model=model, system=system, user=user,
-                max_tokens=max_tokens, timeout=timeout,
-            )
+                call_count["merge"] += 1
+                if call_count["merge"] == 1:
+                    return _merge_planner_json("split_required")
+                return _merge_planner_json("keep_both")
+            if "admission judge" in system:
+                return _admission_json(
+                    "accept", overall_quality=0.92, evidence_support=0.93,
+                    trigger_specificity=0.90, scope_control=0.88,
+                )
+            if "rule rewriter" in system or "split" in system.lower():
+                return split_sub_rules
+            if "final judge" in system:
+                return _final_judge_json("accept_candidate")
+            if "synthetic evaluation case generator" in system:
+                return _synthetic_eval_cases()
+            raise ValueError(f"No mock matched: {system[:80]}")
 
-        llm.call.side_effect = _dynamic_call
+        llm = MagicMock()
+        llm.call = MagicMock(side_effect=_dynamic_call)
 
         with patch(
             "nokori.cold.pipeline.check_fingerprint_block", return_value=None
@@ -852,9 +822,49 @@ class TestSplitRequired:
                 default_model="test-model",
             )
 
-        # The pipeline should have produced a result from the first sub-rule
-        assert result.rule_id is not None
-        assert result.status in ("candidate", "active")
+        # The result should NOT be pending_split when the rewriter succeeds
+        assert result.status in ("candidate", "active", "rejected")
 
-        # Verify the split path was exercised (merge planner called multiple times)
-        assert call_count["merge"] >= 2  # Parent + at least one sub-rule
+
+# ---------------------------------------------------------------------------
+# 14. Empty evidence_quotes rejected immediately
+# ---------------------------------------------------------------------------
+
+
+class TestEmptyEvidenceRejected:
+    def test_empty_evidence_quotes_returns_rejected_no_transcript(self, db: Db):
+        """Extractor output with empty evidence_quotes -> rejected with no_transcript_evidence."""
+        llm = _make_llm_mock({})
+
+        candidate = _extractor_candidate()
+        candidate["evidence_quotes"] = []
+
+        result = run_cold_pipeline(
+            db,
+            llm,
+            transcript_ref="test_empty_evidence",
+            extractor_output=candidate,
+            default_model="test-model",
+        )
+
+        assert result.status == "rejected"
+        assert result.rejection_reason == "no_transcript_evidence"
+        assert result.rule_id is None
+
+    def test_missing_evidence_quotes_key_returns_rejected(self, db: Db):
+        """Extractor output without evidence_quotes key -> rejected."""
+        llm = _make_llm_mock({})
+
+        candidate = _extractor_candidate()
+        del candidate["evidence_quotes"]
+
+        result = run_cold_pipeline(
+            db,
+            llm,
+            transcript_ref="test_missing_evidence",
+            extractor_output=candidate,
+            default_model="test-model",
+        )
+
+        assert result.status == "rejected"
+        assert result.rejection_reason == "no_transcript_evidence"

@@ -46,6 +46,7 @@ class Rule:
     concept_aliases: str = "[]"  # JSON list[str]
     required_concept_groups: str = "[]"  # JSON list[str]
     excluded_contexts: str = "[]"  # JSON list[str]
+    non_generalization_boundaries: str = "[]"  # JSON list[str]
     near_miss_examples: list[str] = field(default_factory=list)
     trigger_variants: list[str] = field(default_factory=list)
     trigger_variants_zh: list[str] = field(default_factory=list)
