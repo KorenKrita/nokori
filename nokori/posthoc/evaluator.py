@@ -173,26 +173,30 @@ def parse_posthoc_output(raw_json: str) -> dict:
     Returns parsed dict on success.
     Raises ValueError on parse or validation failure.
     """
-    # Strip markdown fences if LLM wrapped output
-    text = raw_json.strip()
-    if text.startswith("```"):
-        lines = text.splitlines()
-        # Remove first and last fence lines
-        if lines[0].startswith("```"):
-            lines = lines[1:]
-        if lines and lines[-1].strip() == "```":
-            lines = lines[:-1]
-        text = "\n".join(lines)
+    from ..llm.json_payload import parse_json_payload
 
+    text = raw_json.strip()
     try:
         data = json.loads(text)
-    except json.JSONDecodeError as e:
-        raise ValueError(f"posthoc_evaluator: invalid JSON: {e}") from e
+    except json.JSONDecodeError:
+        data = parse_json_payload(text)
+        if data is None:
+            raise ValueError("posthoc_evaluator: invalid JSON: could not extract JSON from response")
 
     if not isinstance(data, dict):
         raise ValueError(
             f"posthoc_evaluator: expected JSON object, got {type(data).__name__}"
         )
+
+    # Normalize field aliases
+    if "rule_application_evidence" not in data:
+        data["rule_application_evidence"] = data.pop("evidence", data.pop("application_evidence", ""))
+    if "would_likely_have_happened_without_rule" not in data:
+        data["would_likely_have_happened_without_rule"] = data.pop(
+            "without_rule", data.pop("counterfactual", "unclear")
+        )
+    if "reason_code" not in data:
+        data["reason_code"] = data.pop("reason", data.pop("code", "unclear"))
 
     # Validate required fields
     for field in POSTHOC_OUTPUT_SCHEMA["required"]:
@@ -287,6 +291,9 @@ def _compute_input_hash(evaluator_input: dict) -> str:
     return hashlib.sha256(serialized.encode()).hexdigest()
 
 
+_POSTHOC_MAX_ATTEMPTS = 2
+
+
 def run_posthoc_evaluation(llm: Any, evaluator_input: dict) -> dict | None:
     """Call LLM with posthoc role, parse and validate output.
 
@@ -297,7 +304,7 @@ def run_posthoc_evaluation(llm: Any, evaluator_input: dict) -> dict | None:
 
     Returns:
         Validated posthoc output dict with added 'attribution_weight' field,
-        or None if LLM call fails or output is unparseable.
+        or None if LLM call fails or output is unparseable after retries.
     """
     # Idempotency: check if this exact input was already processed
     input_hash = _compute_input_hash(evaluator_input)
@@ -306,26 +313,29 @@ def run_posthoc_evaluation(llm: Any, evaluator_input: dict) -> dict | None:
 
     user_message = build_posthoc_prompt(evaluator_input)
 
-    try:
-        raw_response = llm.call(
-            system=POSTHOC_SYSTEM_PROMPT,
-            user=user_message,
-            role="posthoc_evaluator",
-        )
-    except Exception:
-        return None
+    for _attempt in range(_POSTHOC_MAX_ATTEMPTS):
+        try:
+            raw_response = llm.call(
+                system=POSTHOC_SYSTEM_PROMPT,
+                user=user_message,
+                role="posthoc_evaluator",
+            )
+        except Exception:
+            continue
 
-    try:
-        result = parse_posthoc_output(raw_response)
-    except ValueError:
-        return None
+        try:
+            result = parse_posthoc_output(raw_response)
+        except ValueError:
+            continue
 
-    result["attribution_weight"] = compute_attribution_weight(result)
+        result["attribution_weight"] = compute_attribution_weight(result)
 
-    # Cache the result (evict oldest if at capacity)
-    if len(_POSTHOC_RESULT_CACHE) >= _POSTHOC_CACHE_MAX_SIZE:
-        oldest_key = next(iter(_POSTHOC_RESULT_CACHE))
-        del _POSTHOC_RESULT_CACHE[oldest_key]
-    _POSTHOC_RESULT_CACHE[input_hash] = result
+        # Cache the result (evict oldest if at capacity)
+        if len(_POSTHOC_RESULT_CACHE) >= _POSTHOC_CACHE_MAX_SIZE:
+            oldest_key = next(iter(_POSTHOC_RESULT_CACHE))
+            del _POSTHOC_RESULT_CACHE[oldest_key]
+        _POSTHOC_RESULT_CACHE[input_hash] = result
 
-    return result
+        return result
+
+    return None

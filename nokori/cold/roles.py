@@ -459,6 +459,47 @@ def _normalize_role_output(role: str, data: dict[str, Any]) -> dict[str, Any]:
             except ValueError:
                 data["confidence"] = 0.5
 
+    elif role == "rule_rewriter":
+        # Fix: trigger/action field aliases
+        if "trigger_canonical" not in data:
+            data["trigger_canonical"] = data.pop("trigger", data.pop("trigger_text", ""))
+        if "action_instruction" not in data:
+            data["action_instruction"] = data.pop("action", data.pop("instruction", ""))
+        # Fix: missing arrays
+        if "required_concept_groups" not in data:
+            data["required_concept_groups"] = data.pop("concepts", data.pop("concept_groups", []))
+        if "excluded_contexts" not in data:
+            data["excluded_contexts"] = data.pop("exclusions", [])
+        # Fix: missing scope
+        if "scope" not in data:
+            scope = {}
+            for k in ("domain_tags", "path_patterns", "tool_tags"):
+                if k in data:
+                    scope[k] = data.pop(k)
+            data["scope"] = scope if scope else {"domain_tags": [], "path_patterns": [], "tool_tags": []}
+        # Fix: missing rewrite_rationale
+        if "rewrite_rationale" not in data:
+            data["rewrite_rationale"] = data.pop("rationale", data.pop("reasoning", data.pop("reason", "")))
+        # Fix: severity alias
+        if "severity" not in data:
+            data["severity"] = "reminder"
+
+    elif role == "synthetic_eval_generator":
+        # Fix: bare array → wrapped object
+        # (handled elsewhere but normalize here too for consistency)
+        pass
+
+    elif role == "posthoc_evaluator":
+        # Fix: field aliases
+        if "rule_application_evidence" not in data:
+            data["rule_application_evidence"] = data.pop("evidence", data.pop("application_evidence", ""))
+        if "would_likely_have_happened_without_rule" not in data:
+            data["would_likely_have_happened_without_rule"] = data.pop(
+                "without_rule", data.pop("counterfactual", "unclear")
+            )
+        if "reason_code" not in data:
+            data["reason_code"] = data.pop("reason", data.pop("code", "unclear"))
+
     return data
 
 

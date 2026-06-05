@@ -42,24 +42,35 @@ def _opt_str(item: dict, key: str) -> str | None:
     return (str(item[key]).strip() or None) if item.get(key) else None
 
 
+_EXTRACT_MAX_RETRIES = 2
+
+
 def extract(transcript: str, llm: LLMAdapter) -> tuple[list[Candidate], bool]:
     """Returns (candidates, llm_ok). llm_ok=False when the LLM call failed (not empty parse)."""
     if not transcript.strip():
         return [], True
     user_content = wrap_untrusted(transcript)
-    try:
-        raw = llm.complete_messages(
-            EXTRACT_SYSTEM, user_content, max_tokens=3000, timeout=60,
-        )
-    except Exception as e:
-        log.warning("extract LLM call failed: %s", type(e).__name__)
-        return [], False
-    if raw is None:
-        return [], False
-    candidates, parse_ok = _parse_candidates(raw)
-    if not parse_ok:
-        return [], False
-    return candidates, True
+    last_error: str | None = None
+    for attempt in range(_EXTRACT_MAX_RETRIES + 1):
+        try:
+            raw = llm.complete_messages(
+                EXTRACT_SYSTEM, user_content, max_tokens=3000, timeout=60,
+            )
+        except Exception as e:
+            log.warning("extract LLM call failed (attempt %d): %s", attempt + 1, type(e).__name__)
+            last_error = str(e)
+            continue
+        if raw is None:
+            last_error = "LLM returned None"
+            continue
+        candidates, parse_ok = _parse_candidates(raw)
+        if not parse_ok:
+            log.warning("extract parse failed (attempt %d), retrying", attempt + 1)
+            last_error = "parse failed"
+            continue
+        return candidates, True
+    log.warning("extract failed after %d attempts: %s", _EXTRACT_MAX_RETRIES + 1, last_error)
+    return [], False
 
 
 def _parse_candidates(raw: str) -> tuple[list[Candidate], bool]:
