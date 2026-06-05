@@ -5,12 +5,15 @@ import json
 from ..config import Config
 from ..db import open_db
 from ..errors import DbError
+from ..extract.jobs import write_job as write_extract_job
 from ..gate import prompt_ack
 from ..posthoc import enqueue_posthoc_for_session
 from ..posthoc.windowing import compute_event_window, extract_window_content
 from ..utils import sessions
 from ..utils.host import Host, effective_session_id
 from ..utils.logging import get_logger
+from ..utils.project import resolve_project_id
+from ..utils.transcript import resolve_transcript_path
 
 log = get_logger("nokori.hooks.session_end")
 
@@ -48,7 +51,26 @@ def handle(payload: dict, cfg: Config, *, host: Host) -> dict:
     finally:
         db.close()
 
+    # Write extract job so the cold pipeline can process this session's transcript
+    _enqueue_extract_job(payload, cfg)
+
     return {"continue": True}
+
+
+def _enqueue_extract_job(payload: dict, cfg: Config) -> None:
+    """Write an extract job file for the session's transcript (spec cold-path trigger)."""
+    transcript_path = resolve_transcript_path(payload)
+    if transcript_path is None or not transcript_path.exists():
+        return
+    try:
+        mtime = transcript_path.stat().st_mtime
+        project_id = payload.get("project_id") or resolve_project_id(
+            payload.get("cwd") or ""
+        )
+        write_extract_job(cfg, transcript_path, project_id, mtime)
+        log.info("wrote extract job for %s", transcript_path.name)
+    except Exception as e:
+        log.warning("extract job write failed: %s", e)
 
 
 def _extract_session_turns(payload: dict) -> list[dict]:

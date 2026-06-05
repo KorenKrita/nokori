@@ -186,7 +186,7 @@ def validate_benchmark_result(profile: EmbeddingProfile) -> list[str]:
             f">= medium_p10 ({profile.overall.medium_p10:.4f})"
         )
 
-    # Required bucket presence.
+    # Required bucket presence and minimum sample coverage.
     for bucket_name in REQUIRED_BUCKETS:
         if bucket_name == "overall":
             continue
@@ -194,6 +194,12 @@ def validate_benchmark_result(profile: EmbeddingProfile) -> list[str]:
             errors.append(
                 f"required bucket '{bucket_name}' missing from profile"
             )
+        else:
+            bt = profile.buckets[bucket_name]
+            if bt.positive_p10 == 0.0 and bt.medium_p10 == 0.0 and bt.near_miss_p95 == 0.0:
+                errors.append(
+                    f"required bucket '{bucket_name}' has no benchmark data (all percentiles zero)"
+                )
 
     # Per-bucket separation checks.
     for bucket_name, thresholds in profile.buckets.items():

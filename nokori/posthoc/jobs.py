@@ -371,10 +371,9 @@ def build_evaluator_input(db: Db, fire_event: dict) -> dict | None:
     if not fire_event_id:
         return None
 
-    # The bounded window ref is the key to transcript context.
-    # If unavailable, the evaluator cannot judge this event.
     bounded_window_ref = fire_event.get("bounded_window_ref")
     transcript_window_ref = fire_event.get("transcript_window_ref")
+    # Early exit only if both are truly absent (legacy events before transcript_window_ref was added)
     if bounded_window_ref is None and transcript_window_ref is None:
         return None
 
@@ -398,9 +397,15 @@ def build_evaluator_input(db: Db, fire_event: dict) -> dict | None:
     decision_features = loads_json(
         fire_event.get("decision_features"), {}
     )
-    # Spec 10.2: evaluator must NOT see status-revealing fields.
-    # Strip decision_reason which may contain status/severity info.
-    decision_features.pop("decision_reason", None)
+    # Spec 10.2: evaluator must NOT see status-revealing fields or quality scores.
+    _BLIND_KEYS = (
+        "decision_reason", "quality_score", "evidence_support_score",
+        "specificity_score", "retrieval_readiness_score", "observed_usefulness_score",
+        "plausible_usefulness_score", "false_positive_score", "harmful_score",
+        "status", "severity", "activation_origin", "merge_lineage",
+    )
+    for k in _BLIND_KEYS:
+        decision_features.pop(k, None)
 
     # Fetch feedback events tied to this fire event, if any
     feedback_rows = db.fetchall(

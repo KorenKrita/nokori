@@ -249,10 +249,16 @@ class TestBuildEvaluatorInputPartiallyBlind:
         try:
             rule = _insert_rule(db)
             session = "session_5"
-            # Create event without setting window refs
+            # Create event then NULL out both window refs to simulate legacy/broken state
             eid = create_fire_event(
                 db, rule, session, "hash_abc", "hot", {"score": 0.9}
             )
+            with db.transaction() as tx:
+                tx.execute(
+                    "UPDATE rule_fire_events SET bounded_window_ref = NULL, "
+                    "transcript_window_ref = NULL WHERE id = ?",
+                    (eid,),
+                )
             row = db.fetchone(
                 "SELECT * FROM rule_fire_events WHERE id = ?", (eid,)
             )

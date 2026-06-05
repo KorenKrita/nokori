@@ -78,6 +78,7 @@ class LLMAdapter:
             "model": model_id or self.cfg.llm_model,
             "messages": messages,
             "max_tokens": max_tokens,
+            "response_format": {"type": "json_object"},
         }
         headers = {"Content-Type": "application/json"}
         if self.cfg.llm_api_key:

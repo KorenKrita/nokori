@@ -35,6 +35,8 @@ def create_fire_event(
         "excluded_contexts": loads_json(rule.excluded_contexts, []),
     })
 
+    transcript_window_ref = f"session:{session_id}:turn:{turn_index}" if turn_index is not None else f"session:{session_id}"
+
     with db.transaction() as tx:
         tx.execute(
             "INSERT INTO rule_fire_events "
@@ -43,10 +45,11 @@ def create_fire_event(
             "injected_structured_snapshot, "
             "trigger_idf_pool_version, runtime_policy_version, "
             "embedding_profile_version, "
-            "prompt_hash, turn_index, level, decision_reason, decision_features, "
+            "prompt_hash, transcript_window_ref, turn_index, level, "
+            "decision_reason, decision_features, "
             "bounded_window_ref, "
             "created_at) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 event_id,
                 rule.id,
@@ -59,6 +62,7 @@ def create_fire_event(
                 runtime_policy_version or RUNTIME_POLICY_VERSION,
                 embedding_profile_version,
                 prompt_hash,
+                transcript_window_ref,
                 turn_index,
                 level,
                 resolved_decision_reason,

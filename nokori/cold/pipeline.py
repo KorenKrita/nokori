@@ -287,8 +287,21 @@ def _run_cold_pipeline_inner(
     action_instruction = rule_data.get("action_instruction", "")
     domain_tags = rule_data.get("scope", {}).get("domain_tags", [])
 
+    # Pass admission judge acceptance so narrower-scope override path is reachable.
+    # admission_judge_cited=True when the admission judge accepted the candidate
+    # (overall_quality >= accept threshold 0.82), meaning it evaluated and endorsed
+    # the scope difference — functionally equivalent to "citing the difference".
+    scope_evidence = rule_data.get("non_generalization_boundaries") or rule_data.get("evidence_quotes")
+    admission_cited = (
+        scores is not None
+        and scores.get("overall_quality", 0) >= 0.82
+        and bool(scope_evidence)
+    )
+
     fingerprint_block = check_fingerprint_block(
-        db, trigger_canonical, action_instruction, domain_tags
+        db, trigger_canonical, action_instruction, domain_tags,
+        stronger_evidence=str(scope_evidence[0]) if scope_evidence else None,
+        admission_judge_cited=admission_cited,
     )
     fingerprint_conflict = fingerprint_block is not None
 
