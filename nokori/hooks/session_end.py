@@ -153,3 +153,37 @@ def _populate_transcript_windows(
                     "UPDATE posthoc_jobs SET redacted_window_json = ? WHERE id = ?",
                     (window_content, row["job_id"]),
                 )
+
+
+def _spawn_async_extract(cfg: Config) -> None:
+    """Fork a detached subprocess to run `nokori extract`. Best-effort."""
+    import os
+    import subprocess
+    import sys
+
+    env = os.environ.copy()
+    env.pop("NOKORI_EXTRACTING", None)
+    env["NOKORI_DATA_DIR"] = str(cfg.data_dir)
+    cfg.ensure_dirs()
+    err_log = cfg.logs_dir / "async-extract.log"
+    err_fh = subprocess.DEVNULL
+    try:
+        err_fh = open(err_log, "a", encoding="utf-8")
+    except OSError as e:
+        log.warning("async extract log open failed: %s", e)
+    try:
+        subprocess.Popen(
+            [sys.executable, "-m", "nokori", "extract"],
+            env=env,
+            stdout=subprocess.DEVNULL,
+            stderr=err_fh,
+            start_new_session=True,
+        )
+    except Exception as e:
+        log.warning("async extract spawn failed: %s", e)
+    finally:
+        if err_fh is not subprocess.DEVNULL:
+            try:
+                err_fh.close()
+            except OSError:
+                pass
