@@ -27,8 +27,6 @@ class Candidate:
     behavior: str | None
     action: str
     rationale: str | None
-    source_type: str = "correction"
-    confidence: str = "medium"
     evidence_quotes: list[str] = dataclasses.field(default_factory=list)
     trigger_text_zh: str | None = None
     action_zh: str | None = None
@@ -116,12 +114,6 @@ def _coerce(item: dict) -> Candidate:
         raise ValueError("missing trigger or action")
     if _has_cjk(trigger):
         raise ValueError("trigger must be English (CJK in trigger)")
-    source_type = str(item.get("source_type") or "correction").strip()
-    if source_type not in ("correction", "preference", "solution", "anti_pattern"):
-        source_type = "correction"
-    confidence = str(item.get("confidence") or "medium").strip()
-    if confidence not in ("high", "medium", "low"):
-        confidence = "medium"
     variants = item.get("trigger_variants") or []
     if not isinstance(variants, list):
         variants = []
@@ -156,8 +148,6 @@ def _coerce(item: dict) -> Candidate:
         behavior=(str(item["behavior"]).strip() if item.get("behavior") else None),
         action=action,
         rationale=(str(item["rationale"]).strip() if item.get("rationale") else None),
-        source_type=source_type,
-        confidence=confidence,
         evidence_quotes=evidence_quotes,
         trigger_text_zh=trigger_text_zh,
         action_zh=action_zh,

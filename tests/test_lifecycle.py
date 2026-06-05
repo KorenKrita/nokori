@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 
 from nokori.config import Config
 from nokori.db import open_db
-from nokori.lifecycle import evidence, hot_cache, maintenance, promotion
+from nokori.lifecycle import hot_cache, maintenance, promotion
 
 
 def _utcnow_iso(delta_days: int = 0) -> str:
@@ -78,21 +78,6 @@ def test_candidate_cleanup_deletes_fire_events(monkeypatch, tmp_path):
     finally:
         db.close()
 
-
-def test_evidence_concurrent_append(monkeypatch, tmp_path):
-    monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
-    cfg = Config.from_env()
-    db = open_db(cfg.db_path)
-    try:
-        _make_rule(db, id_="ev-1", status="active", last_hit_days_ago=0)
-        evidence.add_evidence(db, "ev-1", "same_extraction", 1)
-        evidence.add_evidence(db, "ev-1", "same_extraction", 1)
-        row = db.fetchone(
-            "SELECT evidence_support_score FROM rules WHERE id = 'ev-1'"
-        )
-        assert row["evidence_support_score"] == 2.0
-    finally:
-        db.close()
 
 
 def test_candidate_cleanup_removes_old(monkeypatch, tmp_path):
@@ -244,14 +229,6 @@ def test_unmerge_check_restores_when_replacement_target_suppressed(monkeypatch, 
     finally:
         db.close()
 
-
-def test_evidence_active_days():
-    log = [
-        {"kind": "x", "points": 1, "at": "2026-01-01T10:00:00Z"},
-        {"kind": "x", "points": 1, "at": "2026-01-01T20:00:00Z"},
-        {"kind": "x", "points": 1, "at": "2026-01-02T05:00:00Z"},
-    ]
-    assert evidence.evidence_active_days(log) == 2
 
 
 def test_hot_cache_returns_none_when_no_path(monkeypatch, tmp_path):

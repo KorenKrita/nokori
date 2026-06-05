@@ -1,54 +1,10 @@
 """Code-review round: regression tests for reported issues."""
 
-import json
-
-
 from nokori.config import Config
 from nokori.db import open_db, log_injections_batch
-from nokori.extract.merger import MergeOutcome, merge_candidate
 from nokori.models import Rule
 from nokori.search import bm25
 from nokori.utils.time import now_iso
-
-
-class FakeMergeLLM:
-    def __init__(self, response: str):
-        self.response = response
-
-    def complete_messages(self, system, user, **kwargs):
-        return self.response
-
-
-def _cand(trigger: str, action: str):
-    from nokori.extract.extractor import Candidate
-
-    return Candidate(
-        trigger=trigger,
-        trigger_variants=[],
-        search_terms={},
-        behavior=None,
-        action=action,
-        rationale=None,
-    )
-
-
-def test_merge_null_relationships_does_not_crash(monkeypatch, tmp_path):
-    monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
-    db = open_db(Config.from_env().db_path)
-    try:
-        merge_candidate(
-            _cand("git push force shared", "action one"),
-            db,
-            FakeMergeLLM("[]"),
-        )
-        out = merge_candidate(
-            _cand("git push force shared branch", "action two"),
-            db,
-            FakeMergeLLM(json.dumps({"relationships": None})),
-        )
-        assert isinstance(out, MergeOutcome)
-    finally:
-        db.close()
 
 
 def test_bm25_index_cache_ignores_updated_at(monkeypatch, tmp_path):

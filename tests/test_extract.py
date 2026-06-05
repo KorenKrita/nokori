@@ -326,8 +326,7 @@ def test_batch_extract_keeps_job_on_merge_llm_failure(monkeypatch, tmp_path):
     }])
     from nokori.commands import extract as extract_cmd
     from nokori.db import open_db
-    from nokori.extract.extractor import Candidate
-    from nokori.extract.merger import merge_candidate
+    from nokori.utils.time import now_iso
     import argparse
 
     class SeqLLM:
@@ -346,19 +345,18 @@ def test_batch_extract_keeps_job_on_merge_llm_failure(monkeypatch, tmp_path):
     monkeypatch.setattr(extract_cmd, "LLMAdapter", lambda cfg: SeqLLM())
     db = open_db(cfg.db_path)
     try:
-        merge_candidate(
-            Candidate(
-                trigger="existing rule seed",
-                trigger_variants=[],
-                search_terms={},
-                behavior=None,
-                action="seed action",
-                rationale=None,
-            ),
-            db,
-            FakeLLM("[]"),
-            project_id="proj",
-        )
+        now = now_iso()
+        with db.transaction() as tx:
+            tx.execute(
+                "INSERT INTO rules (id, short_id, schema_version, rule_version, "
+                "created_by_pipeline_version, runtime_policy_version, "
+                "trigger_canonical, action_instruction, "
+                "status, severity, project_scope, project_id, "
+                "created_at, updated_at) "
+                "VALUES (?,?,1,1,'v1','1.0.0',?,?,?,?,?,?,?,?)",
+                ("seed-id", "seed1234", "existing rule seed", "seed action",
+                 "active", "reminder", "project", "proj", now, now),
+            )
     finally:
         db.close()
 

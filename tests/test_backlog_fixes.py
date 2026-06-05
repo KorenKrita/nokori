@@ -8,18 +8,6 @@ from nokori.config import Config
 from nokori.db import open_db
 from nokori.gate import marker as marker_io
 from nokori.gate.marker import MarkerRule, prompt_hash
-from nokori.lifecycle.evidence import MAX_EVIDENCE_LOG_ENTRIES, compute_evidence_append
-
-
-def test_evidence_log_capped():
-    score = 0
-    log_json = "[]"
-    for _ in range(MAX_EVIDENCE_LOG_ENTRIES + 10):
-        score, log_json = compute_evidence_append(score, log_json, "shadow_hot", 1)
-    entries = json.loads(log_json)
-    assert len(entries) == MAX_EVIDENCE_LOG_ENTRIES
-    assert entries[0]["kind"] == "shadow_hot"
-
 
 def test_import_rolls_back_on_failure(tmp_path):
     data = tmp_path / "data"

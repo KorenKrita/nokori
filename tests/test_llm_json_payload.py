@@ -1,4 +1,3 @@
-from nokori.extract import merger
 from nokori.extract.extractor import Candidate, _parse_candidates, extract
 from nokori.llm.json_payload import parse_json_payload
 
@@ -68,19 +67,11 @@ def test_parse_json_payload_prefers_last_fence_when_multiple():
     assert parse_json_payload(raw) == {"x": 1}
 
 
-def test_merge_ask_llm_parses_thinking_wrapped_dict():
-    cand = Candidate(
-        trigger="t",
-        trigger_variants=[],
-        search_terms={},
-        behavior=None,
-        action="a",
-        rationale=None,
-    )
+def test_parse_json_payload_thinking_wrapped_dict():
     payload = (
         "merge reasoning\n"
         '{"relationships": [{"existing_id": "x1", "judgment": "E", "reasoning": "ok"}]}'
     )
-    out = merger._ask_llm(cand, [], FakeLLM(payload))
+    out = parse_json_payload(payload)
     assert out is not None
     assert out["relationships"][0]["judgment"] == "E"
