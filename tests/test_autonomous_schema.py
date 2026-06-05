@@ -322,7 +322,6 @@ class TestOpenDbFreshPath:
                 "rule_embeddings",
                 "rule_reviews",
                 "rule_synthetic_evals",
-                "embedding_benchmark_profiles",
                 "trigger_idf_stats",
                 "rule_fire_events",
                 "rule_shadow_events",

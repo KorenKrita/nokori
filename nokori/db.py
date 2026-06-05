@@ -105,15 +105,6 @@ CREATE TABLE IF NOT EXISTS rule_synthetic_evals (
     created_at TEXT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS embedding_benchmark_profiles (
-    model_id TEXT PRIMARY KEY,
-    profile_version TEXT,
-    dimension INTEGER,
-    normalization TEXT,
-    bucket_thresholds TEXT,
-    benchmark_summary TEXT,
-    created_at TEXT NOT NULL
-);
 
 CREATE TABLE IF NOT EXISTS trigger_idf_stats (
     pool_version TEXT PRIMARY KEY,

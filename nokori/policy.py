@@ -23,8 +23,6 @@ COMPILER_VERSION: str = "1.0.0"
 
 Status = Literal["candidate", "active", "trusted", "suppressed", "archived"]
 
-# Backward-compatible alias
-RuleStatus = Status
 
 # ---------------------------------------------------------------------------
 # Severity literals (section 4)
@@ -53,20 +51,6 @@ ActivationOrigin = Literal[
 # Archive strength literals (section 3.5 / 11)
 # ---------------------------------------------------------------------------
 
-ArchiveStrength = Literal["user", "system", "replacement"]
-
-# ---------------------------------------------------------------------------
-# Shadow label literals (section 12 rule_shadow_events)
-# ---------------------------------------------------------------------------
-
-ShadowLabel = Literal[
-    "would_help_high",
-    "would_help_low",
-    "irrelevant",
-    "risky",
-    "near_miss",
-    "unclear",
-]
 
 # ---------------------------------------------------------------------------
 # Posthoc label literals (section 10.2)
@@ -100,8 +84,6 @@ PosthocReasonCode = Literal[
 # Injection level literals (section 9.4 / 9.5)
 # ---------------------------------------------------------------------------
 
-InjectionLevel = Literal["cold", "warm", "hot", "gate"]
-
 # ---------------------------------------------------------------------------
 # Merge operation literals (section 8.2 / 8.4)
 # ---------------------------------------------------------------------------
@@ -118,21 +100,6 @@ MergeOperation = Literal[
 ]
 
 # ---------------------------------------------------------------------------
-# Relation shape literals (section 8.2)
-# ---------------------------------------------------------------------------
-
-RelationShape = Literal[
-    "equivalent",
-    "new_broader",
-    "new_narrower",
-    "overlap",
-    "complementary",
-    "contradiction",
-    "obsolete",
-    "unrelated",
-    "split_required",
-]
-
 # ---------------------------------------------------------------------------
 # False-positive event classification (section 3.4)
 # ---------------------------------------------------------------------------
@@ -142,10 +109,6 @@ FALSE_POSITIVE_REASON_CODES: frozenset[PosthocReasonCode] = frozenset((
     "harmful_wrong_scope",
     "harmful_blocked_valid_action",
     "harmful_distracted",
-))
-
-WEAK_FALSE_POSITIVE_REASON_CODES: frozenset[PosthocReasonCode] = frozenset((
-    "irrelevant_redundant",
 ))
 
 EVALUATED_LABELS: frozenset[PosthocLabel] = frozenset((
@@ -260,25 +223,6 @@ SUPPRESSED_TO_ACTIVE = SuppressedToActiveThresholds()
 SUPPRESSED_TO_ARCHIVED = SuppressedToArchivedThresholds()
 
 
-@dataclass(frozen=True)
-class StateTransitionThresholds:
-    """Groups all transition threshold instances for convenient access."""
-
-    cold_fast_lane: ColdFastLaneThresholds = COLD_FAST_LANE
-    candidate_to_active: CandidateToActiveThresholds = CANDIDATE_TO_ACTIVE
-    candidate_to_active_single_session: CandidateToActiveSingleSessionThresholds = (
-        CANDIDATE_TO_ACTIVE_SINGLE_SESSION
-    )
-    candidate_to_archived: CandidateToArchivedThresholds = CANDIDATE_TO_ARCHIVED
-    active_to_trusted: ActiveToTrustedThresholds = ACTIVE_TO_TRUSTED
-    active_to_suppressed: ActiveToSuppressedThresholds = ACTIVE_TO_SUPPRESSED
-    trusted_to_active: TrustedToActiveThresholds = TRUSTED_TO_ACTIVE
-    trusted_to_suppressed: TrustedToSuppressedThresholds = TRUSTED_TO_SUPPRESSED
-    suppressed_to_active: SuppressedToActiveThresholds = SUPPRESSED_TO_ACTIVE
-    suppressed_to_archived: SuppressedToArchivedThresholds = SUPPRESSED_TO_ARCHIVED
-
-
-STATE_TRANSITION_THRESHOLDS = StateTransitionThresholds()
 
 # ---------------------------------------------------------------------------
 # Score windows (section 3.4)
