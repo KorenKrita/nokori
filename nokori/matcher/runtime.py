@@ -334,7 +334,19 @@ def _near_trigger_window_texts(
         if span in seen:
             continue
         seen.add(span)
-        windows.append(" ".join(tokens[start:end]))
+        # Use both space-joined tokens AND original text slice for pattern matching.
+        # This ensures patterns with punctuation (hyphens, dots, underscores) still match.
+        window_text = " ".join(tokens[start:end])
+        # Also extract the original text between first and last token positions
+        # by finding their approximate char positions in text_lower.
+        first_token = tokens[start]
+        last_token = tokens[end - 1]
+        char_start = text_lower.find(first_token)
+        char_end = text_lower.rfind(last_token) + len(last_token) if char_start >= 0 else -1
+        if char_start >= 0 and char_end > char_start:
+            original_window = text_lower[char_start:char_end]
+            window_text = f"{original_window} {window_text}"
+        windows.append(window_text)
     return tuple(windows)
 
 

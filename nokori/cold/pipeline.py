@@ -1300,9 +1300,10 @@ def _apply_merge_side_effects(
     rpv_where = "AND runtime_policy_version = ?" if existing_rpv else "AND runtime_policy_version IS NULL"
     rpv_params: tuple = (existing_rpv,) if existing_rpv else ()
 
+    cas_applied = False
     with db.transaction() as tx:
         if merge_op == "replace_existing":
-            tx.execute(
+            cur = tx.execute(
                 "UPDATE rules SET status = 'archived', archived_reason = ?, "
                 "replacement_id = ?, rule_version = rule_version + 1, "
                 f"runtime_policy_version = ?, updated_at = ? "
@@ -1310,8 +1311,9 @@ def _apply_merge_side_effects(
                 (reason, new_rule_id, RUNTIME_POLICY_VERSION, now,
                  target_rule_id, existing_version, existing_status, *rpv_params),
             )
+            cas_applied = cur.rowcount == 1
         elif merge_op == "suppress_existing":
-            tx.execute(
+            cur = tx.execute(
                 "UPDATE rules SET status = 'suppressed', suppressed_at = ?, "
                 "rule_version = rule_version + 1, "
                 f"runtime_policy_version = ?, updated_at = ? "
@@ -1319,8 +1321,9 @@ def _apply_merge_side_effects(
                 (now, RUNTIME_POLICY_VERSION, now,
                  target_rule_id, existing_version, existing_status, *rpv_params),
             )
+            cas_applied = cur.rowcount == 1
         elif merge_op == "archive_existing":
-            tx.execute(
+            cur = tx.execute(
                 "UPDATE rules SET status = 'archived', archived_reason = ?, "
                 "rule_version = rule_version + 1, "
                 f"runtime_policy_version = ?, updated_at = ? "
@@ -1328,6 +1331,10 @@ def _apply_merge_side_effects(
                 (reason, RUNTIME_POLICY_VERSION, now,
                  target_rule_id, existing_version, existing_status, *rpv_params),
             )
+            cas_applied = cur.rowcount == 1
+
+    if not cas_applied:
+        return
 
     record_lineage(db, target_rule_id, new_rule_id, merge_op, reason)
 
@@ -1409,12 +1416,19 @@ def _generate_eval_cases(
         )
         cases = json.loads(response)
         # Accept both array and {cases:[...]} formats for robustness
+        case_list: list | None = None
         if isinstance(cases, list):
-            return cases
-        if isinstance(cases, dict) and "cases" in cases:
+            case_list = cases
+        elif isinstance(cases, dict) and "cases" in cases:
             validate_role_output("synthetic_eval_generator", response)
-            return cases["cases"]
-        raise ValueError("synthetic_eval_generator returned no cases")
+            case_list = cases["cases"]
+        if case_list is None:
+            raise ValueError("synthetic_eval_generator returned no cases")
+        # Validate each case has required 'prompt' key
+        for case in case_list:
+            if not isinstance(case, dict) or "prompt" not in case:
+                raise ValueError(f"eval case missing 'prompt' key: {case}")
+        return case_list
     except CircuitBreakerOpenError:
         raise
     except (json.JSONDecodeError, ValueError):
