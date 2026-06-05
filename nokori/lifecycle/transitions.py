@@ -119,7 +119,8 @@ def _aggregate_fire_evidence(db: Db, rule_id: str, window_days: int = 30) -> dic
     """
     cutoff = _days_ago_iso(window_days)
     recent_rows = db.fetchall(
-        "SELECT posthoc_label, posthoc_reason_code, session_id FROM rule_fire_events "
+        "SELECT posthoc_label, posthoc_reason_code, posthoc_score, session_id "
+        "FROM rule_fire_events "
         "WHERE rule_id = ? AND posthoc_label IS NOT NULL AND posthoc_label != 'unclear' "
         "AND created_at >= ? "
         "ORDER BY created_at DESC LIMIT ?",
@@ -128,6 +129,7 @@ def _aggregate_fire_evidence(db: Db, rule_id: str, window_days: int = 30) -> dic
 
     counts: dict[str, int | float] = {
         "observed_useful": 0,
+        "observed_useful_strong": 0,
         "plausible_useful": 0,
         "irrelevant": 0,
         "harmful": 0,
@@ -146,6 +148,10 @@ def _aggregate_fire_evidence(db: Db, rule_id: str, window_days: int = 30) -> dic
             reason_counts[rc] = reason_counts.get(rc, 0) + 1
         if label == "observed_useful" and r["session_id"]:
             useful_sessions.add(r["session_id"])
+            # Spec 10.2: attribution_weight > 0.5 = strong attribution for promotion
+            attribution_weight = r["posthoc_score"]
+            if attribution_weight is None or attribution_weight > 0.5:
+                counts["observed_useful_strong"] = int(counts["observed_useful_strong"]) + 1
 
     counts["reason_counts"] = reason_counts  # type: ignore[assignment]
     counts["distinct_observed_useful_sessions"] = len(useful_sessions)
@@ -553,8 +559,9 @@ def _evaluate_active(db: Db, row, rule_version: int) -> TransitionResult:
 
     # Check active -> trusted (slow upgrade)
     # INVARIANT: trusted promotion uses ONLY fire events (observed_useful), never shadow/counterfactual
+    # Use observed_useful_strong (attribution_weight > 0.5) for promotion threshold.
     th = ACTIVE_TO_TRUSTED
-    observed_useful = fire.get("observed_useful", 0)
+    observed_useful = fire.get("observed_useful_strong", 0)
     total_evaluated = fire.get("total_evaluated", 0)
     distinct_sessions = fire.get("distinct_observed_useful_sessions", 0)
 
