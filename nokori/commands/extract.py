@@ -70,10 +70,22 @@ def _segment_hash(text: str) -> str:
 
 
 def _candidate_evidence_quotes(cand, transcript_text: str) -> list[str]:
-    """Return bounded transcript evidence for legacy extractor candidates."""
+    """Return transcript evidence — prefer extractor-returned verbatim quotes."""
     haystack = transcript_text.strip()
     if not haystack:
         return []
+    # Prefer quotes returned by the extractor (verbatim from transcript)
+    if cand.evidence_quotes:
+        verified = []
+        for q in cand.evidence_quotes:
+            if q in haystack:
+                verified.append(q[:_EVIDENCE_QUOTE_MAX])
+            elif q.lower() in haystack.lower():
+                idx = haystack.lower().find(q.lower())
+                verified.append(haystack[idx:idx + len(q)][:_EVIDENCE_QUOTE_MAX])
+        if verified:
+            return verified
+    # Fallback: search for needles from candidate fields
     needles = [
         cand.trigger,
         cand.action,

@@ -31,6 +31,7 @@ class Candidate:
     rationale: str | None
     source_type: str
     confidence: str
+    evidence_quotes: list[str] = dataclasses.field(default_factory=list)
     trigger_text_zh: str | None = None
     behavior_zh: str | None = None
     action_zh: str | None = None
@@ -150,6 +151,10 @@ def _coerce(item: dict) -> Candidate:
     if not isinstance(variants_zh_raw, list):
         variants_zh_raw = []
     trigger_variants_zh = [str(v).strip() for v in variants_zh_raw if str(v).strip()]
+    evidence_raw = item.get("evidence_quotes") or []
+    if not isinstance(evidence_raw, list):
+        evidence_raw = []
+    evidence_quotes = [str(q).strip() for q in evidence_raw if str(q).strip()]
     return Candidate(
         trigger=trigger,
         trigger_variants=variants,
@@ -159,6 +164,7 @@ def _coerce(item: dict) -> Candidate:
         rationale=(str(item["rationale"]).strip() if item.get("rationale") else None),
         source_type=source_type,
         confidence=confidence,
+        evidence_quotes=evidence_quotes,
         trigger_text_zh=trigger_text_zh,
         behavior_zh=behavior_zh,
         action_zh=action_zh,

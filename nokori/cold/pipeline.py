@@ -684,6 +684,10 @@ def _run_admission_judge(
         "Evaluate whether this candidate rule deserves lifecycle entry. "
         "Reject broad, unsupported, or untestable rules. "
         "You must cite evidence for any positive decision.\n\n"
+        "CRITICAL for evidence_support scoring: the evidence_quotes field contains "
+        "verbatim transcript excerpts. Verify that these quotes actually support "
+        "the trigger and action claimed. If the quotes are unrelated to the rule's "
+        "topic, score evidence_support near 0 regardless of how plausible the rule sounds.\n\n"
         "Output strict JSON:\n"
         '{"scores":{"overall_quality":0.0-1.0,"evidence_support":0.0-1.0,'
         '"trigger_specificity":0.0-1.0,"action_clarity":0.0-1.0,'
@@ -695,7 +699,8 @@ def _run_admission_judge(
     candidate_text = _prompt_text(json.dumps(candidate, ensure_ascii=False, indent=2))
     user_prompt = (
         f"<candidate_rule>\n{candidate_text}\n</candidate_rule>\n\n"
-        "Evaluate this candidate. Score each dimension 0.0-1.0 and decide: accept, revise, or reject."
+        "Evaluate this candidate. Score each dimension 0.0-1.0 and decide: accept, revise, or reject. "
+        "Pay special attention to whether evidence_quotes genuinely support the claimed trigger/action."
     )
 
     try:
