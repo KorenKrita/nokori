@@ -99,7 +99,7 @@ Field constraints:
     "用pnpm别用npm" → en: ["pnpm", "npm"], zh: []
 - source_type: correction (user corrected or directed: "don't", "stop", "改一下", "use X instead", "你可以用…", explicit rejection) | preference (stable preference without correcting a mistake: "we use pnpm") | solution (failure→fix loop where user acknowledged lesson in a later [User] message) | anti_pattern (approach that failed and should be avoided).
 - confidence: high (user repeated/emphasized strongly — "永远不要"/"必须"/"always"/"never again", or lesson is universally applicable across projects) | medium (user corrected once clearly, lesson is reusable but may be context-dependent) | low (inferred from failure→fix pattern, or user's correction was mild/ambiguous). Never high if only assistant self-fixed without user pushback.
-- evidence_quotes: 1-3 verbatim substrings copy-pasted from the transcript that prove the user's correction/preference exists. Must be findable via exact string match in the input. Do NOT paraphrase, summarize, or fabricate. If you cannot find a verbatim quote to support the rule, do not emit the rule.
+- evidence_quotes: 1-3 verbatim substrings copy-pasted from the transcript that prove the user's correction/preference exists. Each quote must be a contiguous span — do NOT truncate the middle, splice separate passages, or rearrange words to manufacture support. Must be findable via exact string match in the input. Do NOT paraphrase, summarize, or fabricate. If you cannot find a verbatim contiguous quote that demonstrates the user's intent, do not emit the rule.
 
 Count:
 - At most 3 items per transcript (distinct lessons only). Never pad — 0 is valid. Prefer fewer when lessons overlap.
