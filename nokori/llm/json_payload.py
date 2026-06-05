@@ -115,4 +115,17 @@ def parse_json_payload(raw: str) -> Any | None:
         if best is not None:
             return best
 
+    # Final fallback: json-repair for truncated/malformed JSON
+    return _repair_json(stripped or raw.strip())
+
+
+def _repair_json(text: str) -> Any | None:
+    """Use json-repair library as last resort for malformed LLM output."""
+    try:
+        from json_repair import repair_json
+        result = repair_json(text, return_objects=True)
+        if result and result != "" and result != [] and result != {}:
+            return result
+    except Exception:
+        pass
     return None
