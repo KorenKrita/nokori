@@ -351,7 +351,6 @@ class TestParsePosthocOutput:
         })
         result = parse_posthoc_output(raw)
         assert result["label"] == "observed_useful"
-        assert result["rule_application_evidence"] == ""
         assert result["would_likely_have_happened_without_rule"] == "unclear"
 
     def test_all_valid_labels_accepted(self):

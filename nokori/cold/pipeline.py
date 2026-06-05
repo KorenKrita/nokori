@@ -241,6 +241,7 @@ def _run_cold_pipeline_inner(
         rule_data = rewritten
         # Always use original evidence — rewriter must not override with hallucinated quotes
         rule_data["evidence_quotes"] = candidate.get("evidence_quotes", [])
+        rule_data["_rewritten"] = True
     else:
         # Build structured rule_data from extractor candidate for accepted path
         rule_data = _candidate_to_rule_data(candidate)
@@ -694,10 +695,9 @@ def _run_admission_judge(
         "topic, score evidence_support near 0 regardless of how plausible the rule sounds.\n\n"
         "Output strict JSON:\n"
         '{"scores":{"overall_quality":0.0-1.0,"evidence_support":0.0-1.0,'
-        '"trigger_specificity":0.0-1.0,"action_clarity":0.0-1.0,'
-        '"scope_control":0.0-1.0,"generalization_safety":0.0-1.0,'
+        '"trigger_specificity":0.0-1.0,"scope_control":0.0-1.0,'
         '"retrieval_readiness":0.0-1.0},'
-        '"decision":"accept|revise|reject","reasoning":"..."}'
+        '"decision":"accept|revise|reject"}'
     )
 
     candidate_text = _prompt_text(json.dumps(candidate, ensure_ascii=False, indent=2))
@@ -783,7 +783,7 @@ def _run_rewriter(
         '{"trigger_canonical":"...","required_concept_groups":[{"concepts":["term"],"match":"all|any"}],'
         '"excluded_contexts":[{"pattern":"...","scope":"trigger|action"}],'
         '"action_instruction":"...","severity":"reminder|high_risk|gate_eligible",'
-        '"scope":{"domain_tags":[],"path_patterns":[],"tool_tags":[]},"rewrite_rationale":"..."}'
+        '"scope":{"domain_tags":[],"path_patterns":[],"tool_tags":[]}}'
     )
 
     candidate_text = _prompt_text(json.dumps(candidate, ensure_ascii=False, indent=2))
@@ -833,8 +833,7 @@ def _run_final_judge(
         "Do not let rewriter polish hide weak evidence. "
         "You must cite evidence for any accept decision.\n\n"
         "Output strict JSON:\n"
-        '{"decision":"accept_active|accept_candidate|reject",'
-        '"reasoning":"...","evidence_citations":["quote1","quote2"]}'
+        '{"decision":"accept_active|accept_candidate|reject"}'
     )
 
     rule_text = _prompt_text(json.dumps(rule_data, ensure_ascii=False, indent=2))
@@ -1132,7 +1131,7 @@ def insert_rule_from_pipeline(
                 1,  # rule_version
                 PIPELINE_VERSION,
                 RUNTIME_POLICY_VERSION,
-                "rule_rewriter" if "rewrite_rationale" in rule_data else None,
+                "rule_rewriter" if rule_data.get("_rewritten") else None,
                 status,
                 severity,
                 trigger_canonical,

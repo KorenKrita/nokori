@@ -54,7 +54,6 @@ POSTHOC_OUTPUT_SCHEMA: dict[str, Any] = {
             "type": "string",
             "enum": list(POSTHOC_REASON_CODES),
         },
-        "rule_application_evidence": {"type": "string"},
         "would_likely_have_happened_without_rule": {
             "type": "string",
             "enum": list(ATTRIBUTION_ANSWERS),
@@ -63,7 +62,6 @@ POSTHOC_OUTPUT_SCHEMA: dict[str, Any] = {
     "required": [
         "label",
         "reason_code",
-        "rule_application_evidence",
         "would_likely_have_happened_without_rule",
     ],
 }
@@ -105,7 +103,6 @@ Return a single JSON object (no markdown fences, no extra text):
 {
   "label": "observed_useful|plausible_useful|irrelevant|harmful|unclear",
   "reason_code": "<one of the defined reason codes>",
-  "rule_application_evidence": "<specific evidence from the transcript>",
   "would_likely_have_happened_without_rule": "yes|no|unclear"
 }
 """
@@ -155,8 +152,7 @@ def build_posthoc_prompt(evaluator_input: dict) -> str:
     parts.append("\n## Instructions")
     parts.append(
         "Based on the above, produce a single JSON object with: "
-        "label, reason_code, rule_application_evidence, "
-        "would_likely_have_happened_without_rule."
+        "label, reason_code, would_likely_have_happened_without_rule."
     )
 
     return "\n".join(parts)
@@ -189,8 +185,6 @@ def parse_posthoc_output(raw_json: str) -> dict:
         )
 
     # Normalize field aliases
-    if "rule_application_evidence" not in data:
-        data["rule_application_evidence"] = data.pop("evidence", data.pop("application_evidence", ""))
     if "would_likely_have_happened_without_rule" not in data:
         data["would_likely_have_happened_without_rule"] = data.pop(
             "without_rule", data.pop("counterfactual", "unclear")
@@ -223,12 +217,6 @@ def parse_posthoc_output(raw_json: str) -> dict:
         raise ValueError(
             f"posthoc_evaluator: invalid attribution {attribution!r}, "
             f"must be one of {ATTRIBUTION_ANSWERS}"
-        )
-
-    evidence = data.get("rule_application_evidence")
-    if not isinstance(evidence, str):
-        raise ValueError(
-            "posthoc_evaluator: rule_application_evidence must be a string"
         )
 
     return data

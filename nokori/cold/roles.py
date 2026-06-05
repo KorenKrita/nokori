@@ -138,18 +138,14 @@ ADMISSION_JUDGE_SCHEMA: dict[str, Any] = {
                 "overall_quality": {"type": "number", "minimum": 0, "maximum": 1},
                 "evidence_support": {"type": "number", "minimum": 0, "maximum": 1},
                 "trigger_specificity": {"type": "number", "minimum": 0, "maximum": 1},
-                "action_clarity": {"type": "number", "minimum": 0, "maximum": 1},
                 "scope_control": {"type": "number", "minimum": 0, "maximum": 1},
-                "generalization_safety": {"type": "number", "minimum": 0, "maximum": 1},
                 "retrieval_readiness": {"type": "number", "minimum": 0, "maximum": 1},
             },
             "required": [
                 "overall_quality",
                 "evidence_support",
                 "trigger_specificity",
-                "action_clarity",
                 "scope_control",
-                "generalization_safety",
                 "retrieval_readiness",
             ],
         },
@@ -157,9 +153,8 @@ ADMISSION_JUDGE_SCHEMA: dict[str, Any] = {
             "type": "string",
             "enum": ["accept", "revise", "reject"],
         },
-        "reasoning": {"type": "string"},
     },
-    "required": ["scores", "decision", "reasoning"],
+    "required": ["scores", "decision"],
 }
 
 RULE_REWRITER_SCHEMA: dict[str, Any] = {
@@ -171,7 +166,6 @@ RULE_REWRITER_SCHEMA: dict[str, Any] = {
         "action_instruction": {"type": "string"},
         "severity": {"type": "string", "enum": ["reminder", "high_risk", "gate_eligible"]},
         "scope": {"type": "object"},
-        "rewrite_rationale": {"type": "string"},
     },
     "required": [
         "trigger_canonical",
@@ -180,7 +174,6 @@ RULE_REWRITER_SCHEMA: dict[str, Any] = {
         "action_instruction",
         "severity",
         "scope",
-        "rewrite_rationale",
     ],
 }
 
@@ -191,13 +184,8 @@ FINAL_JUDGE_SCHEMA: dict[str, Any] = {
             "type": "string",
             "enum": ["accept_active", "accept_candidate", "reject"],
         },
-        "reasoning": {"type": "string"},
-        "evidence_citations": {
-            "type": "array",
-            "items": {"type": "string"},
-        },
     },
-    "required": ["decision", "reasoning", "evidence_citations"],
+    "required": ["decision"],
 }
 
 MERGE_PLANNER_SCHEMA: dict[str, Any] = {
@@ -265,9 +253,8 @@ SYNTHETIC_EVAL_GENERATOR_SCHEMA: dict[str, Any] = {
                         "type": "string",
                         "enum": ["cold", "warm", "hot", "gate"],
                     },
-                    "rationale": {"type": "string"},
                 },
-                "required": ["prompt", "case_type", "expected_min_decision", "expected_max_decision", "rationale"],
+                "required": ["prompt", "case_type", "expected_min_decision", "expected_max_decision"],
             },
         },
     },
@@ -301,7 +288,6 @@ POSTHOC_EVALUATOR_SCHEMA: dict[str, Any] = {
                 "harmful_blocked_valid_action",
             ],
         },
-        "rule_application_evidence": {"type": "string"},
         "would_likely_have_happened_without_rule": {
             "type": "string",
             "enum": ["yes", "no", "unclear"],
@@ -310,7 +296,6 @@ POSTHOC_EVALUATOR_SCHEMA: dict[str, Any] = {
     "required": [
         "label",
         "reason_code",
-        "rule_application_evidence",
         "would_likely_have_happened_without_rule",
     ],
 }
@@ -407,7 +392,7 @@ def validate_role_output(role: str, raw_json_str: str) -> dict[str, Any]:
 
 _ADMISSION_SCORE_KEYS = (
     "overall_quality", "evidence_support", "trigger_specificity",
-    "action_clarity", "scope_control", "generalization_safety", "retrieval_readiness",
+    "scope_control", "retrieval_readiness",
 )
 
 
@@ -430,18 +415,9 @@ def _normalize_role_output(role: str, data: dict[str, Any]) -> dict[str, Any]:
                         data["scores"][k] = float(v)
                     except ValueError:
                         pass
-        # Fix 3: missing reasoning
-        if "reasoning" not in data:
-            data["reasoning"] = data.pop("rationale", data.pop("reason", data.pop("explanation", "")))
 
     elif role == "final_judge":
-        # Fix: missing evidence_citations
-        if "evidence_citations" not in data:
-            data["evidence_citations"] = data.pop("citations", data.pop("evidence", []))
-        if isinstance(data.get("evidence_citations"), str):
-            data["evidence_citations"] = [data["evidence_citations"]]
-        if "reasoning" not in data:
-            data["reasoning"] = data.pop("rationale", data.pop("reason", data.pop("explanation", "")))
+        pass
 
     elif role == "merge_planner":
         # Fix: target_rule_ids missing or as single string
@@ -477,9 +453,6 @@ def _normalize_role_output(role: str, data: dict[str, Any]) -> dict[str, Any]:
                 if k in data:
                     scope[k] = data.pop(k)
             data["scope"] = scope if scope else {"domain_tags": [], "path_patterns": [], "tool_tags": []}
-        # Fix: missing rewrite_rationale
-        if "rewrite_rationale" not in data:
-            data["rewrite_rationale"] = data.pop("rationale", data.pop("reasoning", data.pop("reason", "")))
         # Fix: severity alias
         if "severity" not in data:
             data["severity"] = "reminder"
@@ -491,8 +464,6 @@ def _normalize_role_output(role: str, data: dict[str, Any]) -> dict[str, Any]:
 
     elif role == "posthoc_evaluator":
         # Fix: field aliases
-        if "rule_application_evidence" not in data:
-            data["rule_application_evidence"] = data.pop("evidence", data.pop("application_evidence", ""))
         if "would_likely_have_happened_without_rule" not in data:
             data["would_likely_have_happened_without_rule"] = data.pop(
                 "without_rule", data.pop("counterfactual", "unclear")

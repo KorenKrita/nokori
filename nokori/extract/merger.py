@@ -250,8 +250,6 @@ def _ask_llm(cand: Candidate, neighbors: list[Rule], llm: LLMAdapter) -> dict | 
         trigger=cand.trigger,
         action=cand.action,
         behavior=cand.behavior,
-        source_type=cand.source_type,
-        confidence=cand.confidence,
         existing_formatted=_format_existing(neighbors),
     )
     try:
