@@ -392,6 +392,30 @@ class TestExcludedContextScopes:
 
         assert "ex_far" not in result.excluded_context_hits
 
+    def test_near_trigger_span_uses_current_token_window_when_tokens_repeat(self):
+        """Repeated window-boundary tokens must not widen the original text slice."""
+        concepts = [_concept("c1", [_alias("secret key")])]
+        groups = [_group("g1", ["c1"])]
+        excluded = [
+            _excluded_context(
+                "ex_repeat",
+                ["sandbox example"],
+                scope="near_trigger_span",
+                window_tokens=2,
+            )
+        ]
+        matcher = compile_rule(
+            _trigger_data(concepts=concepts, groups=groups, excluded_contexts=excluded)
+        )
+
+        result = evaluate_match(
+            matcher,
+            "alpha sandbox example beta gamma delta alpha secret key",
+        )
+
+        assert result.required_concepts_match is True
+        assert "ex_repeat" not in result.excluded_context_hits
+
 
 # ---------------------------------------------------------------------------
 # 7. Near-miss examples don't suppress at runtime

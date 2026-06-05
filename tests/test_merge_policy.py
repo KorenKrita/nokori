@@ -468,7 +468,16 @@ def test_merge_into_existing_quality_both():
 # ---------------------------------------------------------------------------
 
 
-def _insert_rule(db, rule_id, short_id, trigger, action, status="active"):
+def _insert_rule(
+    db,
+    rule_id,
+    short_id,
+    trigger,
+    action,
+    status="active",
+    project_scope="global",
+    project_id=None,
+):
     """Insert a minimal rule into the DB for neighbor retrieval tests."""
     from datetime import datetime, timezone
 
@@ -477,10 +486,10 @@ def _insert_rule(db, rule_id, short_id, trigger, action, status="active"):
         tx.execute(
             "INSERT INTO rules (id, short_id, schema_version, rule_version, "
             "trigger_canonical, action_instruction, status, severity, "
-            "source_origin, created_at, updated_at) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            "source_origin, project_scope, project_id, created_at, updated_at) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (rule_id, short_id, 6, 1, trigger, action, status, "reminder",
-             "transcript_extraction", now, now),
+             "transcript_extraction", project_scope, project_id, now, now),
         )
 
 
@@ -530,3 +539,73 @@ def test_find_merge_neighbors_matches_v6_variant_dicts(db):
     neighbors = find_merge_neighbors(db, rule_data, limit=1)
 
     assert [n["id"] for n in neighbors] == ["rule-a"]
+
+
+def test_find_merge_neighbors_filters_to_global_and_current_project(db):
+    """Project-scoped cold merges must not see unrelated project rules."""
+    _insert_rule(
+        db,
+        "rule-global",
+        "rg",
+        "use typescript strict mode",
+        "enable strict",
+    )
+    _insert_rule(
+        db,
+        "rule-current",
+        "rc",
+        "use typescript strict mode",
+        "enable strict",
+        project_scope="project",
+        project_id="proj-a",
+    )
+    _insert_rule(
+        db,
+        "rule-other",
+        "ro",
+        "use typescript strict mode",
+        "enable strict",
+        project_scope="project",
+        project_id="proj-b",
+    )
+
+    rule_data = {
+        "id": "new-candidate",
+        "trigger_canonical": "use typescript strict mode for all files",
+        "action_instruction": "enforce strict",
+    }
+
+    scoped = find_merge_neighbors(db, rule_data, project_id="proj-a")
+    scoped_ids = {n["id"] for n in scoped}
+    assert "rule-global" in scoped_ids
+    assert "rule-current" in scoped_ids
+    assert "rule-other" not in scoped_ids
+
+    global_only = find_merge_neighbors(db, rule_data, project_id=None)
+    assert {n["id"] for n in global_only} == {"rule-global"}
+
+
+def test_find_merge_neighbors_reads_domain_tags_from_rule_scope(db):
+    """Cold rule_data stores domain/tool tags under scope."""
+    _insert_rule(db, "rule-domain", "rd", "alpha beta", "domain action")
+    _insert_rule(db, "rule-recent", "rr", "recent unrelated", "recent action")
+    with db.transaction() as tx:
+        tx.execute(
+            "UPDATE rules SET domain_tags = ?, updated_at = ? WHERE id = ?",
+            (json.dumps(["python"]), "2000-01-01T00:00:00Z", "rule-domain"),
+        )
+        tx.execute(
+            "UPDATE rules SET updated_at = ? WHERE id = ?",
+            ("2999-01-01T00:00:00Z", "rule-recent"),
+        )
+
+    rule_data = {
+        "id": "new-candidate",
+        "trigger_canonical": "omega sigma",
+        "action_instruction": "theta lambda",
+        "scope": {"domain_tags": ["python"]},
+    }
+
+    neighbors = find_merge_neighbors(db, rule_data, limit=1)
+
+    assert [n["id"] for n in neighbors] == ["rule-domain"]

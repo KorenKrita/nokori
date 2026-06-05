@@ -167,6 +167,7 @@ def _process_path(path: Path, project_id: str | None, cfg: Config,
                     extractor_output=extractor_output,
                     role_models=cfg.role_models,
                     default_model=cfg.llm_model,
+                    project_id=project_id,
                     role_max_tokens=cfg.role_max_tokens,
                     role_timeouts=cfg.role_timeouts,
                 )

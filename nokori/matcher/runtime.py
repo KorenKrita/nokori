@@ -36,11 +36,17 @@ from nokori.runtime.applicability import (
 # ---------------------------------------------------------------------------
 
 _TOKEN_SPLIT_RE = re.compile(r"[\s/\-_.,:;!?\"'`()\[\]{}]+")
+_TOKEN_RE = re.compile("[^\\s/\\-_.,:;!?\"'`()\\[\\]{}]+")
 
 
 def _tokenize(text: str) -> list[str]:
     """Split text into lowercase tokens."""
     return [t for t in _TOKEN_SPLIT_RE.split(text.lower()) if t]
+
+
+def _tokenize_with_spans(text: str) -> list[tuple[str, int, int]]:
+    """Split text into lowercase tokens while preserving source character spans."""
+    return [(m.group(0).lower(), m.start(), m.end()) for m in _TOKEN_RE.finditer(text)]
 
 
 # ---------------------------------------------------------------------------
@@ -304,9 +310,10 @@ def _near_trigger_window_texts(
     derive trigger positions from matched anchor tokens and phrases, then only
     evaluate exclusions inside +/- window_tokens around those positions.
     """
-    tokens = _tokenize(text_lower)
-    if not tokens:
+    token_spans = _tokenize_with_spans(text_lower)
+    if not token_spans:
         return ()
+    tokens = [token for token, _start, _end in token_spans]
 
     trigger_positions: set[int] = {
         idx for idx, tok in enumerate(tokens) if tok in trigger_anchor_tokens
@@ -334,18 +341,11 @@ def _near_trigger_window_texts(
         if span in seen:
             continue
         seen.add(span)
-        # Use both space-joined tokens AND original text slice for pattern matching.
-        # This ensures patterns with punctuation (hyphens, dots, underscores) still match.
         window_text = " ".join(tokens[start:end])
-        # Also extract the original text between first and last token positions
-        # by finding their approximate char positions in text_lower.
-        first_token = tokens[start]
-        last_token = tokens[end - 1]
-        char_start = text_lower.find(first_token)
-        char_end = text_lower.rfind(last_token) + len(last_token) if char_start >= 0 else -1
-        if char_start >= 0 and char_end > char_start:
-            original_window = text_lower[char_start:char_end]
-            window_text = f"{original_window} {window_text}"
+        char_start = token_spans[start][1]
+        char_end = token_spans[end - 1][2]
+        original_window = text_lower[char_start:char_end]
+        window_text = f"{original_window} {window_text}"
         windows.append(window_text)
     return tuple(windows)
 

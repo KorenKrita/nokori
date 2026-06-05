@@ -328,7 +328,12 @@ def record_lineage(
 # ---------------------------------------------------------------------------
 
 
-def find_merge_neighbors(db: Db, rule_data: dict, limit: int = 10) -> list[dict]:
+def find_merge_neighbors(
+    db: Db,
+    rule_data: dict,
+    limit: int = 10,
+    project_id: str | None = None,
+) -> list[dict]:
     """Broad recall for merge neighbor retrieval (section 8.1).
 
     Retrieves candidates via:
@@ -367,16 +372,27 @@ def find_merge_neighbors(db: Db, rule_data: dict, limit: int = 10) -> list[dict]
         rule_data.get("variants") or rule_data.get("trigger_variants", [])
     )
     search_terms: dict = rule_data.get("search_terms", {})
-    domain_tags: list[str] = rule_data.get("domain_tags", [])
-    tool_tags: list[str] = rule_data.get("tool_tags", [])
+    scope = rule_data.get("scope", {})
+    scope = scope if isinstance(scope, dict) else {}
+    domain_tags: list[str] = rule_data.get("domain_tags") or scope.get("domain_tags", [])
+    tool_tags: list[str] = rule_data.get("tool_tags") or scope.get("tool_tags", [])
     action_text: str = rule_data.get("action_instruction", "")
 
     # Exclude the rule itself if it has an id.
     exclude_id: str | None = rule_data.get("id")
 
+    if project_id is None:
+        scope_where = "project_scope = 'global'"
+        scope_params: tuple = ()
+    else:
+        scope_where = "(project_scope = 'global' OR project_id = ?)"
+        scope_params = (project_id,)
+
     # Fetch all non-archived rules for scoring.
     rows = db.fetchall(
-        f"SELECT {RULE_COLUMNS} FROM rules WHERE status != 'archived'"
+        f"SELECT {RULE_COLUMNS} FROM rules "
+        f"WHERE status != 'archived' AND {scope_where}",
+        scope_params,
     )
 
     for row in rows:
@@ -471,8 +487,8 @@ def find_merge_neighbors(db: Db, rule_data: dict, limit: int = 10) -> list[dict]
                             # Fetch the rule row for this candidate
                             rule_row = db.fetchone(
                                 f"SELECT {RULE_COLUMNS} FROM rules "
-                                "WHERE id = ? AND status != 'archived'",
-                                (rule_id,),
+                                f"WHERE id = ? AND status != 'archived' AND {scope_where}",
+                                (rule_id,) + scope_params,
                             )
                             if rule_row:
                                 candidates[rule_id] = (_row_to_dict(rule_row), embedding_bonus)
@@ -483,8 +499,8 @@ def find_merge_neighbors(db: Db, rule_data: dict, limit: int = 10) -> list[dict]
     if len(candidates) < limit:
         recent_rows = db.fetchall(
             "SELECT * FROM rules WHERE status IN ('active', 'trusted') "
-            "ORDER BY updated_at DESC LIMIT ?",
-            (min(5, limit - len(candidates)),),
+            f"AND {scope_where} ORDER BY updated_at DESC LIMIT ?",
+            scope_params + (min(5, limit - len(candidates)),),
         )
         for row in recent_rows:
             row_id = row["id"]

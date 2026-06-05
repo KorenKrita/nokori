@@ -106,6 +106,7 @@ def run_cold_pipeline(
     idf_stats: IdfPoolStats | None = None,
     global_adversarial_cases: list[dict[str, Any]] | None = None,
     source_origin: SourceOrigin = "transcript_extraction",
+    project_id: str | None = None,
 ) -> ColdPipelineResult:
     """Run the full cold pipeline for one extractor output candidate.
 
@@ -129,6 +130,7 @@ def run_cold_pipeline(
         idf_stats: Pre-built IDF pool stats. Built on demand if None.
         global_adversarial_cases: Checked-in adversarial eval cases.
         source_origin: Origin type for this candidate.
+        project_id: Optional project scope for transcript-derived rules.
 
     Returns:
         ColdPipelineResult with final status, rule_id (if inserted), rejection reason, and scores.
@@ -140,6 +142,7 @@ def run_cold_pipeline(
             role_max_tokens=role_max_tokens, role_timeouts=role_timeouts,
             idf_stats=idf_stats, global_adversarial_cases=global_adversarial_cases,
             source_origin=source_origin,
+            project_id=project_id,
         )
     except CircuitBreakerOpenError as e:
         # Spec section 5.2: paused jobs remain pending, not rejected
@@ -172,6 +175,7 @@ def _run_cold_pipeline_inner(
     idf_stats: IdfPoolStats | None = None,
     global_adversarial_cases: list[dict[str, Any]] | None = None,
     source_origin: SourceOrigin = "transcript_extraction",
+    project_id: str | None = None,
 ) -> ColdPipelineResult:
     candidate = extractor_output
 
@@ -250,7 +254,8 @@ def _run_cold_pipeline_inner(
     # --- Stage d: Merge Planner ---
     merge_planner_model = resolve_model_id("merge_planner", role_models, default_model)
     merge_op, merge_info = _run_merge_planner(
-        db, llm, rule_data, merge_planner_model, role_max_tokens, role_timeouts
+        db, llm, rule_data, merge_planner_model, role_max_tokens, role_timeouts,
+        project_id=project_id,
     )
 
     if merge_op == "reject_new":
@@ -266,7 +271,7 @@ def _run_cold_pipeline_inner(
         split_results = _handle_split_required(
             db, llm, rule_data, role_models, default_model,
             transcript_ref, source_origin, idf_stats, global_adversarial_cases,
-            role_max_tokens, role_timeouts,
+            role_max_tokens, role_timeouts, project_id,
         )
         if split_results:
             return split_results[0]
@@ -413,7 +418,7 @@ def _run_cold_pipeline_inner(
                     "SELECT trigger_canonical, trigger_variants, excluded_contexts, "
                     "concepts, required_concept_groups, near_miss_examples, "
                     "action_instruction, rule_version, status, severity, "
-                    "first_observed_useful_at "
+                    "runtime_policy_version, first_observed_useful_at "
                     "FROM rules WHERE id = ?",
                     (target_id,),
                 )
@@ -470,6 +475,8 @@ def _run_cold_pipeline_inner(
                     if not _synth_ok:
                         # Revert merged fields via CAS (restore pre-merge values)
                         _revert_version = _merged_row["rule_version"]
+                        _revert_status = _merged_row["status"]
+                        _revert_rpv = _merged_row["runtime_policy_version"]
                         _now_revert = datetime.now(timezone.utc).isoformat(timespec="seconds")
                         _revert_sets = []
                         _revert_params: list = []
@@ -481,14 +488,18 @@ def _run_cold_pipeline_inner(
                             _revert_params.append(_pre_excluded if isinstance(_pre_excluded, str) else dumps_json(_pre_excluded) if _pre_excluded is not None else None)
                         if _revert_sets:
                             _revert_sets.append("rule_version = rule_version + 1")
+                            _revert_sets.append("runtime_policy_version = ?")
+                            _revert_params.append(RUNTIME_POLICY_VERSION)
                             _revert_sets.append("updated_at = ?")
                             _revert_params.append(_now_revert)
-                            _revert_params.extend([target_id, _revert_version])
+                            _revert_params.extend([target_id, _revert_version, _revert_status])
+                            _rpv_where = "AND runtime_policy_version = ?" if _revert_rpv else "AND runtime_policy_version IS NULL"
+                            _rpv_params = (_revert_rpv,) if _revert_rpv else ()
                             with db.transaction() as tx:
                                 tx.execute(
                                     f"UPDATE rules SET {', '.join(_revert_sets)} "
-                                    "WHERE id = ? AND rule_version = ?",
-                                    tuple(_revert_params),
+                                    f"WHERE id = ? AND rule_version = ? AND status = ? {_rpv_where}",
+                                    tuple(_revert_params) + _rpv_params,
                                 )
                         return ColdPipelineResult(
                             status="rejected",
@@ -524,6 +535,7 @@ def _run_cold_pipeline_inner(
         transcript_ref=transcript_ref,
         scores=scores,
         synthetic_eval_skipped=synthetic_eval_skipped,
+        project_id=project_id,
     )
 
     _apply_merge_side_effects(db, rule_id, merge_op, merge_info)
@@ -790,6 +802,7 @@ def _run_merge_planner(
     model_id: str,
     role_max_tokens: dict[str, int] | None = None,
     role_timeouts: dict[str, int] | None = None,
+    project_id: str | None = None,
 ) -> tuple[str, dict[str, Any]]:
     """Run merge planner to check against existing rules.
 
@@ -797,7 +810,9 @@ def _run_merge_planner(
         Tuple of (operation, full_merge_info).
     """
     # Retrieve existing rules for comparison
-    existing_rules = _get_existing_rules_for_merge(db, rule_data)
+    existing_rules = _get_existing_rules_for_merge(
+        db, rule_data, project_id=project_id
+    )
 
     if not existing_rules:
         return "keep_both", {"merge_rationale": "no existing overlap", "target_rule_ids": []}
@@ -944,6 +959,7 @@ def insert_rule_from_pipeline(
     transcript_ref: str | None = None,
     scores: dict | None = None,
     synthetic_eval_skipped: bool = False,
+    project_id: str | None = None,
 ) -> str:
     """Insert a rule from the cold pipeline into the rules table.
 
@@ -999,6 +1015,7 @@ def insert_rule_from_pipeline(
     language_hints_json = dumps_json(rule_data.get("language_hints", []))
     evidence_quotes_json = dumps_json(rule_data.get("evidence_quotes", []))
     non_generalization_boundaries_json = dumps_json(rule_data.get("non_generalization_boundaries", []))
+    project_scope = "project" if project_id else "global"
 
     with db.transaction() as tx:
         tx.execute(
@@ -1018,9 +1035,10 @@ def insert_rule_from_pipeline(
             "observed_usefulness_score, plausible_usefulness_score, false_positive_score, harmful_score, "
             "source_origin, activation_origin, transcript_ref, "
             "synthetic_eval_skipped, "
+            "project_scope, project_id, "
             "created_at, updated_at"
             ") VALUES ("
-            "?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?"
+            "?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?"
             ")",
             (
                 rule_id,
@@ -1064,6 +1082,8 @@ def insert_rule_from_pipeline(
                 activation_origin,
                 transcript_ref,
                 1 if synthetic_eval_skipped else 0,
+                project_scope,
+                project_id,
                 now,
                 now,
             ),
@@ -1363,13 +1383,17 @@ def _build_trigger_data(rule_data: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _get_existing_rules_for_merge(db: Db, rule_data: dict[str, Any]) -> list[dict[str, Any]]:
+def _get_existing_rules_for_merge(
+    db: Db,
+    rule_data: dict[str, Any],
+    project_id: str | None = None,
+) -> list[dict[str, Any]]:
     """Retrieve existing active/trusted rules with potential overlap for merge planning."""
     trigger = rule_data.get("trigger_canonical", "")
     if not trigger:
         return []
 
-    return find_merge_neighbors(db, rule_data, limit=20)
+    return find_merge_neighbors(db, rule_data, limit=20, project_id=project_id)
 
 
 def _generate_eval_cases(
@@ -1447,6 +1471,7 @@ def _handle_split_required(
     global_adversarial_cases: list[dict[str, Any]] | None,
     role_max_tokens: dict[str, int] | None = None,
     role_timeouts: dict[str, int] | None = None,
+    project_id: str | None = None,
 ) -> list[ColdPipelineResult]:
     """Handle split_required by invoking rewriter to produce sub-rules, then re-process each.
 
@@ -1502,6 +1527,7 @@ def _handle_split_required(
             role_max_tokens=role_max_tokens, role_timeouts=role_timeouts,
             idf_stats=idf_stats, global_adversarial_cases=global_adversarial_cases,
             source_origin=source_origin,
+            project_id=project_id,
         )
         results.append(result)
 

@@ -313,6 +313,7 @@ def test_process_path_passes_transcript_evidence_and_role_limits(
     assert finished is True
     assert captured["extractor_output"]["evidence_quotes"]
     assert "deploy" in captured["extractor_output"]["evidence_quotes"][0]
+    assert captured["kwargs"]["project_id"] == "proj"
     assert captured["kwargs"]["role_max_tokens"] == cfg.role_max_tokens
     assert captured["kwargs"]["role_timeouts"] == cfg.role_timeouts
 

@@ -733,6 +733,136 @@ def test_non_destructive_merge_reeval_runs_global_adversarial_without_local_case
     assert mock_eval.call_args.args[4] == global_adversarial
 
 
+def test_non_destructive_merge_failed_reeval_revert_uses_full_cas(db: Db):
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace(
+        "+00:00", "Z"
+    )
+    existing_rule_id = "existing-revert-cas-rule"
+    original_variants = [{"text": "parametrize with fixtures", "kind": "weak_recall"}]
+    with db.transaction() as tx:
+        tx.execute(
+            "INSERT INTO rules ("
+            "id, short_id, schema_version, rule_version, "
+            "created_by_pipeline_version, runtime_policy_version, "
+            "status, severity, trigger_canonical, trigger_variants, "
+            "concepts, required_concept_groups, excluded_contexts, "
+            "action_instruction, source_origin, project_scope, "
+            "created_at, updated_at"
+            ") VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (
+                existing_rule_id,
+                "merge03",
+                SCHEMA_VERSION,
+                1,
+                PIPELINE_VERSION,
+                RUNTIME_POLICY_VERSION,
+                "active",
+                "reminder",
+                "When using pytest parametrize with fixtures",
+                json.dumps(original_variants),
+                json.dumps([{
+                    "id": "concept_0",
+                    "label": "pytest parametrize",
+                    "aliases": [{"text": "pytest parametrize", "strength": "strong"}],
+                    "match_mode": "any_alias",
+                    "required": True,
+                }]),
+                json.dumps([{"id": "grp1", "all_of": ["concept_0"]}]),
+                "[]",
+                "Use indirect=True for fixture params",
+                "transcript_extraction",
+                "global",
+                now,
+                now,
+            ),
+        )
+
+    llm = _make_llm_mock({
+        "admission judge": _admission_json(
+            "accept",
+            overall_quality=0.92,
+            evidence_support=0.90,
+            trigger_specificity=0.90,
+            scope_control=0.90,
+        ),
+        "final judge": _final_judge_json("accept_candidate"),
+    })
+    passed_eval = MagicMock(
+        passed=True, results=[], rule_id="", rule_version=1,
+        runtime_policy_version=RUNTIME_POLICY_VERSION, tokenizer_version="1.0.0",
+        matcher_compiler_version="1.0.0", concept_compiler_version="1.0.0",
+        embedding_profile_version="1.0.0", trigger_idf_pool_version="test",
+        benchmark_version="1.0.0", cases=[],
+    )
+    failed_eval = MagicMock(
+        passed=False, results=[], rule_id="", rule_version=1,
+        runtime_policy_version=RUNTIME_POLICY_VERSION, tokenizer_version="1.0.0",
+        matcher_compiler_version="1.0.0", concept_compiler_version="1.0.0",
+        embedding_profile_version="1.0.0", trigger_idf_pool_version="test",
+        benchmark_version="1.0.0", cases=[],
+    )
+
+    def fake_run_synthetic_eval(*args, **kwargs):
+        if fake_run_synthetic_eval.calls == 0:
+            fake_run_synthetic_eval.calls += 1
+            return passed_eval
+        with db.transaction() as tx:
+            tx.execute(
+                "UPDATE rules SET status = 'trusted' WHERE id = ?",
+                (existing_rule_id,),
+            )
+        fake_run_synthetic_eval.calls += 1
+        return failed_eval
+
+    fake_run_synthetic_eval.calls = 0
+
+    with patch(
+        "nokori.cold.pipeline.check_fingerprint_block", return_value=None
+    ), patch(
+        "nokori.cold.pipeline._run_merge_planner",
+        return_value=(
+            "update_existing_fields",
+            {
+                "existing_rule": {
+                    "id": existing_rule_id,
+                    "status": "active",
+                    "runtime_policy_version": RUNTIME_POLICY_VERSION,
+                    "trigger_variants": original_variants,
+                    "excluded_contexts": [],
+                },
+                "merge_rationale": "add stronger variant",
+            },
+        ),
+    ), patch(
+        "nokori.cold.pipeline._generate_eval_cases",
+        return_value=[{
+            "prompt": "pytest parametrize with fixtures",
+            "expected_min_decision": "warm",
+            "expected_max_decision": "hot",
+            "case_type": "positive",
+        }],
+    ), patch(
+        "nokori.cold.pipeline.run_synthetic_eval",
+        side_effect=fake_run_synthetic_eval,
+    ):
+        result = run_cold_pipeline(
+            db,
+            llm,
+            transcript_ref="test_merge_failed_reeval_full_cas",
+            extractor_output=_extractor_candidate(),
+            default_model="test-model",
+        )
+
+    assert result.status == "rejected"
+    assert result.rejection_reason == "post_merge_synthetic_eval_failed"
+    row = db.fetchone(
+        "SELECT status, trigger_variants FROM rules WHERE id = ?",
+        (existing_rule_id,),
+    )
+    assert row["status"] == "trusted"
+    assert json.loads(row["trigger_variants"]) != original_variants
+
+
 # ---------------------------------------------------------------------------
 # 7. Cold fast lane: high-quality rules enter as active directly
 # ---------------------------------------------------------------------------
@@ -826,6 +956,40 @@ class TestLowQualityCandidate:
         )
         assert row["status"] == "candidate"
         assert row["activation_origin"] is None
+
+    def test_project_id_is_persisted_as_project_scope(self, db: Db):
+        """Cold pipeline rules extracted from a project transcript stay project-scoped."""
+        llm = _make_llm_mock({
+            "admission judge": _admission_json(
+                "accept",
+                overall_quality=0.85,
+                evidence_support=0.86,
+                trigger_specificity=0.82,
+                scope_control=0.80,
+            ),
+            "final judge": _final_judge_json("accept_candidate"),
+            "merge planner": _merge_planner_json("keep_both"),
+        })
+
+        with patch(
+            "nokori.cold.pipeline.check_fingerprint_block", return_value=None
+        ):
+            result = run_cold_pipeline(
+                db,
+                llm,
+                transcript_ref="test_project_scope",
+                extractor_output=_extractor_candidate(),
+                default_model="test-model",
+                project_id="proj-a",
+            )
+
+        assert result.status == "candidate"
+        row = db.fetchone(
+            "SELECT project_scope, project_id FROM rules WHERE id = ?",
+            (result.rule_id,),
+        )
+        assert row["project_scope"] == "project"
+        assert row["project_id"] == "proj-a"
 
 
 # ---------------------------------------------------------------------------
