@@ -344,13 +344,15 @@ class TestParsePosthocOutput:
         with pytest.raises(ValueError, match="invalid attribution"):
             parse_posthoc_output(raw)
 
-    def test_rejects_missing_required_field(self):
+    def test_normalizes_missing_fields(self):
         raw = json.dumps({
             "label": "observed_useful",
             "reason_code": "useful_prevented_error",
         })
-        with pytest.raises(ValueError, match="missing required field"):
-            parse_posthoc_output(raw)
+        result = parse_posthoc_output(raw)
+        assert result["label"] == "observed_useful"
+        assert result["rule_application_evidence"] == ""
+        assert result["would_likely_have_happened_without_rule"] == "unclear"
 
     def test_all_valid_labels_accepted(self):
         for label in POSTHOC_LABELS:

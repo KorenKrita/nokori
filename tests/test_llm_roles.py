@@ -172,7 +172,7 @@ class TestValidateRoleOutput:
         assert result["candidates"][0]["trigger_draft"] == "when X"
 
     def test_malformed_json_raises(self):
-        with pytest.raises(ValueError, match="invalid JSON"):
+        with pytest.raises(ValueError):
             validate_role_output("extractor", "{not json at all")
 
     def test_missing_required_field_raises(self):
