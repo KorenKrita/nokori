@@ -499,7 +499,6 @@ class TestRunShadowCounterfactualEvaluation:
     def test_labels_unlabeled_shadow_events(self, tmp_path):
         from nokori.events.shadow import (
             run_shadow_counterfactual_evaluation,
-            mark_shadow_label,
         )
 
         db = _make_db(tmp_path)

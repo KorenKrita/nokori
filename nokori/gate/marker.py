@@ -26,6 +26,14 @@ class MarkerRule:
     trigger: str = ""
     source_type: str = "transcript_extraction"
     rationale: str | None = None
+    rule_id: str | None = None
+    status: str | None = None
+    severity: str | None = None
+    rule_version: int | None = None
+    runtime_policy_version: str | None = None
+    trigger_idf_pool_version: str | None = None
+    embedding_profile_version: str | None = None
+    decision_features: dict | None = None
 
 
 @dataclass

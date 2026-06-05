@@ -417,7 +417,6 @@ def find_merge_neighbors(db: Db, rule_data: dict, limit: int = 10) -> list[dict]
             _deserialize,
         )
         from ..config import Config
-        from ..utils.sql_batch import batched
 
         cfg = Config.load()
         if cfg.embed_enabled and cfg.embed_base_url and cfg.embed_model:

@@ -25,6 +25,7 @@ log = get_logger("nokori.commands.extract")
 
 
 _CONTEXT_TURNS = 2
+_EVIDENCE_QUOTE_MAX = 500
 
 
 class _ColdLLMAdapter:
@@ -41,11 +42,17 @@ class _ColdLLMAdapter:
         max_tokens: int = 2000,
         timeout: int = 30,
     ) -> str:
-        result = self._llm._call_openai_compatible(
-            system, user, max_tokens, timeout, model_id=model
-        ) if self._llm.configured() else self._llm._fallback_claude_cli(
-            system, user, timeout
-        )
+        configured = getattr(self._llm, "configured", None)
+        if callable(configured) and configured():
+            result = self._llm._call_openai_compatible(
+                system, user, max_tokens, timeout, model_id=model
+            )
+        elif hasattr(self._llm, "complete_messages"):
+            result = self._llm.complete_messages(
+                system, user, max_tokens=max_tokens, timeout=timeout
+            )
+        else:
+            result = self._llm._fallback_claude_cli(system, user, timeout)
         if result is None:
             raise RuntimeError("LLM call returned None")
         return result
@@ -60,6 +67,31 @@ def _safe_mtime(path: Path) -> float:
 
 def _segment_hash(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
+
+
+def _candidate_evidence_quotes(cand, transcript_text: str) -> list[str]:
+    """Return bounded transcript evidence for legacy extractor candidates."""
+    haystack = transcript_text.strip()
+    if not haystack:
+        return []
+    needles = [
+        cand.trigger,
+        cand.action,
+        cand.behavior,
+        cand.rationale,
+        *cand.trigger_variants,
+    ]
+    lower = haystack.lower()
+    for needle in needles:
+        if not needle:
+            continue
+        idx = lower.find(str(needle).strip().lower())
+        if idx < 0:
+            continue
+        start = max(0, idx - 160)
+        end = min(len(haystack), idx + len(str(needle)) + 240)
+        return [haystack[start:end].strip()[:_EVIDENCE_QUOTE_MAX]]
+    return [haystack[:_EVIDENCE_QUOTE_MAX]]
 
 
 def _process_path(path: Path, project_id: str | None, cfg: Config,
@@ -103,7 +135,7 @@ def _process_path(path: Path, project_id: str | None, cfg: Config,
                 "trigger_draft": cand.trigger,
                 "action": cand.action,
                 "action_draft": cand.action,
-                "evidence_quotes": [],
+                "evidence_quotes": _candidate_evidence_quotes(cand, text),
                 "confidence": 0.7 if cand.confidence == "medium" else (
                     0.9 if cand.confidence == "high" else 0.5
                 ),
@@ -135,6 +167,8 @@ def _process_path(path: Path, project_id: str | None, cfg: Config,
                     extractor_output=extractor_output,
                     role_models=cfg.role_models,
                     default_model=cfg.llm_model,
+                    role_max_tokens=cfg.role_max_tokens,
+                    role_timeouts=cfg.role_timeouts,
                 )
                 if result.rule_id is not None:
                     rules_created += 1

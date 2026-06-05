@@ -5,6 +5,7 @@ from collections import Counter, OrderedDict
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 
+from ..db import loads_json
 from ..models import Rule, ScoredResult
 from .tokenizer import tokenize
 
@@ -65,7 +66,14 @@ def _tokenize_search(rule: Rule) -> list[str]:
 def _tokenize_variants(rule: Rule) -> tuple[list[str], list[list[str]]]:
     pieces: list[str] = []
     phrases: list[list[str]] = []
-    for v in rule.trigger_variants:
+    variants = (
+        loads_json(rule.trigger_variants, [])
+        if isinstance(rule.trigger_variants, str)
+        else rule.trigger_variants
+    )
+    for v in variants:
+        if isinstance(v, dict):
+            v = v.get("text", "")
         toks = tokenize(v)
         pieces.extend(toks)
         if toks:
@@ -109,7 +117,9 @@ def _index_key(rules_list: list[Rule]) -> tuple:
             r.id,
             r.trigger_canonical,
             r.action_instruction,
-            tuple(r.trigger_variants),
+            r.trigger_variants
+            if isinstance(r.trigger_variants, str)
+            else tuple(r.trigger_variants),
             tuple(r.trigger_variants_zh),
             terms,
             r.trigger_canonical_zh,

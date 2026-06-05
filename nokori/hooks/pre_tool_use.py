@@ -8,6 +8,7 @@ from ..db import open_db
 from ..errors import DbError
 from ..gate import marker as marker_io
 from ..gate.blocker import format_block_reason, format_cursor_user_notice
+from ..policy import RUNTIME_POLICY_VERSION
 from .cursor_deferred import maybe_deferred_pre_tool_use
 from ..utils.hook_diag import log_diag
 from ..utils.hook_response import pre_tool_deny_response
@@ -36,16 +37,37 @@ def _tool_matches_gate(tool_name: str | None, matcher: str) -> bool:
     return bool(pattern.fullmatch(tool_name))
 
 
-def _is_gate_eligible_rule(rule) -> bool:
-    """Gate eligibility for marker rules.
-
-    MarkerRule objects written to disk don't carry status/severity — the
-    filtering already happened at write-time via select_gate_rules(). If we
-    have a MarkerRule (no status attr), trust that it's gate-eligible.
-    """
-    if not hasattr(rule, "status"):
-        return True
-    return rule.status == "trusted" and rule.severity == "gate_eligible"
+def _is_gate_eligible_rule(rule, db=None) -> bool:
+    """Gate eligibility for marker rules, revalidated against current DB state."""
+    row = None
+    if db is not None:
+        if getattr(rule, "rule_id", None):
+            row = db.fetchone(
+                "SELECT id, short_id, status, severity, rule_version, "
+                "runtime_policy_version FROM rules WHERE id = ?",
+                (rule.rule_id,),
+            )
+        if row is None and getattr(rule, "short_id", None):
+            row = db.fetchone(
+                "SELECT id, short_id, status, severity, rule_version, "
+                "runtime_policy_version FROM rules WHERE short_id = ?",
+                (rule.short_id,),
+            )
+    if row is not None:
+        if row["status"] != "trusted" or row["severity"] != "gate_eligible":
+            return False
+        marker_version = getattr(rule, "rule_version", None)
+        if marker_version is not None and int(row["rule_version"]) != marker_version:
+            return False
+        marker_policy = getattr(rule, "runtime_policy_version", None)
+        if marker_policy and marker_policy != row["runtime_policy_version"]:
+            return False
+        return row["runtime_policy_version"] == RUNTIME_POLICY_VERSION
+    return (
+        getattr(rule, "status", None) == "trusted"
+        and getattr(rule, "severity", None) == "gate_eligible"
+        and getattr(rule, "runtime_policy_version", None) == RUNTIME_POLICY_VERSION
+    )
 
 
 def _has_tool_evidence(rule, payload: dict) -> bool:
@@ -132,41 +154,41 @@ def _run_gate(payload: dict, cfg: Config, session_id: str, host) -> dict:
             current_ph = marker_io.resolve_current_prompt_hash(
                 payload, cfg, session_id, db=db,
             )
+        if not current_ph:
+            marker_io.delete_session(cfg, session_id)
+            return {}
+
+        if on_disk and on_disk.prompt_hash == current_ph:
+            marker = on_disk
+        else:
+            marker = marker_io.read(cfg, session_id, prompt_hash_value=current_ph)
+        if marker is None:
+            marker_io.prune_stale_markers(cfg, session_id, current_ph)
+            return {}
+
+        if marker_io.is_expired(marker, cfg.gate_ttl_seconds):
+            marker_io.delete(cfg, session_id, prompt_hash_value=current_ph)
+            return {}
+
+        if not marker.rules:
+            marker_io.delete(cfg, session_id, prompt_hash_value=current_ph)
+            return {}
+
+        if not marker_io.prompt_hash_matches(marker, current_ph, session_id=session_id):
+            marker_io.delete(cfg, session_id, prompt_hash_value=current_ph)
+            return {}
+
+        # Filter to only gate-eligible rules whose prompt evidence still matches
+        # inspectable tool input. If input is unrelated, keep marker for a later
+        # tool call in this turn instead of consuming it.
+        gate_rules = [
+            r for r in marker.rules
+            if _is_gate_eligible_rule(r, db) and _has_tool_evidence(r, payload)
+        ]
+        if not gate_rules:
+            return {}
     finally:
         db.close()
-    if not current_ph:
-        marker_io.delete_session(cfg, session_id)
-        return {}
-
-    if on_disk and on_disk.prompt_hash == current_ph:
-        marker = on_disk
-    else:
-        marker = marker_io.read(cfg, session_id, prompt_hash_value=current_ph)
-    if marker is None:
-        marker_io.prune_stale_markers(cfg, session_id, current_ph)
-        return {}
-
-    if marker_io.is_expired(marker, cfg.gate_ttl_seconds):
-        marker_io.delete(cfg, session_id, prompt_hash_value=current_ph)
-        return {}
-
-    if not marker.rules:
-        marker_io.delete(cfg, session_id, prompt_hash_value=current_ph)
-        return {}
-
-    if not marker_io.prompt_hash_matches(marker, current_ph, session_id=session_id):
-        marker_io.delete(cfg, session_id, prompt_hash_value=current_ph)
-        return {}
-
-    # Filter to only gate-eligible rules whose prompt evidence still matches
-    # inspectable tool input. If input is unrelated, keep marker for a later
-    # tool call in this turn instead of consuming it.
-    gate_rules = [
-        r for r in marker.rules
-        if _is_gate_eligible_rule(r) and _has_tool_evidence(r, payload)
-    ]
-    if not gate_rules:
-        return {}
 
     marker_io.delete(cfg, session_id, prompt_hash_value=current_ph)
 

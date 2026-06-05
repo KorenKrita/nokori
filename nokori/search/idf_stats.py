@@ -12,6 +12,7 @@ from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
+from ..db import loads_json
 from ..policy import (
     DYNAMIC_IDF_NORMAL,
     DYNAMIC_IDF_SMALL_POOL,
@@ -216,7 +217,12 @@ def _trigger_tokens_for_rule(rule) -> set[str]:
     tokens.update(tokenize(rule.trigger_canonical))
     if rule.trigger_canonical_zh:
         tokens.update(tokenize(rule.trigger_canonical_zh))
-    for v in rule.trigger_variants:
+    variants = (
+        loads_json(rule.trigger_variants, [])
+        if isinstance(rule.trigger_variants, str)
+        else rule.trigger_variants
+    )
+    for v in variants:
         text = v.get("text") if isinstance(v, dict) else v
         tokens.update(tokenize(str(text or "")))
     for v in rule.trigger_variants_zh:

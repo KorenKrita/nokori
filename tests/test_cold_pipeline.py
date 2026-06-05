@@ -472,6 +472,113 @@ class TestReviseRoutesRewriter:
         assert row["last_rewritten_by_role"] == "rule_rewriter"
 
 
+def test_non_destructive_merge_reeval_uses_synthetic_eval_signature(db: Db):
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace(
+        "+00:00", "Z"
+    )
+    existing_rule_id = "existing-merge-rule"
+    with db.transaction() as tx:
+        tx.execute(
+            "INSERT INTO rules ("
+            "id, short_id, schema_version, rule_version, "
+            "created_by_pipeline_version, runtime_policy_version, "
+            "status, severity, trigger_canonical, trigger_variants, "
+            "concepts, required_concept_groups, excluded_contexts, "
+            "action_instruction, source_origin, project_scope, "
+            "created_at, updated_at"
+            ") VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (
+                existing_rule_id,
+                "merge01",
+                SCHEMA_VERSION,
+                1,
+                PIPELINE_VERSION,
+                RUNTIME_POLICY_VERSION,
+                "active",
+                "reminder",
+                "When using pytest parametrize with fixtures",
+                json.dumps(["parametrize with fixtures"]),
+                json.dumps([{
+                    "id": "concept_0",
+                    "label": "pytest parametrize",
+                    "aliases": [{"text": "pytest parametrize", "strength": "strong"}],
+                    "match_mode": "any_alias",
+                    "required": True,
+                }]),
+                json.dumps([{"id": "grp1", "all_of": ["concept_0"]}]),
+                "[]",
+                "Use indirect=True for fixture params",
+                "transcript_extraction",
+                "global",
+                now,
+                now,
+            ),
+        )
+
+    llm = _make_llm_mock({
+        "admission judge": _admission_json(
+            "accept",
+            overall_quality=0.92,
+            evidence_support=0.90,
+            trigger_specificity=0.90,
+            scope_control=0.90,
+        ),
+        "final judge": _final_judge_json("accept_candidate"),
+    })
+
+    eval_result = MagicMock(
+        passed=True, results=[], rule_id="", rule_version=1,
+        runtime_policy_version=RUNTIME_POLICY_VERSION, tokenizer_version="1.0.0",
+        matcher_compiler_version="1.0.0", concept_compiler_version="1.0.0",
+        embedding_profile_version="1.0.0", trigger_idf_pool_version="test",
+        benchmark_version="1.0.0", cases=[],
+    )
+
+    def fake_run_synthetic_eval(rule_data, matcher, idf_stats, eval_cases,
+                                global_adversarial_cases=None):
+        assert isinstance(rule_data, dict)
+        return eval_result
+
+    with patch(
+        "nokori.cold.pipeline.check_fingerprint_block", return_value=None
+    ), patch(
+        "nokori.cold.pipeline._run_merge_planner",
+        return_value=(
+            "update_existing_fields",
+            {
+                "existing_rule": {
+                    "id": existing_rule_id,
+                    "status": "active",
+                    "trigger_variants": ["parametrize with fixtures"],
+                    "excluded_contexts": [],
+                },
+                "merge_rationale": "add stronger variant",
+            },
+        ),
+    ), patch(
+        "nokori.cold.pipeline._generate_eval_cases",
+        return_value=[{
+            "input_prompt": "pytest parametrize with fixtures",
+            "expected_decision_min": "warm",
+            "expected_decision_max": "hot",
+            "case_type": "positive",
+        }],
+    ), patch(
+        "nokori.cold.pipeline.run_synthetic_eval",
+        side_effect=fake_run_synthetic_eval,
+    ):
+        result = run_cold_pipeline(
+            db,
+            llm,
+            transcript_ref="test_merge_reeval",
+            extractor_output=_extractor_candidate(),
+            default_model="test-model",
+        )
+
+    assert result.status == "merged"
+    assert result.rule_id == existing_rule_id
+
+
 # ---------------------------------------------------------------------------
 # 7. Cold fast lane: high-quality rules enter as active directly
 # ---------------------------------------------------------------------------

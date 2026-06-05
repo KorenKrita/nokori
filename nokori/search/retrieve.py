@@ -32,7 +32,12 @@ class RetrievalResult:
 
 def _variant_dicts(rule: Rule, required_concepts: list[str]) -> list[dict]:
     variants: list[dict] = []
-    for variant in rule.trigger_variants:
+    raw_variants = (
+        loads_json(rule.trigger_variants, [])
+        if isinstance(rule.trigger_variants, str)
+        else rule.trigger_variants
+    )
+    for variant in raw_variants:
         if isinstance(variant, dict):
             variants.append(variant)
         else:

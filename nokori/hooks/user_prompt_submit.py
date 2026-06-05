@@ -77,6 +77,14 @@ def _update_gate_marker(
                     action=r.rule.action_instruction,
                     trigger=r.rule.trigger_canonical,
                     source_type=r.rule.source_origin,
+                    rule_id=r.rule.id,
+                    status=r.rule.status,
+                    severity=r.rule.severity,
+                    rule_version=r.rule.rule_version,
+                    runtime_policy_version=r.runtime_policy_version,
+                    trigger_idf_pool_version=r.trigger_idf_pool_version,
+                    embedding_profile_version=r.embedding_profile_version,
+                    decision_features=getattr(r, "decision_features", None),
                 )
                 for r in gate_rules
             ],

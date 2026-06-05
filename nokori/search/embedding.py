@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Literal
 
 from ..config import Config
-from ..db import Db
+from ..db import Db, loads_json
 from ..errors import EmbeddingError
 from ..models import Rule, ScoredResult
 from ..utils.logging import get_logger
@@ -98,7 +98,16 @@ def _rule_text(rule: Rule) -> str:
     parts.append(rule.action_instruction)
     if rule.action_instruction_zh:
         parts.append(rule.action_instruction_zh)
-    parts.extend(rule.trigger_variants)
+    variants = (
+        loads_json(rule.trigger_variants, [])
+        if isinstance(rule.trigger_variants, str)
+        else rule.trigger_variants
+    )
+    for variant in variants:
+        if isinstance(variant, dict):
+            parts.append(str(variant.get("text") or ""))
+        else:
+            parts.append(str(variant))
     parts.extend(rule.trigger_variants_zh)
     for items in rule.search_terms.values():
         parts.extend(items)

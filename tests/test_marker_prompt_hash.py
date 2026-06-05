@@ -6,6 +6,7 @@ from nokori.config import Config
 from nokori.db import open_db
 from nokori.gate import marker as marker_io
 from nokori.gate.marker import MarkerRule, prompt_hash
+from nokori.policy import RUNTIME_POLICY_VERSION
 from nokori.utils.host import Host
 
 
@@ -13,7 +14,15 @@ def _utcnow_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
-def _insert_rule(db, *, id_, trigger, short_id=None):
+def _insert_rule(
+    db,
+    *,
+    id_,
+    trigger,
+    short_id=None,
+    status="active",
+    severity="reminder",
+):
     now = _utcnow_iso()
     sid = short_id or id_.replace("-", "")[:6]
     with db.transaction() as tx:
@@ -23,9 +32,10 @@ def _insert_rule(db, *, id_, trigger, short_id=None):
             "trigger_canonical, action_instruction, "
             "source_origin, status, severity, "
             "project_scope, project_id, created_at, updated_at) "
-            "VALUES (?,?,1,1,'v1','v1',?,?,?,?,?,?,?,?,?)",
-            (id_, sid, trigger, "use lease",
-             "transcript_extraction", "active", "reminder",
+            "VALUES (?,?,1,1,'v1',?,?,?,?,?,?,?,?,?,?)",
+            (id_, sid, RUNTIME_POLICY_VERSION,
+             trigger, "use lease",
+             "transcript_extraction", status, severity,
              "global", None, now, now),
         )
 
@@ -108,8 +118,22 @@ def test_per_prompt_hash_markers_do_not_overwrite(monkeypatch, tmp_path):
     db = open_db(cfg.db_path)
     try:
         now = _utcnow_iso()
-        _insert_rule(db, id_="rule-a", trigger="deploy trigger", short_id="aaaaaa")
-        _insert_rule(db, id_="rule-b", trigger="test trigger", short_id="bbbbbb")
+        _insert_rule(
+            db,
+            id_="rule-a",
+            trigger="deploy trigger",
+            short_id="aaaaaa",
+            status="trusted",
+            severity="gate_eligible",
+        )
+        _insert_rule(
+            db,
+            id_="rule-b",
+            trigger="test trigger",
+            short_id="bbbbbb",
+            status="trusted",
+            severity="gate_eligible",
+        )
         with db.transaction() as tx:
             tx.execute(
                 "INSERT INTO rule_fire_events (id, rule_id, session_id, prompt_hash, level, created_at) "
@@ -142,5 +166,50 @@ def test_per_prompt_hash_markers_do_not_overwrite(monkeypatch, tmp_path):
         assert (out.get("hookSpecificOutput") or {}).get("permissionDecision") == "deny"
         assert not cfg.marker_path(sess, ph_a).exists()
         assert cfg.marker_path(sess, ph_b).exists()
+    finally:
+        db.close()
+
+
+def test_pre_tool_use_revalidates_marker_rule_lifecycle(
+    monkeypatch, tmp_path
+):
+    """A marker cannot Gate unless the DB row is currently trusted+gate_eligible."""
+    monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+    cfg = Config.from_env()
+    sess = "s-marker-lifecycle"
+    ph = prompt_hash("deploy trigger")
+    db = open_db(cfg.db_path)
+    try:
+        now = _utcnow_iso()
+        _insert_rule(
+            db,
+            id_="rule-not-gate",
+            trigger="deploy trigger",
+            short_id="nogate",
+            status="active",
+            severity="reminder",
+        )
+        marker_io.write(
+            cfg,
+            sess,
+            "deploy trigger",
+            [MarkerRule("nogate", "use lease", "deploy trigger")],
+            ph=ph,
+        )
+        with db.transaction() as tx:
+            tx.execute(
+                "INSERT INTO rule_fire_events "
+                "(id, rule_id, session_id, prompt_hash, level, created_at) "
+                "VALUES (?,?,?,?,?,?)",
+                ("fe-not-gate", "rule-not-gate", sess, ph, "hot", now),
+            )
+        from nokori.hooks.pre_tool_use import handle
+
+        out = handle(
+            {"session_id": sess, "tool_name": "Bash", "prompt": "deploy trigger"},
+            cfg,
+            host=Host.CLAUDE,
+        )
+        assert (out.get("hookSpecificOutput") or {}).get("permissionDecision") != "deny"
     finally:
         db.close()

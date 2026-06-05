@@ -305,6 +305,14 @@ class TestExcludedContextScopes:
         result = evaluate_match(scoped_matcher, "secret key just kidding")
         assert "ex_global" in result.excluded_context_hits
 
+    def test_global_scope_scans_entire_prompt_intent(self, scoped_matcher):
+        long_context = "background detail " * 30
+        result = evaluate_match(
+            scoped_matcher,
+            f"secret key {long_context} just kidding",
+        )
+        assert "ex_global" in result.excluded_context_hits
+
     def test_tool_input_only_fires_on_tool_input(self, scoped_matcher):
         result = evaluate_match(
             scoped_matcher,

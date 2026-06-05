@@ -1,4 +1,6 @@
+import dataclasses
 import json
+from types import SimpleNamespace
 
 
 from nokori.config import Config
@@ -257,6 +259,62 @@ def test_extract_llm_failure_does_not_mark_extracted(monkeypatch, tmp_path):
         assert row is None
     finally:
         db.close()
+
+
+def test_process_path_passes_transcript_evidence_and_role_limits(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+    cfg = Config.from_env()
+    cfg = dataclasses.replace(
+        cfg,
+        role_max_tokens={"admission_judge": 1234},
+        role_timeouts={"admission_judge": 56},
+    )
+    path = tmp_path / "evidence.jsonl"
+    path.write_text(
+        '{"type":"user","message":{"content":"When deploy fails, use migrate deploy."}}\n',
+        encoding="utf-8",
+    )
+
+    from nokori.commands import extract as extract_cmd
+
+    class FakeExtractLLM:
+        def complete_messages(self, *_args, **_kwargs):
+            return json.dumps([{
+                "trigger": "deploy fails",
+                "action": "use migrate deploy",
+                "source_type": "solution",
+                "confidence": "medium",
+            }])
+
+        def configured(self):
+            return True
+
+        def _call_openai_compatible(self, *_args, **_kwargs):
+            return "[]"
+
+    captured: dict = {}
+
+    def fake_cold_pipeline(db, llm, *, transcript_ref, extractor_output, **kwargs):
+        captured["extractor_output"] = extractor_output
+        captured["kwargs"] = kwargs
+        return SimpleNamespace(status="candidate", rule_id="rule-1")
+
+    monkeypatch.setattr(extract_cmd, "LLMAdapter", lambda cfg: FakeExtractLLM())
+    monkeypatch.setattr(extract_cmd, "run_cold_pipeline", fake_cold_pipeline)
+
+    cands, applied, finished = extract_cmd._process_path(
+        path, "proj", cfg, dry_run=False
+    )
+
+    assert cands == 1
+    assert applied == 1
+    assert finished is True
+    assert captured["extractor_output"]["evidence_quotes"]
+    assert "deploy" in captured["extractor_output"]["evidence_quotes"][0]
+    assert captured["kwargs"]["role_max_tokens"] == cfg.role_max_tokens
+    assert captured["kwargs"]["role_timeouts"] == cfg.role_timeouts
 
 
 def test_batch_extract_keeps_job_on_merge_llm_failure(monkeypatch, tmp_path):

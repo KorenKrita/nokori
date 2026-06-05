@@ -204,3 +204,91 @@ def test_record_fire_events_passes_turn_index(monkeypatch):
     )
 
     assert captured["turn_index"] == 7
+
+
+def test_inject_for_prompt_records_only_rendered_entries(monkeypatch):
+    from nokori.config import Config
+    from nokori.hooks import prompt_inject as pinject
+
+    cfg = Config.from_env()
+
+    def make_result(rule_id: str, short_id: str):
+        return SimpleNamespace(
+            rule=SimpleNamespace(
+                id=rule_id,
+                short_id=short_id,
+                trigger_canonical=f"trigger {short_id}",
+                action_instruction=f"action {short_id}",
+                severity="reminder",
+            ),
+            trigger_idf_sum=1.0,
+            trigger_coverage=1.0,
+            distinct_trigger_terms=2,
+            strong_variant_phrase_hit=True,
+            required_concepts_match=True,
+            excluded_context_hit=False,
+            bm25_score=1.0,
+            cosine=None,
+            rrf_score=1.0,
+            decision_reason="test",
+            trigger_idf_pool_version="idf",
+            embedding_profile_version="embed",
+        )
+
+    hot_unrendered = make_result("rule-hot", "hot123")
+    warm_rendered = make_result("rule-warm", "warm123")
+
+    monkeypatch.setattr(
+        pinject,
+        "_fetch_formal_and_shadow",
+        lambda *_args, **_kwargs: ([hot_unrendered.rule, warm_rendered.rule], []),
+    )
+    monkeypatch.setattr(
+        pinject,
+        "retrieve_formal_and_shadow",
+        lambda *_args, **_kwargs: (
+            SimpleNamespace(hot=[hot_unrendered], warm=[warm_rendered]),
+            [],
+            [],
+        ),
+    )
+    monkeypatch.setattr(
+        pinject,
+        "format_injection",
+        lambda *_args, **_kwargs: ("rendered", [("rule-warm", "warm")]),
+    )
+
+    recorded: list[tuple[str, str]] = []
+
+    def fake_create_fire_event(_db, rule, *_args, **kwargs):
+        recorded.append((rule.id, kwargs["level"]))
+        return f"event-{rule.id}"
+
+    monkeypatch.setattr(pinject, "create_fire_event", fake_create_fire_event)
+
+    outcome = pinject.inject_for_prompt(
+        SimpleNamespace(),
+        cfg,
+        session_id="session-1",
+        prompt="trigger text",
+        project_id="proj",
+    )
+
+    assert outcome is not None
+    assert outcome.rendered_entries == [("rule-warm", "warm")]
+    assert recorded == [("rule-warm", "warm")]
+
+
+def test_select_gate_rules_requires_runtime_gate_level():
+    from nokori.gate.blocker import select_gate_rules
+
+    trusted_gate_hot = SimpleNamespace(
+        rule=SimpleNamespace(status="trusted", severity="gate_eligible"),
+        level="hot",
+    )
+    trusted_gate = SimpleNamespace(
+        rule=SimpleNamespace(status="trusted", severity="gate_eligible"),
+        level="gate",
+    )
+
+    assert select_gate_rules([trusted_gate_hot, trusted_gate]) == [trusted_gate]
