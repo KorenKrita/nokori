@@ -363,8 +363,10 @@ class TestExcludedContextScopes:
 
         result = evaluate_match(matcher, "secret key sandbox example")
 
-        # Vacuous truth: empty override_requires = override applies, exclusion NOT fired
-        assert "ex_override" not in result.excluded_context_hits
+        # Vacuous truth: empty override_requires = override applies.
+        # Hit is still recorded (for applicability WARM cap), but override flag is set.
+        assert "ex_override" in result.excluded_context_hits
+        assert result.excluded_context_override_passed is True
 
     def test_near_trigger_span_ignores_far_away_exclusion(self):
         concepts = [_concept("c1", [_alias("secret key")])]

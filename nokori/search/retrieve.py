@@ -148,6 +148,7 @@ def _apply_runtime_applicability(
         strong_variant_phrase_hit=bool(match.strong_variant_hits),
         required_concepts_match=match.required_concepts_match,
         excluded_context_hit=bool(match.excluded_context_hits),
+        excluded_context_override_passed=match.excluded_context_override_passed,
         action_only_match=match.action_only_match,
         search_only_match=match.search_only_match,
         embedding_only_match=result.embedding_only_match,

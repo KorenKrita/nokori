@@ -55,6 +55,7 @@ class MatchResult:
     strong_variant_hits: tuple[str, ...]
     weak_variant_hits: tuple[str, ...]
     excluded_context_hits: tuple[str, ...]
+    excluded_context_override_passed: bool
     matched_trigger_anchors: frozenset[str]
     action_only_match: bool
     search_only_match: bool
@@ -448,6 +449,7 @@ def evaluate_match(
 
     # 4. Evaluate excluded contexts
     excluded_context_hits: list[str] = []
+    excluded_context_overridden = False
     anchor_tokens = matcher.trigger_anchors.anchor_tokens
     anchor_phrases = matcher.trigger_anchors.anchor_phrases
     for ctx in matcher.excluded_contexts:
@@ -460,11 +462,14 @@ def evaluate_match(
             trigger_anchor_phrases=anchor_phrases,
         ):
             # Check if override is allowed and override_requires are met
-            if ctx.override_allowed and (not ctx.override_requires or all(
+            override_passed = ctx.override_allowed and (not ctx.override_requires or all(
                 _text_contains_phrase(combined_lower, req.lower())
                 for req in ctx.override_requires
-            )):
-                continue  # Override applies, exclusion does not fire
+            ))
+            if override_passed:
+                excluded_context_hits.append(ctx.id)
+                excluded_context_overridden = True
+                continue
 
             excluded_context_hits.append(ctx.id)
 
@@ -563,6 +568,7 @@ def evaluate_match(
         strong_variant_hits=tuple(strong_variant_hits),
         weak_variant_hits=tuple(weak_variant_hits),
         excluded_context_hits=tuple(excluded_context_hits),
+        excluded_context_override_passed=excluded_context_overridden,
         matched_trigger_anchors=matched_anchors,
         action_only_match=action_only_match,
         search_only_match=search_only_match,
