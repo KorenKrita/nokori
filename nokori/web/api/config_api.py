@@ -35,6 +35,7 @@ def show_config():
             "session_idle_seconds": cfg.session_idle_seconds,
             "promotion_enabled": cfg.promotion_enabled,
             "log_level": cfg.log_level,
+            "role_models": cfg.role_models or {},
         }
     }
 

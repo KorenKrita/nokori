@@ -18,7 +18,7 @@ def create_app(cfg: Config) -> FastAPI:
     @app.middleware("http")
     async def write_auth_cookie(request: Request, call_next):
         response = await call_next(request)
-        if request.method in {"GET", "HEAD"} and not request.cookies.get(WRITE_AUTH_COOKIE):
+        if request.method in {"GET", "HEAD"}:
             response.set_cookie(
                 WRITE_AUTH_COOKIE,
                 app.state.write_auth_token,

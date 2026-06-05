@@ -23,6 +23,7 @@ export async function mutateApi<T>(
   const res = await fetch(BASE + path, {
     method,
     headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
     body: body ? JSON.stringify(body) : undefined,
   })
   if (!res.ok) {

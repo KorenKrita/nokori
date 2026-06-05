@@ -96,7 +96,11 @@
 # 若只把本节 matcher 改成 .* 而不改 settings.json，Read/Grep 仍不会进 hook。
 
 [gate]
-# 是否启用 Gate（仅 correction/anti_pattern 且 HOT+high+active 写 marker 并 block 一次；solution 等只注入）
+# 是否启用 Gate。
+# Gate 只对 trusted + gate_eligible 且运行时证据过关的规则生效：
+# - UserPromptSubmit 写 marker 前要求强 prompt evidence（提示证据）
+# - PreToolUse 会重新校验 DB 状态、rule_version、runtime_policy_version、prompt hash
+# - tool input（工具输入）可检查时还要 tool-input evidence；tool-input-only exclusion 会再次放行
 # 类型：布尔
 # 默认：true
 # 可选：true | false
@@ -173,7 +177,7 @@ mode = "manual"
 # 本地权重：pip install nokori[local-embed]（需 sentence-transformers>=3.0）或 nokori install / nokori embed prefetch → ~/.nokori/models/
 # 类型：布尔
 # 默认：false
-# 说明：未显式开启时，库内 active+dormant 规则数 >= 20 且（远程 embed 或 local-embed）会自动启用
+# 说明：未显式开启时，当次 formal/shadow 检索池 >= 20 且（远程 embed 或 local-embed）可用时会自动启用
 # 环境变量：NOKORI_EMBED_ENABLED
 enabled = false
 
@@ -246,17 +250,54 @@ dimensions = 0
 # idle_seconds = 1800
 
 # -----------------------------------------------------------------------------
-# 跨项目 promotion（影子池 → global）
+# 影子池与自治生命周期证据
 # -----------------------------------------------------------------------------
 
 [promotion]
-# 是否启用影子池检索与 shadow_hit_count / 升 global
-# 影子池 HOT/WARM 命中均计 promotion 证据（不注入当前对话）
-# 正式池为空时仍会跑影子池（场景 C：新项目从他项目规则累积）
+# 是否启用 shadow pool（影子池）检索。
+# candidate / suppressed 的 HOT/WARM 命中只记 lifecycle evidence（生命周期证据），
+# 不注入当前对话，也不会直接 Gate。
 # 类型：布尔
 # 默认：true
 # 环境变量：NOKORI_PROMOTION_ENABLED
 # enabled = true
+
+# -----------------------------------------------------------------------------
+# Per-role models（冷路径多角色模型、token 与超时）
+# -----------------------------------------------------------------------------
+
+[models]
+# 多角色冷路径默认使用 [llm].model；需要时可按角色覆盖。
+# 环境变量只支持模型名覆盖：NOKORI_MODEL_EXTRACTOR 等。
+# max_tokens / timeout 仅从 config.toml 读取。
+#
+# extractor = "deepseek-v4-flash"
+# admission_judge = "deepseek-v4-flash"
+# rule_rewriter = "deepseek-v4-flash"
+# final_judge = "deepseek-v4-flash"
+# merge_planner = "deepseek-v4-flash"
+# synthetic_eval_generator = "deepseek-v4-flash"
+# posthoc_evaluator = "deepseek-v4-flash"
+
+[models.limits]
+# 各角色响应 token 上限；未配置时使用以下默认值。
+# extractor_max_tokens = 4000
+# admission_judge_max_tokens = 2000
+# rule_rewriter_max_tokens = 4000
+# final_judge_max_tokens = 2000
+# merge_planner_max_tokens = 3000
+# synthetic_eval_generator_max_tokens = 4000
+# posthoc_evaluator_max_tokens = 3000
+
+[models.timeouts]
+# 各角色请求超时（秒）；未配置时使用以下默认值。
+# extractor_timeout = 60
+# admission_judge_timeout = 30
+# rule_rewriter_timeout = 60
+# final_judge_timeout = 30
+# merge_planner_timeout = 45
+# synthetic_eval_generator_timeout = 60
+# posthoc_evaluator_timeout = 45
 
 # -----------------------------------------------------------------------------
 # 环境变量速查（与上文 TOML 字段等价）
@@ -276,7 +317,7 @@ dimensions = 0
 # | NOKORI_EMBED_SERVER_AUTO_START | 1 | hook 自动拉起 embed server |
 # | NOKORI_SESSION_IDLE_SECONDS | 1800 | session 活跃判定窗口（秒） |
 # | NOKORI_EXTRACT_DEFER_ACTIVE | 0 | async 时有活跃 session 则推迟 fork extract |
-# | NOKORI_PROMOTION_ENABLED | 1 | 影子池 / 跨项目 promotion |
+# | NOKORI_PROMOTION_ENABLED | 1 | 影子池生命周期证据；0=关闭 candidate/suppressed shadow matching |
 # | NOKORI_GATE_ENABLED | 1 | 启用 Gate |
 # | NOKORI_GATE_TTL_SECONDS | 600 | Marker TTL（秒）；0=永不过期 |
 # | NOKORI_GATE_MATCHER | Edit\|Write\|... | 第二层 block 用 tool_name 正则；任意 .* |
@@ -284,6 +325,7 @@ dimensions = 0
 # | NOKORI_LLM_BASE_URL | — | LLM API 根 URL |
 # | NOKORI_LLM_MODEL | — | LLM 模型 |
 # | NOKORI_LLM_API_KEY | — | LLM Key |
+# | NOKORI_MODEL_<ROLE> | — | 角色模型覆盖：EXTRACTOR / ADMISSION_JUDGE / RULE_REWRITER / FINAL_JUDGE / MERGE_PLANNER / SYNTHETIC_EVAL_GENERATOR / POSTHOC_EVALUATOR |
 # | NOKORI_EMBED_ENABLED | 0 | 强制启用 embedding |
 # | NOKORI_EMBED_BASE_URL | — | Embedding API 根 URL |
 # | NOKORI_EMBED_MODEL | — | Embedding 模型 |
@@ -314,7 +356,7 @@ dimensions = 0
 # -----------------------------------------------------------------------------
 #
 # - 热缓存：见 [hot_cache]；同目录上一场 *.jsonl，未 extract 才注入（500 字 / 3 条用户消息）；glob 回退最多扫 50 个文件
-# - 注入日志：仅实际写入上下文的规则记入 injections / last_hit（预算截断的不记）
+# - Fire events：仅实际写入上下文的规则记入 rule_fire_events（预算截断的不记）
 # - active_sessions/：ended 超过 60 天的 registry 由维护任务清理
 # - embed server：Unix socket {data_dir}/embed.sock；空闲自退出见 server_idle_seconds；hook 启动等待硬编码约 45s
 # - 本地模型文件缓存在 {data_dir}/models/（非 cache/）；cache/ 目录仅预留
