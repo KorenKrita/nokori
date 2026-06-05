@@ -148,7 +148,10 @@ def _aggregate_fire_evidence(db: Db, rule_id: str, window_days: int = 30) -> dic
             reason_counts[rc] = reason_counts.get(rc, 0) + 1
         if label == "observed_useful" and r["session_id"]:
             useful_sessions.add(r["session_id"])
-            # Spec 10.2: attribution_weight > 0.5 = strong attribution for promotion
+            # Spec 10.2: only strong-attribution events count toward trusted promotion.
+            # NULL = legacy event (pre-attribution system) → treated as strong for compat.
+            # > 0.5 = new system confirmed strong causal attribution.
+            # <= 0.5 = weak/redundant attribution → excluded from promotion count.
             attribution_weight = r["posthoc_score"]
             if attribution_weight is None or attribution_weight > 0.5:
                 counts["observed_useful_strong"] = int(counts["observed_useful_strong"]) + 1
