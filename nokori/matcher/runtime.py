@@ -255,7 +255,7 @@ def _evaluate_excluded_context(
     elif ctx.scope == "prompt_only":
         search_text = prompt_only_lower
     elif ctx.scope == "global":
-        search_text = prompt_only_lower
+        search_text = text_lower
     elif ctx.scope == "near_trigger_span":
         search_texts = _near_trigger_window_texts(
             text_lower,

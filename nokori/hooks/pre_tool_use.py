@@ -107,7 +107,7 @@ def _has_tool_evidence(rule, payload: dict) -> bool:
         return False
     # Word-boundary match to avoid substring false positives in paths/identifiers
     hits = {t for t in tokens if re.search(r'\b' + re.escape(t) + r'\b', haystack)}
-    return len(hits) >= max(2, len(tokens) // 2)
+    return len(hits) >= max(1, len(tokens) // 2)
 
 
 def _run_gate(payload: dict, cfg: Config, session_id: str, host) -> dict:
