@@ -7,7 +7,6 @@ from ..config import Config
 from ..constants import TRANSCRIPT_MTIME_EPSILON_SEC
 from ..db import Db
 from ..extract.reader import read_tail_user_turns
-from . import transcript_index
 from ..utils.time import now_iso, parse_iso
 from ..utils.transcript import is_path_allowed, resolve_transcript_path, transcript_key
 
@@ -18,16 +17,7 @@ TRUSTED_RECENT_WINDOW_DAYS = 7
 
 
 def find_previous_transcript(current: Path, cfg: Config | None = None) -> Path | None:
-    """Previous session transcript: O(1) index when available, else directory scan."""
-    if cfg is not None:
-        indexed = transcript_index.lookup_previous(cfg, current)
-        if indexed is not None:
-            try:
-                resolved = indexed.expanduser().resolve()
-            except OSError:
-                return _find_previous_transcript_glob(current)
-            if is_path_allowed(resolved):
-                return indexed
+    """Previous session transcript via directory scan."""
     return _find_previous_transcript_glob(current)
 
 
