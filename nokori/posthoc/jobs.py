@@ -160,9 +160,14 @@ def process_pending_posthoc_jobs(db: Db, llm, *, limit: int = 20) -> dict[str, i
             label == "observed_useful"
             and result.get("would_likely_have_happened_without_rule") == "yes"
         ):
-            label = "irrelevant"
-            reason_code = "irrelevant_redundant"
-            attribution_weight = 0.0
+            evidence = result.get("rule_application_evidence", "")
+            if len(evidence) > 20:
+                # Substantive evidence: keep as observed_useful with weak weight
+                attribution_weight = 0.3
+            else:
+                label = "irrelevant"
+                reason_code = "irrelevant_redundant"
+                attribution_weight = 0.0
 
         mark_posthoc_job_complete(
             db,
@@ -405,12 +410,12 @@ def _load_transcript_window(
             return content
 
     # The bounded_window_ref may contain inline content (stored during session_end)
-    # or be a reference identifier. In either case, if it exists we use it as
-    # context for the evaluator. Short refs get wrapped with framing for the LLM.
+    # or be a reference identifier. Short refs (< 64 chars) are just hash IDs
+    # without real content — mark as unclear rather than wrapping as fake content.
     ref = bounded_window_ref or transcript_window_ref
     if ref:
         if len(ref) > 64:
             return ref
-        return f"[Bounded transcript window reference: {ref}]"
+        return None
 
     return None

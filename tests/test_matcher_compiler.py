@@ -725,10 +725,10 @@ class TestTriggerEvidencePassFail:
             "is_shadow": False,
             "idf_max": 3.0,
         }
-        # Single token, coverage likely too low for small pool
+        # Single token, coverage too low for small pool stricter thresholds
         result = evaluate_match(matcher, "pytest framework usage", idf_stats=idf_stats)
         # Should not pass with insufficient coverage/distinct terms for small pool
-        # (depends on actual anchor set — but the key test is that thresholds are stricter)
+        assert result.trigger_evidence_passed is False
 
     def test_shadow_idf_cap(self):
         """Shadow mode: IDF capped at idf_max=3.0."""

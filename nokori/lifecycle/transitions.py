@@ -680,9 +680,9 @@ def _evaluate_suppressed(db: Db, row, rule_version: int) -> TransitionResult:
     if suppressed_at is not None:
         ttl_deadline = suppressed_at + timedelta(days=SUPPRESSION_TTL_DAYS)
         if datetime.now(timezone.utc) > ttl_deadline:
-            # No recovery evidence before TTL
+            # No recovery evidence before TTL (spec: archive if no recovery evidence)
             would_help_high = shadow.get("would_help_high", 0)
-            if would_help_high < SUPPRESSED_TO_ACTIVE.shadow_recovery_would_help_high_min:
+            if would_help_high == 0:
                 reason = "no_recovery_before_ttl"
                 applied = _apply_transition(
                     db, rule_id, rule_version, old_status, "archived", rpv, reason

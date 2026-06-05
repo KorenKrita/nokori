@@ -410,6 +410,8 @@ def job_key(role: str, model_id: str, input_hash: str) -> str:
 
 # --- Role Model Resolution ---
 
+PROVIDER_DEFAULT_MODEL: str = "claude-sonnet-4-6"
+
 
 def resolve_model_id(
     role: str,
@@ -421,7 +423,7 @@ def resolve_model_id(
     Resolution order:
       1. role_models_dict[role] if provided and non-empty
       2. default_model if provided and non-empty
-      3. Raise ValueError
+      3. PROVIDER_DEFAULT_MODEL
 
     No imports from nokori.config — accepts plain dicts/strings as params.
     """
@@ -436,7 +438,4 @@ def resolve_model_id(
     if default_model and default_model.strip():
         return default_model.strip()
 
-    raise ValueError(
-        f"no model configured for role {role!r}: "
-        f"provide role_models_dict[{role!r}] or default_model"
-    )
+    return PROVIDER_DEFAULT_MODEL

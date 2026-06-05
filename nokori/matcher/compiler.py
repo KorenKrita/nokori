@@ -180,6 +180,27 @@ GENERIC_TOKENS: frozenset[str] = frozenset(
 )
 
 # ---------------------------------------------------------------------------
+# Generic action words that should not be trigger anchors
+# ---------------------------------------------------------------------------
+
+GENERIC_ACTION_WORDS: frozenset[str] = frozenset(
+    {
+        "should",
+        "must",
+        "always",
+        "never",
+        "ensure",
+        "make",
+        "check",
+        "verify",
+        "avoid",
+        "prevent",
+        "handle",
+        "implement",
+    }
+)
+
+# ---------------------------------------------------------------------------
 # Errors
 # ---------------------------------------------------------------------------
 
@@ -477,12 +498,17 @@ def _compile_excluded_context(data: dict[str, Any]) -> CompiledExcludedContext:
 def _build_trigger_anchors(
     concepts: tuple[CompiledConcept, ...],
     variants: tuple[CompiledVariant, ...],
+    canonical_trigger_text: str = "",
 ) -> CompiledTriggerAnchors:
     """Build the set of trigger anchors from compiled concepts and variants.
 
     Anchors are concept alias tokens (non-generic, from required concepts)
     plus strong-anchor variant phrase tokens. Weak-recall variants are recall
     hints only and must not raise trigger_coverage.
+
+    Additionally, high-IDF trigger terms are extracted from canonical_trigger_text
+    by splitting into tokens and filtering out GENERIC_TOKENS and
+    GENERIC_ACTION_WORDS.
     """
     anchor_tokens: set[str] = set()
     anchor_phrases: list[str] = []
@@ -505,6 +531,13 @@ def _build_trigger_anchors(
         tokens = _tokenize(variant.text)
         for tok in tokens:
             if tok not in GENERIC_TOKENS:
+                anchor_tokens.add(tok)
+
+    # Add high-IDF trigger terms from canonical trigger text
+    if canonical_trigger_text:
+        canonical_tokens = _tokenize(canonical_trigger_text)
+        for tok in canonical_tokens:
+            if tok not in GENERIC_TOKENS and tok not in GENERIC_ACTION_WORDS:
                 anchor_tokens.add(tok)
 
     total = len(anchor_tokens) + len(anchor_phrases)
@@ -597,7 +630,8 @@ def compile_rule(
     )
 
     # Build trigger anchors
-    trigger_anchors = _build_trigger_anchors(concepts, variants)
+    canonical_trigger_text = trigger_data.get("canonical_trigger_text", "")
+    trigger_anchors = _build_trigger_anchors(concepts, variants, canonical_trigger_text)
 
     # Normalize search terms
     raw_search = search_terms or {}

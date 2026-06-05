@@ -142,6 +142,7 @@ def check_fingerprint_block(
     action_instruction: str,
     domain_tags: list[str] | None = None,
     scope_change_evidence: str | None = None,
+    synthetic_eval_passed: bool = True,
 ) -> dict | None:
     """Check if an archived fingerprint blocks a proposed rule.
 
@@ -149,7 +150,8 @@ def check_fingerprint_block(
 
     Blocking logic (plan sections 3.5 and 11):
       user strength: blocked unless scope_change_evidence provided.
-      system strength: blocked but overridable with stronger evidence.
+      system strength: blocked but overridable with BOTH scope_change_evidence
+          AND synthetic_eval_passed.
       replacement strength: blocks exact duplicates only.
     """
     signature = compute_signature(trigger_canonical, action_instruction, domain_tags)
@@ -167,6 +169,7 @@ def check_fingerprint_block(
             scope_change_evidence=scope_change_evidence,
             exact_match=True,
             is_narrower_scope=False,  # exact match = same scope
+            synthetic_eval_passed=synthetic_eval_passed,
         )
 
     row = _find_related_fingerprint(db, trigger_canonical, action_instruction)
@@ -181,6 +184,7 @@ def check_fingerprint_block(
         scope_change_evidence=scope_change_evidence,
         exact_match=False,
         is_narrower_scope=is_narrower,
+        synthetic_eval_passed=synthetic_eval_passed,
     )
 
 
@@ -190,6 +194,7 @@ def _fingerprint_decision(
     scope_change_evidence: str | None,
     exact_match: bool,
     is_narrower_scope: bool = False,
+    synthetic_eval_passed: bool = True,
 ):
     strength = row["archive_strength"]
 
@@ -225,9 +230,14 @@ def _fingerprint_decision(
             "overridable": bool(row["can_be_overridden_by_changed_scope"]),
         }
 
-    # System archive: weak negative memory, overridable by stronger evidence + synthetic eval
+    # System archive: weak negative memory, overridable ONLY when BOTH
+    # scope_change_evidence is provided AND synthetic_eval_passed is True.
     if strength == "system":
-        if scope_change_evidence and row["can_be_overridden_by_changed_scope"]:
+        if (
+            scope_change_evidence
+            and synthetic_eval_passed
+            and row["can_be_overridden_by_changed_scope"]
+        ):
             return None
         return {
             "blocked": True,

@@ -264,8 +264,8 @@ def test_validate_merge_transaction_destructive_requires_all_gates():
 
 
 def test_validate_merge_transaction_non_destructive_always_passes():
-    """Non-destructive ops (keep_both, reject_new) always pass validation."""
-    for op in ("keep_both", "reject_new", "merge_into_existing", "update_existing_fields"):
+    """Non-destructive ops (keep_both, reject_new, merge_into_existing) always pass validation."""
+    for op in ("keep_both", "reject_new", "merge_into_existing"):
         decision = MergeDecision(
             operation=op,
             target_rule_id="x",

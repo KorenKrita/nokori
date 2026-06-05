@@ -286,38 +286,42 @@ def _run_cold_pipeline_inner(
             scores=scores,
         )
 
-    # --- Stage g: Synthetic eval (if targeting active) ---
+    # --- Stage g: Synthetic eval (for both active and candidate targeting) ---
     synthetic_passed = False
     adversarial_failures = 0
     synthetic_result: SyntheticEvalResult | None = None
 
-    if target_status == "active":
-        if idf_stats is None:
-            idf_stats = _build_idf_stats_from_db(db)
+    if idf_stats is None:
+        idf_stats = _build_idf_stats_from_db(db)
 
+    try:
         eval_cases = _generate_eval_cases(db, llm, rule_data, role_models, default_model)
-        if eval_cases:
-            eval_rule_data = {
-                "id": "",
-                "version": 0,
-                "status": "active",
-                "severity": rule_data.get("severity", "reminder"),
-                "first_observed_useful_at": None,
-            }
-            synthetic_result = run_synthetic_eval(
-                eval_rule_data,
-                compiled_matcher,
-                idf_stats,
-                eval_cases,
-                global_adversarial_cases,
+    except (CircuitBreakerOpenError, ValueError):
+        if target_status == "active":
+            raise  # Active requires synthetic eval — propagate to pending
+        eval_cases = []  # Candidate can proceed without eval
+    if eval_cases:
+        eval_rule_data = {
+            "id": "",
+            "version": 0,
+            "status": target_status,
+            "severity": rule_data.get("severity", "reminder"),
+            "first_observed_useful_at": None,
+        }
+        synthetic_result = run_synthetic_eval(
+            eval_rule_data,
+            compiled_matcher,
+            idf_stats,
+            eval_cases,
+            global_adversarial_cases,
+        )
+        synthetic_passed = synthetic_result.passed
+        # Count adversarial failures
+        if synthetic_result.results:
+            adversarial_failures = sum(
+                1 for r in synthetic_result.results
+                if r.get("case_type") == "global_adversarial" and not r.get("case_passed", True)
             )
-            synthetic_passed = synthetic_result.passed
-            # Count adversarial failures
-            if synthetic_result.results:
-                adversarial_failures = sum(
-                    1 for r in synthetic_result.results
-                    if r.get("case_type") == "global_adversarial" and not r.get("case_passed", True)
-                )
 
     # --- Stage h: Final admission policy (section 6.7) ---
     fast_lane_passed = _check_cold_fast_lane(
@@ -752,8 +756,8 @@ def _check_cold_fast_lane(
     if fingerprint_conflict:
         return False
 
-    # Merge operation must not require split/rewrite
-    if merge_op in ("split_required", "reject_new"):
+    # Merge operation must be keep_both — any other op means structural work
+    if merge_op != "keep_both":
         return False
 
     return True
@@ -807,6 +811,14 @@ def insert_rule_from_pipeline(
 
     # Serialize JSON fields
     concepts_json = dumps_json(rule_data.get("concepts", []))
+    # Extract concept_aliases from concepts structure (each concept may have an "aliases" key)
+    raw_concepts = rule_data.get("concepts", [])
+    concept_aliases_list = []
+    if isinstance(raw_concepts, list):
+        for c in raw_concepts:
+            if isinstance(c, dict) and "aliases" in c:
+                concept_aliases_list.extend(c["aliases"])
+    concept_aliases_json = dumps_json(concept_aliases_list)
     required_concept_groups_json = dumps_json(rule_data.get("required_concept_groups", []))
     excluded_contexts_json = dumps_json(rule_data.get("excluded_contexts", []))
     near_miss_json = dumps_json(rule_data.get("near_miss_examples", []))
@@ -818,6 +830,7 @@ def insert_rule_from_pipeline(
     domain_tags_json = dumps_json(scope.get("domain_tags", []))
     tool_tags_json = dumps_json(scope.get("tool_tags", []))
     path_patterns_json = dumps_json(scope.get("file_or_path_patterns", []))
+    language_hints_json = dumps_json(rule_data.get("language_hints", []))
 
     with db.transaction() as tx:
         tx.execute(
@@ -826,16 +839,16 @@ def insert_rule_from_pipeline(
             "created_by_pipeline_version, runtime_policy_version, last_rewritten_by_role, "
             "status, severity, "
             "trigger_canonical, trigger_canonical_zh, "
-            "concepts, required_concept_groups, excluded_contexts, "
+            "concepts, concept_aliases, required_concept_groups, excluded_contexts, "
             "near_miss_examples, trigger_variants, trigger_variants_zh, search_terms, "
             "action_instruction, action_instruction_zh, "
             "allowed_behavior, forbidden_behavior, "
-            "domain_tags, tool_tags, path_patterns, "
+            "domain_tags, tool_tags, path_patterns, language_hints, "
             "quality_score, evidence_support_score, specificity_score, retrieval_readiness_score, "
-            "source_origin, activation_origin, "
+            "source_origin, activation_origin, transcript_ref, "
             "created_at, updated_at"
             ") VALUES ("
-            "?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?"
+            "?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?"
             ")",
             (
                 rule_id,
@@ -850,6 +863,7 @@ def insert_rule_from_pipeline(
                 trigger_canonical,
                 rule_data.get("trigger_canonical_zh"),
                 concepts_json,
+                concept_aliases_json,
                 required_concept_groups_json,
                 excluded_contexts_json,
                 near_miss_json,
@@ -863,12 +877,14 @@ def insert_rule_from_pipeline(
                 domain_tags_json,
                 tool_tags_json,
                 path_patterns_json,
+                language_hints_json,
                 scores.get("overall_quality", 0.0),
                 scores.get("evidence_support", 0.0),
                 scores.get("trigger_specificity", 0.0),
                 scores.get("retrieval_readiness", 0.0),
                 source_origin,
                 activation_origin,
+                transcript_ref,
                 now,
                 now,
             ),

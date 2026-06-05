@@ -121,13 +121,17 @@ def _create_fire_event_with_window(db, rule, session_id, *, labeled=False):
     event_id = create_fire_event(
         db, rule, session_id, "hash_abc", "hot", {"score": 0.9}, turn_index=1
     )
-    # Add bounded_window_ref and action snapshot so build_evaluator_input works
+    # Add bounded_window_ref with inline content (> 64 chars) so build_evaluator_input works
+    window_content = (
+        "User asked about coding patterns. Assistant discussed best practices "
+        "for error handling and provided examples of try-catch blocks."
+    )
     with db.transaction() as tx:
         tx.execute(
             "UPDATE rule_fire_events "
             "SET bounded_window_ref = ?, transcript_window_ref = ? "
             "WHERE id = ?",
-            ("window_ref_123", "transcript_ref_456", event_id),
+            (window_content, window_content, event_id),
         )
     if labeled:
         with db.transaction() as tx:
@@ -605,6 +609,7 @@ class TestCompletedJobsMarkFireEvents:
                     "label": "observed_useful",
                     "reason_code": "useful_prevented_error",
                     "would_likely_have_happened_without_rule": "yes",
+                    "rule_application_evidence": "",
                     "attribution_weight": 0.0,
                 },
             )
@@ -620,5 +625,65 @@ class TestCompletedJobsMarkFireEvents:
             assert row["posthoc_label"] == "irrelevant"
             assert row["posthoc_reason_code"] == "irrelevant_redundant"
             assert row["posthoc_score"] == pytest.approx(0.0)
+        finally:
+            db.close()
+
+
+# ---------------------------------------------------------------------------
+# 11. Full flywheel loop: active rule + harmful posthoc -> suppressed
+# ---------------------------------------------------------------------------
+
+
+class TestFullFlywheelLoop:
+    """End-to-end: create active rule, fire events, run posthoc with harmful
+    result, verify rule transitions to suppressed."""
+
+    def test_harmful_posthoc_transitions_rule_to_suppressed(
+        self, tmp_path, monkeypatch
+    ):
+        db = _make_db(tmp_path)
+        try:
+            rule = _insert_rule(db, status="active")
+
+            # Create multiple fire events in a session
+            session = "session_flywheel"
+            eid1 = _create_fire_event_with_window(db, rule, session)
+            eid2 = _create_fire_event_with_window(db, rule, session)
+
+            # Enqueue posthoc jobs
+            count = enqueue_posthoc_for_session(db, session)
+            assert count == 2
+
+            # Mock LLM returns harmful for all evaluations
+            monkeypatch.setattr(
+                "nokori.posthoc.jobs.run_posthoc_evaluation",
+                lambda _llm, _inp: {
+                    "label": "harmful",
+                    "reason_code": "harmful_distracted",
+                    "would_likely_have_happened_without_rule": "no",
+                    "rule_application_evidence": "The rule caused the assistant to go off-track",
+                    "attribution_weight": -2.0,
+                },
+            )
+
+            # Process pending jobs — triggers score updates and lifecycle transitions
+            summary = process_pending_posthoc_jobs(db, object())
+
+            assert summary["processed"] == 2
+            assert summary["done"] == 2
+
+            # Verify fire events carry harmful labels
+            for eid in (eid1, eid2):
+                row = db.fetchone(
+                    "SELECT posthoc_label FROM rule_fire_events WHERE id = ?",
+                    (eid,),
+                )
+                assert row["posthoc_label"] == "harmful"
+
+            # Verify rule transitioned to suppressed
+            rule_row = db.fetchone(
+                "SELECT status FROM rules WHERE id = ?", (rule.id,)
+            )
+            assert rule_row["status"] == "suppressed"
         finally:
             db.close()

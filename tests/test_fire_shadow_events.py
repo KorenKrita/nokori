@@ -207,14 +207,14 @@ class TestMarkPosthocLabel:
             event_id = create_fire_event(
                 db, rule, "session_1", "hash_abc", "hot", {"score": 0.9}
             )
-            mark_posthoc_label(db, event_id, "observed_useful", "user_ack", score=0.95)
+            mark_posthoc_label(db, event_id, "observed_useful", "useful_prevented_error", score=0.95)
             row = db.fetchone(
                 "SELECT posthoc_label, posthoc_reason_code, posthoc_score "
                 "FROM rule_fire_events WHERE id = ?",
                 (event_id,),
             )
             assert row["posthoc_label"] == "observed_useful"
-            assert row["posthoc_reason_code"] == "user_ack"
+            assert row["posthoc_reason_code"] == "useful_prevented_error"
             assert row["posthoc_score"] == pytest.approx(0.95)
         finally:
             db.close()
@@ -228,7 +228,7 @@ class TestUpdateFirstObservedUseful:
             event_id = create_fire_event(
                 db, rule, "session_1", "hash_abc", "hot", {"score": 0.9}
             )
-            mark_posthoc_label(db, event_id, "observed_useful", "user_ack")
+            mark_posthoc_label(db, event_id, "observed_useful", "useful_prevented_error")
             update_first_observed_useful(db, rule.id)
             row = db.fetchone(
                 "SELECT first_observed_useful_at FROM rules WHERE id = ?",
@@ -252,7 +252,7 @@ class TestUpdateFirstObservedUseful:
             event_id = create_fire_event(
                 db, rule, "session_1", "hash_abc", "hot", {"score": 0.9}
             )
-            mark_posthoc_label(db, event_id, "observed_useful", "user_ack")
+            mark_posthoc_label(db, event_id, "observed_useful", "useful_prevented_error")
             update_first_observed_useful(db, rule.id)
             row = db.fetchone(
                 "SELECT first_observed_useful_at FROM rules WHERE id = ?",
@@ -270,7 +270,7 @@ class TestUpdateFirstObservedUseful:
             event_id = create_fire_event(
                 db, rule, "session_1", "hash_abc", "hot", {"score": 0.9}
             )
-            mark_posthoc_label(db, event_id, "irrelevant", "no_match")
+            mark_posthoc_label(db, event_id, "irrelevant", "irrelevant_not_applicable")
             update_first_observed_useful(db, rule.id)
             row = db.fetchone(
                 "SELECT first_observed_useful_at FROM rules WHERE id = ?",
@@ -291,7 +291,7 @@ class TestCountEvaluatedFireEvents:
                 eid = create_fire_event(
                     db, rule, "session_1", "hash_abc", "hot", {"score": 0.5}
                 )
-                mark_posthoc_label(db, eid, label, "auto")
+                mark_posthoc_label(db, eid, label, "useful_improved_quality")
 
             # One event without label (should not count)
             create_fire_event(db, rule, "session_1", "hash_abc", "hot", {"score": 0.5})
@@ -312,7 +312,7 @@ class TestCountEvaluatedFireEvents:
             eid = create_fire_event(
                 db, rule, "session_1", "hash_abc", "hot", {"score": 0.5}
             )
-            mark_posthoc_label(db, eid, "observed_useful", "auto")
+            mark_posthoc_label(db, eid, "observed_useful", "useful_improved_quality")
             # Backdate the event to 60 days ago
             old_ts = _utcnow_iso(-60)
             with db.transaction() as tx:
@@ -489,6 +489,102 @@ class TestIsDuplicateShadowContext:
             rule = _insert_rule(db, status="candidate")
             fp_new = compute_context_fingerprint("never_seen", "tool_c", 99)
             assert is_duplicate_shadow_context(db, rule.id, fp_new) is False
+        finally:
+            db.close()
+
+
+class TestRunShadowCounterfactualEvaluation:
+    """Tests for run_shadow_counterfactual_evaluation with a mock LLM."""
+
+    def test_labels_unlabeled_shadow_events(self, tmp_path):
+        from nokori.events.shadow import (
+            run_shadow_counterfactual_evaluation,
+            mark_shadow_label,
+        )
+
+        db = _make_db(tmp_path)
+        try:
+            rule = _insert_rule(db, status="candidate")
+
+            # Create shadow events without labels
+            eid1 = create_shadow_event(
+                db, rule, "s_eval_1", "candidate", "candidate_probe",
+                "hash_eval_1", "hot", {"sim": 0.9},
+                context_fingerprint="fp_eval_1",
+            )
+            eid2 = create_shadow_event(
+                db, rule, "s_eval_2", "candidate", "candidate_probe",
+                "hash_eval_2", "warm", {"sim": 0.7},
+                context_fingerprint="fp_eval_2",
+            )
+
+            # Verify events are unlabeled
+            row1 = db.fetchone(
+                "SELECT shadow_label FROM rule_shadow_events WHERE id = ?", (eid1,)
+            )
+            row2 = db.fetchone(
+                "SELECT shadow_label FROM rule_shadow_events WHERE id = ?", (eid2,)
+            )
+            assert row1["shadow_label"] is None
+            assert row2["shadow_label"] is None
+
+            # Mock LLM that returns would_help_high
+            import json
+
+            class MockLLM:
+                def call(self, *, system, user, role):
+                    return json.dumps({
+                        "label": "would_help_high",
+                        "reasoning": "The rule would have prevented an error",
+                    })
+
+            summary = run_shadow_counterfactual_evaluation(db, MockLLM())
+
+            assert summary["processed"] == 2
+            assert summary["labeled"] == 2
+            assert summary["failed"] == 0
+
+            # Verify labels are applied
+            row1 = db.fetchone(
+                "SELECT shadow_label FROM rule_shadow_events WHERE id = ?", (eid1,)
+            )
+            row2 = db.fetchone(
+                "SELECT shadow_label FROM rule_shadow_events WHERE id = ?", (eid2,)
+            )
+            assert row1["shadow_label"] == "would_help_high"
+            assert row2["shadow_label"] == "would_help_high"
+        finally:
+            db.close()
+
+    def test_handles_llm_failure_gracefully(self, tmp_path):
+        from nokori.events.shadow import run_shadow_counterfactual_evaluation
+
+        db = _make_db(tmp_path)
+        try:
+            rule = _insert_rule(db, status="suppressed")
+
+            eid = create_shadow_event(
+                db, rule, "s_fail", "suppressed", "suppression_recovery",
+                "hash_fail", "hot", {"sim": 0.8},
+                context_fingerprint="fp_fail",
+            )
+
+            # Mock LLM that raises an exception
+            class FailingLLM:
+                def call(self, *, system, user, role):
+                    raise RuntimeError("LLM unavailable")
+
+            summary = run_shadow_counterfactual_evaluation(db, FailingLLM())
+
+            assert summary["processed"] == 1
+            assert summary["failed"] == 1
+            assert summary["labeled"] == 0
+
+            # Event remains unlabeled
+            row = db.fetchone(
+                "SELECT shadow_label FROM rule_shadow_events WHERE id = ?", (eid,)
+            )
+            assert row["shadow_label"] is None
         finally:
             db.close()
 

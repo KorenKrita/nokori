@@ -137,11 +137,12 @@ def apply_merge_policy(
         and op_safety == "safe"
         and existing_status in ("active", "trusted")
         and _action_semantics_unchanged(existing_rule, new_rule_data)
+        and _new_evidence_improves(existing_rule, new_rule_data)
     ):
         return MergeDecision(
             operation="update_existing_fields",
             target_rule_id=target_id,
-            reason="safe field-level update; action unchanged",
+            reason="safe field-level update; action unchanged; new evidence improves",
             requires_synthetic_reeval=False,
             lineage_record=_lineage(target_id, "update_existing_fields", planner_reason),
         )
@@ -459,17 +460,36 @@ def validate_merge_transaction(
     3. Synthetic retrieval evaluation (synthetic_passed)
     4. Final admission policy (final_admission_passed)
 
+    For update_existing_fields: treated as destructive when the operation
+    changes trigger/variants/concepts/exclusions. Check via merge_decision
+    lineage_record metadata if available; otherwise treat all
+    update_existing_fields as requiring validation.
+
     Returns True if the transaction is valid and may proceed.
     """
     destructive_ops: frozenset[str] = frozenset((
         "replace_existing",
         "suppress_existing",
         "archive_existing",
+        "update_existing_fields",
     ))
 
     # Non-destructive operations always pass validation.
     if merge_decision.operation not in destructive_ops:
         return True
+
+    # For update_existing_fields: only require full validation if changes
+    # touch trigger/variants/concepts/exclusions. Use lineage_record metadata
+    # to determine scope; if metadata unavailable, require validation.
+    if merge_decision.operation == "update_existing_fields":
+        requires_validation = True
+        lineage = merge_decision.lineage_record
+        if lineage and isinstance(lineage.get("changed_fields"), (list, tuple)):
+            sensitive_fields = {"trigger_canonical", "trigger_variants", "concepts", "exclusions"}
+            changed = set(lineage["changed_fields"])
+            requires_validation = bool(changed & sensitive_fields)
+        if not requires_validation:
+            return True
 
     # All four gates must pass for destructive operations.
     if not synthetic_passed:
@@ -508,6 +528,36 @@ def _lineage(target_id: str | None, operation: str, reason: str) -> dict:
         "operation": operation,
         "reason": reason,
     }
+
+
+def _new_evidence_improves(existing_rule: dict, new_rule_data: dict) -> bool:
+    """Check whether the new rule has MORE variants, concepts, exclusions, or near_miss_examples.
+
+    Returns True only if the new rule provides strictly more evidence in at
+    least one of these dimensions without reducing any other.
+    """
+    def _len(obj, key: str) -> int:
+        val = obj.get(key)
+        if isinstance(val, list):
+            return len(val)
+        if isinstance(val, str) and val:
+            from nokori.db import loads_json
+            parsed = loads_json(val, [])
+            return len(parsed) if isinstance(parsed, list) else 0
+        return 0
+
+    fields = ("trigger_variants", "concepts", "exclusions", "near_miss_examples")
+
+    has_improvement = False
+    for field in fields:
+        existing_count = _len(existing_rule, field)
+        new_count = _len(new_rule_data, field)
+        if new_count < existing_count:
+            return False
+        if new_count > existing_count:
+            has_improvement = True
+
+    return has_improvement
 
 
 def _action_semantics_unchanged(existing_rule: dict, new_rule_data: dict) -> bool:

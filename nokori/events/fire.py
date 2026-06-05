@@ -15,6 +15,7 @@ def create_fire_event(
     level: str,
     decision_features: dict,
     *,
+    decision_reason: str | None = None,
     turn_index: int | None = None,
     idf_pool_version: str | None = None,
     runtime_policy_version: str | None = None,
@@ -24,6 +25,8 @@ def create_fire_event(
     """Persist a fire event when a rule is injected into a session."""
     event_id = str(uuid.uuid4())
     now = now_iso()
+
+    resolved_decision_reason = decision_reason or decision_features.get("decision_reason")
 
     injected_structured_snapshot = dumps_json({
         "concepts": loads_json(rule.concepts, []),
@@ -40,9 +43,10 @@ def create_fire_event(
             "injected_structured_snapshot, "
             "trigger_idf_pool_version, runtime_policy_version, "
             "embedding_profile_version, "
-            "prompt_hash, turn_index, level, decision_features, bounded_window_ref, "
+            "prompt_hash, turn_index, level, decision_reason, decision_features, "
+            "bounded_window_ref, "
             "created_at) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 event_id,
                 rule.id,
@@ -57,6 +61,7 @@ def create_fire_event(
                 prompt_hash,
                 turn_index,
                 level,
+                resolved_decision_reason,
                 dumps_json(decision_features),
                 bounded_window_ref,
                 now,

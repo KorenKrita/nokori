@@ -397,14 +397,20 @@ def evaluate_match(
         combined_lower = text_lower + " " + tool_input_lower
 
     # 1. Evaluate concepts
+    # Per spec 9.2 field-level scoring: concepts evaluate against prompt text
+    # only. Tool input is only checked when concept has match_mode "tool_pattern".
     satisfied_concepts: set[str] = set()
     for concept in matcher.concepts:
+        concept_text = text_lower
+        concept_tool_input = None
+        if "tool_pattern" in concept.match_mode:
+            concept_tool_input = tool_input_lower
         if _evaluate_concept(
             concept,
-            combined_lower,
+            concept_text,
             prompt_tokens,
             tool_name_lower,
-            tool_input_lower,
+            concept_tool_input,
             path_hints_lower,
             project_tags_lower,
         ):
@@ -640,6 +646,51 @@ def _evaluate_trigger_evidence(
         return True
 
     return False
+
+
+def compute_dynamic_threshold(pool_size: int) -> dict:
+    """Compute dynamic trigger threshold values per spec formula.
+
+    Given a pool_size (N = number of rules in the active pool), computes:
+      - rare_df: floor(N * 0.10) clamped to min 1
+      - idf_10pct: log(1 + (N - rare_df + 0.5) / (rare_df + 0.5))
+      - dynamic_trigger_info_min: max(idf_10pct, absolute_min)
+
+    This allows callers to validate their passed dynamic_threshold against
+    the spec-defined formula.
+
+    Args:
+        pool_size: Number of rules in the active pool (N).
+
+    Returns:
+        Dict with keys: pool_size, rare_df, idf_10pct, dynamic_trigger_info_min.
+    """
+    import math
+
+    if pool_size <= 0:
+        return {
+            "pool_size": 0,
+            "rare_df": 0,
+            "idf_10pct": 0.0,
+            "dynamic_trigger_info_min": 0.0,
+        }
+
+    rare_df = max(1, int(pool_size * 0.10))
+    idf_10pct = math.log(1 + (pool_size - rare_df + 0.5) / (rare_df + 0.5))
+
+    if pool_size < _SMALL_POOL_THRESHOLD:
+        absolute_min = _SMALL_POOL_ABSOLUTE_MIN
+    else:
+        absolute_min = _NORMAL_ABSOLUTE_MIN
+
+    dynamic_trigger_info_min = max(idf_10pct, absolute_min)
+
+    return {
+        "pool_size": pool_size,
+        "rare_df": rare_df,
+        "idf_10pct": idf_10pct,
+        "dynamic_trigger_info_min": dynamic_trigger_info_min,
+    }
 
 
 def _evaluate_strong_trigger_evidence(

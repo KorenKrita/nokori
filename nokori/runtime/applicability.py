@@ -468,6 +468,16 @@ def evaluate_applicability(
 
         # HOT for trusted: spec says trusted "can WARM/HOT" without strong-evidence requirement
         # (unlike active which requires strong evidence for HOT)
+        # However, significant recent noise (false_positive_score > 0.3) downgrades to WARM.
+        if false_positive_score > 0.3:
+            penalties.append(f"recent_fp_penalty={false_positive_score:.2f}")
+            return ApplicabilityResult(
+                decision="warm",
+                eligible=True,
+                reason="trusted: trigger evidence passed but significant recent noise -> WARM fallback",
+                trigger_evidence_passed=True,
+                penalties=penalties,
+            )
         if false_positive_score > 0.0:
             penalties.append(f"recent_fp_penalty={false_positive_score:.2f}")
         return ApplicabilityResult(

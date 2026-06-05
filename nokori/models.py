@@ -43,6 +43,7 @@ class Rule:
     trigger_canonical: str
     trigger_canonical_zh: str | None = None
     concepts: str = "[]"  # JSON list[str]
+    concept_aliases: str = "[]"  # JSON list[str]
     required_concept_groups: str = "[]"  # JSON list[str]
     excluded_contexts: str = "[]"  # JSON list[str]
     near_miss_examples: list[str] = field(default_factory=list)
@@ -60,6 +61,8 @@ class Rule:
     domain_tags: list[str] = field(default_factory=list)
     tool_tags: list[str] = field(default_factory=list)
     path_patterns: list[str] = field(default_factory=list)
+    language_hints: str = "[]"  # JSON list[str]
+    transcript_ref: str | None = None
 
     # Quality scores
     quality_score: float = 0.0

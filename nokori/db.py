@@ -39,6 +39,8 @@ CREATE TABLE IF NOT EXISTS rules (
     domain_tags TEXT NOT NULL DEFAULT '[]',
     tool_tags TEXT NOT NULL DEFAULT '[]',
     path_patterns TEXT NOT NULL DEFAULT '[]',
+    language_hints TEXT NOT NULL DEFAULT '[]',
+    transcript_ref TEXT,
     quality_score REAL NOT NULL DEFAULT 0.0,
     evidence_support_score REAL NOT NULL DEFAULT 0.0,
     specificity_score REAL NOT NULL DEFAULT 0.0,
@@ -48,7 +50,7 @@ CREATE TABLE IF NOT EXISTS rules (
     false_positive_score REAL NOT NULL DEFAULT 0.0,
     harmful_score REAL NOT NULL DEFAULT 0.0,
     source_origin TEXT NOT NULL DEFAULT 'transcript_extraction' CHECK(source_origin IN ('transcript_extraction','external_source_material')),
-    activation_origin TEXT,
+    activation_origin TEXT CHECK(activation_origin IS NULL OR activation_origin IN ('cold_fast_lane','shadow_promotion','merge_replacement','external_shadow_promotion')),
     first_observed_useful_at TEXT,
     trusted_at TEXT,
     suppressed_at TEXT,
@@ -141,8 +143,8 @@ CREATE TABLE IF NOT EXISTS rule_fire_events (
     decision_reason TEXT,
     decision_features TEXT,
     bounded_window_ref TEXT,
-    posthoc_label TEXT,
-    posthoc_reason_code TEXT,
+    posthoc_label TEXT CHECK(posthoc_label IS NULL OR posthoc_label IN ('observed_useful','plausible_useful','irrelevant','harmful','unclear')),
+    posthoc_reason_code TEXT CHECK(posthoc_reason_code IS NULL OR posthoc_reason_code IN ('useful_prevented_error','useful_improved_quality','useful_followed_preference','irrelevant_not_applicable','irrelevant_redundant','irrelevant_unused','harmful_distracted','harmful_wrong_scope','harmful_blocked_valid_action','window_unavailable')),
     posthoc_score REAL,
     created_at TEXT NOT NULL
 );
@@ -413,6 +415,7 @@ def row_to_rule(row):
         trigger_canonical=row["trigger_canonical"],
         trigger_canonical_zh=row["trigger_canonical_zh"],
         concepts=row["concepts"],
+        concept_aliases=row["concept_aliases"],
         required_concept_groups=row["required_concept_groups"],
         excluded_contexts=row["excluded_contexts"],
         near_miss_examples=loads_json(row["near_miss_examples"], []),
@@ -426,6 +429,8 @@ def row_to_rule(row):
         domain_tags=loads_json(row["domain_tags"], []),
         tool_tags=loads_json(row["tool_tags"], []),
         path_patterns=loads_json(row["path_patterns"], []),
+        language_hints=row["language_hints"],
+        transcript_ref=row["transcript_ref"],
         quality_score=row["quality_score"],
         evidence_support_score=row["evidence_support_score"],
         specificity_score=row["specificity_score"],
@@ -453,11 +458,11 @@ RULE_COLUMNS = (
     "created_by_pipeline_version, runtime_policy_version, last_rewritten_by_role, "
     "status, severity, "
     "trigger_canonical, trigger_canonical_zh, "
-    "concepts, required_concept_groups, excluded_contexts, "
+    "concepts, concept_aliases, required_concept_groups, excluded_contexts, "
     "near_miss_examples, trigger_variants, trigger_variants_zh, search_terms, "
     "action_instruction, action_instruction_zh, "
     "allowed_behavior, forbidden_behavior, "
-    "domain_tags, tool_tags, path_patterns, "
+    "domain_tags, tool_tags, path_patterns, language_hints, transcript_ref, "
     "quality_score, evidence_support_score, specificity_score, retrieval_readiness_score, "
     "observed_usefulness_score, plausible_usefulness_score, false_positive_score, harmful_score, "
     "source_origin, activation_origin, first_observed_useful_at, "

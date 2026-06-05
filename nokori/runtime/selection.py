@@ -210,16 +210,16 @@ def select_injection(
             if u <= 0:
                 continue
             # Strong evidence per spec: Path A or full Path B
-            # Rules in eligible_results already passed applicability with proper thresholds.
             # Use the level field if set by applicability (hot/gate = strong evidence confirmed).
+            # Dynamic thresholds use conservative small-pool minimums (strictest gate).
             has_strong_evidence = (
                 (sr.strong_variant_phrase_hit and sr.required_concepts_match)
-                or (hasattr(sr, 'level') and sr.level in ("hot", "gate"))
+                or (sr.level == "hot" or sr.level == "gate")
                 or (
-                    sr.trigger_idf_sum >= 2.0
+                    sr.trigger_idf_sum >= 2.40
                     and sr.trigger_coverage >= 0.40
                     and sr.required_concepts_match
-                    and getattr(sr, 'distinct_trigger_terms', 0) >= 2
+                    and sr.distinct_trigger_terms >= 2
                 )
             )
             if _has_distinct_domain(sr, hot) and has_strong_evidence:

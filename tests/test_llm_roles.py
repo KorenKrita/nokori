@@ -102,9 +102,10 @@ class TestResolveModelId:
         )
         assert result == "gpt-3.5"
 
-    def test_raises_when_neither_set(self):
-        with pytest.raises(ValueError, match="no model configured"):
-            resolve_model_id("extractor", role_models_dict={}, default_model=None)
+    def test_falls_back_to_provider_default_when_neither_set(self):
+        """Spec section 5: third-level fallback to provider default."""
+        result = resolve_model_id("extractor", role_models_dict={}, default_model=None)
+        assert result  # Should return provider default, not raise
 
     def test_raises_on_unknown_role(self):
         with pytest.raises(ValueError, match="unknown role"):

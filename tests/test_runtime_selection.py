@@ -560,3 +560,39 @@ class TestComputeUtility:
         u = compute_utility(sr, {})
         expected = 6.0 + 1.0 + 0.5 - 0.5
         assert u == pytest.approx(expected)
+
+
+# ---------------------------------------------------------------------------
+# 12. Level-based filtering restricts HOT selection
+# ---------------------------------------------------------------------------
+
+
+class TestLevelFiltering:
+    def test_level_filtering_restricts_hot(self):
+        """Results with level='warm' should not get into hot list when levels are present."""
+        rule_hot = _make_rule(rule_id="r_hot", domain_tags=["python"])
+        rule_warm = _make_rule(rule_id="r_warm", domain_tags=["rust"])
+
+        sr_hot = ScoredResult(
+            rule=rule_hot,
+            trigger_idf_sum=8.0,
+            strong_variant_phrase_hit=True,
+            matched_trigger_tokens=frozenset({"a", "b"}),
+            required_concepts_match=True,
+            trigger_coverage=0.6,
+            level="hot",
+        )
+        sr_warm = ScoredResult(
+            rule=rule_warm,
+            trigger_idf_sum=7.0,
+            strong_variant_phrase_hit=True,
+            matched_trigger_tokens=frozenset({"c", "d"}),
+            required_concepts_match=True,
+            trigger_coverage=0.6,
+            level="warm",
+        )
+        sel = select_injection([sr_hot, sr_warm], max_injection_chars=50000)
+        # sr_warm has level="warm", so it must NOT appear in hot
+        assert sr_warm not in sel.hot
+        # sr_hot should be in hot
+        assert sr_hot in sel.hot

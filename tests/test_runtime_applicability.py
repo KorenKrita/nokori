@@ -523,3 +523,41 @@ class TestRequiredConceptsFalse:
             strong_variant_phrase_hit=True,
         )
         assert r.decision == "cold"
+
+
+# ---------------------------------------------------------------------------
+# 17. excluded_context_override allows injection despite excluded_context_hit
+# ---------------------------------------------------------------------------
+
+
+class TestExcludedContextOverride:
+    def test_excluded_context_override_allows_injection(self):
+        """excluded_context_hit=True + excluded_context_override_passed=True -> not COLD."""
+        r = _eval(
+            excluded_context_hit=True,
+            excluded_context_override_passed=True,
+        )
+        assert r.decision != "cold"
+        assert r.eligible is True
+
+
+# ---------------------------------------------------------------------------
+# 18. near_miss_context -> COLD
+# ---------------------------------------------------------------------------
+
+
+class TestNearMissContext:
+    def test_near_miss_context_is_cold(self):
+        """near_miss_context=True -> COLD."""
+        r = _eval(near_miss_context=True)
+        assert r.decision == "cold"
+        assert r.eligible is False
+
+    def test_near_miss_with_override_passes(self):
+        """near_miss_context=True + excluded_context_override_passed=True -> not COLD."""
+        r = _eval(
+            near_miss_context=True,
+            excluded_context_override_passed=True,
+        )
+        assert r.decision != "cold"
+        assert r.eligible is True

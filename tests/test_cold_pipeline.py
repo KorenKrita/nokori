@@ -363,11 +363,19 @@ class TestEvidenceSupportThreshold:
             "rule rewriter": _rewriter_json(),
             "final judge": _final_judge_json("accept_candidate"),
             "merge planner": _merge_planner_json("keep_both"),
+            "synthetic evaluation case generator": _synthetic_eval_cases(),
         })
 
         with patch(
             "nokori.cold.pipeline.check_fingerprint_block", return_value=None
-        ):
+        ), patch("nokori.cold.pipeline.run_synthetic_eval") as mock_eval:
+            mock_eval.return_value = MagicMock(
+                passed=False, results=[], rule_id="", rule_version=1,
+                runtime_policy_version="1.0.0", tokenizer_version="1.0.0",
+                matcher_compiler_version="1.0.0", concept_compiler_version="1.0.0",
+                embedding_profile_version="1.0.0", trigger_idf_pool_version="test",
+                benchmark_version="1.0.0", cases=[],
+            )
             result = run_cold_pipeline(
                 db,
                 llm,
@@ -392,7 +400,7 @@ class TestEvidenceSupportThreshold:
                 scope_control=0.90,
             ),
             "final judge": _final_judge_json("accept_active"),
-            "merge planner": _merge_planner_json("insert"),
+            "merge planner": _merge_planner_json("keep_both"),
             "synthetic evaluation case generator": _synthetic_eval_cases(),
         })
 
@@ -436,7 +444,7 @@ class TestReviseRoutesRewriter:
             ),
             "rule rewriter": _rewriter_json(),
             "final judge": _final_judge_json("accept_candidate"),
-            "merge planner": _merge_planner_json("insert"),
+            "merge planner": _merge_planner_json("keep_both"),
             "synthetic evaluation case generator": _synthetic_eval_cases(),
         })
 
@@ -479,7 +487,7 @@ class TestColdFastLane:
                 scope_control=0.90,
             ),
             "final judge": _final_judge_json("accept_active"),
-            "merge planner": _merge_planner_json("insert"),
+            "merge planner": _merge_planner_json("keep_both"),
             "synthetic evaluation case generator": _synthetic_eval_cases(),
         })
 
@@ -532,7 +540,7 @@ class TestLowQualityCandidate:
                 scope_control=0.80,
             ),
             "final judge": _final_judge_json("accept_candidate"),
-            "merge planner": _merge_planner_json("insert"),
+            "merge planner": _merge_planner_json("keep_both"),
         })
 
         with patch(
@@ -568,7 +576,7 @@ class TestCompilationFailure:
         llm = _make_llm_mock({
             "admission judge": _admission_json("accept"),
             "final judge": _final_judge_json("accept_active"),
-            "merge planner": _merge_planner_json("insert"),
+            "merge planner": _merge_planner_json("keep_both"),
         })
 
         from nokori.matcher.compiler import CompilationError
@@ -606,7 +614,7 @@ class TestArchivedFingerprintBlock:
         llm = _make_llm_mock({
             "admission judge": _admission_json("accept"),
             "final judge": _final_judge_json("accept_active"),
-            "merge planner": _merge_planner_json("insert"),
+            "merge planner": _merge_planner_json("keep_both"),
         })
 
         fingerprint_result = {
@@ -676,7 +684,7 @@ class TestExternalSourceNoFastLane:
                 scope_control=0.90,
             ),
             "final judge": _final_judge_json("accept_candidate"),
-            "merge planner": _merge_planner_json("insert"),
+            "merge planner": _merge_planner_json("keep_both"),
         })
 
         with patch(
@@ -716,7 +724,7 @@ class TestVersionFieldsStored:
         llm = _make_llm_mock({
             "admission judge": _admission_json("accept"),
             "final judge": _final_judge_json("accept_candidate"),
-            "merge planner": _merge_planner_json("insert"),
+            "merge planner": _merge_planner_json("keep_both"),
         })
 
         with patch(
