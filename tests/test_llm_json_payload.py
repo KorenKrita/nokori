@@ -41,7 +41,7 @@ def test_parse_candidates_minimax_style():
     cands, ok = _parse_candidates(MINIMAX_STYLE)
     assert ok is True
     assert len(cands) == 1
-    assert cands[0].source_type == "correction"
+    assert cands[0].trigger is not None
 
 
 def test_extract_end_to_end_with_thinking_prefix():
@@ -76,8 +76,6 @@ def test_merge_ask_llm_parses_thinking_wrapped_dict():
         behavior=None,
         action="a",
         rationale=None,
-        source_type="correction",
-        confidence="high",
     )
     payload = (
         "merge reasoning\n"

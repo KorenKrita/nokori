@@ -40,8 +40,6 @@ def test_extractor_parses_array(tmp_path):
     cands, ok = extract("[User] dummy transcript\n", FakeLLM(response))
     assert ok and len(cands) == 1
     c = cands[0]
-    assert c.confidence == "high"
-    assert c.source_type == "correction"
     assert "git push --force" in c.trigger_variants
     assert c.search_terms["zh"] == ["强推"]
 
@@ -97,14 +95,6 @@ def test_extractor_llm_failure_not_ok():
     cands, ok = extract("nonempty transcript", FailLLM())
     assert cands == [] and ok is False
 
-
-def test_extractor_skips_invalid_source_type():
-    response = json.dumps([{
-        "trigger": "x", "action": "y",
-        "source_type": "WAT", "confidence": "high",
-    }])
-    cands, ok = extract("nonempty", FakeLLM(response))
-    assert not ok and cands == []
 
 
 def test_extractor_returns_empty_on_empty_transcript():
@@ -364,8 +354,6 @@ def test_batch_extract_keeps_job_on_merge_llm_failure(monkeypatch, tmp_path):
                 behavior=None,
                 action="seed action",
                 rationale=None,
-                source_type="correction",
-                confidence="high",
             ),
             db,
             FakeLLM("[]"),

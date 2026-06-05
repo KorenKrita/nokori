@@ -21,10 +21,12 @@ class FakeMergeLLM:
 def _cand(
     trigger="rule x",
     action="do y",
-    source="correction",
-    conf="high",
     *,
     variants=(),
+    source_type="correction",
+    source="correction",
+    confidence="high",
+    conf="high",
 ):
     return Candidate(
         trigger=trigger,
@@ -33,8 +35,8 @@ def _cand(
         behavior=None,
         action=action,
         rationale=None,
-        source_type=source,
-        confidence=conf,
+        source_type=source if source != "correction" else source_type,
+        confidence=conf if conf != "high" else confidence,
     )
 
 

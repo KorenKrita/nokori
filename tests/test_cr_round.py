@@ -29,8 +29,6 @@ def _cand(trigger: str, action: str):
         behavior=None,
         action=action,
         rationale=None,
-        source_type="correction",
-        confidence="high",
     )
 
 

@@ -79,9 +79,7 @@ Each item:
   "action": "<imperative general pattern; 1-2 sentences — match correction scope; cover all issues if multiple in one message; do not broaden a specific rejection into a blanket rule; no specific paths/filenames from the transcript>",
   "action_zh": "<Chinese translation of action — imperative, same scope>",
   "rationale": "<one sentence evidence from the transcript>",
-  "evidence_quotes": ["<verbatim substring from the transcript that proves the user correction/preference — copy-paste, do not paraphrase; 1-3 quotes, each 20-200 chars>"],
-  "source_type": "correction" | "preference" | "solution" | "anti_pattern",
-  "confidence": "high" | "medium" | "low"
+  "evidence_quotes": ["<verbatim substring from the transcript that proves the user correction/preference — copy-paste, do not paraphrase; 1-3 quotes, each 20-200 chars>"]
 }
 
 _zh fields: Chinese translations of the corresponding English field. Keep concise (same scope as English). Always provide even if transcript is English-only.
@@ -95,8 +93,10 @@ Field constraints:
     "为什么不用skill" → en: ["skill"], zh: ["为什么不用"]
     ".claude.json permission" → en: [".claude.json", "permission"], zh: []
     "用pnpm别用npm" → en: ["pnpm", "npm"], zh: []
-- source_type: correction (user corrected or directed: "don't", "stop", "改一下", "use X instead", "你可以用…", explicit rejection) | preference (stable preference without correcting a mistake: "we use pnpm") | solution (failure→fix loop where user acknowledged lesson in a later [User] message) | anti_pattern (approach that failed and should be avoided).
-- confidence: high (user repeated/emphasized strongly — "永远不要"/"必须"/"always"/"never again", or lesson is universally applicable across projects) | medium (user corrected once clearly, lesson is reusable but may be context-dependent) | low (inferred from failure→fix pattern, or user's correction was mild/ambiguous). Never high if only assistant self-fixed without user pushback.
+Extraction strength guidance (do NOT output these as fields — use them to decide whether to emit a rule at all):
+- Extract if: user explicitly corrected/directed/rejected, expressed stable preference ("we use pnpm"), or a failure→fix loop had user acknowledgment in a later [User] message.
+- Strong signal (emit rule): user repeated/emphasized ("永远不要"/"必须"/"always"/"never again"), or lesson is universally applicable.
+- Weak signal (drop, do not emit): only inferred from failure pattern with no user pushback, mild/ambiguous language, or assistant self-fixed without user correction.
 - evidence_quotes: 1-3 verbatim substrings copy-pasted from the transcript that prove the user's correction/preference exists. Each quote must be a contiguous span — do NOT truncate the middle, splice separate passages, or rearrange words to manufacture support. Must be findable via exact string match in the input. Do NOT paraphrase, summarize, or fabricate. If you cannot find a verbatim contiguous quote that demonstrates the user's intent, do not emit the rule.
 
 Count:
@@ -110,7 +110,7 @@ Count only [User] lines as user intent. Ignore content marked as ignorable by sy
 
 1) Reusable in another SE repo? Not task-execution/CR-relay/scope-redirect/one-shot-format/retracted?
 2) trigger = English scenario (no actor prefix); action covers full correction scope?
-3) confidence: high only with strong emphasis/repetition; medium for clear single correction; low for inferred/mild?
+3) Strong enough signal? Drop if only inferred from failure pattern or assistant self-fixed without user pushback.
 4) search_terms: en Latin-only (incl. acronyms), zh CJK-only, mixed split, no negation-only zh?
 5) trigger_variants obey same actor/scenario rules as trigger?
 6) solution requires user ack in a later [User] message?

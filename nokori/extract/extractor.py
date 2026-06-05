@@ -13,8 +13,6 @@ from .term_normalize import normalize_search_terms, normalize_trigger_variants
 
 log = get_logger("nokori.extract.extractor")
 
-_VALID_SOURCE_TYPES = ("correction", "preference", "solution", "anti_pattern")
-_VALID_CONFIDENCE = ("high", "medium", "low")
 
 
 def _has_cjk(text: str) -> bool:
@@ -29,8 +27,8 @@ class Candidate:
     behavior: str | None
     action: str
     rationale: str | None
-    source_type: str
-    confidence: str
+    source_type: str = "correction"
+    confidence: str = "medium"
     evidence_quotes: list[str] = dataclasses.field(default_factory=list)
     trigger_text_zh: str | None = None
     action_zh: str | None = None
@@ -119,11 +117,11 @@ def _coerce(item: dict) -> Candidate:
     if _has_cjk(trigger):
         raise ValueError("trigger must be English (CJK in trigger)")
     source_type = str(item.get("source_type") or "correction").strip()
-    if source_type not in _VALID_SOURCE_TYPES:
-        raise ValueError(f"bad source_type {source_type!r}")
+    if source_type not in ("correction", "preference", "solution", "anti_pattern"):
+        source_type = "correction"
     confidence = str(item.get("confidence") or "medium").strip()
-    if confidence not in _VALID_CONFIDENCE:
-        raise ValueError(f"bad confidence {confidence!r}")
+    if confidence not in ("high", "medium", "low"):
+        confidence = "medium"
     variants = item.get("trigger_variants") or []
     if not isinstance(variants, list):
         variants = []
