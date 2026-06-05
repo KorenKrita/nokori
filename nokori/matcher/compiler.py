@@ -549,11 +549,8 @@ def _build_trigger_anchors(
             if tok not in GENERIC_TOKENS and tok not in GENERIC_ACTION_WORDS:
                 anchor_tokens.add(tok)
 
-    # Remove tokens that are part of any anchor_phrase to avoid double-counting
-    phrase_member_tokens: set[str] = set()
-    for phrase in anchor_phrases:
-        phrase_member_tokens.update(_tokenize(phrase))
-    anchor_tokens -= phrase_member_tokens
+    # Keep individual tokens even if they appear in phrases — they serve as
+    # independent anchors when the full phrase doesn't match as a unit.
 
     total = len(anchor_tokens) + len(anchor_phrases)
 

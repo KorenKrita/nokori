@@ -493,13 +493,10 @@ def find_merge_neighbors(db: Db, rule_data: dict, limit: int = 10) -> list[dict]
 
     # Archived fingerprint negative memory (spec 8.1)
     fp_rows = db.fetchall(
-        "SELECT rule_id FROM archived_fingerprints "
-        "WHERE archive_strength IN ('user', 'system') LIMIT 10"
+        "SELECT id, blocked_trigger_area, blocked_action_area, archive_strength "
+        "FROM archived_fingerprints "
+        "WHERE archive_strength IN ('user', 'system') LIMIT 20"
     )
-    archived_fingerprint_ids = {r["rule_id"] for r in fp_rows}
-    # Fingerprints are passed for negative memory awareness in merge planning,
-    # but don't add to positive candidates — they inform the planner that
-    # certain areas are blocked.
 
     # Sort by score descending, return top limit.
     sorted_candidates = sorted(
@@ -507,10 +504,22 @@ def find_merge_neighbors(db: Db, rule_data: dict, limit: int = 10) -> list[dict]
     )
     results = []
     for entry in sorted_candidates[:limit]:
-        candidate_dict = {**entry[0], "archived_fingerprints": [
-            fp_id for fp_id in archived_fingerprint_ids
-            if fp_id == entry[0].get("id")
-        ]}
+        # Attach any fingerprints whose blocked area overlaps this candidate's trigger/action
+        candidate_trigger = (entry[0].get("trigger_canonical") or "").lower()
+        candidate_action = (entry[0].get("action_instruction") or "").lower()
+        related_fps = []
+        for fp in fp_rows:
+            fp_trigger = (fp["blocked_trigger_area"] or "").lower()
+            fp_action = (fp["blocked_action_area"] or "").lower()
+            if (fp_trigger and fp_trigger in candidate_trigger) or \
+               (fp_action and fp_action in candidate_action) or \
+               (candidate_trigger and candidate_trigger in fp_trigger):
+                related_fps.append({
+                    "id": fp["id"],
+                    "strength": fp["archive_strength"],
+                    "blocked_trigger": fp["blocked_trigger_area"],
+                })
+        candidate_dict = {**entry[0], "archived_fingerprints": related_fps}
         results.append(candidate_dict)
     return results
 
