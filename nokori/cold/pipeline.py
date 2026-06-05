@@ -606,6 +606,13 @@ def _call_llm_role(
         mark_job_failed(db, job_id, error_info=error_info)
         raise
 
+    # Only cache if response is parseable JSON — prevents permanently caching
+    # malformed output that blocks all future retries.
+    try:
+        json.loads(response)
+    except (json.JSONDecodeError, TypeError):
+        mark_job_failed(db, job_id, error_info="response not valid JSON")
+        raise ValueError(f"LLM role {role} returned non-JSON response")
     mark_job_complete(db, job_id, response)
     return response
 
