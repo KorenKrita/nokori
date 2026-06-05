@@ -305,9 +305,10 @@ def _find_related_fingerprint(
         "FROM archived_fingerprints "
         "WHERE archive_strength IN ('user','system','replacement')",
     )
-    best = None
-    best_score = 0.0
-    best_strength = None
+    # Collect all matches that pass their per-strength threshold.
+    # Return the strongest match (user > system > replacement).
+    _thresholds = {"user": 0.75, "system": 0.75, "replacement": 0.85}
+    candidates: list[tuple[int, float, dict]] = []
     for row in rows:
         old_tokens = _content_tokens(
             f"{row['blocked_trigger_area']} {row['blocked_action_area']}"
@@ -317,14 +318,16 @@ def _find_related_fingerprint(
         overlap = len(new_tokens & old_tokens) / len(old_tokens)
         containment = len(new_tokens & old_tokens) / len(new_tokens)
         score = max(overlap, containment)
-        if score > best_score:
-            best = row
-            best_score = score
-            best_strength = row["archive_strength"]
-    # Replacement fingerprints require a stricter threshold (0.85) for fuzzy match
-    # to approximate "weaker replacement" detection; user/system use 0.75.
-    threshold = 0.85 if best_strength == "replacement" else 0.75
-    return best if best_score >= threshold else None
+        threshold = _thresholds.get(row["archive_strength"], 0.75)
+        if score >= threshold:
+            priority = _STRENGTH_ORDER.index(row["archive_strength"])
+            candidates.append((priority, score, row))
+
+    if not candidates:
+        return None
+    # Highest priority (user=2 > system=1 > replacement=0), then highest score
+    candidates.sort(key=lambda x: (x[0], x[1]), reverse=True)
+    return candidates[0][2]
 
 
 def _is_narrower_scope(

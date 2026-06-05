@@ -449,7 +449,8 @@ def evaluate_match(
 
     # 4. Evaluate excluded contexts
     excluded_context_hits: list[str] = []
-    excluded_context_overridden = False
+    _has_non_overridden_hit = False
+    _has_any_override = False
     anchor_tokens = matcher.trigger_anchors.anchor_tokens
     anchor_phrases = matcher.trigger_anchors.anchor_phrases
     for ctx in matcher.excluded_contexts:
@@ -468,10 +469,11 @@ def evaluate_match(
             ))
             if override_passed:
                 excluded_context_hits.append(ctx.id)
-                excluded_context_overridden = True
+                _has_any_override = True
                 continue
 
             excluded_context_hits.append(ctx.id)
+            _has_non_overridden_hit = True
 
     # 5. Compute trigger coverage
     trigger_coverage, matched_anchors = _compute_trigger_coverage(
@@ -568,7 +570,7 @@ def evaluate_match(
         strong_variant_hits=tuple(strong_variant_hits),
         weak_variant_hits=tuple(weak_variant_hits),
         excluded_context_hits=tuple(excluded_context_hits),
-        excluded_context_override_passed=excluded_context_overridden,
+        excluded_context_override_passed=_has_any_override and not _has_non_overridden_hit,
         matched_trigger_anchors=matched_anchors,
         action_only_match=action_only_match,
         search_only_match=search_only_match,
