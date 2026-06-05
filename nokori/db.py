@@ -197,7 +197,7 @@ CREATE TABLE IF NOT EXISTS rule_lineage (
 
 CREATE TABLE IF NOT EXISTS archived_fingerprints (
     id TEXT PRIMARY KEY,
-    signature TEXT NOT NULL,
+    signature TEXT NOT NULL UNIQUE,
     scope_summary TEXT,
     blocked_trigger_area TEXT,
     blocked_action_area TEXT,

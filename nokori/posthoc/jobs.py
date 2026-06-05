@@ -91,8 +91,12 @@ def mark_posthoc_job_complete(
             "UPDATE posthoc_jobs SET status = 'done', updated_at = ? WHERE id = ?",
             (now, job_id),
         )
-
-    mark_posthoc_label(db, fire_event_id, label, reason_code, score)
+        tx.execute(
+            "UPDATE rule_fire_events "
+            "SET posthoc_label = ?, posthoc_reason_code = ?, posthoc_score = ? "
+            "WHERE id = ?",
+            (label, reason_code, score, fire_event_id),
+        )
 
 
 def mark_posthoc_job_failed(db: Db, job_id: str) -> None:

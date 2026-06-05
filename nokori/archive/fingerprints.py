@@ -64,7 +64,7 @@ def create_archived_fingerprint(
 
     with db.transaction() as tx:
         tx.execute(
-            "INSERT INTO archived_fingerprints "
+            "INSERT OR IGNORE INTO archived_fingerprints "
             "(id, signature, scope_summary, blocked_trigger_area, blocked_action_area, "
             "archive_strength, can_be_overridden_by_changed_scope, rule_id, created_at) "
             "VALUES (?,?,?,?,?,?,?,?,?)",
@@ -80,6 +80,19 @@ def create_archived_fingerprint(
                 now,
             ),
         )
+        if tx.execute("SELECT changes()").fetchone()[0] == 0:
+            existing = tx.execute(
+                "SELECT id, archive_strength FROM archived_fingerprints WHERE signature = ?",
+                (signature,),
+            ).fetchone()
+            if existing:
+                if _STRENGTH_ORDER.index(strength) > _STRENGTH_ORDER.index(existing["archive_strength"]):
+                    tx.execute(
+                        "UPDATE archived_fingerprints SET archive_strength = ?, "
+                        "can_be_overridden_by_changed_scope = ?, created_at = ? WHERE id = ?",
+                        (strength, can_be_overridden, now, existing["id"]),
+                    )
+                return existing["id"]
     return fp_id
 
 
@@ -103,27 +116,11 @@ def create_archived_fingerprint_from_data(
     fp_id = str(uuid.uuid4())
     now = _now_iso()
 
-    # Upsert: update strength if existing fingerprint is weaker
-    existing = db.fetchone(
-        "SELECT id, archive_strength FROM archived_fingerprints WHERE signature = ?",
-        (signature,),
-    )
-    if existing:
-        existing_strength = existing["archive_strength"]
-        if _STRENGTH_ORDER.index(strength) > _STRENGTH_ORDER.index(existing_strength):
-            with db.transaction() as tx:
-                tx.execute(
-                    "UPDATE archived_fingerprints SET archive_strength = ?, "
-                    "can_be_overridden_by_changed_scope = ?, created_at = ? "
-                    "WHERE id = ?",
-                    (strength, can_be_overridden, now, existing["id"]),
-                )
-            return existing["id"]
-        return existing["id"]
-
+    # Atomic upsert: INSERT OR IGNORE + conditional UPDATE in one transaction.
+    # Prevents TOCTOU race under concurrent calls with the same signature.
     with db.transaction() as tx:
         tx.execute(
-            "INSERT INTO archived_fingerprints "
+            "INSERT OR IGNORE INTO archived_fingerprints "
             "(id, signature, scope_summary, blocked_trigger_area, blocked_action_area, "
             "archive_strength, can_be_overridden_by_changed_scope, rule_id, created_at) "
             "VALUES (?,?,?,?,?,?,?,?,?)",
@@ -133,6 +130,22 @@ def create_archived_fingerprint_from_data(
                 strength, can_be_overridden, rule_id, now,
             ),
         )
+        if tx.execute("SELECT changes()").fetchone()[0] == 0:
+            # Row already exists — upgrade strength if new is stronger
+            existing = tx.execute(
+                "SELECT id, archive_strength FROM archived_fingerprints WHERE signature = ?",
+                (signature,),
+            ).fetchone()
+            if existing:
+                existing_strength = existing["archive_strength"]
+                if _STRENGTH_ORDER.index(strength) > _STRENGTH_ORDER.index(existing_strength):
+                    tx.execute(
+                        "UPDATE archived_fingerprints SET archive_strength = ?, "
+                        "can_be_overridden_by_changed_scope = ?, created_at = ? "
+                        "WHERE id = ?",
+                        (strength, can_be_overridden, now, existing["id"]),
+                    )
+                return existing["id"]
     return fp_id
 
 

@@ -465,12 +465,12 @@ def _run_cold_pipeline_inner(
                         _now_revert = datetime.now(timezone.utc).isoformat(timespec="seconds")
                         _revert_sets = []
                         _revert_params: list = []
-                        if _merge_changed_variants and _pre_variants is not None:
+                        if _merge_changed_variants:
                             _revert_sets.append("trigger_variants = ?")
-                            _revert_params.append(_pre_variants if isinstance(_pre_variants, str) else dumps_json(_pre_variants))
-                        if _merge_changed_excluded and _pre_excluded is not None:
+                            _revert_params.append(_pre_variants if isinstance(_pre_variants, str) else dumps_json(_pre_variants) if _pre_variants is not None else None)
+                        if _merge_changed_excluded:
                             _revert_sets.append("excluded_contexts = ?")
-                            _revert_params.append(_pre_excluded if isinstance(_pre_excluded, str) else dumps_json(_pre_excluded))
+                            _revert_params.append(_pre_excluded if isinstance(_pre_excluded, str) else dumps_json(_pre_excluded) if _pre_excluded is not None else None)
                         if _revert_sets:
                             _revert_sets.append("rule_version = rule_version + 1")
                             _revert_sets.append("updated_at = ?")
@@ -1344,7 +1344,7 @@ def _generate_eval_cases(
     system_prompt = (
         "You are a synthetic evaluation case generator for an autonomous rule memory system. "
         "Produce diverse, tricky test cases. Near-miss cases must be genuinely hard to distinguish. "
-        "Output strict JSON array of cases."
+        'Output strict JSON object: {"cases": [...]}'
     )
 
     try:
@@ -1363,10 +1363,11 @@ def _generate_eval_cases(
             ),
         )
         cases = json.loads(response)
-        validate_role_output("synthetic_eval_generator", response)
+        # Accept both array and {cases:[...]} formats for robustness
         if isinstance(cases, list):
             return cases
         if isinstance(cases, dict) and "cases" in cases:
+            validate_role_output("synthetic_eval_generator", response)
             return cases["cases"]
         raise ValueError("synthetic_eval_generator returned no cases")
     except CircuitBreakerOpenError:
