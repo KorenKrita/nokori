@@ -134,8 +134,14 @@ def _has_distinct_domain(candidate: ScoredResult, selected: list[ScoredResult]) 
                                        if isinstance(s.rule.required_concept_groups, str)
                                        else (s.rule.required_concept_groups or []))
         )
-        # Both domain AND concept groups must differ for distinctness
+        # When both have empty domains AND empty groups, they are trivially "equal"
+        # but may be genuinely unrelated rules — use trigger token overlap as tiebreak.
         if candidate_domains == s_domains and candidate_groups == s_groups:
+            if not candidate_domains and not candidate_groups:
+                # Fallback: low trigger token overlap = distinct
+                overlap = _jaccard(candidate.matched_trigger_tokens, s.matched_trigger_tokens)
+                if overlap < 0.3:
+                    continue  # Distinct enough
             return False
     return True
 

@@ -110,6 +110,44 @@ def _has_tool_evidence(rule, payload: dict) -> bool:
     return len(hits) >= max(1, len(tokens) // 2)
 
 
+def _tool_input_exclusion_fires(rule, payload: dict, db) -> bool:
+    """Check if any tool_input_only excluded_context fires against tool input.
+
+    At gate-marker creation time, tool_input_only exclusions cannot fire (no tool_input yet).
+    Re-evaluate them now that tool_input is available.
+    """
+    tool_input = payload.get("tool_input") or payload.get("input")
+    if not tool_input:
+        return False
+
+    rule_id = getattr(rule, "rule_id", None) or getattr(rule, "short_id", None)
+    if not rule_id or db is None:
+        return False
+
+    from ..db import loads_json
+    row = db.fetchone(
+        "SELECT excluded_contexts FROM rules WHERE id = ? OR short_id = ?",
+        (rule_id, rule_id),
+    )
+    if row is None or not row["excluded_contexts"]:
+        return False
+
+    excluded_contexts = loads_json(row["excluded_contexts"], [])
+    if isinstance(tool_input, str):
+        haystack = tool_input.lower()
+    else:
+        haystack = json.dumps(tool_input, ensure_ascii=False).lower()
+
+    for ctx in excluded_contexts:
+        if ctx.get("scope") != "tool_input_only":
+            continue
+        patterns = ctx.get("patterns", [])
+        for pattern in patterns:
+            if pattern.lower() in haystack:
+                return True
+    return False
+
+
 def _run_gate(payload: dict, cfg: Config, session_id: str, host) -> dict:
     tool_name = payload.get("tool_name") or payload.get("tool")
     gate_matcher = effective_gate_matcher(cfg.gate_matcher, host)
@@ -186,11 +224,12 @@ def _run_gate(payload: dict, cfg: Config, session_id: str, host) -> dict:
             return {}
 
         # Filter to only gate-eligible rules whose prompt evidence still matches
-        # inspectable tool input. If input is unrelated, keep marker for a later
-        # tool call in this turn instead of consuming it.
+        # inspectable tool input AND whose tool_input_only exclusions don't fire.
         gate_rules = [
             r for r in marker.rules
-            if _is_gate_eligible_rule(r, db) and _has_tool_evidence(r, payload)
+            if _is_gate_eligible_rule(r, db)
+            and _has_tool_evidence(r, payload)
+            and not _tool_input_exclusion_fires(r, payload, db)
         ]
         if not gate_rules:
             return {}
