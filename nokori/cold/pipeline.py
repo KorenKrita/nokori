@@ -683,8 +683,13 @@ def _run_admission_judge(
         "You are an admission judge for an autonomous rule memory system. "
         "Evaluate whether this candidate rule deserves lifecycle entry. "
         "Reject broad, unsupported, or untestable rules. "
-        "You must cite evidence for any positive decision. "
-        "Output strict JSON matching the admission_judge schema."
+        "You must cite evidence for any positive decision.\n\n"
+        "Output strict JSON:\n"
+        '{"scores":{"overall_quality":0.0-1.0,"evidence_support":0.0-1.0,'
+        '"trigger_specificity":0.0-1.0,"action_clarity":0.0-1.0,'
+        '"scope_control":0.0-1.0,"generalization_safety":0.0-1.0,'
+        '"retrieval_readiness":0.0-1.0},'
+        '"decision":"accept|revise|reject","reasoning":"..."}'
     )
 
     candidate_text = _prompt_text(json.dumps(candidate, ensure_ascii=False, indent=2))
@@ -764,8 +769,12 @@ def _run_rewriter(
     system_prompt = (
         "You are a rule rewriter for an autonomous memory system. "
         "Narrow and structure the candidate without inventing facts or broadening beyond evidence. "
-        "Separate trigger, action, variants, search_terms, required_concepts, and excluded_contexts. "
-        "Output strict JSON matching the rule_rewriter schema."
+        "Separate trigger, action, variants, search_terms, required_concepts, and excluded_contexts.\n\n"
+        "Output strict JSON:\n"
+        '{"trigger_canonical":"...","required_concept_groups":[{"concepts":["term"],"match":"all|any"}],'
+        '"excluded_contexts":[{"pattern":"...","scope":"trigger|action"}],'
+        '"action_instruction":"...","severity":"reminder|high_risk|gate_eligible",'
+        '"scope":{"domain_tags":[],"path_patterns":[],"tool_tags":[]},"rewrite_rationale":"..."}'
     )
 
     candidate_text = _prompt_text(json.dumps(candidate, ensure_ascii=False, indent=2))
@@ -813,8 +822,10 @@ def _run_final_judge(
         "You are the final judge for an autonomous rule memory system. "
         "Verify the structured rule against original evidence. "
         "Do not let rewriter polish hide weak evidence. "
-        "You must cite evidence for any accept decision. "
-        "Output strict JSON matching the final_judge schema."
+        "You must cite evidence for any accept decision.\n\n"
+        "Output strict JSON:\n"
+        '{"decision":"accept_active|accept_candidate|reject",'
+        '"reasoning":"...","evidence_citations":["quote1","quote2"]}'
     )
 
     rule_text = _prompt_text(json.dumps(rule_data, ensure_ascii=False, indent=2))
@@ -873,8 +884,14 @@ def _run_merge_planner(
     system_prompt = (
         "You are a merge planner for an autonomous rule memory system. "
         "Determine the relationship between a new rule and existing rules. "
-        "Do not replace trusted rules with plausible but weaker text. "
-        "Output strict JSON matching the merge_planner schema."
+        "Do not replace trusted rules with plausible but weaker text.\n\n"
+        "Output strict JSON:\n"
+        '{"relation_shape":"equivalent|new_broader|new_narrower|overlap|complementary|contradiction|obsolete|unrelated|split_required",'
+        '"new_rule_safety":"safe|unsafe|uncertain",'
+        '"operation_safety":"safe|unsafe|uncertain",'
+        '"quality_winner":"new|existing|both|neither",'
+        '"operation":"merge_into_existing|update_existing_fields|replace_existing|keep_both|reject_new|suppress_existing|archive_existing|split_required",'
+        '"confidence":0.0-1.0,"reason":"...","target_rule_ids":["id1"]}'
     )
 
     rule_text = _prompt_text(json.dumps(rule_data, ensure_ascii=False, indent=2))
