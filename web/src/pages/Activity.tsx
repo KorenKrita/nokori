@@ -3,7 +3,11 @@ import { motion } from 'motion/react'
 import { FilterPill } from '@/components/FilterPill'
 import { GlassCard } from '@/components/GlassCard'
 import { TimelineGroup, groupEvents } from '@/components/TimelineGroup'
+import { OverviewTab } from '@/components/dashboard/OverviewTab'
+import { ErrorsTab } from '@/components/dashboard/ErrorsTab'
+import { TimeRangePicker, hoursToISO } from '@/components/dashboard/TimeRangePicker'
 import { usePolling } from '@/hooks/usePolling'
+import { useApi } from '@/hooks/useApi'
 import { fetchApi } from '@/lib/api'
 import { t } from '@/lib/i18n'
 import type { TimelineEvent, TimelineSession } from '@/lib/types'
@@ -22,9 +26,12 @@ const EVENT_SOURCES = [
 ]
 
 type Tab = 'timeline' | 'dashboard'
+type DashboardSubTab = 'overview' | 'errors'
 
 export function Activity() {
   const [activeTab, setActiveTab] = useState<Tab>('timeline')
+  const [dashSubTab, setDashSubTab] = useState<DashboardSubTab>('overview')
+  const [timeRangeHours, setTimeRangeHours] = useState(168)
   const [sessionFilter, setSessionFilter] = useState('')
   const [sourceFilter, setSourceFilter] = useState('')
   const [autoScroll, setAutoScroll] = useState(true)
@@ -182,12 +189,78 @@ export function Activity() {
           </GlassCard>
         </>
       ) : (
-        <GlassCard>
-          <div className="text-center text-text-tertiary py-12 text-sm">
-            Nokori Dashboard — coming in Part 7
-          </div>
-        </GlassCard>
+        <DashboardContent
+          subTab={dashSubTab}
+          setSubTab={setDashSubTab}
+          timeRangeHours={timeRangeHours}
+          setTimeRangeHours={setTimeRangeHours}
+          sessionFilter={sessionFilter}
+        />
       )}
     </motion.div>
+  )
+}
+
+function DashboardContent({
+  subTab,
+  setSubTab,
+  timeRangeHours,
+  setTimeRangeHours,
+  sessionFilter,
+}: {
+  subTab: DashboardSubTab
+  setSubTab: (t: DashboardSubTab) => void
+  timeRangeHours: number
+  setTimeRangeHours: (h: number) => void
+  sessionFilter: string
+}) {
+  const since = hoursToISO(timeRangeHours)
+  const params: Record<string, string> = { since }
+  if (sessionFilter) params.session_id = sessionFilter
+
+  const { data: overviewData } = useApi<{
+    total_events: number
+    total_errors: number
+    events_by_source: { source: string; count: number }[]
+    events_by_outcome: { outcome: string; count: number }[]
+    error_summary: { role: string; count: number }[]
+    pipeline_funnel: Record<string, number>
+  }>('/monitor/overview', params)
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-4">
+        <TimeRangePicker value={timeRangeHours} onChange={setTimeRangeHours} />
+      </div>
+
+      <div className="flex gap-2 border-b border-[var(--color-border-subtle)] pb-0">
+        <button
+          onClick={() => setSubTab('overview')}
+          className={`px-3 py-1.5 text-xs font-medium border-b-2 transition-colors ${
+            subTab === 'overview'
+              ? 'border-accent-sky text-[var(--color-text)]'
+              : 'border-transparent text-text-secondary hover:text-[var(--color-text)]'
+          }`}
+        >
+          Overview
+        </button>
+        <button
+          onClick={() => setSubTab('errors')}
+          className={`px-3 py-1.5 text-xs font-medium border-b-2 transition-colors ${
+            subTab === 'errors'
+              ? 'border-accent-sky text-[var(--color-text)]'
+              : 'border-transparent text-text-secondary hover:text-[var(--color-text)]'
+          }`}
+        >
+          Errors
+        </button>
+      </div>
+
+      {subTab === 'overview' ? (
+        <OverviewTab data={overviewData} />
+      ) : (
+        <ErrorsTab since={since} />
+      )}
+    </div>
   )
 }
