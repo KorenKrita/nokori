@@ -717,6 +717,8 @@ nokori web --no-browser       # サーバーのみ起動
 | **ダッシュボード** | ルール状態別カウント、24hインジェクション統計、Embedサーバー制御（起動/停止）、Gate状態、抽出ジョブ、プロモーション進捗 |
 | **ルール** | フィルタ付きリスト、詳細ページ（trigger、action、evidence log、lifecycle evidence、replacement lineage）、編集、アーカイブ |
 | **検索シミュレーション** | プロンプトを入力してルールヒットを確認：BM25 + embedding スコア、HOT/WARM 階層、マッチトークン、シャドウプール |
+| **アクティビティ — タイムライン** | 全システムイベントストリーム：各 hook 呼出し、コールドパイプライン判定、CLI 操作。二層折りたたみ（session＋タイプグループ → 個別イベント要約 → 詳細）。カラーラベル、結果バッジ、session/タイプフィルタ、5s ポーリング、自動スクロール |
+| **アクティビティ — Nokori Dashboard** | 運用チャート：イベントソース棒グラフ、コールドパイプライン変換ファネル、エラー円グラフ、エラー傾向折れ線、モデル/ロール別エラーランキング。時間範囲プリセット（1h–30d）、session フィルタ |
 | **インジェクション履歴** | ルールインジェクションのタイムライン：ルールID、レベル、セッション、タイムスタンプ。レベル/セッションでフィルタ可 |
 | **抽出パイプライン** | 保留中/完了ジョブ、各トランスクリプトの抽出状態（オフセット、mtime） |
 | **ライフサイクル** | プロモーション進捗バー（shadowヒット元プロジェクト数 → グローバル閾値）、メンテナンスジョブ実行履歴 |
@@ -760,6 +762,10 @@ nokori test "<prompt>" [--project <id>]
 nokori status          # ルール状態、hook/config、embed、履歴 promotion 進捗
 nokori logs
 nokori health
+
+# オブザーバビリティ（AI フレンドリー）
+nokori report [--since <ISO>] [--session <id>] [--json]   # システム状態レポート
+nokori stream [--since <ISO>] [--session <id>] [--type <source>] [--verbose] [--follow]
 
 # メンテナンス
 nokori maintain

@@ -750,6 +750,8 @@ nokori web --no-browser       # start server only, don't auto-open
 | **Dashboard** | Rule counts by status, injection stats (24h), embed server status with start/stop control, gate state, extract pending jobs, lifecycle evidence |
 | **Rules** | Full CRUD: filter by status/type, view details (trigger, action, evidence log, lifecycle evidence, replacement lineage), edit fields, dismiss |
 | **Retrieve** | Enter a prompt, see exactly which rules fire: BM25 + embedding scores, HOT/WARM tier, matched tokens, shadow pool results. Embedding toggle on/off |
+| **Activity — Timeline** | Full event stream: every hook call, cold-pipeline decision, CLI operation. Two-layer collapse (session+type grouped → individual events → details). Color-coded source labels, outcome badges, session/type filters, 5s polling, auto-scroll |
+| **Activity — Nokori Dashboard** | Operational charts: events-by-source bar chart, cold-pipeline conversion funnel, error pie chart, error trend line chart, model/role error ranking. Time range presets (1h–30d), session filter |
 | **Injections** | Timeline of every rule injection: rule, level (HOT/WARM), session, timestamp. Filter by level or session |
 | **Extract** | Pending/done jobs, extract state per transcript (byte offset, mtime) |
 | **Lifecycle** | Evidence progress for candidate → active, active → trusted, and suppressed recovery; maintenance job last-run times |
@@ -803,6 +805,10 @@ nokori test "<prompt>" [--project <id>]
 nokori status          # Rule status, hook/config, embed, and lifecycle evidence
 nokori logs
 nokori health
+
+# Observability (AI-friendly)
+nokori report [--since <ISO>] [--session <id>] [--json]   # system status report
+nokori stream [--since <ISO>] [--session <id>] [--type <source>] [--verbose] [--follow]
 
 # Maintenance
 nokori maintain

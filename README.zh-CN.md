@@ -748,6 +748,8 @@ nokori web --no-browser       # 仅启动服务器
 | **仪表盘** | 规则各状态计数、24h 注入统计、Embed 服务控制（启动/停止）、Gate 状态、待处理提取任务、生命周期证据 |
 | **规则** | 筛选列表、详情页（trigger（触发条件）、action（执行动作）、evidence log（证据日志）、lifecycle evidence（生命周期证据）、replacement lineage（替换谱系））、编辑、退役 |
 | **检索模拟** | 输入 prompt 查看命中规则：BM25 + embedding 分数、HOT/WARM 分层、匹配 token、影子池 |
+| **活动 — 时间线** | 全系统事件流：每次 hook 调用、冷管道决策、CLI 操作。两层折叠（session+类型分组 → 单事件摘要 → 详情）。彩色类型标签、结果徽章、session/类型筛选、5s 轮询、自动滚动 |
+| **活动 — Nokori Dashboard** | 运营图表：事件来源柱状图、冷管道转化漏斗、错误饼图、错误趋势折线图、模型/角色错误排行。时间范围预设（1h–30d）、session 筛选 |
 | **注入历史** | 每次规则注入的时间线：规则 ID、级别、会话、时间戳，可按级别/会话筛选 |
 | **提取管道** | 待处理/已完成任务、每个转录文件的提取状态（偏移量、mtime） |
 | **生命周期** | candidate → active、active → trusted、suppressed recovery 的证据进度，以及维护任务执行记录 |
@@ -794,6 +796,10 @@ nokori test "<prompt>" [--project <id>]
 nokori status          # 规则状态、hook/config、embed 与生命周期证据
 nokori logs
 nokori health
+
+# 可观测性（AI 友好）
+nokori report [--since <ISO>] [--session <id>] [--json]   # 系统状态报告
+nokori stream [--since <ISO>] [--session <id>] [--type <source>] [--verbose] [--follow]
 
 # 维护
 nokori maintain
