@@ -11,6 +11,7 @@ from ..db import (
     find_rule_id_injected_since,
     open_db,
 )
+from ..events.observability import write_event
 from ..gate import marker as marker_io
 from ..gate import prompt_ack
 from ..gate.blocker import select_gate_rules
@@ -109,7 +110,7 @@ def handle(payload: dict, cfg: Config, *, host: Host) -> dict:
 
     db = open_db(cfg.db_path)
     try:
-        _run_dismiss(db, prompt, session_id, cfg)
+        dismissed = _run_dismiss(db, prompt, session_id, cfg)
 
         try:
             outcome = inject_for_prompt(
@@ -124,11 +125,23 @@ def handle(payload: dict, cfg: Config, *, host: Host) -> dict:
             log.warning("retrieve failed (%s); continuing without rules", e)
             if cfg.gate_enabled:
                 marker_io.delete_session(cfg, session_id)
+            write_event(
+                db, source="user_prompt_submit", session_id=session_id,
+                outcome="retrieve_failed",
+                prompt_snippet=prompt[:200] if prompt else None,
+                details={"error": str(e), "dismissed_count": dismissed},
+            )
             return {"continue": True}
 
         if outcome is None:
             if cfg.gate_enabled:
                 marker_io.delete_session(cfg, session_id)
+            write_event(
+                db, source="user_prompt_submit", session_id=session_id,
+                outcome="no_rules",
+                prompt_snippet=prompt[:200] if prompt else None,
+                details={"dismissed_count": dismissed},
+            )
             return {"continue": True}
 
         hot, warm = outcome.hot, outcome.warm
@@ -140,8 +153,16 @@ def handle(payload: dict, cfg: Config, *, host: Host) -> dict:
         if not hot and not warm:
             if cfg.gate_enabled:
                 marker_io.delete_session(cfg, session_id)
+            write_event(
+                db, source="user_prompt_submit", session_id=session_id,
+                outcome="no_matches",
+                prompt_snippet=prompt[:200] if prompt else None,
+                details={"dismissed_count": dismissed},
+            )
             return {"continue": True}
 
+        gate_marker_written = False
+        gate_rule_ids = []
         if text:
             injected_hot_ids = {
                 rid for rid, level in rendered_entries if level == "hot"
@@ -150,11 +171,41 @@ def handle(payload: dict, cfg: Config, *, host: Host) -> dict:
             _update_gate_marker(
                 cfg, session_id, normalized_prompt or prompt, gate_hot, ph,
             )
+            if cfg.gate_enabled:
+                gate_candidates = select_gate_rules(gate_hot)
+                if gate_candidates:
+                    gate_marker_written = True
+                    gate_rule_ids = [r.rule.short_id for r in gate_candidates]
         elif cfg.gate_enabled:
             marker_io.delete_session(cfg, session_id)
 
         if ph_for_ack:
             prompt_ack.record(cfg, session_id, ph_for_ack)
+
+        hot_count = len(hot)
+        warm_count = len(warm)
+        write_event(
+            db, source="user_prompt_submit", session_id=session_id,
+            outcome="injected",
+            prompt_snippet=prompt[:200] if prompt else None,
+            details={
+                "hot_count": hot_count,
+                "warm_count": warm_count,
+                "shadow_hot_count": len(shadow_hot),
+                "shadow_warm_count": len(shadow_warm),
+                "hot_rules": [
+                    {"short_id": r.rule.short_id, "rrf_score": round(r.rrf_score, 4)}
+                    for r in hot
+                ],
+                "warm_rules": [
+                    {"short_id": r.rule.short_id, "rrf_score": round(r.rrf_score, 4)}
+                    for r in warm
+                ],
+                "gate_marker_written": gate_marker_written,
+                "gate_rule_ids": gate_rule_ids,
+                "dismissed_count": dismissed,
+            },
+        )
 
         log.info(
             "injected hot=%d warm=%d shadow_hot=%d shadow_warm=%d session=%s",

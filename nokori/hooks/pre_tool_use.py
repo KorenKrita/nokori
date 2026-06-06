@@ -6,6 +6,7 @@ import re
 from ..config import Config
 from ..db import open_db
 from ..errors import DbError
+from ..events.observability import write_event
 from ..gate import marker as marker_io
 from ..gate.blocker import format_block_reason, format_cursor_user_notice
 from ..policy import RUNTIME_POLICY_VERSION
@@ -158,7 +159,8 @@ def _tool_input_exclusion_fires(rule, payload: dict, excluded_contexts: list | N
     return False
 
 
-def _run_gate(payload: dict, cfg: Config, session_id: str, host) -> dict:
+def _run_gate(payload: dict, cfg: Config, session_id: str, host) -> tuple[dict, str, list[str]]:
+    """Run gate logic. Returns (response_dict, outcome_reason, blocked_short_ids) for observability."""
     tool_name = payload.get("tool_name") or payload.get("tool")
     gate_matcher = effective_gate_matcher(cfg.gate_matcher, host)
 
@@ -169,7 +171,7 @@ def _run_gate(payload: dict, cfg: Config, session_id: str, host) -> dict:
             tool_name or "-",
             host.value,
         )
-        return {}
+        return {}, "passed_gate_disabled", []
 
     matched = _tool_matches_gate(tool_name, gate_matcher)
     log_diag(
@@ -183,7 +185,7 @@ def _run_gate(payload: dict, cfg: Config, session_id: str, host) -> dict:
         cfg.gate_matcher,
     )
     if not matched:
-        return {}
+        return {}, "passed_tool_not_matched", []
 
     on_disk = marker_io.read_latest_marker(cfg, session_id)
     current_ph: str | None = None
@@ -195,7 +197,7 @@ def _run_gate(payload: dict, cfg: Config, session_id: str, host) -> dict:
         db = open_db(cfg.db_path)
     except DbError as e:
         log.warning("gate db open failed, fail-open session=%s: %s", session_id, e)
-        return {}
+        return {}, "passed_db_open_failed", []
     try:
         if not current_ph:
             if on_disk and on_disk.rules:
@@ -211,7 +213,7 @@ def _run_gate(payload: dict, cfg: Config, session_id: str, host) -> dict:
             )
         if not current_ph:
             marker_io.delete_session(cfg, session_id)
-            return {}
+            return {}, "passed_no_prompt_hash", []
 
         if on_disk and on_disk.prompt_hash == current_ph:
             marker = on_disk
@@ -219,19 +221,19 @@ def _run_gate(payload: dict, cfg: Config, session_id: str, host) -> dict:
             marker = marker_io.read(cfg, session_id, prompt_hash_value=current_ph)
         if marker is None:
             marker_io.prune_stale_markers(cfg, session_id, current_ph)
-            return {}
+            return {}, "passed_no_marker", []
 
         if marker_io.is_expired(marker, cfg.gate_ttl_seconds):
             marker_io.delete(cfg, session_id, prompt_hash_value=current_ph)
-            return {}
+            return {}, "passed_marker_expired", []
 
         if not marker.rules:
             marker_io.delete(cfg, session_id, prompt_hash_value=current_ph)
-            return {}
+            return {}, "passed_empty_marker", []
 
         if not marker_io.prompt_hash_matches(marker, current_ph, session_id=session_id):
             marker_io.delete(cfg, session_id, prompt_hash_value=current_ph)
-            return {}
+            return {}, "passed_hash_mismatch", []
 
         # Filter to only gate-eligible rules whose prompt evidence still matches
         # inspectable tool input AND whose tool_input_only exclusions don't fire.
@@ -246,7 +248,7 @@ def _run_gate(payload: dict, cfg: Config, session_id: str, host) -> dict:
                 continue
             gate_rules.append(r)
         if not gate_rules:
-            return {}
+            return {}, "passed_no_eligible_rules", []
     finally:
         db.close()
 
@@ -267,8 +269,29 @@ def _run_gate(payload: dict, cfg: Config, session_id: str, host) -> dict:
         )
         return pre_tool_deny_response(
             host, reason, user_message=user_note, agent_message=reason,
+        ), "blocked", short_ids
+    return pre_tool_deny_response(host, reason), "blocked", short_ids
+
+
+def _write_pre_tool_event(cfg: Config, session_id: str, payload: dict, outcome: str, blocked_by: list[str] | None = None) -> None:
+    """Write pre_tool_use observability event. Opens its own DB connection (fail-open)."""
+    tool_name = payload.get("tool_name") or payload.get("tool")
+    details: dict = {"tool_name": tool_name}
+    if blocked_by:
+        details["blocked_by"] = blocked_by
+    try:
+        db = open_db(cfg.db_path)
+    except Exception as e:
+        log.warning("pre_tool_use observability db open failed: %s", e)
+        return
+    try:
+        write_event(
+            db, source="pre_tool_use", session_id=session_id,
+            outcome=outcome,
+            details=details,
         )
-    return pre_tool_deny_response(host, reason)
+    finally:
+        db.close()
 
 
 def handle(payload: dict, cfg: Config, *, host: Host) -> dict:
@@ -279,6 +302,9 @@ def handle(payload: dict, cfg: Config, *, host: Host) -> dict:
         payload, cfg, session_id, tool_name, host
     )
     if deferred is not None:
+        _write_pre_tool_event(cfg, session_id, payload, "deferred")
         return deferred
 
-    return _run_gate(payload, cfg, session_id, host)
+    response, outcome, blocked_ids = _run_gate(payload, cfg, session_id, host)
+    _write_pre_tool_event(cfg, session_id, payload, outcome, blocked_by=blocked_ids or None)
+    return response
