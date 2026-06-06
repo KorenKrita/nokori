@@ -54,7 +54,7 @@ Nokori 的核心是 autonomous quality flywheel（自治质量飞轮）：每条
 - **Structured triggers（结构化触发器）**：concepts（概念）、required concept groups（必需概念组）、trigger variants（触发变体）、excluded contexts（排除上下文）、tool tags（工具标签）、severity（严重度）、source origin（来源）、runtime policy version（运行时策略版本）与 lineage metadata（谱系元数据），而不是几段松散文本。
 - **Autonomous lifecycle（自治生命周期）**：`candidate → active → trusted`，也支持 `suppressed` 恢复和终态 `archived`。手动命令可以 archive（归档），但不能伪造 trust（信任）。
 - **Conservative Gate（保守门闸）**：Gate 是给 `trusted + gate_eligible` 规则的一次性提醒刹车，不是权限系统。
-- **Hybrid retrieval（混合检索）**：BM25 永远可用；可选 remote embedding（远程向量）或本地 Granite multilingual model 补语义召回；RRF 与 v6 applicability（适用性判断）决定 HOT/WARM。
+- **Hybrid retrieval（混合检索）**：BM25 永远可用；可选 remote embedding（远程向量）或本地 Granite multilingual model 补语义召回；RRF 与 runtime applicability（适用性判断）决定 HOT/WARM。
 - **本地优先**：SQLite、hook 日志、job 队列、Gate marker、embedding 权重、Web UI 状态都在 `~/.nokori/` 下。远程 LLM / embedding 端点按需启用。
 - **跨工具可观测**：Claude Code 与 Cursor 都支持；`nokori test`、`status`、`health`、`logs`、`extract`、`maintain` 与 Web UI 能解释规则为什么触发、为什么没触发。
 
@@ -86,7 +86,7 @@ Nokori 最重要的承诺是 restraint（克制）：它可以早早 reminder（
 | **lifecycle transition**（生命周期迁移） | 自治流转：candidate → active、active → trusted，或 suppressed 恢复 |
 | **promotion**（晋升） | shadow lifecycle evidence（影子池生命周期证据），用于 candidate 和 suppressed 规则；不是绕过 trust（信任）的捷径 |
 | **project / global scope**（项目 / 全局作用域） | 规则可在哪些项目生效；scope（作用域）永远不能绕过生命周期信任 |
-| **candidate / active / trusted / suppressed / archived** | v6 生命周期：候选、可注入、已信任、影子恢复、终态归档 |
+| **candidate / active / trusted / suppressed / archived** | 生命周期状态：候选、可注入、已信任、影子恢复、终态归档 |
 | **lineage / replacement** | 替换历史存在 lineage（谱系）/ tombstone（墓碑记录）里，不作为用户需要管理的生命周期状态 |
 | **OpenAI-compatible** | API 地址填 `.../v1` 就能接 Ollama、LM Studio、OpenRouter 等 |
 
@@ -285,7 +285,7 @@ nokori add \
   --terms-zh "强推,覆盖代码"
 ```
 
-手动添加会写入一条结构化 v6 `candidate`。这是有意为之：它给飞轮一个可评估的候选，但不会绕过信任门槛，也不会立刻注入或 Gate。不传 `--project-id` 时，候选是 `project_scope=global`；传了则是 `project_scope=project` 并绑定该项目。
+手动添加会写入一条结构化 `candidate`。这是有意为之：它给飞轮一个可评估的候选，但不会绕过信任门槛，也不会立刻注入或 Gate。不传 `--project-id` 时，候选是 `project_scope=global`；传了则是 `project_scope=project` 并绑定该项目。
 
 ### 2. 验证影子命中
 
@@ -491,7 +491,7 @@ nokori extract
 
 1. **读** transcript，单文件上限 50MB，超了直接报错
 2. **压缩**：用户消息原样保留，AI 回复砍成头 200 字 + 尾 100 字；整体再压到约 30k token 以内，还超就对全文（含用户消息）做中段省略
-3. **提取**：extractor 角色输出结构化 v6 候选，包含 concepts、required concept groups、variants、excluded contexts、evidence quotes 与来源信息
+3. **提取**：extractor 角色输出结构化候选，包含 concepts、required concept groups、variants、excluded contexts、evidence quotes 与来源信息
 4. **判定 / 重写 / 再判定**：admission judge 与 final judge 会拒绝弱证据、过宽范围、不可执行的规则；rule rewriter 可以收窄表达，但不能放宽范围
 5. **合并规划**：merge planner 与邻近规则比较关系，确定性 merge policy 再决定 keep / replace / suppress / archive / reject / split
 6. **验证入库**：归档指纹、matcher 编译、synthetic 正例/负例/对抗评测、cold-fast-lane 阈值一起决定最终存成 `candidate` 还是 `active`
@@ -506,7 +506,7 @@ LLM 给每条候选回一个关系字母 `A`–`E`，对应 SAME / BROADER / NAR
 |------|------|
 | 已有重叠 | merge planner 提出关系 / 安全 / 质量判断，确定性 merge policy 决定 keep_both / merge_into_existing / replace_existing / suppress_existing / archive_existing / reject_new / split_required |
 | 归档指纹冲突 | 等价或更宽的新规则会被拦下，除非有明确 changed-scope 证据允许更窄规则回来 |
-| 不安全或低置信合并 | 保守 keep_both 或 reject_new；trusted 替换必须过更高的 v6 门槛 |
+| 不安全或低置信合并 | 保守 keep_both 或 reject_new；trusted 替换必须过更高的质量门槛 |
 | **NARROWER (C)** | 插入新规则，与已有规则共存；即使同轮还有 **SAME (A)**，这条候选也照插 |
 | **UNRELATED (E)** | 插一条新 `candidate`，独立于邻居 |
 | 无强关系 | 插一条新 `candidate` |
@@ -537,7 +537,7 @@ candidate → active → trusted
 
 | 状态 | 参与提醒？ | 会 Gate？ | 怎么来的 |
 |------|-----------|-----------|----------|
-| `candidate` | 否；只做 shadow / 证据 | 否 | `nokori add` 或冷路径提取创建的结构化 v6 候选 |
+| `candidate` | 否；只做 shadow / 证据 | 否 | `nokori add` 或冷路径提取创建的结构化候选 |
 | `active` | 是；未观察到有用前最多 WARM，有强证据 / 历史后可 HOT | 不会直接 Gate，除非后续升 trusted | 冷路径 fast lane，或 shadow/posthoc 生命周期证据推动 |
 | `trusted` | 是 | 可能，仅 `severity=gate_eligible` 且运行时证据过关 | 观察到实际有用后由自治生命周期授信 |
 | `suppressed` | 否；只做 shadow recovery | 否 | false-positive / harmful 证据导致的自治抑制 |
@@ -545,13 +545,13 @@ candidate → active → trusted
 
 ### 一条规则怎么变 active/trusted
 
-- **手动 `nokori add` 永远创建 `candidate`**，并写入 v6 结构化 trigger concepts/groups。即使 `--confidence high --source-type correction`，也不会绕过生命周期。
+- **手动 `nokori add` 永远创建 `candidate`**，并写入结构化 trigger concepts/groups。即使 `--confidence high --source-type correction`，也不会绕过生命周期。
 - **冷路径生命周期迁移** 要通过 matcher 编译、归档指纹检查、merge policy、synthetic eval 与 cold-fast-lane 阈值。
 - **trusted / gate-capable** 规则需要自治 posthoc / shadow 证据；`nokori edit --status active|trusted|suppressed` 会被刻意拒绝。
 
 ### 运行时证据与 posthoc
 
-热路径会编译 v6 trigger 数据，检查 required concepts / exclusions，应用动态 IDF trigger evidence，记录完整 fire events，并在 SessionEnd 后排 posthoc 评估。没有观察到有用性的 active 规则最多 WARM；trusted `gate_eligible` 规则可以写 gate marker，PreToolUse 会在 block 前重新检查可见工具输入。
+热路径会编译 trigger 数据，检查 required concepts / exclusions，应用动态 IDF trigger evidence，记录完整 fire events，并在 SessionEnd 后排 posthoc 评估。没有观察到有用性的 active 规则最多 WARM；trusted `gate_eligible` 规则可以写 gate marker，PreToolUse 会在 block 前重新检查可见工具输入。
 
 ### Project ID（项目 ID）
 
@@ -612,7 +612,7 @@ SessionStart 要找「上一场 transcript」，两步走：
 
 维护任务挂在 `SessionStart` 上，按各自的间隔到点才跑：
 
-- **生命周期迁移**（每天）：posthoc/shadow 证据按 v6 control law 更新 candidate、active、trusted、suppressed 状态
+- **生命周期迁移**（每天）：posthoc/shadow 证据按生命周期 control law 更新 candidate、active、trusted、suppressed 状态
 - **Candidate 清理**（最多每 30 天跑一次）：删掉 `created_at` 满 **20 个日历天** 的普通 candidate，以及满 **40 天** 的 `anti_pattern` candidate（按日历天算，不是「活 30 天」那套）
 - **Replacement 恢复检查**（最多每 90 天）：若一条 archived replacement 的目标不存在、被 suppressed 或 archived，就把旧规则恢复成 `candidate`
 - **Session 文件清理**：删 `active_sessions/` 里结束超过 60 天的 registry 文件
@@ -721,7 +721,7 @@ nokori embed stop     # 优雅关闭（SIGTERM + IPC shutdown）
 
 | 层级 | 进档条件 | 注入内容 |
 |------|---------|----------|
-| HOT | 通过 v6 applicability 的 `active`/`trusted` 结果且 utility 为正；通常最多 1 条，第二条必须领域 / 概念明显不同且 trigger 证据很强 | trigger + action + rationale |
+| HOT | 通过 runtime applicability 的 `active`/`trusted` 结果且 utility 为正；通常最多 1 条，第二条必须领域 / 概念明显不同且 trigger 证据很强 | trigger + action + rationale |
 | WARM | 通过证据线但 utility、历史或预算不足以 HOT；active 规则未观察到有用前也最多 WARM | trigger + action，一行 |
 | COLD | Candidate/suppressed/archived、action-only/search-only/embedding-only、excluded/near-miss，或 trigger 证据不足 | 不注入 |
 

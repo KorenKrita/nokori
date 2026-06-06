@@ -51,7 +51,7 @@ Nokori 的核心是 autonomous quality flywheel（自治品質飛輪）：每條
 | **Evidence loop（證據回流）** | HOT/WARM injection（注入）會產生 fire events（觸發事件）；candidate/suppressed 命中會產生 shadow events（影子事件）；SessionEnd 排 posthoc jobs（事後任務）；maintenance（維護任務）根據評估後的 evidence（證據）自動升降級。 |
 | **Conservative Gate（保守門閘）** | Gate（門閘）是最終權限，不是預設行為。它要求 `trusted + gate_eligible`、強 prompt evidence（提示證據）、runtime policy（執行時策略）對得上、prompt hash（提示雜湊）新鮮；tool input（工具輸入）可檢查時還要 tool-input evidence（工具輸入證據）。 |
 | **No LLM on hot path（熱路徑不調 LLM）** | `SessionStart`、`UserPromptSubmit`、`PreToolUse` 只做確定性的 retrieval（檢索）、matching（匹配）、scoring（打分）、marker I/O（標記讀寫）與 fail-open（失敗放行）；LLM 工作放到 extract/posthoc（提取/事後）後台任務。 |
-| **Hybrid retrieval（混合檢索）** | BM25 永遠可用；可選 remote embedding（遠端向量）或本地 Granite multilingual model（Granite 多語言模型）補 semantic recall（語義召回）；RRF 融合排名，再由 v6 applicability（適用性判斷）與 MMR 式 selection（選擇器）決定 HOT/WARM。 |
+| **Hybrid retrieval（混合檢索）** | BM25 永遠可用；可選 remote embedding（遠端向量）或本地 Granite multilingual model（Granite 多語言模型）補 semantic recall（語義召回）；RRF 融合排名，再由 runtime applicability（適用性判斷）與 MMR 式 selection（選擇器）決定 HOT/WARM。 |
 | **本地優先** | SQLite、hook 日誌、job 佇列、Gate marker、embedding 權重、Web UI 狀態都在 `~/.nokori/` 下。遠端 LLM / embedding 端點是按需啟用。 |
 | **跨工具支援** | Claude Code 與 Cursor 都支援，包括 Cursor 的 `Shell` 工具名、重複 hook 合併、deferred inject，以及各平台自己的 hook 輸出格式。 |
 | **可觀測性** | `nokori test`、`status`、`health`、`logs`、`extract`、`maintain` 與 Web UI 都能看見規則為什麼觸發、為什麼沒觸發、證據攢到哪一步、目前配置最終解析成什麼。 |
@@ -82,7 +82,7 @@ Nokori 最重要的承諾是 restraint（克制）：它可以早早 reminder（
 | **extract** | 從 transcript 裡用 LLM **提取**候選規則（會話結束後的冷路徑） |
 | **shadow pool**（影子池） | 後台匹配 `candidate` / `suppressed` 規則：只記證據，**不注入到目前對話** |
 | **promotion**（晉升） | 自治生命週期流轉：candidate → active、active → trusted、suppressed 恢復，或跨專案變為 global scope |
-| **candidate / active / trusted / suppressed / archived** | v6 生命週期：候選、可注入、已信任、影子恢復、終態歸檔 |
+| **candidate / active / trusted / suppressed / archived** | 生命週期狀態：候選、可注入、已信任、影子恢復、終態歸檔 |
 | **lineage / replacement** | 替換歷史存在 lineage（譜系）/ tombstone（墓碑記錄）裡，不作為使用者需要管理的生命週期狀態 |
 | **OpenAI-compatible** | API 地址填 `.../v1` 就能接 Ollama、LM Studio、OpenRouter 等 |
 
@@ -467,7 +467,7 @@ nokori extract
 
 1. **讀** transcript，單檔案上限 50MB，超了直接報錯
 2. **壓縮**：使用者消息原樣保留，AI 回覆砍成頭 200 字 + 尾 100 字；整體再壓到約 30k token 以內，還超就對全文（含使用者消息）做中段省略
-3. **提取**：extractor 角色輸出結構化 v6 候選，包含 concepts、required concept groups、variants、excluded contexts、evidence quotes 與來源資訊
+3. **提取**：extractor 角色輸出結構化候選，包含 concepts、required concept groups、variants、excluded contexts、evidence quotes 與來源資訊
 4. **判定 / 重寫 / 再判定**：admission judge 與 final judge 會拒絕弱證據、過寬範圍、不可執行的規則；rule rewriter 可以收窄表達，但不能放寬範圍
 5. **合併規劃**：merge planner 與鄰近規則比較關係，確定性 merge policy 再決定 keep / replace / suppress / archive / reject / split
 6. **驗證入庫**：歸檔指紋、matcher 編譯、synthetic 正例/負例/對抗評測、cold-fast-lane 閾值一起決定最終存成 `candidate` 還是 `active`
@@ -482,7 +482,7 @@ LLM 給每條候選回一個關係字母 `A`–`E`，對應 SAME / BROADER / NAR
 |------|------|
 | 已有重疊 | merge planner 提出關係 / 安全 / 品質判斷，確定性 merge policy 決定 keep_both / merge_into_existing / replace_existing / suppress_existing / archive_existing / reject_new / split_required |
 | 歸檔指紋衝突 | 等價或更寬的新規則會被攔下，除非有明確 changed-scope 證據允許更窄規則回來 |
-| 不安全或低置信合併 | 保守 keep_both 或 reject_new；trusted 替換必須過更高的 v6 門檻 |
+| 不安全或低置信合併 | 保守 keep_both 或 reject_new；trusted 替換必須過更高的品質門檻 |
 | **NARROWER (C)** | 插新規則，與已有共存；同輪即便還有 **SAME (A)**，本條候選照插 |
 | **UNRELATED (E)** | 插一條新 `candidate`，跟鄰居互不相干 |
 | 無強關係 | 插一條新 `candidate` |
@@ -513,7 +513,7 @@ candidate → active → trusted
 
 | 狀態 | 參與提醒？ | 會 Gate？ | 怎麼來的 |
 |------|-----------|-----------|----------|
-| `candidate` | 否；只做 shadow / 證據 | 否 | `nokori add` 或冷路徑提取建立的結構化 v6 候選 |
+| `candidate` | 否；只做 shadow / 證據 | 否 | `nokori add` 或冷路徑提取建立的結構化候選 |
 | `active` | 是；未觀察到有用前最多 WARM，有強證據 / 歷史後可 HOT | 不會直接 Gate，除非後續升 trusted | 冷路徑 fast lane，或 shadow/posthoc 證據推動 |
 | `trusted` | 是 | 可能，僅 `severity=gate_eligible` 且執行時證據過關 | 觀察到實際有用後由自治生命週期授信 |
 | `suppressed` | 否；只做 shadow recovery | 否 | false-positive / harmful 證據導致的自治抑制 |
@@ -521,13 +521,13 @@ candidate → active → trusted
 
 ### 一條規則怎麼變 active/trusted
 
-- **手動 `nokori add` 永遠建立 `candidate`**，並寫入 v6 結構化 trigger concepts/groups。即使 `--confidence high --source-type correction`，也不會繞過生命週期。
+- **手動 `nokori add` 永遠建立 `candidate`**，並寫入結構化 trigger concepts/groups。即使 `--confidence high --source-type correction`，也不會繞過生命週期。
 - **冷路徑 promotion** 要通過 matcher 編譯、歸檔指紋檢查、merge policy、synthetic eval 與 cold-fast-lane 閾值。
 - **trusted / gate-capable** 規則需要自治 posthoc / shadow 證據；`nokori edit --status active|trusted|suppressed` 會被刻意拒絕。
 
 ### 執行時證據與 posthoc
 
-熱路徑會編譯 v6 trigger 資料，檢查 required concepts / exclusions，應用動態 IDF trigger evidence，記錄完整 fire events，並在 SessionEnd 後排 posthoc 評估。沒有觀察到有用性的 active 規則最多 WARM；trusted `gate_eligible` 規則可以寫 gate marker，PreToolUse 會在 block 前重新檢查可見工具輸入。
+熱路徑會編譯 trigger 資料，檢查 required concepts / exclusions，應用動態 IDF trigger evidence，記錄完整 fire events，並在 SessionEnd 後排 posthoc 評估。沒有觀察到有用性的 active 規則最多 WARM；trusted `gate_eligible` 規則可以寫 gate marker，PreToolUse 會在 block 前重新檢查可見工具輸入。
 
 ### Project ID（專案 ID）
 
@@ -588,7 +588,7 @@ SessionStart 要找「上一場 transcript」，兩步走：
 
 維護任務掛在 `SessionStart` 上，按各自的間隔到點才跑：
 
-- **生命週期遷移**（每天）：posthoc/shadow 證據按 v6 control law 更新 candidate、active、trusted、suppressed 狀態
+- **生命週期遷移**（每天）：posthoc/shadow 證據按生命週期 control law 更新 candidate、active、trusted、suppressed 狀態
 - **Candidate 清理**（最多每 30 天跑一次）：刪掉 `created_at` 滿 **20 個日曆天** 的普通 candidate，以及滿 **40 天** 的 `anti_pattern` candidate（按日曆天算，不是「活 30 天」那套）
 - **Replacement 恢復檢查**（最多每 90 天）：若一條 archived replacement 的目標不存在、被 suppressed 或 archived，就把舊規則恢復成 `candidate`
 - **Session 檔案清理**：刪 `active_sessions/` 裡結束超過 60 天的 registry 檔案
@@ -697,7 +697,7 @@ nokori embed stop     # 優雅關閉（SIGTERM + IPC shutdown）
 
 | 層級 | 進檔條件 | 注入內容 |
 |------|---------|----------|
-| HOT | 通過 v6 applicability 的 `active`/`trusted` 結果且 utility 為正；通常最多 1 條，第二條必須領域 / 概念明顯不同且 trigger 證據很強 | trigger + action + rationale |
+| HOT | 通過 runtime applicability 的 `active`/`trusted` 結果且 utility 為正；通常最多 1 條，第二條必須領域 / 概念明顯不同且 trigger 證據很強 | trigger + action + rationale |
 | WARM | 通過證據線但 utility、歷史或預算不足以 HOT；active 規則未觀察到有用前也最多 WARM | trigger + action，一行 |
 | COLD | Candidate/suppressed/archived、action-only/search-only/embedding-only、excluded/near-miss，或 trigger 證據不足 | 不注入 |
 

@@ -54,7 +54,7 @@ What makes that loop useful:
 - **Structured triggers**, not loose text: concepts, required concept groups, variants, excluded contexts, tool tags, severity, source origin, runtime policy version, and lineage metadata.
 - **Autonomous lifecycle**: `candidate → active → trusted`, with `suppressed` recovery and terminal `archived` outcomes. Manual commands can archive, but cannot fake trust.
 - **Conservative Gate**: a one-turn reminder brake for `trusted + gate_eligible` rules with strong runtime evidence. It is not a permission system.
-- **Hybrid retrieval**: BM25 is always available; optional remote embeddings or the local Granite multilingual model add semantic recall; RRF and v6 applicability decide HOT/WARM.
+- **Hybrid retrieval**: BM25 is always available; optional remote embeddings or the local Granite multilingual model add semantic recall; RRF and runtime applicability decide HOT/WARM.
 - **Local-first operations**: SQLite, hook logs, job queues, gate markers, embedding weights, and web dashboard state all live under `~/.nokori/`. Remote LLM/embedding endpoints are opt-in.
 - **Cross-tool inspectability**: Claude Code and Cursor both work, and `nokori test`, `status`, `health`, `logs`, `extract`, `maintain`, plus the Web UI explain why a rule did or did not fire.
 
@@ -86,7 +86,7 @@ If you hit English abbreviations on a first read, skim this table first; the key
 | **lifecycle transition** | Autonomous movement such as candidate → active, active → trusted, or suppressed recovery |
 | **promotion** | Shadow lifecycle evidence for candidate and suppressed rules; not a shortcut to trust |
 | **project / global scope** | Where an eligible rule can apply; scope never bypasses lifecycle trust |
-| **candidate / active / trusted / suppressed / archived** | v6 lifecycle: observed candidates, injectable active/trusted rules, shadow-only suppressed rules, terminal archives |
+| **candidate / active / trusted / suppressed / archived** | Lifecycle states: observed candidates, injectable active/trusted rules, shadow-only suppressed rules, terminal archives |
 | **lineage / replacement** | Replacement history is stored as lineage/tombstone data, not as a user-managed lifecycle status |
 | **OpenAI-compatible** | Point the API at `.../v1` to use Ollama, LM Studio, OpenRouter, etc. |
 
@@ -285,7 +285,7 @@ nokori add \
   --terms-zh "强推,覆盖代码"
 ```
 
-Manual add writes a structured v6 `candidate`. That is intentional: it gives the lifecycle something to evaluate, but it does not bypass the trust bar and it will not immediately inject or Gate. Without `--project-id`, the candidate is `project_scope=global`; with `--project-id`, it is `project_scope=project` and bound to that project.
+Manual add writes a structured `candidate`. That is intentional: it gives the lifecycle something to evaluate, but it does not bypass the trust bar and it will not immediately inject or Gate. Without `--project-id`, the candidate is `project_scope=global`; with `--project-id`, it is `project_scope=project` and bound to that project.
 
 ### 2. Verify the shadow match
 
@@ -468,7 +468,7 @@ Gate is not a permission system. It is a one-turn reminder brake: show the relev
 
 ## Automatic extraction
 
-This runs after a session closes, off the interactive path. With an LLM configured, Nokori reads that session's **transcript** (the `.jsonl` session log), extracts possible rules, and sends each candidate through the v6 cold pipeline: admission judge, optional rewriter, final judge, merge planner, archived-fingerprint check, matcher compilation, synthetic eval, and deterministic admission. It does not block chat while it runs.
+This runs after a session closes, off the interactive path. With an LLM configured, Nokori reads that session's **transcript** (the `.jsonl` session log), extracts possible rules, and sends each candidate through the cold pipeline: admission judge, optional rewriter, final judge, merge planner, archived-fingerprint check, matcher compilation, synthetic eval, and deterministic admission. It does not block chat while it runs.
 
 ```bash
 # Configure the LLM (any OpenAI-compatible endpoint)
@@ -492,7 +492,7 @@ The cold path is deliberately more fussy than the hot path:
 
 1. **Read** the transcript, single-file cap 50MB, over that it errors out
 2. **Compress**: user messages kept verbatim, AI replies cut to the first 200 chars + last 100 chars; the whole thing is then squeezed under about 30k tokens, and if it's still over, the full text (user messages included) gets a middle elision
-3. **Extract**: the extractor role emits structured v6 candidates with concepts, required concept groups, variants, excluded contexts, evidence quotes, and source metadata
+3. **Extract**: the extractor role emits structured candidates with concepts, required concept groups, variants, excluded contexts, evidence quotes, and source metadata
 4. **Judge / rewrite / judge**: admission and final-judge roles reject weak or over-broad rules; a rewriter may tighten scope, but cannot broaden it
 5. **Merge**: the merge planner compares the candidate with nearby rules, then deterministic policy decides whether to keep, replace, suppress, reject, or require a split
 6. **Validate**: archived fingerprints, matcher compilation, synthetic positive/negative/adversarial eval, and cold-fast-lane thresholds decide whether the result is stored as `candidate` or `active`
@@ -507,7 +507,7 @@ The LLM returns one relation letter `A`–`E` per candidate, mapping to SAME / B
 |----------|----------|
 | Existing overlap | The merge planner proposes relation/safety/quality, then deterministic merge policy decides keep_both / merge_into_existing / replace_existing / suppress_existing / archive_existing / reject_new / split_required |
 | Archived fingerprint conflict | Equivalent or broader future rules are blocked unless explicit changed-scope evidence allows a narrower rule |
-| Unsafe or low-confidence merge | Conservative keep_both or reject_new; trusted replacement requires the higher v6 bar |
+| Unsafe or low-confidence merge | Conservative keep_both or reject_new; trusted replacement requires the higher quality bar |
 | **NARROWER (C)** | Insert new rule, coexisting with the existing one; even if the same round also has **SAME (A)**, this candidate is still inserted |
 | **UNRELATED (E)** | Insert a new `candidate`, independent of its neighbors |
 | No strong relation | Insert a new `candidate` |
@@ -527,7 +527,7 @@ Every rule lives in one SQLite file, `rules.db`, created automatically on first 
 
 ## Rule lifecycle
 
-Every rule flows through the v6 autonomous state machine. Manual commands can create or archive rules, but they do **not** promote, trust, or suppress rules directly.
+Every rule flows through the autonomous state machine. Manual commands can create or archive rules, but they do **not** promote, trust, or suppress rules directly.
 
 ```
 candidate → active → trusted
@@ -538,7 +538,7 @@ candidate → active → trusted
 
 | Status | In reminders? | Gated? | How it got here |
 |--------|---------------|--------|-----------------|
-| `candidate` | No; shadow/evidence only | No | `nokori add` or cold extraction creates a structured v6 candidate |
+| `candidate` | No; shadow/evidence only | No | `nokori add` or cold extraction creates a structured candidate |
 | `active` | Yes, WARM until usefulness is observed; HOT only with strong evidence/history | No direct gate unless later trusted | Autonomous cold fast lane or shadow/posthoc lifecycle evidence |
 | `trusted` | Yes | Maybe, only when `severity=gate_eligible` and runtime evidence passes | Autonomous lifecycle after observed usefulness |
 | `suppressed` | No; shadow recovery only | No | Autonomous false-positive/harm suppression |
@@ -546,13 +546,13 @@ candidate → active → trusted
 
 ### How a rule turns active/trusted
 
-- **Manual `nokori add` always creates a `candidate`** with v6 structured trigger concepts/groups. Even `--confidence high --source-type correction` does not bypass the lifecycle.
+- **Manual `nokori add` always creates a `candidate`** with structured trigger concepts/groups. Even `--confidence high --source-type correction` does not bypass the lifecycle.
 - **Cold-path lifecycle movement** requires matcher compilation, archived-fingerprint checks, merge policy, synthetic evaluation, and cold-fast-lane thresholds.
 - **Trusted/gate-capable rules** require autonomous posthoc/shadow evidence; `nokori edit --status active|trusted|suppressed` is intentionally rejected.
 
 ### Runtime evidence and posthoc
 
-The hot path compiles v6 trigger data, checks required concepts/exclusions, applies dynamic IDF trigger evidence, records complete fire events, and enqueues posthoc evaluation after session end. Active rules without observed usefulness inject at most WARM; trusted `gate_eligible` rules can create a gate marker, and PreToolUse re-checks inspectable tool input before blocking.
+The hot path compiles trigger data, checks required concepts/exclusions, applies dynamic IDF trigger evidence, records complete fire events, and enqueues posthoc evaluation after session end. Active rules without observed usefulness inject at most WARM; trusted `gate_eligible` rules can create a gate marker, and PreToolUse re-checks inspectable tool input before blocking.
 
 ### Project ID
 
@@ -614,7 +614,7 @@ If the previous session hasn't been extracted yet, it injects the last 3 user me
 
 Maintenance runs from `SessionStart` on its configured intervals:
 
-- **Lifecycle transitions**: posthoc/shadow evidence updates candidate, active, trusted, and suppressed states according to the v6 control law
+- **Lifecycle transitions**: posthoc/shadow evidence updates candidate, active, trusted, and suppressed states according to the lifecycle control law
 - **Candidate cleanup** (at most once every 30 days): archive stale candidates after the configured calendar windows
 - **Archived fingerprint checks**: archived rules leave negative-memory fingerprints so equivalent or broader future rules are blocked by cold-path admission
 - **Session file cleanup**: delete registry files in `active_sessions/` that ended more than 60 days ago
@@ -719,7 +719,7 @@ The local embed server's Unix socket lives under `NOKORI_DATA_DIR`, with **no IP
 
 ### Injection tiers
 
-After retrieval, candidates go through v6 applicability and then a small selector. The selector uses utility, diversity (MMR-style overlap penalty), status history, false-positive penalties, and the character budget. The tiers decide whether a rule enters context and, if so, how much gets written:
+After retrieval, candidates go through runtime applicability and then a small selector. The selector uses utility, diversity (MMR-style overlap penalty), status history, false-positive penalties, and the character budget. The tiers decide whether a rule enters context and, if so, how much gets written:
 
 | Tier | Entry condition | Injected content |
 |------|-----------------|------------------|
