@@ -49,7 +49,8 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
                     f"invalid status transition {rule.status!r} -> {new_status!r}"
                 )
             updates.append(("status", new_status))
-            updates.append(("archived_reason", "manual_edit"))
+            if new_status == "archived":
+                updates.append(("archived_reason", "manual_edit"))
         if args.variants is not None:
             updates.append(("trigger_variants", dumps_json(split_csv(args.variants))))
         if args.terms_en is not None or args.terms_zh is not None:

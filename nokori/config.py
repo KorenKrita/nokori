@@ -168,7 +168,7 @@ _DEFAULT_TIMEOUTS: dict[str, int] = {
 }
 
 
-def _resolve_role_models(toml: dict, file_values: dict[str, str]) -> dict[str, str]:
+def _resolve_role_models(toml: dict) -> dict[str, str]:
     """Resolve per-role model IDs from [models] section + env overrides."""
     models_section = toml.get("models", {}) if toml else {}
     result: dict[str, str] = {}
@@ -351,7 +351,7 @@ class Config:
             strict=_bool_val("NOKORI_STRICT", False, file_values),
             disabled=_bool_val("NOKORI_DISABLED", False, file_values),
             dismiss_phrase=_str_val("NOKORI_DISMISS_PHRASE", "dismiss", file_values),
-            role_models=_resolve_role_models(raw_toml, file_values),
+            role_models=_resolve_role_models(raw_toml),
             role_max_tokens=_resolve_role_max_tokens(raw_toml),
             role_timeouts=_resolve_role_timeouts(raw_toml),
             log_level=_log_level_val("NOKORI_LOG_LEVEL", "warn", file_values),

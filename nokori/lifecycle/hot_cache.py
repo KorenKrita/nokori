@@ -16,7 +16,7 @@ HOT_CACHE_RECENT_TURNS = 3
 TRUSTED_RECENT_WINDOW_DAYS = 7
 
 
-def find_previous_transcript(current: Path, cfg: Config | None = None) -> Path | None:
+def find_previous_transcript(current: Path) -> Path | None:
     """Previous session transcript via directory scan."""
     return _find_previous_transcript_glob(current)
 
@@ -111,12 +111,14 @@ def _recent_trusted_rules_summary(db: Db) -> str | None:
     ).isoformat(timespec="seconds").replace("+00:00", "Z")
 
     rows = db.fetchall(
-        "SELECT DISTINCT r.id, r.trigger_canonical, r.action_instruction "
+        "SELECT r.id, r.trigger_canonical, r.action_instruction, "
+        "MAX(e.created_at) AS last_fired "
         "FROM rule_fire_events e "
         "JOIN rules r ON r.id = e.rule_id "
         "WHERE r.status IN ('active', 'trusted') "
         "AND e.created_at >= ? "
-        "ORDER BY e.created_at DESC "
+        "GROUP BY r.id "
+        "ORDER BY last_fired DESC "
         "LIMIT 5",
         (cutoff,),
     )
@@ -150,7 +152,7 @@ def maybe_inject(payload: dict, cfg: Config, db: Db) -> str | None:
     sections: list[str] = []
 
     # Transcript context from previous session
-    previous = find_previous_transcript(current, cfg)
+    previous = find_previous_transcript(current)
     if previous is not None and not _was_extracted(db, previous):
         tail = read_tail_user_turns(previous, HOT_CACHE_RECENT_TURNS)
         if tail:

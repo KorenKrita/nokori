@@ -2,19 +2,23 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timedelta, timezone
+from typing import TYPE_CHECKING
 
 from ..db import Db, dumps_json, loads_json
 from ..policy import RUNTIME_POLICY_VERSION
 from ..utils.time import now_iso
 
+if TYPE_CHECKING:
+    from ..models import Rule
+
 
 def create_fire_event(
     db: Db,
-    rule,
+    rule: "Rule",
     session_id: str,
     prompt_hash: str,
     level: str,
-    decision_features: dict,
+    decision_features: dict | None,
     *,
     decision_reason: str | None = None,
     turn_index: int | None = None,

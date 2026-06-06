@@ -137,6 +137,14 @@ class TestRules:
         assert resp.status_code == 403
         assert resp.json()["detail"] == "write authentication required"
 
+    @pytest.mark.parametrize("action", ["promote", "trust", "suppress"])
+    def test_manual_lifecycle_rejected_after_auth(self, client_with_rule, action):
+        """After authenticating via GET /api/config, promote/trust/suppress still return 403."""
+        client_with_rule.get("/api/config")
+        resp = client_with_rule.post(f"/api/rules/abc/{action}")
+        assert resp.status_code == 403
+        assert "not supported" in resp.json()["detail"]
+
     def test_archive_rule(self, client_with_rule):
         client_with_rule.get("/api/config")
         resp = client_with_rule.post("/api/rules/abc/archive")

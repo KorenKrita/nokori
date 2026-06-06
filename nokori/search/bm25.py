@@ -114,7 +114,7 @@ def _index_key(rules_list: list[Rule]) -> tuple:
             r.action_instruction,
             r.trigger_variants
             if isinstance(r.trigger_variants, str)
-            else tuple(r.trigger_variants),
+            else str(r.trigger_variants),
             tuple(r.trigger_variants_zh),
             terms,
             r.trigger_canonical_zh,

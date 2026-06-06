@@ -60,7 +60,8 @@ def extract(transcript: str, llm: LLMAdapter) -> tuple[list[Candidate], bool]:
             continue
         candidates, parse_ok = _parse_candidates(raw)
         if not parse_ok:
-            log.warning("extract parse failed (attempt %d), retrying", attempt + 1)
+            if attempt < _EXTRACT_MAX_RETRIES:
+                log.warning("extract parse failed (attempt %d), retrying", attempt + 1)
             last_error = "parse failed"
             continue
         return candidates, True

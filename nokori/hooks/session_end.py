@@ -117,9 +117,10 @@ def _populate_transcript_windows(
 
     # Get fire events for this session that have pending posthoc jobs
     rows = db.fetchall(
-        "SELECT pj.id AS job_id, fe.turn_index, fe.rule_id "
+        "SELECT pj.id AS job_id, fe.turn_index, fe.rule_id, r.tool_tags "
         "FROM posthoc_jobs pj "
         "JOIN rule_fire_events fe ON fe.id = pj.fire_event_id "
+        "JOIN rules r ON r.id = fe.rule_id "
         "WHERE fe.session_id = ? AND pj.status = 'pending' "
         "AND pj.redacted_window_json IS NULL",
         (session_id,),
@@ -131,13 +132,10 @@ def _populate_transcript_windows(
             continue
 
         # Get rule's tool tags for relevance-based windowing
-        rule_row = db.fetchone(
-            "SELECT tool_tags FROM rules WHERE id = ?", (row["rule_id"],)
-        )
         tool_tags = None
-        if rule_row and rule_row["tool_tags"]:
+        if row["tool_tags"]:
             try:
-                tool_tags = json.loads(rule_row["tool_tags"])
+                tool_tags = json.loads(row["tool_tags"])
             except (json.JSONDecodeError, TypeError):
                 pass
 

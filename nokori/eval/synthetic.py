@@ -29,7 +29,9 @@ from ..search.idf_stats import IdfPoolStats, TOKENIZER_VERSION, compute_trigger_
 
 DECISION_RANK: dict[str, int] = {"cold": 0, "warm": 1, "hot": 2, "gate": 3}
 
+# TODO: import from source module once a canonical definition exists
 CONCEPT_COMPILER_VERSION: str = "1.0.0"
+# TODO: import from source module once a canonical definition exists
 EMBEDDING_PROFILE_VERSION: str = "1.0.0"
 BENCHMARK_VERSION: str = "1.0.0"
 

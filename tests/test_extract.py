@@ -96,7 +96,6 @@ def test_extractor_llm_failure_not_ok():
     assert cands == [] and ok is False
 
 
-
 def test_extractor_returns_empty_on_empty_transcript():
     cands, ok = extract("", FakeLLM(json.dumps([{"trigger": "x", "action": "y"}])))
     assert ok and cands == []
@@ -277,12 +276,6 @@ def test_process_path_passes_transcript_evidence_and_role_limits(
                 "source_type": "solution",
                 "confidence": "medium",
             }])
-
-        def configured(self):
-            return True
-
-        def _call_openai_compatible(self, *_args, **_kwargs):
-            return "[]"
 
     captured: dict = {}
 

@@ -4,9 +4,13 @@ import hashlib
 import json
 import uuid
 from datetime import datetime, timedelta, timezone
+from typing import TYPE_CHECKING
 
 from ..db import Db, dumps_json, loads_json
 from ..utils.time import now_iso
+
+if TYPE_CHECKING:
+    from ..models import Rule
 
 
 def compute_context_fingerprint(
@@ -26,7 +30,7 @@ def compute_context_fingerprint(
 
 def create_shadow_event(
     db: Db,
-    rule,
+    rule: "Rule",
     session_id: str,
     status_at_match: str,
     shadow_type: str,
@@ -136,7 +140,6 @@ def count_shadow_evidence(
         "irrelevant": 0,
         "risky": 0,
         "near_miss": 0,
-        "unclear": 0,
     }
     sessions: set[str] = set()
     unique_contexts = 0

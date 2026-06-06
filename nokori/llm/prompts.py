@@ -82,7 +82,7 @@ Each item:
   "evidence_quotes": ["<verbatim substring from the transcript that proves the user correction/preference — copy-paste, do not paraphrase; 1-3 quotes, each 20-200 chars>"]
 }
 
-_zh fields: Chinese translations of the corresponding English field. Keep concise (same scope as English). Always provide even if transcript is English-only.
+_zh fields (trigger_variants_zh, action_zh): Chinese translations of the corresponding English fields. Keep concise (same scope as English). Always provide even if transcript is English-only.
 
 Field constraints:
 - trigger and every trigger_variant MUST NOT start with "User", "The user", "Assistant", "When the user", or "The assistant". Name a scenario, not an actor.

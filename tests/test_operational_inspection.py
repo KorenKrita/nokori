@@ -345,7 +345,42 @@ class TestCliListCommand:
 
 
 class TestCliStatusCommand:
-    def test_status_shows_pending_jobs(self, cfg, db_with_rules, capsys, monkeypatch):
+    @pytest.fixture(autouse=True)
+    def _mock_status_deps(self, monkeypatch):
+        monkeypatch.setattr(
+            "nokori.commands.status.describe_claude_hooks",
+            lambda: {"installed": False},
+        )
+        monkeypatch.setattr(
+            "nokori.commands.status.describe_cursor_hooks",
+            lambda: {"installed": False},
+        )
+        monkeypatch.setattr(
+            "nokori.commands.status.describe_dual_hook_registration",
+            lambda: {"both_installed": False},
+        )
+        monkeypatch.setattr(
+            "nokori.commands.status.coalesce_enabled",
+            lambda: False,
+        )
+        monkeypatch.setattr(
+            "nokori.commands.status.embed_ipc.server_status",
+            lambda cfg: {"running": False, "pid": None, "idle_seconds": 0},
+        )
+        monkeypatch.setattr(
+            "nokori.commands.status.job_io.list_jobs",
+            lambda cfg, status=None: [],
+        )
+        monkeypatch.setattr(
+            "nokori.commands.status.sessions.list_session_records",
+            lambda cfg: [],
+        )
+        monkeypatch.setattr(
+            "nokori.commands.status.sessions.list_active_sessions",
+            lambda cfg, records=None: [],
+        )
+
+    def test_status_shows_pending_jobs(self, cfg, db_with_rules, capsys):
         from nokori.commands.status import run
 
         # Add pending jobs to DB
@@ -369,40 +404,6 @@ class TestCliStatusCommand:
                 ("pj-1", "fe-1", "pending", NOW, NOW),
             )
 
-        # Mock install hooks and embed server to avoid filesystem dependencies
-        monkeypatch.setattr(
-            "nokori.commands.status.describe_claude_hooks",
-            lambda: {"installed": False},
-        )
-        monkeypatch.setattr(
-            "nokori.commands.status.describe_cursor_hooks",
-            lambda: {"installed": False},
-        )
-        monkeypatch.setattr(
-            "nokori.commands.status.describe_dual_hook_registration",
-            lambda: {"both_installed": False},
-        )
-        monkeypatch.setattr(
-            "nokori.commands.status.coalesce_enabled",
-            lambda: False,
-        )
-        monkeypatch.setattr(
-            "nokori.commands.status.embed_ipc.server_status",
-            lambda cfg: {"running": False, "pid": None, "idle_seconds": 0},
-        )
-        monkeypatch.setattr(
-            "nokori.commands.status.job_io.list_jobs",
-            lambda cfg, status=None: [],
-        )
-        monkeypatch.setattr(
-            "nokori.commands.status.sessions.list_session_records",
-            lambda cfg: [],
-        )
-        monkeypatch.setattr(
-            "nokori.commands.status.sessions.list_active_sessions",
-            lambda cfg, records=None: [],
-        )
-
         args = argparse.Namespace()
         rc = run(args, cfg)
         assert rc == 0
@@ -411,41 +412,8 @@ class TestCliStatusCommand:
         assert "cold.outstanding 3" in out
         assert "posthoc.pending 1" in out
 
-    def test_status_shows_idf_pool_stats(self, cfg, db_with_rules, capsys, monkeypatch):
+    def test_status_shows_idf_pool_stats(self, cfg, db_with_rules, capsys):
         from nokori.commands.status import run
-
-        monkeypatch.setattr(
-            "nokori.commands.status.describe_claude_hooks",
-            lambda: {"installed": False},
-        )
-        monkeypatch.setattr(
-            "nokori.commands.status.describe_cursor_hooks",
-            lambda: {"installed": False},
-        )
-        monkeypatch.setattr(
-            "nokori.commands.status.describe_dual_hook_registration",
-            lambda: {"both_installed": False},
-        )
-        monkeypatch.setattr(
-            "nokori.commands.status.coalesce_enabled",
-            lambda: False,
-        )
-        monkeypatch.setattr(
-            "nokori.commands.status.embed_ipc.server_status",
-            lambda cfg: {"running": False, "pid": None, "idle_seconds": 0},
-        )
-        monkeypatch.setattr(
-            "nokori.commands.status.job_io.list_jobs",
-            lambda cfg, status=None: [],
-        )
-        monkeypatch.setattr(
-            "nokori.commands.status.sessions.list_session_records",
-            lambda cfg: [],
-        )
-        monkeypatch.setattr(
-            "nokori.commands.status.sessions.list_active_sessions",
-            lambda cfg, records=None: [],
-        )
 
         args = argparse.Namespace()
         run(args, cfg)
@@ -456,41 +424,8 @@ class TestCliStatusCommand:
         assert "idf.dynamic_threshold" in out
         assert "idf.unique_tokens" in out
 
-    def test_status_shows_circuit_breaker_info(self, cfg, db_with_rules, capsys, monkeypatch):
+    def test_status_shows_circuit_breaker_info(self, cfg, db_with_rules, capsys):
         from nokori.commands.status import run
-
-        monkeypatch.setattr(
-            "nokori.commands.status.describe_claude_hooks",
-            lambda: {"installed": False},
-        )
-        monkeypatch.setattr(
-            "nokori.commands.status.describe_cursor_hooks",
-            lambda: {"installed": False},
-        )
-        monkeypatch.setattr(
-            "nokori.commands.status.describe_dual_hook_registration",
-            lambda: {"both_installed": False},
-        )
-        monkeypatch.setattr(
-            "nokori.commands.status.coalesce_enabled",
-            lambda: False,
-        )
-        monkeypatch.setattr(
-            "nokori.commands.status.embed_ipc.server_status",
-            lambda cfg: {"running": False, "pid": None, "idle_seconds": 0},
-        )
-        monkeypatch.setattr(
-            "nokori.commands.status.job_io.list_jobs",
-            lambda cfg, status=None: [],
-        )
-        monkeypatch.setattr(
-            "nokori.commands.status.sessions.list_session_records",
-            lambda cfg: [],
-        )
-        monkeypatch.setattr(
-            "nokori.commands.status.sessions.list_active_sessions",
-            lambda cfg, records=None: [],
-        )
 
         args = argparse.Namespace()
         run(args, cfg)
@@ -517,6 +452,8 @@ class TestWebRetrieveApi:
         assert "embed_mode" in data
         assert "bm25_matches" in data
 
+        # Verify rules matched (non-vacuous test)
+        assert len(data["hot"]) + len(data["warm"]) > 0
         # If any rules matched, they must have decision_features
         for item in data["hot"] + data["warm"]:
             assert "decision_features" in item
@@ -539,6 +476,7 @@ class TestWebRetrieveApi:
             json={"prompt": "force push to main"},
         )
         data = resp.json()["data"]
+        assert len(data["hot"]) + len(data["warm"]) > 0
         for item in data["hot"] + data["warm"]:
             assert "eligibility" in item
             elig = item["eligibility"]
@@ -554,6 +492,7 @@ class TestWebRetrieveApi:
             json={"prompt": "force push to main"},
         )
         data = resp.json()["data"]
+        assert len(data["hot"]) + len(data["warm"]) > 0
         for item in data["hot"] + data["warm"]:
             assert "ranking_utility" in item
             assert "rrf_score" in item

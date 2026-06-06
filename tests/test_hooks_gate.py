@@ -30,10 +30,11 @@ def _set_rule_lifecycle(
             params.append(now)
         params.append(short_id)
         with db.transaction() as tx:
-            tx.execute(
+            cur = tx.execute(
                 f"UPDATE rules SET {', '.join(updates)} WHERE short_id = ?",
                 tuple(params),
             )
+            assert cur.rowcount == 1
     finally:
         db.close()
 

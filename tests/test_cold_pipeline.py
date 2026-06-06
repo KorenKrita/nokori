@@ -1018,6 +1018,7 @@ class TestColdFastLane:
 
         assert result.status == "active"
         assert result.rule_id is not None
+        mock_eval.assert_called_once()
 
         row = db.fetchone(
             "SELECT activation_origin, status FROM rules WHERE id = ?",

@@ -30,7 +30,6 @@ def _make_rule(db, *, id_, status, created_days_ago=None,
         )
 
 
-
 def test_candidate_cleanup_deletes_fire_events(monkeypatch, tmp_path):
     monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
     cfg = Config.from_env()
@@ -54,7 +53,6 @@ def test_candidate_cleanup_deletes_fire_events(monkeypatch, tmp_path):
         db.close()
 
 
-
 def test_candidate_cleanup_removes_old(monkeypatch, tmp_path):
     monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
     cfg = Config.from_env()
@@ -72,8 +70,6 @@ def test_candidate_cleanup_removes_old(monkeypatch, tmp_path):
         assert "anti-1" in rows
     finally:
         db.close()
-
-
 
 
 def test_unmerge_restores_when_superseder_deleted(monkeypatch, tmp_path):
@@ -105,7 +101,6 @@ def test_unmerge_restores_when_superseder_deleted(monkeypatch, tmp_path):
         assert row["replacement_id"] is None
     finally:
         db.close()
-
 
 
 def test_unmerge_check_restores_when_replacement_target_suppressed(monkeypatch, tmp_path):
@@ -148,7 +143,6 @@ def test_unmerge_check_restores_when_replacement_target_suppressed(monkeypatch, 
         assert row["replacement_id"] is None
     finally:
         db.close()
-
 
 
 def test_hot_cache_returns_none_when_no_path(monkeypatch, tmp_path):
