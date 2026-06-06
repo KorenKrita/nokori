@@ -9,6 +9,7 @@ No LLM calls. Uses stdlib + re + shared policy/applicability imports.
 
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import dataclass
 from typing import Optional
@@ -20,11 +21,6 @@ from nokori.matcher.compiler import (
     CompiledExcludedContext,
     CompiledMatcher,
     CompiledVariant,
-)
-from nokori.policy import (
-    DYNAMIC_IDF_NORMAL,
-    DYNAMIC_IDF_SMALL_POOL,
-    SMALL_POOL_THRESHOLD,
 )
 from nokori.runtime.applicability import (
     _trigger_evidence_passes,
@@ -526,7 +522,6 @@ def evaluate_match(
         is_shadow = idf_stats.get("is_shadow", False)
         idf_max = idf_stats.get("idf_max", 3.0)
         if pool_size > 0:
-            import math
             seen_terms: set[str] = set()
             for token in matched_anchors:
                 if ' ' in token:

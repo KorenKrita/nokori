@@ -205,9 +205,11 @@ def search(
         strong_variant = _check_phrase_hit(query_tokens, doc.variant_phrases)
 
         # Match source flags
+        has_variant = bool(matched_variant)
+        has_action = bool(matched_action)
         has_trigger = bool(matched_trigger)
-        action_only = bool(matched_action) and not has_trigger and not bool(matched_variant)
-        search_only = bool(matched_search) and not has_trigger and not bool(matched_variant) and not bool(matched_action)
+        action_only = has_action and not has_trigger and not has_variant
+        search_only = bool(matched_search) and not has_trigger and not has_variant and not has_action
 
         scored.append(
             ScoredResult(

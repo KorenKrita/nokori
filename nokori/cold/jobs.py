@@ -144,7 +144,6 @@ def is_circuit_breaker_open(db: Db, role: str, model_id: str | None = None) -> b
             # Check cooldown: if most recent failure is within cooldown, breaker open
             most_recent = rows[0]["updated_at"] if rows else None
             if most_recent:
-                from datetime import datetime, timezone
                 try:
                     recent_dt = datetime.fromisoformat(most_recent.replace("Z", "+00:00"))
                     elapsed = (datetime.now(timezone.utc) - recent_dt).total_seconds()
@@ -253,21 +252,13 @@ def enqueue_transcript_ingest(
 def expire_stale_ingest_jobs(db: Db) -> int:
     """Mark expired transcript ingest jobs as 'expired'. Return count."""
     now = _now_iso()
-    rows = db.fetchall(
-        "SELECT id FROM transcript_ingest_jobs "
-        "WHERE status = 'pending' AND ttl_expires_at <= ?",
-        (now,),
-    )
-    if not rows:
-        return 0
-    ids = [r["id"] for r in rows]
     with db.transaction() as tx:
-        for job_id in ids:
-            tx.execute(
-                "UPDATE transcript_ingest_jobs SET status = 'expired', "
-                "updated_at = ? WHERE id = ?",
-                (now, job_id),
-            )
-    return len(ids)
+        cursor = tx.execute(
+            "UPDATE transcript_ingest_jobs SET status = 'expired', "
+            "updated_at = ? WHERE status = 'pending' AND ttl_expires_at <= ?",
+            (now, now),
+        )
+        changed = cursor.rowcount
+    return changed
 
 

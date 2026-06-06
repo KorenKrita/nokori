@@ -74,7 +74,7 @@ export function Dashboard() {
           </GlassCard>
         </motion.div>
 
-        {/* Injections */}
+        {/* Fire events */}
         <motion.div variants={cardVariant} className="col-span-4">
           <GlassCard hover>
             <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary mb-4">

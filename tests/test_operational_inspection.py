@@ -408,7 +408,7 @@ class TestCliStatusCommand:
         assert rc == 0
         out = capsys.readouterr().out
 
-        assert "cold.pending   3" in out
+        assert "cold.outstanding 3" in out
         assert "posthoc.pending 1" in out
 
     def test_status_shows_idf_pool_stats(self, cfg, db_with_rules, capsys, monkeypatch):

@@ -8,8 +8,6 @@ TurnRole = Literal["human", "assistant", "tool_use", "tool_result"]
 
 Status = Literal["candidate", "active", "trusted", "suppressed", "archived"]
 Severity = Literal["reminder", "high_risk", "gate_eligible"]
-SourceType = Literal["correction", "preference", "solution", "anti_pattern"]
-Confidence = Literal["high", "medium", "low"]
 SourceOrigin = Literal["transcript_extraction", "external_source_material"]
 ActivationOrigin = Literal[
     "cold_fast_lane",

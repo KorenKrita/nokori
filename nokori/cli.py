@@ -27,15 +27,7 @@ def _build_parser() -> argparse.ArgumentParser:
     sp_add = sub.add_parser("add", help="add a rule manually")
     sp_add.add_argument("--trigger", required=True, help="trigger scenario (English canonical)")
     sp_add.add_argument("--action", required=True, help="correct behavior")
-    sp_add.add_argument("--behavior", default=None, help="incorrect behavior")
-    sp_add.add_argument("--rationale", default=None, help="one-line evidence")
-    sp_add.add_argument(
-        "--source-type",
-        default="correction",
-        choices=("correction", "preference", "solution", "anti_pattern"),
-    )
-    sp_add.add_argument("--confidence", default="high", choices=("high", "medium", "low"))
-    sp_add.add_argument("--severity", default="reminder", choices=("reminder", "high_risk", "gate_eligible"))
+    sp_add.add_argument("--severity", default="reminder", choices=("reminder", "high_risk"))
     sp_add.add_argument("--variants", default=None, help="comma-separated variants")
     sp_add.add_argument("--terms-en", default=None, help="comma-separated English search terms")
     sp_add.add_argument("--terms-zh", default=None, help="comma-separated Chinese search terms")

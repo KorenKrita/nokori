@@ -36,7 +36,6 @@ class EmbeddingProfile:
     normalization: str  # "cosine"
     overall: BucketThresholds
     buckets: dict[str, BucketThresholds]
-    embedding_only_allowed: bool = False
 
 
 REQUIRED_BUCKETS: tuple[str, ...] = ("overall", "zh", "mixed", "code_or_cli")

@@ -24,7 +24,7 @@ def _rule_to_response(rule) -> dict:
         schema_version=rule.schema_version,
         rule_version=rule.rule_version,
         created_by_pipeline_version=rule.created_by_pipeline_version,
-        runtime_policy_version=rule.runtime_policy_version,
+        runtime_policy_version=rule.runtime_policy_version or "1.0.0",
         last_rewritten_by_role=rule.last_rewritten_by_role,
         status=rule.status,
         severity=rule.severity,

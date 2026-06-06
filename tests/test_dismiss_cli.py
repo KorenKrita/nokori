@@ -33,10 +33,6 @@ def test_cli_dismiss_archives_directly(tmp_path, monkeypatch):
         "never force push",
         "--action",
         "use lease",
-        "--source-type",
-        "correction",
-        "--confidence",
-        "high",
         env_extra={"NOKORI_DATA_DIR": str(tmp_path)},
     )
     assert r.returncode == 0, r.stderr
@@ -56,10 +52,6 @@ def test_cli_dismiss_after_fire_event(tmp_path, monkeypatch):
         "never force push",
         "--action",
         "use lease",
-        "--source-type",
-        "correction",
-        "--confidence",
-        "high",
         "--variants",
         "git push --force",
         env_extra=env,

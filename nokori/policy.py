@@ -51,6 +51,7 @@ ActivationOrigin = Literal[
 # Archive strength literals (section 3.5 / 11)
 # ---------------------------------------------------------------------------
 
+ArchiveStrength = Literal["user", "system", "replacement"]
 
 # ---------------------------------------------------------------------------
 # Posthoc label literals (section 10.2)
@@ -100,7 +101,6 @@ MergeOperation = Literal[
 ]
 
 # ---------------------------------------------------------------------------
-# ---------------------------------------------------------------------------
 # False-positive event classification (section 3.4)
 # ---------------------------------------------------------------------------
 
@@ -133,7 +133,7 @@ class ColdFastLaneThresholds:
     global_adversarial_failures_max: int = 0
     archived_fingerprint_conflict: bool = False
     final_judge_decision: str = "accept_active"
-    merge_operation_must_not_require: tuple = ("split_required",)
+    merge_operation_must_not_require: tuple[str, ...] = ("split_required",)
 
 
 @dataclass(frozen=True)

@@ -76,12 +76,13 @@ def _candidate_evidence_quotes(cand, transcript_text: str) -> list[str]:
         return []
     # Prefer quotes returned by the extractor (verbatim from transcript)
     if cand.evidence_quotes:
+        lower = haystack.lower()
         verified = []
         for q in cand.evidence_quotes:
             if q in haystack:
                 verified.append(q[:_EVIDENCE_QUOTE_MAX])
-            elif q.lower() in haystack.lower():
-                idx = haystack.lower().find(q.lower())
+            elif q.lower() in lower:
+                idx = lower.find(q.lower())
                 verified.append(haystack[idx:idx + len(q)][:_EVIDENCE_QUOTE_MAX])
         if verified:
             return verified

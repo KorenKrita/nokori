@@ -4,7 +4,7 @@ import hashlib
 import re
 import uuid
 
-from ..db import Db, loads_json
+from ..db import Db
 
 _STRENGTH_ORDER = ("replacement", "system", "user")
 
@@ -297,30 +297,6 @@ def _is_narrower_scope(
 def _content_tokens(text: str) -> set[str]:
     stop = {"the", "and", "for", "with", "before", "after", "rule", "use"}
     return {t for t in re.findall(r"[a-z0-9_+-]{3,}", text.lower()) if t not in stop}
-
-
-def _build_scope_summary(rule, domain_tags: list[str]) -> str:
-    """Build a human-readable scope summary from rule fields."""
-    parts = []
-    if domain_tags:
-        parts.append(f"domains: {', '.join(domain_tags)}")
-    tool_tags = (
-        rule.tool_tags
-        if isinstance(rule.tool_tags, list)
-        else loads_json(rule.tool_tags if isinstance(rule.tool_tags, str) else None, [])
-    )
-    if tool_tags:
-        parts.append(f"tools: {', '.join(tool_tags)}")
-    path_patterns = (
-        rule.path_patterns
-        if isinstance(rule.path_patterns, list)
-        else loads_json(
-            rule.path_patterns if isinstance(rule.path_patterns, str) else None, []
-        )
-    )
-    if path_patterns:
-        parts.append(f"paths: {', '.join(path_patterns)}")
-    return "; ".join(parts) if parts else ""
 
 
 def _now_iso() -> str:

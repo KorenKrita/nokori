@@ -66,16 +66,12 @@ def _add_rule(
     trigger,
     action,
     *,
-    source_type: str = "correction",
-    confidence: str = "high",
-    severity: str = "gate_eligible",
+    severity: str = "high_risk",
     variants=None,
 ):
     args = [
         "--trigger", trigger,
         "--action", action,
-        "--source-type", source_type,
-        "--confidence", confidence,
         "--severity", severity,
     ]
     if variants:
@@ -265,10 +261,6 @@ def test_hook_without_cwd_injects_global_rules_only(tmp_path):
         "project only force push branch",
         "--action",
         "use lease in this repo",
-        "--source-type",
-        "correction",
-        "--confidence",
-        "high",
         "--variants",
         "git push --force proj",
         "--project-id",
@@ -281,10 +273,6 @@ def test_hook_without_cwd_injects_global_rules_only(tmp_path):
         "global never force push shared branch",
         "--action",
         "use --force-with-lease globally",
-        "--source-type",
-        "correction",
-        "--confidence",
-        "high",
         "--variants",
         "git push --force",
         env_extra=env,
@@ -326,7 +314,6 @@ def test_solution_hot_injects_without_gate(monkeypatch, tmp_path):
         tmp_path,
         "Never force push to a shared branch",
         "use --force-with-lease",
-        source_type="solution",
         severity="reminder",
         variants=["git push --force"],
     )

@@ -499,8 +499,7 @@ def _normalize_role_output(role: str, data: dict[str, Any]) -> dict[str, Any]:
             data["severity"] = "reminder"
 
     elif role == "synthetic_eval_generator":
-        # Fix: bare array → wrapped object
-        # (handled elsewhere but normalize here too for consistency)
+        # Bare array normalization is handled in pipeline.py, not here.
         pass
 
     elif role == "posthoc_evaluator":
@@ -519,10 +518,6 @@ def _normalize_role_output(role: str, data: dict[str, Any]) -> dict[str, Any]:
                 data["reason_code"] = rc
 
     return data
-
-
-# Keep backward-compatible alias
-parse_role_output = validate_role_output
 
 
 # --- Role Model Resolution ---

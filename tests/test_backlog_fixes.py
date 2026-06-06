@@ -55,8 +55,7 @@ def test_dismiss_strips_gate_marker(tmp_path, monkeypatch):
            "NOKORI_EMBED_ENABLED": "0", "HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1"}
     subprocess.run(
         [sys.executable, "-m", "nokori", "add",
-         "--trigger", "deploy prisma", "--action", "use lease",
-         "--source-type", "correction", "--confidence", "high"],
+         "--trigger", "deploy prisma", "--action", "use lease"],
         check=True,
         env=env,
         capture_output=True,
@@ -139,10 +138,10 @@ def test_no_gate_marker_when_injection_empty(monkeypatch, tmp_path):
 
 
 def test_decision_features_include_decision_reason():
-    from nokori.hooks.prompt_inject import _build_decision_features
+    from nokori.hooks.prompt_inject import build_decision_features
     from nokori.web.models import DecisionFeaturesOut
 
-    features = _build_decision_features(
+    features = build_decision_features(
         SimpleNamespace(
             trigger_idf_sum=1.2,
             trigger_coverage=0.5,

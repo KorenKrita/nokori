@@ -36,7 +36,7 @@ def enqueue_posthoc_for_session(db: Db, session_id: str) -> int:
                 session_id, fire_event_id, turn_index
             )
 
-            # Skip if already enqueued (idempotency via window_payload_hash)
+            # Skip if already enqueued (one posthoc job per fire event)
             existing = db.fetchone(
                 "SELECT id FROM posthoc_jobs WHERE fire_event_id = ?",
                 (fire_event_id,),
@@ -75,7 +75,7 @@ def mark_posthoc_job_complete(
     db: Db,
     job_id: str,
     label: str,
-    reason_code: str,
+    reason_code: str | None,
     score: float | None = None,
 ) -> None:
     """Mark a posthoc job as done and propagate the label to the fire event."""
@@ -263,8 +263,6 @@ def build_evaluator_input(db: Db, fire_event: dict) -> dict | None:
     for k in _BLIND_KEYS:
         decision_features.pop(k, None)
 
-    feedback: list[dict] = []
-
     # Load actual transcript window content from posthoc_jobs redacted_window_json
     transcript_window_content = _load_transcript_window(
         db, fire_event_id, bounded_window_ref, transcript_window_ref
@@ -272,15 +270,13 @@ def build_evaluator_input(db: Db, fire_event: dict) -> dict | None:
     if transcript_window_content is None:
         return None
 
-    feedback_text = dumps_json(feedback) if feedback else None
-
     return {
         "fire_event_id": fire_event_id,
         "session_id": fire_event.get("session_id"),
         "injected_suggestion": suggestion_text,
         "injection_context": injection_context,
         "transcript_window": transcript_window_content,
-        "feedback": feedback_text,
+        "feedback": None,
         "suggestion": {
             "text": suggestion_text,
             "trigger_context": trigger_snapshot,
@@ -291,7 +287,7 @@ def build_evaluator_input(db: Db, fire_event: dict) -> dict | None:
         "transcript_window_ref": transcript_window_ref,
         "turn_index": fire_event.get("turn_index"),
         "decision_features": decision_features,
-        "feedback_events": feedback,
+        "feedback_events": None,
     }
 
 
@@ -327,6 +323,8 @@ def _load_transcript_window(
     ref = bounded_window_ref or transcript_window_ref
     if ref:
         if _re.match(r'^[0-9a-f]{16,64}$', ref):
+            return None
+        if ref.startswith("session:") or len(ref) < 80:
             return None
         return ref
 

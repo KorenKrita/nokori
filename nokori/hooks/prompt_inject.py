@@ -59,7 +59,7 @@ def _fetch_formal_and_shadow(
     return formal_rules, shadow_rules
 
 
-def _build_decision_features(r) -> dict:
+def build_decision_features(r) -> dict:
     """Extract decision features from a ScoredResult for event logging."""
     return {
         "trigger_idf_sum": r.trigger_idf_sum,
@@ -111,7 +111,7 @@ def _record_fire_events(
                 prompt_hash=ph,
                 turn_index=turn_index,
                 level=level,
-                decision_features=_build_decision_features(r),
+                decision_features=build_decision_features(r),
                 idf_pool_version=getattr(r, "trigger_idf_pool_version", None),
                 embedding_profile_version=r.embedding_profile_version,
                 bounded_window_ref=bounded_ref,
@@ -174,7 +174,7 @@ def _record_shadow_events(
                 shadow_type=shadow_type,
                 prompt_hash=ph,
                 matched_level="hot_candidate" if r.strong_variant_phrase_hit else "warm_candidate",
-                decision_features=_build_decision_features(r),
+                decision_features=build_decision_features(r),
                 idf_pool_version=r.trigger_idf_pool_version,
                 runtime_policy_version=r.runtime_policy_version,
                 embedding_profile_version=r.embedding_profile_version,

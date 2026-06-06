@@ -11,6 +11,10 @@ import hashlib
 import json
 from typing import Any
 
+from ..utils.logging import get_logger
+
+logger = get_logger(__name__)
+
 
 # ---------------------------------------------------------------------------
 # Labels and reason codes (section 10.2)
@@ -201,7 +205,9 @@ def parse_posthoc_output(raw_json: str) -> dict:
             if alias in data:
                 val = data.pop(alias)
                 break
-        data["reason_code"] = val if val is not None else "unclear"
+        if val is None:
+            raise ValueError("posthoc_evaluator: missing required field 'reason_code' (no alias found)")
+        data["reason_code"] = val
 
     # Validate required fields
     for field in POSTHOC_OUTPUT_SCHEMA["required"]:
@@ -319,12 +325,14 @@ def run_posthoc_evaluation(llm: Any, evaluator_input: dict) -> dict | None:
                 user=user_message,
                 role="posthoc_evaluator",
             )
-        except Exception:
+        except Exception as exc:
+            logger.warning("posthoc_evaluator LLM call failed (attempt %d): %s", _attempt + 1, exc)
             continue
 
         try:
             result = parse_posthoc_output(raw_response)
-        except ValueError:
+        except ValueError as exc:
+            logger.warning("posthoc_evaluator parse failed (attempt %d): %s", _attempt + 1, exc)
             continue
 
         result["attribution_weight"] = compute_attribution_weight(result)

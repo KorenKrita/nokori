@@ -37,11 +37,6 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
             updates.append(("severity", args.severity))
         if args.status is not None:
             new_status = args.status
-            if new_status in {"active", "trusted", "suppressed"}:
-                raise NokoriError(
-                    "manual lifecycle status changes are disabled in v6; "
-                    "use autonomous promotion/suppression or archive the rule"
-                )
             allowed = {
                 "candidate": {"archived"},
                 "active": {"archived"},
@@ -54,11 +49,7 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
                     f"invalid status transition {rule.status!r} -> {new_status!r}"
                 )
             updates.append(("status", new_status))
-            if new_status == "active":
-                updates.append(("archived_reason", None))
-                updates.append(("replacement_id", None))
-            elif new_status == "archived":
-                updates.append(("archived_reason", "manual_edit"))
+            updates.append(("archived_reason", "manual_edit"))
         if args.variants is not None:
             updates.append(("trigger_variants", dumps_json(split_csv(args.variants))))
         if args.terms_en is not None or args.terms_zh is not None:

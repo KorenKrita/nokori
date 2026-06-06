@@ -31,15 +31,10 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
         # Archived fingerprint summary
         archived_fp = None
         if rule.status == "archived":
-            row = db.fetchone(
-                "SELECT archived_reason, replacement_id FROM rules WHERE id = ?",
-                (rule.id,),
-            )
-            if row:
-                archived_fp = {
-                    "reason": row["archived_reason"],
-                    "replacement_id": row["replacement_id"],
-                }
+            archived_fp = {
+                "reason": rule.archived_reason,
+                "replacement_id": rule.replacement_id,
+            }
     finally:
         db.close()
 

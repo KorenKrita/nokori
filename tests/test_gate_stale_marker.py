@@ -20,8 +20,6 @@ def _add_high_active(tmp_path, trigger, action, variants=None):
     args = [
         "--trigger", trigger,
         "--action", action,
-        "--source-type", "correction",
-        "--confidence", "high",
     ]
     if variants:
         args.extend(["--variants", ",".join(variants)])

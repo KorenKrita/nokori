@@ -113,7 +113,7 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
                     dumps_json(variant_entries),
                     dumps_json(terms),
                     args.action,
-                    "transcript_extraction",
+                    "external_source_material",
                     status,
                     severity,
                     evidence_score,

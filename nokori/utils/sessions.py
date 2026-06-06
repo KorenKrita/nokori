@@ -2,7 +2,7 @@
 
 | API | Meaning |
 |-----|---------|
-| `is_session_open` | `ended_at` unset — used by SessionEnd extract defer |
+| `is_session_open` | `ended_at` unset — used by status command to count open sessions |
 | `list_active_sessions` | open + activity within `session_idle_seconds` — status UI |
 """
 from __future__ import annotations

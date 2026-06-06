@@ -51,10 +51,8 @@ def test_export_import_roundtrip(tmp_path):
     out = tmp_path / "rules.json"
 
     _run("add", "--trigger", "rule one", "--action", "do x",
-         "--source-type", "correction", "--confidence", "high",
          env_extra={"NOKORI_DATA_DIR": str(src_data)})
     _run("add", "--trigger", "rule two", "--action", "do y",
-         "--source-type", "preference", "--confidence", "medium",
          env_extra={"NOKORI_DATA_DIR": str(src_data)})
 
     r = _run("export", str(out), env_extra={"NOKORI_DATA_DIR": str(src_data)})

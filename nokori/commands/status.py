@@ -5,9 +5,8 @@ from datetime import datetime, timedelta, timezone
 
 from ..config import Config
 from ..cold.jobs import is_circuit_breaker_open
-from ..db import open_db
+from ..db import open_db, fetch_rules
 from ..utils.time import iso_of
-from ..lifecycle.promotion import CROSS_PROJECT_PROMOTE_THRESHOLD
 from ..extract import jobs as job_io
 from ..search import embed_ipc
 from ..search.idf_stats import build_idf_stats
@@ -18,7 +17,6 @@ from ..commands.install import (
 )
 from ..hooks.coalesce import coalesce_enabled
 from ..utils import sessions
-from ..db import fetch_rules
 
 
 def _yn(value: bool) -> str:
@@ -129,7 +127,7 @@ def run(_args: argparse.Namespace, cfg: Config) -> int:
     print(f"extract.pending {pending_jobs}")
 
     # Pending cold/posthoc jobs
-    print(f"cold.pending   {pending_cold['n'] if pending_cold else 0}")
+    print(f"cold.outstanding {pending_cold['n'] if pending_cold else 0}")
     print(f"posthoc.pending {pending_posthoc['n'] if pending_posthoc else 0}")
 
     # Circuit breaker states
@@ -154,7 +152,7 @@ def run(_args: argparse.Namespace, cfg: Config) -> int:
     print(f"embed.server_idle {est['idle_seconds']}s")
     print(f"session.idle_s    {cfg.session_idle_seconds}")
     print(f"promotion.enabled   {cfg.promotion_enabled}")
-    print(f"promotion.threshold   {CROSS_PROJECT_PROMOTE_THRESHOLD}")
+    print(f"promotion.threshold   3")
     print(f"rules.global          {global_rules['n'] if global_rules else 0}")
 
     if cfg.promotion_enabled:

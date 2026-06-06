@@ -95,7 +95,6 @@ class TestProfileSchema:
         assert hasattr(profile, "normalization")
         assert hasattr(profile, "overall")
         assert hasattr(profile, "buckets")
-        assert hasattr(profile, "embedding_only_allowed")
 
 
 
