@@ -612,11 +612,11 @@ class TestRunShadowCounterfactualEvaluation:
             assert summary["failed"] == 1
             assert summary["labeled"] == 0
 
-            # Event remains unlabeled
+            # Event marked as 'unclear' so it doesn't stay permanently unlabeled
             row = db.fetchone(
                 "SELECT shadow_label FROM rule_shadow_events WHERE id = ?", (eid,)
             )
-            assert row["shadow_label"] is None
+            assert row["shadow_label"] == "unclear"
         finally:
             db.close()
 

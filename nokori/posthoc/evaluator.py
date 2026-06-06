@@ -207,6 +207,11 @@ def parse_posthoc_output(raw_json: str) -> dict:
                 break
         if val is None:
             raise ValueError("posthoc_evaluator: missing required field 'reason_code' (no alias found)")
+        if val not in POSTHOC_REASON_CODES:
+            raise ValueError(
+                f"posthoc_evaluator: alias-popped reason_code {val!r} "
+                f"not in POSTHOC_REASON_CODES"
+            )
         data["reason_code"] = val
 
     # Validate required fields

@@ -58,6 +58,8 @@ def _scored_to_dict(sr) -> dict:
 
     # Eligibility result
     level = sr.level  # already computed by retrieve pipeline
+    # "cold" is an API-only display value indicating the rule did not reach any
+    # injection level; it is NOT part of the InjectionLevel domain model.
     eligibility = {
         "decision": level if level else "cold",
         "eligible": level is not None and level != "cold",

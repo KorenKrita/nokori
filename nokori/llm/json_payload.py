@@ -125,6 +125,8 @@ def _repair_json(text: str) -> Any | None:
         from json_repair import repair_json
         result = repair_json(text, return_objects=True)
         if result is not None and result != "" and result != [] and result != {}:
+            if not isinstance(result, (dict, list)):
+                return None
             return result
     except Exception:
         pass

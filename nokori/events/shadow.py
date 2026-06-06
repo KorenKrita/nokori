@@ -2,12 +2,16 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 
 from ..db import Db, dumps_json, loads_json
+from ..llm.json_payload import parse_json_payload
 from ..utils.time import now_iso
+
+log = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from ..models import Rule
@@ -369,20 +373,44 @@ def run_shadow_counterfactual_evaluation(
                 user=user_prompt,
                 role="posthoc_evaluator",
             )
-            data = json.loads(response)
-            label = data.get("label", "unclear")
-            valid_labels = (
-                "would_help_high", "would_help_low", "irrelevant",
-                "risky", "near_miss", "unclear",
+        except (json.JSONDecodeError, KeyError, TypeError, RuntimeError,
+                OSError, ValueError) as exc:
+            log.warning(
+                "shadow counterfactual evaluation LLM call failed for event=%s: %s",
+                shadow_event_id,
+                exc,
             )
-            if label not in valid_labels:
-                label = "unclear"
-            mark_shadow_label(db, shadow_event_id, label)
+            mark_shadow_label(db, shadow_event_id, "unclear")
+            if rule_id:
+                affected_rule_ids.add(rule_id)
+            summary["failed"] += 1
+            summary["processed"] += 1
+            continue
+
+        try:
+            data = json.loads(response)
+        except (json.JSONDecodeError, TypeError):
+            data = parse_json_payload(response)
+        if not isinstance(data, dict):
+            data = None
+        if data is None:
+            mark_shadow_label(db, shadow_event_id, "unclear")
             if rule_id:
                 affected_rule_ids.add(rule_id)
             summary["labeled"] += 1
-        except Exception:
-            summary["failed"] += 1
+            summary["processed"] += 1
+            continue
+        label = data.get("label", "unclear")
+        valid_labels = (
+            "would_help_high", "would_help_low", "irrelevant",
+            "risky", "near_miss", "unclear",
+        )
+        if label not in valid_labels:
+            label = "unclear"
+        mark_shadow_label(db, shadow_event_id, label)
+        if rule_id:
+            affected_rule_ids.add(rule_id)
+        summary["labeled"] += 1
 
         summary["processed"] += 1
 

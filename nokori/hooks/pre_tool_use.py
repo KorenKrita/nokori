@@ -113,8 +113,10 @@ def _has_tool_evidence(rule, payload: dict) -> bool:
     }
     if not tokens:
         return True
-    # Word-boundary match to avoid substring false positives in paths/identifiers
-    hits = {t for t in tokens if re.search(r'\b' + re.escape(t) + r'\b', haystack)}
+    # Truncate haystack to prevent O(tokens × haystack) on very large tool inputs
+    haystack = haystack[:8000]
+    # Simple containment check — precision loss acceptable for fuzzy relevance
+    hits = {t for t in tokens if t in haystack}
     return len(hits) >= max(1, len(tokens) // 2)
 
 

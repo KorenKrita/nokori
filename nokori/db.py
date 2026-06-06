@@ -598,17 +598,27 @@ def archive_rule(db: "Db", rule_id: str, reason: str, now: str, *, strength: str
             (rule_id,),
         )
     # Create user-strength archived fingerprint (spec section 11)
+    # NOTE: This runs in a separate transaction from the archival above. If it
+    # fails, the rule is archived but no fingerprint exists — an atomicity gap.
     if rule_row:
-        from .archive.fingerprints import create_archived_fingerprint_from_data
-        domain_tags = loads_json(rule_row["domain_tags"], []) if rule_row["domain_tags"] else []
-        create_archived_fingerprint_from_data(
-            db,
-            rule_id=rule_id,
-            trigger_canonical=rule_row["trigger_canonical"] or "",
-            action_instruction=rule_row["action_instruction"] or "",
-            domain_tags=domain_tags,
-            strength=strength,
-        )
+        try:
+            from .archive.fingerprints import create_archived_fingerprint_from_data
+            domain_tags = loads_json(rule_row["domain_tags"], []) if rule_row["domain_tags"] else []
+            create_archived_fingerprint_from_data(
+                db,
+                rule_id=rule_id,
+                trigger_canonical=rule_row["trigger_canonical"] or "",
+                action_instruction=rule_row["action_instruction"] or "",
+                domain_tags=domain_tags,
+                strength=strength,
+            )
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).warning(
+                "fingerprint creation failed after archiving rule=%s: %s",
+                rule_id,
+                exc,
+            )
 
 
 def _delete_rule_cascade_tx(tx, rule_id: str) -> None:

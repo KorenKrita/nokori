@@ -517,7 +517,10 @@ def _normalize_role_output(role: str, data: dict[str, Any]) -> dict[str, Any]:
         if "reason_code" not in data:
             rc = _pop_first(data, "reason", "code")
             if rc is not None:
-                data["reason_code"] = rc
+                from ..posthoc.evaluator import POSTHOC_REASON_CODES
+                if rc in POSTHOC_REASON_CODES:
+                    data["reason_code"] = rc
+                # else: discard — 'reason'/'code' alias too generic to trust
 
     return data
 
