@@ -94,11 +94,15 @@ def _unmerge_orphan_replaced(db: Db) -> int:
         )
         if target is None:
             with db.transaction() as tx:
-                tx.execute(
+                cur = tx.execute(
                     "UPDATE rules SET status = 'candidate', replacement_id = NULL, "
-                    "archived_reason = NULL, updated_at = ? WHERE id = ?",
+                    "archived_reason = NULL, updated_at = ?, "
+                    "rule_version = rule_version + 1 "
+                    "WHERE id = ? AND status = 'archived'",
                     (ts, r["id"]),
                 )
+                if cur.rowcount == 0:
+                    continue
             restored += 1
     return restored
 
@@ -142,20 +146,28 @@ def run_unmerge_check(db: Db) -> int:
         )
         if target is None:
             with db.transaction() as tx:
-                tx.execute(
+                cur = tx.execute(
                     "UPDATE rules SET status = 'candidate', replacement_id = NULL, "
-                    "archived_reason = NULL, updated_at = ? WHERE id = ?",
+                    "archived_reason = NULL, updated_at = ?, "
+                    "rule_version = rule_version + 1 "
+                    "WHERE id = ? AND status = 'archived'",
                     (ts, r["id"]),
                 )
+                if cur.rowcount == 0:
+                    continue
             restored += 1
             continue
         if target["status"] in ("suppressed", "archived"):
             with db.transaction() as tx:
-                tx.execute(
+                cur = tx.execute(
                     "UPDATE rules SET status = 'candidate', replacement_id = NULL, "
-                    "archived_reason = NULL, updated_at = ? WHERE id = ?",
+                    "archived_reason = NULL, updated_at = ?, "
+                    "rule_version = rule_version + 1 "
+                    "WHERE id = ? AND status = 'archived'",
                     (ts, r["id"]),
                 )
+                if cur.rowcount == 0:
+                    continue
             restored += 1
     _set_last_run(db, "unmerge_check")
     if restored:

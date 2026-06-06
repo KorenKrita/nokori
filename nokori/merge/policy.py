@@ -94,16 +94,6 @@ def apply_merge_policy(
             lineage_record=None,
         )
 
-    # Low confidence on a non-unrelated relation.
-    if confidence < _LOW_CONFIDENCE_THRESHOLD and relation != "unrelated":
-        return MergeDecision(
-            operation="reject_new",
-            target_rule_id=target_id,
-            reason=f"confidence {confidence:.2f} below threshold for relation {relation}",
-            requires_synthetic_reeval=False,
-            lineage_record=None,
-        )
-
     # --- keep_both gates ---
 
     if relation == "complementary":
@@ -114,6 +104,19 @@ def apply_merge_policy(
 
     if relation == "unrelated":
         return _keep_both(target_id, "unrelated rules")
+
+    # Low confidence on a destructive relation.
+    _DESTRUCTIVE_RELATIONS: frozenset[str] = frozenset(
+        ("equivalent", "obsolete", "new_broader", "new_narrower", "contradiction")
+    )
+    if confidence < _LOW_CONFIDENCE_THRESHOLD and relation in _DESTRUCTIVE_RELATIONS:
+        return MergeDecision(
+            operation="reject_new",
+            target_rule_id=target_id,
+            reason=f"confidence {confidence:.2f} below threshold for relation {relation}",
+            requires_synthetic_reeval=False,
+            lineage_record=None,
+        )
 
     if op_safety == "unsafe" and new_safety != "unsafe":
         return _keep_both(

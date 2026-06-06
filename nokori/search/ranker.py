@@ -48,6 +48,8 @@ def merge_scored_fields(
         embed_result.cosine is not None
         and not bm25_result.matched_trigger_tokens
         and not bm25_result.matched_variant_tokens
+        and not bm25_result.matched_action_tokens
+        and not bm25_result.matched_search_tokens
     )
     return replace(
         bm25_result,

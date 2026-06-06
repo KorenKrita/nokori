@@ -191,8 +191,10 @@ def _is_topic_shift(
             return True
 
     # Low lexical similarity with injection context
+    # Skip for short messages (< 5 tokens) — they are likely affirmative continuations
+    # ("yes", "ok", "sure", "do it"), not topic shifts.
     turn_tokens = _tokenize(content)
-    if injection_tokens and turn_tokens:
+    if injection_tokens and turn_tokens and len(turn_tokens) >= 5:
         similarity = len(injection_tokens & turn_tokens) / max(len(injection_tokens), 1)
         if turn.get("role") == "user" and similarity < _TOPIC_SHIFT_SIMILARITY_THRESHOLD:
             return True

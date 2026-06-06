@@ -50,17 +50,16 @@ def enqueue_job(
     If pending or failed, returns existing job id for retry tracking.
     Otherwise creates a new job. Returns job id.
     """
-    existing = db.fetchone(
-        "SELECT id, status, output_json FROM llm_jobs "
-        "WHERE role = ? AND model_id = ? AND prompt_version = ? AND input_hash = ?",
-        (role, model_id, prompt_version, input_hash),
-    )
-    if existing is not None:
-        return existing["id"]
-
     job_id = str(uuid.uuid4())
     now = _now_iso()
     with db.transaction() as tx:
+        existing = tx.execute(
+            "SELECT id, status, output_json FROM llm_jobs "
+            "WHERE role = ? AND model_id = ? AND prompt_version = ? AND input_hash = ?",
+            (role, model_id, prompt_version, input_hash),
+        ).fetchone()
+        if existing is not None:
+            return existing["id"]
         tx.execute(
             "INSERT INTO llm_jobs (id, role, model_id, prompt_version, input_hash, "
             "status, retries, created_at, updated_at) "
@@ -216,15 +215,6 @@ def enqueue_transcript_ingest(
 
     Returns the job id. Deduplicates on segment_hash + extractor_prompt_version.
     """
-    existing = db.fetchone(
-        "SELECT id FROM transcript_ingest_jobs "
-        "WHERE segment_hash = ? AND extractor_prompt_version = ? "
-        "AND status IN ('pending', 'done')",
-        (segment_hash, extractor_prompt_version),
-    )
-    if existing is not None:
-        return existing["id"]
-
     job_id = str(uuid.uuid4())
     now = _now_iso()
     ttl_expires_at = datetime.fromtimestamp(
@@ -234,6 +224,14 @@ def enqueue_transcript_ingest(
     ).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     with db.transaction() as tx:
+        existing = tx.execute(
+            "SELECT id FROM transcript_ingest_jobs "
+            "WHERE segment_hash = ? AND extractor_prompt_version = ? "
+            "AND status IN ('pending', 'done')",
+            (segment_hash, extractor_prompt_version),
+        ).fetchone()
+        if existing is not None:
+            return existing["id"]
         tx.execute(
             "INSERT INTO transcript_ingest_jobs "
             "(id, transcript_segment_ref, segment_hash, status, "
