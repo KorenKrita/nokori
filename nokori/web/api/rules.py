@@ -16,7 +16,7 @@ from nokori.web.models import RuleResponse
 router = APIRouter()
 
 
-def _rule_to_response(rule) -> dict:
+def _rule_to_response(rule, *, fire_count: int = 0) -> dict:
     """Convert a Rule dataclass to a RuleResponse dict with all structured fields."""
     return RuleResponse(
         id=rule.id,
@@ -64,6 +64,7 @@ def _rule_to_response(rule) -> dict:
         replacement_id=rule.replacement_id,
         created_at=rule.created_at,
         updated_at=rule.updated_at,
+        fire_count=fire_count,
     ).model_dump()
 
 
@@ -92,14 +93,29 @@ def list_rules(
             source_origins=source_origins,
             severities=severities,
         )
+
+        total = len(rules)
+        start = (page - 1) * per_page
+        page_rules = rules[start : start + per_page]
+
+        fire_counts: dict[str, int] = {}
+        if page_rules:
+            rule_ids = [r.id for r in page_rules]
+            placeholders = ",".join("?" * len(rule_ids))
+            rows = db.fetchall(
+                f"SELECT rule_id, COUNT(*) as cnt FROM rule_fire_events "
+                f"WHERE rule_id IN ({placeholders}) GROUP BY rule_id",
+                tuple(rule_ids),
+            )
+            fire_counts = {row["rule_id"]: row["cnt"] for row in rows}
     finally:
         db.close()
 
-    total = len(rules)
-    start = (page - 1) * per_page
-    page_rules = rules[start : start + per_page]
     return {
-        "data": [_rule_to_response(r) for r in page_rules],
+        "data": [
+            _rule_to_response(r, fire_count=fire_counts.get(r.id, 0))
+            for r in page_rules
+        ],
         "meta": {"total": total, "page": page, "per_page": per_page},
     }
 

@@ -24,6 +24,20 @@ function formatMetaValue(field: string, value: string): string {
   return value
 }
 
+const FIRE_LEVEL_CLASSES: Record<string, string> = {
+  hot: 'bg-accent-rose/15 text-accent-rose',
+  warm: 'bg-accent-amber/15 text-accent-amber',
+};
+const DEFAULT_FIRE_LEVEL_CLASS = 'bg-accent-violet/15 text-accent-violet';
+
+const POSTHOC_LABEL_CLASSES: Record<string, string> = {
+  observed_useful: 'bg-accent-emerald/15 text-accent-emerald',
+  plausible_useful: 'bg-accent-sky/15 text-accent-sky',
+  irrelevant: 'bg-[var(--color-bg-elevated)] text-text-tertiary',
+  harmful: 'bg-accent-rose/15 text-accent-rose',
+};
+const DEFAULT_POSTHOC_CLASS = 'bg-accent-amber/15 text-accent-amber';
+
 export function RuleDetail() {
   const { shortId } = useParams<{ shortId: string }>()
   const navigate = useNavigate()
@@ -150,21 +164,20 @@ export function RuleDetail() {
                 </dd>
               </div>
               {rule.fire_levels && Object.keys(rule.fire_levels).length > 0 && (
-                <div className="flex flex-wrap gap-1 mt-2">
-                  {Object.entries(rule.fire_levels).map(([level, count]) => (
-                    <span
-                      key={level}
-                      className={`px-2 py-0.5 rounded text-xs font-mono ${
-                        level === 'hot'
-                          ? 'bg-accent-rose/15 text-accent-rose'
-                          : level === 'warm'
-                            ? 'bg-accent-amber/15 text-accent-amber'
-                            : 'bg-accent-violet/15 text-accent-violet'
-                      }`}
-                    >
-                      {level} {count}
-                    </span>
-                  ))}
+                <div className="flex justify-between gap-3">
+                  <dt className="text-text-tertiary">{t('rules.fire_levels')}</dt>
+                  <dd className="flex flex-wrap gap-1">
+                    {Object.entries(rule.fire_levels).map(([level, count]) => (
+                      <span
+                        key={level}
+                        className={`px-2 py-0.5 rounded text-xs font-mono ${
+                          FIRE_LEVEL_CLASSES[level] ?? DEFAULT_FIRE_LEVEL_CLASS
+                        }`}
+                      >
+                        {level} {count}
+                      </span>
+                    ))}
+                  </dd>
                 </div>
               )}
               {(rule.shadow_count ?? 0) > 0 && (
@@ -184,15 +197,7 @@ export function RuleDetail() {
                   <div key={label} className="flex items-center justify-between gap-2">
                     <span
                       className={`px-2 py-0.5 rounded text-xs font-mono ${
-                        label === 'observed_useful'
-                          ? 'bg-accent-emerald/15 text-accent-emerald'
-                          : label === 'plausible_useful'
-                            ? 'bg-accent-sky/15 text-accent-sky'
-                            : label === 'irrelevant'
-                              ? 'bg-[var(--color-bg-elevated)] text-text-tertiary'
-                              : label === 'harmful'
-                                ? 'bg-accent-rose/15 text-accent-rose'
-                                : 'bg-accent-amber/15 text-accent-amber'
+                        POSTHOC_LABEL_CLASSES[label] ?? DEFAULT_POSTHOC_CLASS
                       }`}
                     >
                       {label}
