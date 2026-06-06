@@ -86,11 +86,12 @@ def get_monitor_errors(
     group_by: Literal["role", "model_id", "error_type", "source"] = Query("role"),
     session_id: str | None = Query(None),
     since: str | None = Query(None),
+    until: str | None = Query(None),
 ):
     cfg = get_config()
     db = open_db(cfg.db_path)
     try:
-        results = query_errors(db, group_by=group_by, session_id=session_id, since=since)
+        results = query_errors(db, group_by=group_by, session_id=session_id, since=since, until=until)
         return {"errors": results, "group_by": group_by}
     finally:
         db.close()
@@ -99,6 +100,7 @@ def get_monitor_errors(
 @router.get("/monitor/errors/trend")
 def get_error_trend(
     since: str | None = Query(None),
+    until: str | None = Query(None),
     session_id: str | None = Query(None),
 ):
     cfg = get_config()
@@ -112,6 +114,9 @@ def get_error_trend(
         if since:
             where_parts.append("created_at >= ?")
             params.append(since)
+        if until:
+            where_parts.append("created_at <= ?")
+            params.append(until)
 
         where_clause = (" WHERE " + " AND ".join(where_parts)) if where_parts else ""
 

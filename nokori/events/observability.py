@@ -142,7 +142,7 @@ def query_errors(
 ) -> list[dict]:
     """Aggregate error_events by a dimension. Returns list of dicts with count."""
     column_map = {"role": "role", "model_id": "model_id", "error_type": "error_type", "source": "source"}
-    group_by = column_map.get(group_by, "role")
+    group_col = column_map.get(group_by, "role")
 
     where = []
     params: list = []
@@ -157,10 +157,10 @@ def query_errors(
         where.append("created_at <= ?")
         params.append(until)
 
-    sql = f"SELECT {group_by}, COUNT(*) AS count FROM error_events"
+    sql = f"SELECT {group_col}, COUNT(*) AS count FROM error_events"
     if where:
         sql += " WHERE " + " AND ".join(where)
-    sql += f" GROUP BY {group_by} ORDER BY count DESC"
+    sql += f" GROUP BY {group_col} ORDER BY count DESC"
 
     rows = db.fetchall(sql, tuple(params))
     return [dict(r) for r in rows]

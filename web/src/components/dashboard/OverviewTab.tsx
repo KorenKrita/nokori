@@ -83,7 +83,7 @@ export function OverviewTab({ data }: { data: OverviewData | null }) {
             <h3 className="text-xs uppercase tracking-wider text-text-tertiary mb-4">Pipeline Funnel</h3>
             <div className="space-y-2">
               {funnelData.map((item, i) => {
-                const maxVal = funnelData[0]?.value || 1
+                const maxVal = funnelData[0]?.value ?? 1
                 const pct = Math.round((item.value / maxVal) * 100)
                 return (
                   <div key={item.name} className="flex items-center gap-3">

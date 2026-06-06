@@ -55,6 +55,7 @@ def _follow_mode(cfg: Config, *, since: str, session_id: str | None, source: str
     finally:
         db.close()
 
+    last_seen_at = since
     try:
         while True:
             time.sleep(5)
@@ -73,11 +74,12 @@ def _follow_mode(cfg: Config, *, since: str, session_id: str | None, source: str
                         last_id = None
                         events = query_events(
                             db, session_id=session_id, source=source,
-                            since=since, limit=50,
+                            since=last_seen_at, limit=50,
                         )
                 for event in events:
                     _print_event(event, verbose=verbose)
                     last_id = event["id"]
+                    last_seen_at = event.get("created_at") or last_seen_at
             finally:
                 db.close()
     except (KeyboardInterrupt, BrokenPipeError):

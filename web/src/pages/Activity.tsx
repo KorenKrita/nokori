@@ -57,9 +57,6 @@ export function Activity() {
   useEffect(() => {
     setEvents([])
     lastIdRef.current = null
-  }, [sessionFilter, sourceFilter])
-
-  useEffect(() => {
     let active = true
     const poll = async () => {
       try {
