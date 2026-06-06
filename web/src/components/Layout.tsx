@@ -13,6 +13,7 @@ import {
   ArrowsClockwiseIcon,
   GearSixIcon,
   TerminalIcon,
+  WaveformIcon,
 } from '@phosphor-icons/react'
 
 const NAV_ITEMS = [
@@ -24,6 +25,7 @@ const NAV_ITEMS = [
   { to: '/lifecycle', key: 'nav.lifecycle', icon: ArrowsClockwiseIcon },
   { to: '/config', key: 'nav.config', icon: GearSixIcon },
   { to: '/logs', key: 'nav.logs', icon: TerminalIcon },
+  { to: '/activity', key: 'nav.activity', icon: WaveformIcon },
 ]
 
 export function Layout() {

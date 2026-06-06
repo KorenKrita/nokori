@@ -193,6 +193,15 @@ const translations: Record<Locale, Record<string, string>> = {
     'theme.light': '浅色',
     'theme.dark': '深色',
     'theme.system': '跟随系统',
+    // Activity
+    'nav.activity': '活动',
+    'activity.title': '活动',
+    'activity.tab.timeline': '时间线',
+    'activity.tab.dashboard': 'Nokori Dashboard',
+    'activity.filter.all_sessions': '全部会话',
+    'activity.filter.all_types': '全部类型',
+    'activity.auto_scroll': '自动滚动',
+    'activity.empty': '暂无事件',
   },
   en: {
     // Nav
@@ -386,6 +395,15 @@ const translations: Record<Locale, Record<string, string>> = {
     'theme.light': 'Light',
     'theme.dark': 'Dark',
     'theme.system': 'System',
+    // Activity
+    'nav.activity': 'Activity',
+    'activity.title': 'Activity',
+    'activity.tab.timeline': 'Timeline',
+    'activity.tab.dashboard': 'Nokori Dashboard',
+    'activity.filter.all_sessions': 'All Sessions',
+    'activity.filter.all_types': 'All Types',
+    'activity.auto_scroll': 'Auto-scroll',
+    'activity.empty': 'No events yet',
   },
   ja: {
     // Nav
@@ -579,6 +597,15 @@ const translations: Record<Locale, Record<string, string>> = {
     'theme.light': 'ライト',
     'theme.dark': 'ダーク',
     'theme.system': 'システム',
+    // Activity
+    'nav.activity': 'アクティビティ',
+    'activity.title': 'アクティビティ',
+    'activity.tab.timeline': 'タイムライン',
+    'activity.tab.dashboard': 'Nokori ダッシュボード',
+    'activity.filter.all_sessions': '全セッション',
+    'activity.filter.all_types': '全タイプ',
+    'activity.auto_scroll': '自動スクロール',
+    'activity.empty': 'イベントなし',
   },
 }
 
