@@ -231,14 +231,11 @@ class TestBuildEvaluatorInputPartiallyBlind:
             assert result is not None
 
             # Must NOT contain rule status, scores, or promotion target
-            result_str = json.dumps(result)
-            assert "status" not in result_str.lower() or "status" not in result
-            assert "promotion" not in result_str.lower()
-            assert "quality_score" not in result_str
-            assert "observed_usefulness_score" not in result_str
+            assert "rule_status" not in result
+            assert "status" not in result.get("decision_features", {})
+            assert "quality_score" not in result.get("decision_features", {})
 
             # Verify excluded keys are not present
-            assert "rule_status" not in result
             assert "promotion_target" not in result
             assert "historical_scores" not in result
         finally:

@@ -46,7 +46,6 @@ def test_maintain_runs_shadow_counterfactual_worker(monkeypatch, tmp_path, capsy
             "failed": 0,
             "transitions_applied": 1,
         },
-        raising=False,
     )
     monkeypatch.setattr(maintain, "_PosthocLLMAdapter", lambda cfg_arg: object())
     monkeypatch.setattr(maintain, "expire_stale_ingest_jobs", lambda db_arg: 0)

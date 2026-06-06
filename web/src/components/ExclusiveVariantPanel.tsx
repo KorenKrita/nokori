@@ -71,7 +71,6 @@ export function ExclusiveVariantPanel({
       <div className="space-y-2">
         {variants.map((variant) => {
           const isActive = active === variant.id
-          const isOpen = isActive
           const Icon = VARIANT_ICON[variant.id]
           return (
             <div
@@ -87,12 +86,12 @@ export function ExclusiveVariantPanel({
                 type="button"
                 className={cn(
                   'w-full flex items-center justify-between gap-3 px-4 py-3 text-left text-sm font-medium transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]',
-                  isOpen
+                  isActive
                     ? 'bg-[var(--color-nav-active-bg)] text-[var(--color-nav-active-text)] border-l-2 border-accent-sky'
                     : 'bg-[var(--color-bg-elevated)] text-[var(--color-text-secondary)] hover:bg-[var(--color-row-hover)]',
                 )}
                 onClick={() => select(variant.id)}
-                aria-expanded={isOpen}
+                aria-expanded={isActive}
               >
                 <span className="flex items-center gap-2">
                   <Icon size={18} weight="light" className={isActive ? 'text-accent-sky' : ''} />
@@ -103,10 +102,10 @@ export function ExclusiveVariantPanel({
                     </span>
                   )}
                 </span>
-                <span className="text-[var(--color-text-tertiary)] text-xs">{isOpen ? '▾' : '▸'}</span>
+                <span className="text-[var(--color-text-tertiary)] text-xs">{isActive ? '▾' : '▸'}</span>
               </button>
               <AnimatePresence initial={false}>
-                {isOpen && (
+                {isActive && (
                   <motion.div
                     initial={{ height: 0, opacity: 0 }}
                     animate={{ height: 'auto', opacity: 1 }}

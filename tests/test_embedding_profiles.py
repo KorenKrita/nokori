@@ -171,3 +171,6 @@ class TestIsKnownProfile:
 
     def test_returns_true_for_registered(self, registered_profile):
         assert is_known_profile("registered-test-model") is True
+
+    def test_load_profile_returns_registered(self, registered_profile):
+        assert load_profile("registered-test-model") is registered_profile

@@ -714,5 +714,5 @@ class TestResultStructure:
             },
         ]
         result = run_synthetic_eval(rule_data, matcher, idf_stats, eval_cases)
-        with pytest.raises(Exception):
+        with pytest.raises(AttributeError):
             result.passed = False  # type: ignore[misc]

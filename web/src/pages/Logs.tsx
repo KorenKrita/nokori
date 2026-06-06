@@ -3,6 +3,13 @@ import { motion } from 'motion/react'
 import { GlassCard } from '@/components/GlassCard'
 import { t } from '@/lib/i18n'
 
+function getLineColorClass(line: string): string {
+  const prefix = line.slice(0, 80);
+  if (/\bERROR\b/.test(prefix)) return 'text-accent-rose bg-accent-rose/5';
+  if (/\bWARN(?:ING)?\b/.test(prefix)) return 'text-accent-amber bg-accent-amber/5';
+  return 'text-text-secondary';
+}
+
 export function Logs() {
   const [lines, setLines] = useState<string[]>([])
   const [level, setLevel] = useState('all')
@@ -72,13 +79,7 @@ export function Logs() {
           {lines.map((line, i) => (
             <div
               key={i}
-              className={`py-0.5 px-2 rounded break-all whitespace-pre-wrap ${
-                /\bERROR\b/.test(line.slice(0, 80))
-                  ? 'text-accent-rose bg-accent-rose/5'
-                  : /\bWARN(?:ING)?\b/.test(line.slice(0, 80))
-                  ? 'text-accent-amber bg-accent-amber/5'
-                  : 'text-text-secondary'
-              }`}
+              className={`py-0.5 px-2 rounded break-all whitespace-pre-wrap ${getLineColorClass(line)}`}
             >
               {line.replace(/(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}:\d{2})Z/, '$1 $2')}
             </div>

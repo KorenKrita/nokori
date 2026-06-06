@@ -11,10 +11,10 @@ def _utcnow_iso(delta_days: int = 0) -> str:
     return dt.isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
-def _make_rule(db, *, id_, status, last_hit_days_ago=None,
+def _make_rule(db, *, id_, status, created_days_ago=None,
                source_origin="transcript_extraction",
                project_id=None, project_scope="project"):
-    created = _utcnow_iso(-(last_hit_days_ago or 0))
+    created = _utcnow_iso(-(created_days_ago or 0))
     short = id_[:6]
     with db.transaction() as tx:
         tx.execute(
@@ -37,7 +37,7 @@ def test_candidate_cleanup_deletes_fire_events(monkeypatch, tmp_path):
     db = open_db(cfg.db_path)
     try:
         _make_rule(db, id_="cand-fk", status="candidate",
-                   last_hit_days_ago=30, source_origin="transcript_extraction")
+                   created_days_ago=30, source_origin="transcript_extraction")
         with db.transaction() as tx:
             tx.execute(
                 "INSERT INTO rule_fire_events (id, rule_id, session_id, level, created_at) "
@@ -61,9 +61,9 @@ def test_candidate_cleanup_removes_old(monkeypatch, tmp_path):
     db = open_db(cfg.db_path)
     try:
         _make_rule(db, id_="cand-1", status="candidate",
-                   last_hit_days_ago=30, source_origin="transcript_extraction")
+                   created_days_ago=30, source_origin="transcript_extraction")
         _make_rule(db, id_="anti-1", status="candidate",
-                   last_hit_days_ago=30, source_origin="external_source_material")
+                   created_days_ago=30, source_origin="external_source_material")
         deleted = maintenance.run_candidate_cleanup(db)
         # Default cand TTL=20 days; external_source_material TTL=40
         assert deleted == 1

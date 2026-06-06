@@ -14,7 +14,7 @@ const translations: Record<Locale, Record<string, string>> = {
     // Dashboard
     'dashboard.title': '仪表盘',
     'dashboard.rules': '规则',
-    'dashboard.fire_events_24h': 'Fire events (24h)',
+    'dashboard.fire_events_24h': '触发事件 (24h)',
     'dashboard.embed_server': 'Embed 服务',
     'dashboard.gate': 'Gate 阻断',
     'dashboard.extract': '提取任务',
@@ -386,7 +386,7 @@ const translations: Record<Locale, Record<string, string>> = {
     // Dashboard
     'dashboard.title': 'ダッシュボード',
     'dashboard.rules': 'ルール',
-    'dashboard.fire_events_24h': 'Fire events (24h)',
+    'dashboard.fire_events_24h': '発火イベント (24h)',
     'dashboard.embed_server': 'Embed サーバー',
     'dashboard.gate': 'Gate',
     'dashboard.extract': '抽出',

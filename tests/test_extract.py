@@ -308,7 +308,7 @@ def test_process_path_passes_transcript_evidence_and_role_limits(
     assert captured["kwargs"]["role_timeouts"] == cfg.role_timeouts
 
 
-def test_batch_extract_keeps_job_on_merge_llm_failure(monkeypatch, tmp_path):
+def test_batch_extract_consumes_job_on_cold_pipeline_failure(monkeypatch, tmp_path):
     monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
     cfg = Config.from_env()
     cfg.ensure_dirs()

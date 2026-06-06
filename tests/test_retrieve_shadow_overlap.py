@@ -19,7 +19,7 @@ def _rule(rule_id: str, *, project_id: str = "proj-a") -> Rule:
         status="active",
         severity="reminder",
         trigger_canonical="git force push",
-        trigger_variants=[],
+        trigger_variants="[]",
         search_terms={"en": [], "zh": []},
         action_instruction="use lease",
         source_origin="transcript_extraction",
@@ -112,8 +112,6 @@ def test_shadow_selection_does_not_consume_formal_hot_slot(monkeypatch, tmp_path
 
         def fake_retrieve(_prompt, rules, _db, _cfg, **_kwargs):
             rule_ids = {r.id for r in rules}
-            if rule_ids == {"formal-rule", "shadow-rule"}:
-                return RetrievalResult(hot=[shadow_hit], warm=[], bm25_matches=2, embed_mode="off")
             if rule_ids == {"formal-rule"}:
                 return RetrievalResult(hot=[formal_hit], warm=[], bm25_matches=1, embed_mode="off")
             if rule_ids == {"shadow-rule"}:

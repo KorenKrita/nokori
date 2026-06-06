@@ -173,18 +173,21 @@ class TestPoolVersioning:
         stats_b = build_idf_stats(pool, tokenizer_version="2.0.0")
         # tokenizer_version is recorded; pool_version is rule-set hash
         assert stats_a.tokenizer_version != stats_b.tokenizer_version
+        assert stats_a.pool_version != stats_b.pool_version
 
     def test_different_matcher_compiler_version(self):
         pool = _make_pool(5)
         stats_a = build_idf_stats(pool, matcher_compiler_version="1.0.0")
         stats_b = build_idf_stats(pool, matcher_compiler_version="2.0.0")
         assert stats_a.matcher_compiler_version != stats_b.matcher_compiler_version
+        assert stats_a.pool_version != stats_b.pool_version
 
     def test_different_concept_compiler_version(self):
         pool = _make_pool(5)
         stats_a = build_idf_stats(pool, concept_compiler_version="1.0.0")
         stats_b = build_idf_stats(pool, concept_compiler_version="2.0.0")
         assert stats_a.concept_compiler_version != stats_b.concept_compiler_version
+        assert stats_a.pool_version != stats_b.pool_version
 
     def test_different_eligible_rule_set(self):
         pool_a = _make_pool(5, prefix="alpha")
@@ -251,19 +254,19 @@ class TestGenericTokenExclusion:
         for word in ("the", "is", "and", "or", "for", "with", "not"):
             assert word in GENERIC_TOKENS
 
-    def test_generic_tokens_in_trigger_still_counted_in_df(self):
-        # df_by_token counts raw tokenizer output (GENERIC_TOKENS filtering
-        # happens at anchor compilation, not at IDF stats building)
+    def test_generic_tokens_in_trigger_excluded_from_df(self):
+        # Non-generic tokens are recorded
         rule = MockRule(
             id="r1",
             trigger_canonical="the kubernetes deployment is failing",
         )
         stats = build_idf_stats([rule])
-        # Tokenizer produces these, IDF stats records them
-        # But runtime anchor compilation (outside idf_stats) would exclude them
+        # Non-generic tokens are recorded
         assert "kubernetes" in stats.df_by_token
         assert "deployment" in stats.df_by_token
         assert "failing" in stats.df_by_token
+        assert "the" not in stats.df_by_token
+        assert "is" not in stats.df_by_token
 
     def test_generic_tokens_are_frozenset(self):
         assert isinstance(GENERIC_TOKENS, frozenset)

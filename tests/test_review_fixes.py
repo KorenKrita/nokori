@@ -136,7 +136,7 @@ def test_embedding_search_filters_model_version(monkeypatch, tmp_path):
             status="active",
             severity="reminder",
             trigger_canonical="t",
-            trigger_variants=[],
+            trigger_variants="[]",
             search_terms={},
             action_instruction="a",
             project_scope="global",

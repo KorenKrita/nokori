@@ -237,7 +237,7 @@ def test_split_required_returns_split():
 
 
 def test_validate_merge_transaction_destructive_requires_all_gates():
-    """Destructive ops (replace/suppress/archive) require all three gates."""
+    """Destructive ops (replace/suppress/archive) require all four gates."""
     decision = MergeDecision(
         operation="replace_existing",
         target_rule_id="x",
@@ -263,6 +263,22 @@ def test_validate_merge_transaction_destructive_requires_all_gates():
     assert validate_merge_transaction(
         _existing(), _new_rule(), decision,
         synthetic_passed=True, fingerprint_clear=True, matcher_compiled=False,
+    ) is False
+
+
+def test_validate_merge_transaction_final_admission_blocks():
+    """final_admission_passed=False blocks the transaction."""
+    decision = MergeDecision(
+        operation="replace_existing",
+        target_rule_id="x",
+        reason="test",
+        requires_synthetic_reeval=True,
+        lineage_record=None,
+    )
+    assert validate_merge_transaction(
+        _existing(), _new_rule(), decision,
+        synthetic_passed=True, fingerprint_clear=True, matcher_compiled=True,
+        final_admission_passed=False,
     ) is False
 
 

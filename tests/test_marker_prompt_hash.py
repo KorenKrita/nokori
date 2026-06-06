@@ -66,7 +66,7 @@ def test_pre_tool_use_fail_open_when_marker_only_no_injection(monkeypatch, tmp_p
         cfg,
         sess,
         "git push --force the branch",
-        [MarkerRule("rule01", "use lease", "transcript_extraction", "rationale")],
+        [MarkerRule("rule01", "use lease", trigger="deploy command", rationale="rationale")],
         ph=ph,
     )
     from nokori.hooks.pre_tool_use import handle
@@ -91,7 +91,7 @@ def test_pre_tool_use_skips_block_on_stale_prompt_hash(monkeypatch, tmp_path):
             cfg,
             sess,
             "git push --force the branch",
-            [MarkerRule("rule01", "use lease", "transcript_extraction", "rationale")],
+            [MarkerRule("rule01", "use lease", trigger="git push force remote", rationale="rationale")],
             ph=ph_old,
         )
         with db.transaction() as tx:
@@ -139,7 +139,7 @@ def test_pre_tool_use_rechecks_tool_input_only_regex_exclusion(monkeypatch, tmp_
             cfg,
             sess,
             "run deploy command",
-            [MarkerRule("regex1", "use lease", "transcript_extraction", "rationale")],
+            [MarkerRule("regex1", "use lease", trigger="deploy command", rationale="rationale")],
             ph=ph,
         )
         with db.transaction() as tx:
@@ -251,7 +251,7 @@ def test_pre_tool_use_revalidates_marker_rule_lifecycle(
             cfg,
             sess,
             "deploy trigger",
-            [MarkerRule("nogate", "use lease", "deploy trigger")],
+            [MarkerRule("nogate", "use lease", trigger="deploy trigger")],
             ph=ph,
         )
         with db.transaction() as tx:

@@ -19,6 +19,8 @@ from nokori.events.shadow import (
     count_shadow_evidence,
     create_shadow_event,
     is_duplicate_shadow_context,
+    mark_shadow_label,
+    run_shadow_counterfactual_evaluation,
 )
 from nokori.models import Rule
 
@@ -94,7 +96,7 @@ def _insert_rule(db, *, rule_id=None, status="active", rule_version=1) -> Rule:
         required_concept_groups=required_concept_groups,
         excluded_contexts=excluded_contexts,
         near_miss_examples=[],
-        trigger_variants=["variant_a"],
+        trigger_variants=json.dumps(["variant_a"]),
         action_instruction="do the action",
         domain_tags=["domain_web"],
         tool_tags=["tool_git"],
@@ -376,7 +378,6 @@ class TestCountShadowEvidence:
             rule = _insert_rule(db, status="candidate")
             fp = compute_context_fingerprint("hash_dup", "tool_a", 1)
             # Insert two shadow events with same fingerprint
-            from nokori.events.shadow import mark_shadow_label
 
             eid1 = create_shadow_event(
                 db, rule, "s1", "candidate", "candidate_probe",
@@ -404,8 +405,6 @@ class TestCountShadowEvidence:
         try:
             rule_v1 = _insert_rule(db, status="candidate", rule_version=1)
             rule_v2_id = rule_v1.id  # Same rule, but we'll insert events with version 2
-
-            from nokori.events.shadow import mark_shadow_label
 
             # Event with version 1
             eid1 = create_shadow_event(
@@ -486,9 +485,6 @@ class TestRunShadowCounterfactualEvaluation:
     """Tests for run_shadow_counterfactual_evaluation with a mock LLM."""
 
     def test_labels_unlabeled_shadow_events(self, tmp_path):
-        from nokori.events.shadow import (
-            run_shadow_counterfactual_evaluation,
-        )
 
         db = _make_db(tmp_path)
         try:
@@ -545,7 +541,6 @@ class TestRunShadowCounterfactualEvaluation:
             db.close()
 
     def test_shadow_labels_drive_candidate_promotion(self, tmp_path):
-        from nokori.events.shadow import run_shadow_counterfactual_evaluation
 
         db = _make_db(tmp_path)
         try:
@@ -595,7 +590,6 @@ class TestRunShadowCounterfactualEvaluation:
             db.close()
 
     def test_handles_llm_failure_gracefully(self, tmp_path):
-        from nokori.events.shadow import run_shadow_counterfactual_evaluation
 
         db = _make_db(tmp_path)
         try:

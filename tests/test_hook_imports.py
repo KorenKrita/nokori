@@ -30,15 +30,20 @@ def test_cross_module_imports_resolve():
     for f in sorted(hooks_dir.glob("*.py")):
         tree = ast.parse(f.read_text())
         for node in ast.walk(tree):
-            if isinstance(node, ast.ImportFrom) and node.level == 1 and node.module:
+            if isinstance(node, ast.ImportFrom) and node.level >= 1 and node.module:
                 for alias in node.names:
-                    imports.append((f.name, node.module, alias.name))
+                    imports.append((f.name, node.level, node.module, alias.name))
 
+    # nokori.hooks is the base; level 1 = nokori.hooks.{module},
+    # level 2 = nokori.{module}, etc.
+    base_parts = ["nokori", "hooks"]
     failures = []
-    for source, module, name in imports:
-        mod = importlib.import_module(f"nokori.hooks.{module}")
+    for source, level, module, name in imports:
+        parent_parts = base_parts[: len(base_parts) - (level - 1)]
+        fqn = ".".join(parent_parts + [module])
+        mod = importlib.import_module(fqn)
         if not hasattr(mod, name):
-            failures.append(f"{source}: from .{module} import {name} — name not found")
+            failures.append(f"{source}: from {'.' * level}{module} import {name} — name not found")
 
     assert not failures, "\n".join(failures)
 

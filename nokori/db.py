@@ -606,6 +606,7 @@ def _delete_rule_cascade_tx(tx, rule_id: str) -> None:
     tx.execute("DELETE FROM rule_reviews WHERE rule_id = ?", (rule_id,))
     tx.execute("DELETE FROM rule_synthetic_evals WHERE rule_id = ?", (rule_id,))
     tx.execute("DELETE FROM rule_embeddings WHERE rule_id = ?", (rule_id,))
+    tx.execute("DELETE FROM rule_lineage WHERE old_rule_id = ? OR new_rule_id = ?", (rule_id, rule_id))
     # Finally the rule itself
     tx.execute("DELETE FROM rules WHERE id = ?", (rule_id,))
 

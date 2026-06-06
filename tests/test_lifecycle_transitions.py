@@ -1067,7 +1067,7 @@ class TestCAS:
         finally:
             db.close()
 
-    def test_stale_policy_version_prevents_transition(self, tmp_path):
+    def test_old_policy_version_does_not_block_transition(self, tmp_path):
         """CAS checks runtime_policy_version match."""
         db = _fresh_db(tmp_path)
         try:

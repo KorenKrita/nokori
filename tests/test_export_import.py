@@ -381,8 +381,8 @@ def test_export_import_roundtrip_zh_fields(tmp_path):
                     "trigger_variants": ["git push --force"],
                     "search_terms": {"en": ["force", "push"], "zh": ["force-zh"]},
                     "action_instruction": "use --force-with-lease",
-                "action_instruction_zh": "use lease zh",
-                "status": "active",
+                    "action_instruction_zh": "use lease zh",
+                    "status": "active",
             }
         ],
     }

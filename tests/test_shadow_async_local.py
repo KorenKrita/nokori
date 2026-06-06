@@ -87,7 +87,7 @@ class TestFetchShadowRules:
         finally:
             db.close()
 
-    def test_returns_empty_when_no_project_id(self, monkeypatch, tmp_path):
+    def test_returns_all_candidates_when_no_project_id(self, monkeypatch, tmp_path):
         """Without project_id, returns all candidate/suppressed rules."""
         monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
         cfg = Config.from_env()

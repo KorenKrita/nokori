@@ -35,7 +35,6 @@ def test_gate_ttl_zero_never_expires():
     assert is_expired(m, 0) is False
 
 
-
 def test_strip_short_id_from_all_markers(tmp_path, monkeypatch):
     monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
     cfg = Config.from_env()

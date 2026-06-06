@@ -1,3 +1,5 @@
+import hashlib
+
 from nokori.config import Config
 from nokori.db import open_db
 from nokori.hooks.user_prompt_submit import handle
@@ -12,7 +14,6 @@ def _utcnow_iso() -> str:
 
 def _insert(db, *, id_, trigger, status="candidate", project_id="other-proj"):
     now = _utcnow_iso()
-    import hashlib
     sid = hashlib.md5(id_.encode()).hexdigest()[:6]
     with db.transaction() as tx:
         tx.execute(
