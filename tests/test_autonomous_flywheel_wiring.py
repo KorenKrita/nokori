@@ -146,7 +146,7 @@ def test_injection_writes_one_complete_fire_event(tmp_path, monkeypatch):
         db.close()
 
 
-def test_cli_add_high_correction_creates_v6_candidate_not_active(tmp_path):
+def test_cli_add_creates_candidate(tmp_path):
     env = os.environ.copy()
     env["NOKORI_DATA_DIR"] = str(tmp_path)
     env["NOKORI_EMBED_PROVIDER"] = "off"

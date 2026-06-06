@@ -202,7 +202,7 @@ def rule_synthetic_eval(short_id: str):
 
     summary = SyntheticEvalSummary(
         rule_id=row["rule_id"],
-        rule_version=row["rule_version"],
+        rule_version=row["rule_version"] or 0,
         passed=bool(row["passed"]),
         runtime_policy_version=row.get("runtime_policy_version"),
         tokenizer_version=row.get("tokenizer_version"),

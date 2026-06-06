@@ -4,7 +4,7 @@ from nokori.db import open_db
 from nokori.hooks.user_prompt_submit import _run_dismiss
 
 
-def test_dismiss_chinese_punctuation(monkeypatch, tmp_path):
+def test_dismiss_basic(monkeypatch, tmp_path):
     monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
     cfg = Config.from_env()
     db = open_db(cfg.db_path)

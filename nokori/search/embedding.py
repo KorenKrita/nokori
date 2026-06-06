@@ -105,9 +105,11 @@ def _rule_text(rule: Rule) -> str:
     )
     for variant in variants:
         if isinstance(variant, dict):
-            parts.append(str(variant.get("text") or ""))
+            text = str(variant.get("text") or "")
         else:
-            parts.append(str(variant))
+            text = str(variant)
+        if text:
+            parts.append(text)
     parts.extend(rule.trigger_variants_zh)
     for items in rule.search_terms.values():
         parts.extend(items)

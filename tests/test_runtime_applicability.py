@@ -34,7 +34,6 @@ PASS_BASELINE = dict(
     pool_size=0,
     has_tool_input=False,
     tool_evidence_passed=False,
-    observed_usefulness_score=0.0,
     false_positive_score=0.0,
 )
 

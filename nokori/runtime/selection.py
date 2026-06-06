@@ -61,7 +61,6 @@ def mmr_penalty(
 
 def compute_utility(
     scored_result: ScoredResult,
-    idf_stats: dict[str, float],
     selected_tokens_list: list[frozenset[str]] | None = None,
 ) -> float:
     """Compute marginal utility for a candidate rule.
@@ -70,9 +69,6 @@ def compute_utility(
     ----------
     scored_result:
         The fielded scoring result for this rule.
-    idf_stats:
-        Mapping of trigger tokens to their IDF values (unused beyond
-        trigger_idf_sum which is pre-computed on ScoredResult).
     selected_tokens_list:
         Trigger token sets of already-selected rules, for MMR penalty.
     """
@@ -146,10 +142,13 @@ def _has_distinct_domain(candidate: ScoredResult, selected: list[ScoredResult]) 
     return True
 
 
+_FORMAT_OVERHEAD: int = 25
+
+
 def _char_len(result: ScoredResult) -> int:
     """Estimate injected character length for a rule."""
     rule = result.rule
-    return len(rule.trigger_canonical) + len(rule.action_instruction)
+    return len(rule.trigger_canonical) + len(rule.action_instruction) + _FORMAT_OVERHEAD
 
 
 def select_injection(
@@ -179,7 +178,7 @@ def select_injection(
     # Compute initial utility (no MMR penalty for first pass ranking)
     scored_with_utility: list[tuple[float, ScoredResult]] = []
     for sr in eligible_results:
-        u = compute_utility(sr, {}, selected_tokens_list=None)
+        u = compute_utility(sr, selected_tokens_list=None)
         scored_with_utility.append((u, sr))
 
     scored_with_utility.sort(key=lambda x: x[0], reverse=True)
@@ -199,7 +198,7 @@ def select_injection(
         if len(hot) >= hot_max:
             break
         # Recompute with MMR against already-selected
-        u = compute_utility(sr, {}, selected_tokens_list=selected_tokens)
+        u = compute_utility(sr, selected_tokens_list=selected_tokens)
         if u <= 0:
             continue
         hot.append(sr)
@@ -213,7 +212,7 @@ def select_injection(
                 continue
             if has_runtime_levels and sr.level not in ("hot", "gate"):
                 continue
-            u = compute_utility(sr, {}, selected_tokens_list=selected_tokens)
+            u = compute_utility(sr, selected_tokens_list=selected_tokens)
             if u <= 0:
                 continue
             # Strong evidence per spec 9.6: Path A or full Path B.
@@ -251,7 +250,7 @@ def select_injection(
             break
 
         # Recompute utility with MMR against all selected so far
-        u = compute_utility(sr, {}, selected_tokens_list=selected_tokens)
+        u = compute_utility(sr, selected_tokens_list=selected_tokens)
 
         # Diversity gate: skip if >80% trigger token overlap with any selected
         if selected_tokens:

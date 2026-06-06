@@ -99,7 +99,7 @@ def test_status_shows_rule_counts(tmp_path, monkeypatch):
     r = _nokori(monkeypatch, tmp_path, "status")
     assert r.returncode == 0, r.stderr
     # Should show at least 1 active rule
-    assert "1" in r.stdout
+    assert "rules.active" in r.stdout and "1" in r.stdout
 
 
 def test_edit_rejects_manual_gate_eligible_severity(tmp_path, monkeypatch):

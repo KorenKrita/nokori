@@ -244,15 +244,16 @@ class TestCharacterBudget:
             )
             for i in range(3)
         ]
-        sel = select_injection(results, max_injection_chars=30)
+        sel = select_injection(results, max_injection_chars=55)
         # First is HOT, second fills WARM but third exceeds budget
-        warm_char_cost = len("trigger text") + len("action text!")
+        # Each rule costs 12+12+25 (FORMAT_OVERHEAD) = 49 chars
+        warm_char_cost = len("trigger text") + len("action text!") + 25
         assert all(
-            len(sr.rule.trigger_canonical) + len(sr.rule.action_instruction)
+            len(sr.rule.trigger_canonical) + len(sr.rule.action_instruction) + 25
             <= warm_char_cost
             for sr in sel.warm
         )
-        # With 30 chars budget, at most 1 WARM rule fits (24 chars each)
+        # With 55 chars budget, at most 1 WARM rule fits (49 chars each)
         assert len(sel.warm) <= 1
 
     def test_warm_fills_up_to_budget(self):
@@ -266,8 +267,9 @@ class TestCharacterBudget:
             )
             for i in range(5)
         ]
-        # Budget of 6 chars, each rule costs 2 chars -> 3 WARM rules max
-        sel = select_injection(results, max_injection_chars=6)
+        # Each rule costs 1+1+25 (FORMAT_OVERHEAD) = 27 chars
+        # Budget of 81 chars -> 3 WARM rules max
+        sel = select_injection(results, max_injection_chars=81)
         # First goes HOT, remaining can be WARM (up to hard max and budget)
         assert len(sel.warm) == 3  # hard max is 3, budget allows 3
 
@@ -403,8 +405,8 @@ class TestFalsePositivePenalty:
             trigger_idf_sum=5.0,
             false_positive_score=1.0,
         )
-        u_clean = compute_utility(clean, {})
-        u_penalized = compute_utility(penalized, {})
+        u_clean = compute_utility(clean)
+        u_penalized = compute_utility(penalized)
         # Penalty = false_positive_score * 2.0 = 2.0
         assert u_penalized < u_clean
         assert u_clean - u_penalized == pytest.approx(2.0)
@@ -415,7 +417,7 @@ class TestFalsePositivePenalty:
             trigger_idf_sum=2.0,
             false_positive_score=3.0,  # penalty = 6.0, utility = 2.0 - 6.0 < 0
         )
-        u = compute_utility(sr, {})
+        u = compute_utility(sr)
         assert u < 0
 
 
@@ -438,8 +440,8 @@ class TestTrustedUsefulnessBonus:
             trigger_idf_sum=5.0,
             observed_usefulness_score=0.0,
         )
-        u_active = compute_utility(active, {})
-        u_trusted = compute_utility(trusted, {})
+        u_active = compute_utility(active)
+        u_trusted = compute_utility(trusted)
         assert u_trusted > u_active
         assert u_trusted - u_active == pytest.approx(1.5)
 
@@ -454,8 +456,8 @@ class TestTrustedUsefulnessBonus:
             trigger_idf_sum=5.0,
             observed_usefulness_score=1.0,
         )
-        u_no = compute_utility(no_use, {})
-        u_yes = compute_utility(useful, {})
+        u_no = compute_utility(no_use)
+        u_yes = compute_utility(useful)
         assert u_yes > u_no
         assert u_yes - u_no == pytest.approx(0.5)
 
@@ -471,8 +473,8 @@ class TestTrustedUsefulnessBonus:
             trigger_idf_sum=5.0,
             observed_usefulness_score=2.0,
         )
-        u_trusted = compute_utility(trusted, {})
-        u_useful = compute_utility(useful, {})
+        u_trusted = compute_utility(trusted)
+        u_useful = compute_utility(useful)
         assert u_trusted > u_useful
 
 
@@ -555,13 +557,13 @@ class TestEmptyInput:
 class TestComputeUtility:
     def test_base_utility_equals_trigger_idf_sum(self):
         sr = _make_scored(trigger_idf_sum=3.5)
-        u = compute_utility(sr, {})
+        u = compute_utility(sr)
         # No bonuses, no penalties -> utility == trigger_idf_sum
         assert u == pytest.approx(3.5)
 
     def test_variant_phrase_bonus(self):
         sr = _make_scored(trigger_idf_sum=3.0, strong_variant_phrase_hit=True)
-        u = compute_utility(sr, {})
+        u = compute_utility(sr)
         # trigger_idf_sum + variant_phrase_bonus(1.0) = 4.0
         assert u == pytest.approx(4.0)
 
@@ -573,7 +575,7 @@ class TestComputeUtility:
             false_positive_score=0.5,
         )
         # utility = 4.0 (idf) + 1.0 (variant) + 1.5 (trusted) - 0 (mmr) - 1.0 (fp*2)
-        u = compute_utility(sr, {})
+        u = compute_utility(sr)
         assert u == pytest.approx(5.5)
 
     def test_mmr_reduces_utility_with_selected(self):
@@ -583,7 +585,7 @@ class TestComputeUtility:
         )
         # Same tokens already selected -> jaccard=1.0, penalty=2.0
         selected = [frozenset({"a", "b", "c"})]
-        u = compute_utility(sr, {}, selected_tokens_list=selected)
+        u = compute_utility(sr, selected_tokens_list=selected)
         assert u == pytest.approx(5.0 - 2.0)
 
     def test_utility_combines_all_terms(self):
@@ -597,7 +599,7 @@ class TestComputeUtility:
         )
         # variant=1.0, usefulness_bonus=0.5, fp_penalty=0.5
         # No MMR (no selected tokens)
-        u = compute_utility(sr, {})
+        u = compute_utility(sr)
         expected = 6.0 + 1.0 + 0.5 - 0.5
         assert u == pytest.approx(expected)
 

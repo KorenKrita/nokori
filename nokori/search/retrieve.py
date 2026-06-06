@@ -43,14 +43,11 @@ def _variant_dicts(rule: Rule, required_concepts: list[str]) -> list[dict]:
         else:
             text = str(variant).strip()
             if text:
+                is_strong = required_concepts and len(tokenize(text)) >= 2
                 variants.append({
                     "text": text,
-                    "kind": "strong_anchor"
-                    if required_concepts and len(tokenize(text)) >= 2
-                    else "weak_recall",
-                    "requires_concepts": required_concepts
-                    if required_concepts and len(tokenize(text)) >= 2
-                    else [],
+                    "kind": "strong_anchor" if is_strong else "weak_recall",
+                    "requires_concepts": required_concepts if is_strong else [],
                 })
 
     canonical = rule.trigger_canonical.strip()
@@ -173,7 +170,6 @@ def _apply_runtime_applicability(
         pool_size=idf_stats.rule_pool_size,
         dynamic_trigger_info_min=idf_stats.dynamic_threshold,
         has_tool_input=False,
-        observed_usefulness_score=result.rule.observed_usefulness_score,
         false_positive_score=result.rule.false_positive_score,
     )
 

@@ -252,7 +252,6 @@ def evaluate_applicability(
     pool_size: int = 0,
     has_tool_input: bool = False,
     tool_evidence_passed: bool = False,
-    observed_usefulness_score: float = 0.0,
     false_positive_score: float = 0.0,
     dynamic_trigger_info_min: float | None = None,
 ) -> ApplicabilityResult:
@@ -380,15 +379,6 @@ def evaluate_applicability(
             reason="archived status: no hot-path retrieval",
             trigger_evidence_passed=True,
             penalties=penalties,
-        )
-
-    # ------------------------------------------------------------------
-    # False-positive penalty tracking
-    # ------------------------------------------------------------------
-
-    if false_positive_score > 0.0:
-        penalties.append(
-            f"recent_false_positive_score={false_positive_score:.2f}"
         )
 
     # ------------------------------------------------------------------

@@ -245,8 +245,9 @@ def parse_posthoc_output(raw_json: str) -> dict:
 
 
 def compute_attribution_weight(posthoc_output: dict) -> float:
-    # Attribution weight is for informational/audit purposes only; lifecycle uses event counts.
     """Compute attribution weight from posthoc output.
+
+    Attribution weight is for informational/audit purposes only; lifecycle uses event counts.
 
     From section 10.2:
       observed_useful + would_not_have_happened (no)  = 1.0 (strong)
@@ -314,7 +315,10 @@ def run_posthoc_evaluation(llm: Any, evaluator_input: dict) -> dict | None:
     # Idempotency: check if this exact input was already processed
     input_hash = _compute_input_hash(evaluator_input)
     if input_hash in _POSTHOC_RESULT_CACHE:
-        return _POSTHOC_RESULT_CACHE[input_hash]
+        # LRU: move to end on access
+        cached = _POSTHOC_RESULT_CACHE.pop(input_hash)
+        _POSTHOC_RESULT_CACHE[input_hash] = cached
+        return cached
 
     user_message = build_posthoc_prompt(evaluator_input)
 

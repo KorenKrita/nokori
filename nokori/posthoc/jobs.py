@@ -10,10 +10,13 @@ from __future__ import annotations
 import hashlib
 import uuid
 
-from ..db import Db, dumps_json, loads_json
+from ..db import Db, loads_json
 from ..events.fire import get_fire_events_for_session, update_first_observed_useful
 from .evaluator import run_posthoc_evaluation
+from ..utils.logging import get_logger
 from ..utils.time import now_iso
+
+log = get_logger("nokori.posthoc.jobs")
 
 
 def enqueue_posthoc_for_session(db: Db, session_id: str) -> int:
@@ -192,8 +195,11 @@ def process_pending_posthoc_jobs(db: Db, llm, *, limit: int = 20) -> dict[str, i
 
     # Update derived scores and evaluate lifecycle transitions for affected rules
     for rule_id in rules_to_update:
-        update_derived_scores(db, rule_id)
-        evaluate_transitions(db, rule_id)
+        try:
+            update_derived_scores(db, rule_id)
+            evaluate_transitions(db, rule_id)
+        except Exception as exc:
+            log.exception("lifecycle update failed for rule=%s: %s", rule_id, exc)
 
     return summary
 

@@ -86,15 +86,18 @@ def list_injections(
 
         where_clause = (" WHERE " + " AND ".join(where)) if where else ""
 
+        join_clause = " LEFT JOIN rules r ON r.id = e.rule_id"
+
         count_row = db.fetchone(
-            f"SELECT COUNT(*) AS n FROM rule_fire_events e{where_clause}",
+            f"SELECT COUNT(*) AS n FROM rule_fire_events e{join_clause}{where_clause}",
             tuple(params),
         )
         total = count_row["n"] if count_row else 0
 
         offset = (page - 1) * per_page
         rows = db.fetchall(
-            f"SELECT e.* FROM rule_fire_events e"
+            f"SELECT e.*, r.short_id AS rule_short_id, r.project_scope AS rule_project_scope"
+            f" FROM rule_fire_events e{join_clause}"
             f"{where_clause} ORDER BY e.created_at DESC LIMIT ? OFFSET ?",
             tuple(params) + (per_page, offset),
         )

@@ -30,6 +30,7 @@ def _find_log_files(logs_dir: Path) -> list[Path]:
 async def logs_ws(ws: WebSocket):
     global _active_log_ws_connections
     if _active_log_ws_connections >= MAX_LOG_WS_CONNECTIONS:
+        await ws.accept()
         await ws.close(code=1013)
         return
 
@@ -105,13 +106,12 @@ async def logs_ws(ws: WebSocket):
                         ):
                             continue
                         await ws.send_json({"type": "log", "line": f"[{stem}] {line}"})
+                        idle_started_at = time.monotonic()
                 if not found_any:
                     if time.monotonic() - idle_started_at >= LOG_WS_IDLE_TIMEOUT_SECONDS:
                         await ws.close(code=1000)
                         return
                     await asyncio.sleep(0.3)
-                else:
-                    idle_started_at = time.monotonic()
         except (WebSocketDisconnect, OSError):
             pass
     finally:

@@ -101,7 +101,11 @@ def run_all_pending_transitions(db: Db) -> list[TransitionResult]:
         "SELECT id FROM rules WHERE status IN ('candidate','active','trusted','suppressed')"
     )
     for row in rows:
-        result = evaluate_transitions(db, row["id"])
+        try:
+            result = evaluate_transitions(db, row["id"])
+        except Exception as exc:
+            log.exception("evaluate_transitions failed for rule=%s: %s", row["id"], exc)
+            continue
         results.append(result)
     return results
 
@@ -731,6 +735,19 @@ def _evaluate_suppressed(db: Db, row, rule_version: int) -> TransitionResult:
     if suppressed_at is not None:
         ttl_deadline = suppressed_at + timedelta(days=SUPPRESSION_TTL_DAYS)
         ttl_expired = datetime.now(timezone.utc) > ttl_deadline
+    else:
+        log.warning(
+            "suppressed_at unparseable for rule=%s value=%r",
+            rule_id,
+            row["suppressed_at"],
+        )
+        return TransitionResult(
+            rule_id=rule_id,
+            old_status=old_status,
+            new_status=None,
+            reason="unparseable suppressed_at timestamp",
+            applied=False,
+        )
 
     if ttl_expired:
         # TTL expired AND recovery evidence insufficient → archive

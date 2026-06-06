@@ -31,7 +31,6 @@ def _format_eligibility(r, pool_size: int) -> str:
         idf_stats_available=True,
         pool_size=pool_size,
         has_tool_input=False,
-        observed_usefulness_score=r.rule.observed_usefulness_score,
         false_positive_score=r.rule.false_positive_score,
     )
     return f"{result.decision.upper()} ({result.reason})"

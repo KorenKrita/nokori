@@ -10,6 +10,9 @@ from dataclasses import dataclass
 
 from nokori.db import Db
 from nokori.policy import MergeOperation
+from nokori.utils.logging import get_logger
+
+log = get_logger("nokori.merge.policy")
 
 
 # ---------------------------------------------------------------------------
@@ -495,13 +498,13 @@ def find_merge_neighbors(
                             )
                             if rule_row:
                                 candidates[rule_id] = (_row_to_dict(rule_row), embedding_bonus)
-    except Exception:
-        pass  # Embedding recall is optional; skip gracefully if unavailable.
+    except Exception as exc:
+        log.debug("embedding recall skipped: %s", exc)
 
     # Recent fallback: include recently updated rules not yet matched (spec 8.1)
     if len(candidates) < limit:
         recent_rows = db.fetchall(
-            "SELECT * FROM rules WHERE status IN ('active', 'trusted') "
+            f"SELECT {RULE_COLUMNS} FROM rules WHERE status IN ('active', 'trusted') "
             f"AND {scope_where} ORDER BY updated_at DESC LIMIT ?",
             scope_params + (min(5, limit - len(candidates)),),
         )
@@ -583,25 +586,6 @@ def validate_merge_transaction(
     # Non-destructive operations always pass validation.
     if merge_decision.operation not in destructive_ops:
         return True
-
-    # For update_existing_fields: only require full validation if changes
-    # touch trigger/variants/concepts/excluded_contexts. Use lineage_record metadata
-    # to determine scope; if metadata unavailable, require validation.
-    if merge_decision.operation == "update_existing_fields":
-        requires_validation = True
-        lineage = merge_decision.lineage_record
-        if lineage and isinstance(lineage.get("changed_fields"), (list, tuple)):
-            sensitive_fields = {
-                "trigger_canonical",
-                "variants",
-                "trigger_variants",
-                "concepts",
-                "excluded_contexts",
-            }
-            changed = set(lineage["changed_fields"])
-            requires_validation = bool(changed & sensitive_fields)
-        if not requires_validation:
-            return True
 
     # All four gates must pass for destructive operations.
     if not synthetic_passed:

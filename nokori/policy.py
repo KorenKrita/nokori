@@ -15,7 +15,6 @@ from typing import Literal
 # ---------------------------------------------------------------------------
 
 RUNTIME_POLICY_VERSION: str = "1.0.0"
-COMPILER_VERSION: str = "1.0.0"
 
 # ---------------------------------------------------------------------------
 # Status literals (section 3.1)
@@ -85,6 +84,8 @@ PosthocReasonCode = Literal[
 # Injection level literals (section 9.4 / 9.5)
 # ---------------------------------------------------------------------------
 
+InjectionLevel = Literal["hot", "warm", "gate"]
+
 # ---------------------------------------------------------------------------
 # Merge operation literals (section 8.2 / 8.4)
 # ---------------------------------------------------------------------------
@@ -133,7 +134,7 @@ class ColdFastLaneThresholds:
     global_adversarial_failures_max: int = 0
     archived_fingerprint_conflict: bool = False
     final_judge_decision: str = "accept_active"
-    merge_operation_must_not_require: tuple[str, ...] = ("split_required",)
+    merge_operation_must_not_require: tuple["MergeOperation", ...] = ("split_required",)
 
 
 @dataclass(frozen=True)
