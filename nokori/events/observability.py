@@ -102,6 +102,7 @@ def query_events(
     session_id: str | None = None,
     source: str | None = None,
     after_id: str | None = None,
+    since: str | None = None,
     limit: int = 50,
 ) -> list[dict]:
     """Query hook_events with optional filters. Returns list of dicts, oldest first."""
@@ -114,6 +115,9 @@ def query_events(
     if source is not None:
         where.append("source = ?")
         params.append(source)
+    if since is not None:
+        where.append("created_at >= ?")
+        params.append(since)
     if after_id is not None:
         where.append("rowid > COALESCE((SELECT rowid FROM hook_events WHERE id = ?), 0)")
         params.append(after_id)
