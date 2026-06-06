@@ -98,6 +98,7 @@ def _build_parser() -> argparse.ArgumentParser:
     sp_stream.add_argument("--verbose", action="store_true", help="full JSON per event")
     sp_stream.add_argument("--limit", type=int, default=100, help="max events (dump mode)")
     sp_stream.add_argument("--follow", action="store_true", help="continuous mode (like tail -f)")
+
     sp_export = sub.add_parser("export", help="export rules to JSON")
     sp_export.add_argument("path")
     sp_import = sub.add_parser("import", help="import rules from JSON")

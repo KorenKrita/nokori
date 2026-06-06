@@ -32,6 +32,7 @@ export function TimelineEventRow({ event }: { event: TEvent }) {
     <div className="border-b border-[var(--color-border-subtle)] last:border-b-0">
       <button
         onClick={() => setExpanded(!expanded)}
+        aria-expanded={expanded}
         className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-[var(--color-row-hover)] transition-colors text-sm"
       >
         <span className="text-xs text-text-tertiary font-mono w-[7.5rem] shrink-0">

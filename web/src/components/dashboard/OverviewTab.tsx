@@ -70,7 +70,7 @@ export function OverviewTab({ data }: { data: OverviewData | null }) {
                   fontSize: 12,
                 }}
               />
-              <Bar dataKey="count" fill="#38bdf8" radius={[0, 2, 2, 0]} />
+              <Bar dataKey="count" fill={CHART_COLORS[0]} radius={[0, 2, 2, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </GlassCard>

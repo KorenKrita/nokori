@@ -31,7 +31,7 @@ type DashboardSubTab = 'overview' | 'errors'
 export function Activity() {
   const [activeTab, setActiveTab] = useState<Tab>('timeline')
   const [dashSubTab, setDashSubTab] = useState<DashboardSubTab>('overview')
-  const [timeRangeHours, setTimeRangeHours] = useState(168)
+  const [timeRangeHours, setTimeRangeHours] = useState(7 * 24)
   const [sessionFilter, setSessionFilter] = useState('')
   const [sourceFilter, setSourceFilter] = useState('')
   const [autoScroll, setAutoScroll] = useState(true)

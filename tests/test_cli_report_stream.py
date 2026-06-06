@@ -75,7 +75,7 @@ class TestStream:
         rc = run_stream(args, cfg)
         assert rc == 0
         out = capsys.readouterr().out
-        lines = [l for l in out.strip().split("\n") if l]
+        lines = [line for line in out.strip().split("\n") if line]
         assert len(lines) == 3
 
     def test_stream_verbose_mode(self, cfg, seeded_db, capsys):
@@ -86,7 +86,7 @@ class TestStream:
         rc = run_stream(args, cfg)
         assert rc == 0
         out = capsys.readouterr().out
-        lines = [l for l in out.strip().split("\n") if l]
+        lines = [line for line in out.strip().split("\n") if line]
         for line in lines:
             parsed = json.loads(line)
             assert "source" in parsed
@@ -100,7 +100,7 @@ class TestStream:
         rc = run_stream(args, cfg)
         assert rc == 0
         out = capsys.readouterr().out
-        lines = [l for l in out.strip().split("\n") if l]
+        lines = [line for line in out.strip().split("\n") if line]
         assert len(lines) == 1
         assert "cold_pipeline" in lines[0]
 
@@ -112,7 +112,7 @@ class TestStream:
         rc = run_stream(args, cfg)
         assert rc == 0
         out = capsys.readouterr().out
-        lines = [l for l in out.strip().split("\n") if l]
+        lines = [line for line in out.strip().split("\n") if line]
         assert len(lines) == 2
 
     def test_stream_limit(self, cfg, seeded_db, capsys):
@@ -123,7 +123,7 @@ class TestStream:
         rc = run_stream(args, cfg)
         assert rc == 0
         out = capsys.readouterr().out
-        lines = [l for l in out.strip().split("\n") if l]
+        lines = [line for line in out.strip().split("\n") if line]
         assert len(lines) == 1
 
     def test_stream_empty_db(self, cfg, capsys):
