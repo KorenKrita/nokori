@@ -110,11 +110,38 @@ def show_rule(short_id: str):
     db = open_db(cfg.db_path)
     try:
         rule = fetch_rule_by_short_id(db, short_id)
+        if rule is None:
+            raise HTTPException(404, detail=f"no rule with short_id {short_id!r}")
+        data = _rule_to_response(rule)
+
+        # Aggregate fire event statistics
+        row = db.fetchone(
+            "SELECT COUNT(*) as cnt, MAX(created_at) as last_at FROM rule_fire_events WHERE rule_id = ?",
+            (rule.id,),
+        )
+        data["fire_count"] = row["cnt"] if row else 0
+        data["fire_last_at"] = row["last_at"] if row else None
+
+        levels_rows = db.fetchall(
+            "SELECT level, COUNT(*) as cnt FROM rule_fire_events WHERE rule_id = ? GROUP BY level",
+            (rule.id,),
+        )
+        data["fire_levels"] = {r["level"]: r["cnt"] for r in levels_rows}
+
+        posthoc_rows = db.fetchall(
+            "SELECT posthoc_label, COUNT(*) as cnt FROM rule_fire_events WHERE rule_id = ? AND posthoc_label IS NOT NULL GROUP BY posthoc_label",
+            (rule.id,),
+        )
+        data["posthoc_labels"] = {r["posthoc_label"]: r["cnt"] for r in posthoc_rows}
+
+        shadow_row = db.fetchone(
+            "SELECT COUNT(*) as cnt FROM rule_shadow_events WHERE rule_id = ?",
+            (rule.id,),
+        )
+        data["shadow_count"] = shadow_row["cnt"] if shadow_row else 0
     finally:
         db.close()
-    if rule is None:
-        raise HTTPException(404, detail=f"no rule with short_id {short_id!r}")
-    return {"data": _rule_to_response(rule)}
+    return {"data": data}
 
 
 @router.post("/rules/{short_id}/archive", dependencies=[Depends(require_write_auth)])

@@ -43,6 +43,13 @@ export interface Rule {
   replacement_id?: string | null
   created_at: string
   updated_at: string
+
+  // Fire event statistics (aggregated)
+  fire_count?: number
+  fire_last_at?: string | null
+  fire_levels?: Record<string, number>
+  posthoc_labels?: Record<string, number>
+  shadow_count?: number
 }
 
 export interface ScoredResult {

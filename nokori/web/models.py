@@ -174,6 +174,13 @@ class RuleResponse(BaseModel):
     created_at: str = ""
     updated_at: str = ""
 
+    # Fire event statistics (aggregated from rule_fire_events)
+    fire_count: int = 0
+    fire_last_at: str | None = None
+    fire_levels: dict[str, int] = {}  # {"hot": N, "warm": N, "gate": N}
+    posthoc_labels: dict[str, int] = {}  # {"observed_useful": N, "irrelevant": N, ...}
+    shadow_count: int = 0
+
 
 
 

@@ -135,6 +135,74 @@ export function RuleDetail() {
               ))}
             </GlassCard>
           )}
+
+          <GlassCard>
+            <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary mb-3">{t('rules.activity')}</h3>
+            <dl className="space-y-2 text-xs">
+              <div className="flex justify-between gap-3">
+                <dt className="text-text-tertiary">{t('rules.fire_count')}</dt>
+                <dd className="font-mono text-text-secondary">{rule.fire_count ?? 0}</dd>
+              </div>
+              <div className="flex justify-between gap-3">
+                <dt className="text-text-tertiary">{t('rules.last_fired')}</dt>
+                <dd className="font-mono text-text-secondary">
+                  {rule.fire_last_at ? formatDateTime(rule.fire_last_at) : t('rules.never')}
+                </dd>
+              </div>
+              {rule.fire_levels && Object.keys(rule.fire_levels).length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-2">
+                  {Object.entries(rule.fire_levels).map(([level, count]) => (
+                    <span
+                      key={level}
+                      className={`px-2 py-0.5 rounded text-xs font-mono ${
+                        level === 'hot'
+                          ? 'bg-accent-rose/15 text-accent-rose'
+                          : level === 'warm'
+                            ? 'bg-accent-amber/15 text-accent-amber'
+                            : 'bg-accent-violet/15 text-accent-violet'
+                      }`}
+                    >
+                      {level} {count}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {(rule.shadow_count ?? 0) > 0 && (
+                <div className="flex justify-between gap-3 mt-2">
+                  <dt className="text-text-tertiary">{t('rules.shadow_count')}</dt>
+                  <dd className="font-mono text-text-secondary">{rule.shadow_count}</dd>
+                </div>
+              )}
+            </dl>
+          </GlassCard>
+
+          {rule.posthoc_labels && Object.keys(rule.posthoc_labels).length > 0 && (
+            <GlassCard>
+              <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary mb-3">{t('rules.posthoc')}</h3>
+              <div className="space-y-2">
+                {Object.entries(rule.posthoc_labels).map(([label, count]) => (
+                  <div key={label} className="flex items-center justify-between gap-2">
+                    <span
+                      className={`px-2 py-0.5 rounded text-xs font-mono ${
+                        label === 'observed_useful'
+                          ? 'bg-accent-emerald/15 text-accent-emerald'
+                          : label === 'plausible_useful'
+                            ? 'bg-accent-sky/15 text-accent-sky'
+                            : label === 'irrelevant'
+                              ? 'bg-[var(--color-bg-elevated)] text-text-tertiary'
+                              : label === 'harmful'
+                                ? 'bg-accent-rose/15 text-accent-rose'
+                                : 'bg-accent-amber/15 text-accent-amber'
+                      }`}
+                    >
+                      {label}
+                    </span>
+                    <span className="font-mono text-xs text-text-secondary">{count}</span>
+                  </div>
+                ))}
+              </div>
+            </GlassCard>
+          )}
         </div>
       </div>
 
