@@ -108,16 +108,18 @@ def list_rules(
                 tuple(rule_ids),
             )
             fire_counts = {row["rule_id"]: row["cnt"] for row in rows}
+
+        result = {
+            "data": [
+                _rule_to_response(r, fire_count=fire_counts.get(r.id, 0))
+                for r in page_rules
+            ],
+            "meta": {"total": total, "page": page, "per_page": per_page},
+        }
     finally:
         db.close()
 
-    return {
-        "data": [
-            _rule_to_response(r, fire_count=fire_counts.get(r.id, 0))
-            for r in page_rules
-        ],
-        "meta": {"total": total, "page": page, "per_page": per_page},
-    }
+    return result
 
 
 @router.get("/rules/{short_id}")
@@ -128,15 +130,15 @@ def show_rule(short_id: str):
         rule = fetch_rule_by_short_id(db, short_id)
         if rule is None:
             raise HTTPException(404, detail=f"no rule with short_id {short_id!r}")
-        data = _rule_to_response(rule)
-
         # Aggregate fire event statistics
         row = db.fetchone(
             "SELECT COUNT(*) as cnt, MAX(created_at) as last_at FROM rule_fire_events WHERE rule_id = ?",
             (rule.id,),
         )
-        data["fire_count"] = row["cnt"] if row else 0
-        data["fire_last_at"] = row["last_at"] if row else None
+        fire_count = row["cnt"] if row else 0
+        fire_last_at = row["last_at"] if row else None
+        data = _rule_to_response(rule, fire_count=fire_count)
+        data["fire_last_at"] = fire_last_at
 
         levels_rows = db.fetchall(
             "SELECT level, COUNT(*) as cnt FROM rule_fire_events WHERE rule_id = ? GROUP BY level",
