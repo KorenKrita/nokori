@@ -102,19 +102,18 @@ def mark_job_complete(db: Db, job_id: str, output_json: str) -> None:
 def mark_job_failed(db: Db, job_id: str, error_info: str | None = None) -> None:
     """Increment retries, set next_retry_at. Stores error_info in output_json for circuit breaker classification."""
     now = _now_iso()
-    row = db.fetchone(
-        "SELECT role, retries FROM llm_jobs WHERE id = ?", (job_id,)
-    )
-    if row is None:
-        return
-    new_retries = row["retries"] + 1
-    backoff = _retry_backoff_seconds(new_retries)
-    next_retry_at = datetime.now(timezone.utc).timestamp() + backoff
-    next_retry_iso = datetime.fromtimestamp(
-        next_retry_at, tz=timezone.utc
-    ).strftime("%Y-%m-%dT%H:%M:%SZ")
-
     with db.transaction() as tx:
+        row = tx.execute(
+            "SELECT role, retries FROM llm_jobs WHERE id = ?", (job_id,)
+        ).fetchone()
+        if row is None:
+            return
+        new_retries = row["retries"] + 1
+        backoff = _retry_backoff_seconds(new_retries)
+        next_retry_at = datetime.now(timezone.utc).timestamp() + backoff
+        next_retry_iso = datetime.fromtimestamp(
+            next_retry_at, tz=timezone.utc
+        ).strftime("%Y-%m-%dT%H:%M:%SZ")
         tx.execute(
             "UPDATE llm_jobs SET status = 'failed', retries = ?, "
             "next_retry_at = ?, output_json = ?, updated_at = ? WHERE id = ?",
@@ -155,7 +154,7 @@ def is_circuit_breaker_open(db: Db, role: str, model_id: str | None = None) -> b
     # Type 2: provider auth/rate-limit (check by model_id if available)
     if model_id:
         provider_rows = db.fetchall(
-            "SELECT status, output_json FROM llm_jobs WHERE model_id = ? "
+            "SELECT status, output_json, updated_at FROM llm_jobs WHERE model_id = ? "
             "ORDER BY updated_at DESC LIMIT 5",
             (model_id,),
         )
@@ -163,8 +162,21 @@ def is_circuit_breaker_open(db: Db, role: str, model_id: str | None = None) -> b
             1 for r in provider_rows
             if r["status"] == "failed" and _is_auth_rate_error(r["output_json"])
         )
-        if auth_failures >= 1:
-            return True
+        if auth_failures >= 2:
+            # Check cooldown: if most recent auth failure is within cooldown, breaker open
+            most_recent_auth = next(
+                (r["updated_at"] for r in provider_rows
+                 if r["status"] == "failed" and _is_auth_rate_error(r["output_json"])),
+                None,
+            )
+            if most_recent_auth:
+                try:
+                    recent_dt = datetime.fromisoformat(most_recent_auth.replace("Z", "+00:00"))
+                    elapsed = (datetime.now(timezone.utc) - recent_dt).total_seconds()
+                    if elapsed < CIRCUIT_BREAKER_COOLDOWN_SECONDS:
+                        return True
+                except (ValueError, TypeError):
+                    return True
 
     # Type 3: consecutive schema parse failures for this role+prompt_version
     from .roles import PROMPT_VERSIONS

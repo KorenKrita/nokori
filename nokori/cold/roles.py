@@ -39,7 +39,9 @@ PROMPT_VERSIONS: dict[str, str] = {
 
 def compute_prompt_version(role: str, system_prompt: str) -> str:
     """Derive prompt version from content hash so prompt edits auto-invalidate cache."""
-    base = PROMPT_VERSIONS.get(role, "1.0.0")
+    if role not in PROMPT_VERSIONS:
+        raise ValueError(f"unknown role: {role}")
+    base = PROMPT_VERSIONS[role]
     content_hash = hashlib.sha256(system_prompt.encode()).hexdigest()[:8]
     return f"{base}-{content_hash}"
 

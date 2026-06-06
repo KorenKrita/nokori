@@ -161,7 +161,12 @@ def _spawn_async_extract(cfg: Config) -> None:
     import subprocess
     import sys
 
-    env = os.environ.copy()
+    _SAFE_VARS = (
+        "PATH", "HOME", "USER", "LANG", "SHELL", "TERM", "TMPDIR",
+        "XDG_RUNTIME_DIR",
+    )
+    env = {k: v for k, v in os.environ.items()
+           if k in _SAFE_VARS or k.startswith("NOKORI_")}
     env.pop("NOKORI_EXTRACTING", None)
     env["NOKORI_DATA_DIR"] = str(cfg.data_dir)
     cfg.ensure_dirs()

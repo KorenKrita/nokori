@@ -42,14 +42,9 @@ class _ColdLLMAdapter:
         max_tokens: int = 2000,
         timeout: int = 30,
     ) -> str:
-        configured = getattr(self._llm, "configured", None)
-        if callable(configured) and configured():
+        if self._llm.configured():
             result = self._llm._call_openai_compatible(
                 system, user, max_tokens, timeout, model_id=model
-            )
-        elif hasattr(self._llm, "complete_messages"):
-            result = self._llm.complete_messages(
-                system, user, max_tokens=max_tokens, timeout=timeout
             )
         else:
             result = self._llm._fallback_claude_cli(system, user, timeout)
@@ -160,7 +155,7 @@ def _process_path(path: Path, project_id: str | None, cfg: Config,
             }
 
             # Enqueue transcript ingest job for auditability
-            segment_text = f"{cand.trigger}::{cand.action}"
+            segment_text = f"{str(path)}::{cand.trigger}::{cand.action}"
             seg_hash = _segment_hash(segment_text)
             transcript_ref = str(path)
 

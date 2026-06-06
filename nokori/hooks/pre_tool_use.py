@@ -104,7 +104,7 @@ def _has_tool_evidence(rule, payload: dict) -> bool:
                      "been", "will", "should", "must", "always", "never"}
     }
     if not tokens:
-        return False
+        return True
     # Word-boundary match to avoid substring false positives in paths/identifiers
     hits = {t for t in tokens if re.search(r'\b' + re.escape(t) + r'\b', haystack)}
     return len(hits) >= max(1, len(tokens) // 2)

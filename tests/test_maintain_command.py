@@ -10,6 +10,9 @@ class _FakeDb:
     def close(self):
         pass
 
+    def fetchone(self, sql, params=()):
+        return None
+
 
 def test_maintain_runs_shadow_counterfactual_worker(monkeypatch, tmp_path, capsys):
     monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))

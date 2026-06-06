@@ -16,8 +16,6 @@ from ..search.idf_stats import (
 )
 
 
-# Cached pool hash to detect pool changes between runs
-_last_idf_pool_hash: str | None = None
 
 
 class _PosthocLLMAdapter:
@@ -51,13 +49,16 @@ def run(_args: argparse.Namespace, cfg: Config) -> int:
         expired_ingest = expire_stale_ingest_jobs(db)
 
         # Rebuild IDF stats if eligible pool changed
-        global _last_idf_pool_hash
         eligible_rules = fetch_rules(db, statuses=("active", "trusted"))
         current_hash = compute_eligible_rule_set_hash(eligible_rules)
         idf_rebuilt = False
-        if current_hash != _last_idf_pool_hash:
+        last_row = db.fetchone(
+            "SELECT eligible_rule_set_hash FROM trigger_idf_stats "
+            "ORDER BY built_at DESC LIMIT 1"
+        )
+        last_hash = last_row["eligible_rule_set_hash"] if last_row else None
+        if current_hash != last_hash:
             store_idf_stats(db, build_idf_stats(eligible_rules))
-            _last_idf_pool_hash = current_hash
             idf_rebuilt = True
     finally:
         db.close()

@@ -333,6 +333,9 @@ def test_batch_extract_keeps_job_on_merge_llm_failure(monkeypatch, tmp_path):
         def __init__(self):
             self.n = 0
 
+        def configured(self):
+            return False
+
         def complete(self, prompt, *, max_tokens=2000, timeout=30):
             self.n += 1
             if self.n == 1:
@@ -341,6 +344,9 @@ def test_batch_extract_keeps_job_on_merge_llm_failure(monkeypatch, tmp_path):
 
         def complete_messages(self, system, user, *, max_tokens=2000, timeout=30):
             return self.complete(user, max_tokens=max_tokens, timeout=timeout)
+
+        def _fallback_claude_cli(self, system, user, timeout):
+            return self.complete_messages(system, user, max_tokens=2000, timeout=timeout)
 
     monkeypatch.setattr(extract_cmd, "LLMAdapter", lambda cfg: SeqLLM())
     db = open_db(cfg.db_path)

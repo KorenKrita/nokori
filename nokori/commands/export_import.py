@@ -30,8 +30,6 @@ _MAX_SHORT_ID = 64
 _MAX_VARIANTS = 32
 _MAX_VARIANT_LEN = 512
 _MAX_SEARCH_LANGS = 16
-_MAX_TERMS_PER_LANG = 64
-_MAX_TERM_LEN = 256
 _MAX_IMPORT_FILE_BYTES = 100 * 1024 * 1024
 _STATUSES = frozenset({"candidate", "active", "trusted", "suppressed", "archived"})
 _PROJECT_SCOPES = frozenset({"project", "global"})
@@ -103,7 +101,7 @@ def _validate_import_record(rec: dict) -> str | None:
     status = rec.get("status", "candidate")
     if status not in _STATUSES:
         return f"status must be one of {sorted(_STATUSES)}"
-    scope = rec.get("project_scope", "project")
+    scope = rec.get("project_scope", "global")
     if scope not in _PROJECT_SCOPES:
         return f"project_scope must be one of {sorted(_PROJECT_SCOPES)}"
     rid = rec.get("id")
@@ -330,7 +328,7 @@ def run_import(args: argparse.Namespace, cfg: Config) -> int:
                 _import_status(rec),
                 rec.get("severity", "reminder"),
                 _import_source_origin(rec),
-                rec.get("project_scope", "project"),
+                rec.get("project_scope", "global"),
                 rec.get("project_id"),
                 rec.get("archived_reason"),
                 rec.get("replacement_id"),

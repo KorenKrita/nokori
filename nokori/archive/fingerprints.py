@@ -287,7 +287,7 @@ def _is_narrower_scope(
     has_structural_narrowing = (
         new_domain_tags
         and len(new_domain_tags) > 0
-        and "general" in scope_summary.lower()
+        and scope_summary == "general"
     )
 
     token_narrower = new_in_old >= 0.80 and old_in_new < 0.70

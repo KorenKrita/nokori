@@ -211,10 +211,19 @@ class TestCircuitBreaker:
         assert is_circuit_breaker_open(db, "extractor") is False
 
     def test_provider_auth_breaker_does_not_wait_for_role_sample(self, db: Db):
-        """Provider auth/rate-limit failures pause the route immediately."""
-        job_id = enqueue_job(db, "extractor", "model-auth", "1.0.0", "auth_fail")
+        """Provider auth/rate-limit failures pause the route after 2 occurrences."""
+        job_id = enqueue_job(db, "extractor", "model-auth", "1.0.0", "auth_fail_1")
         mark_job_failed(db, job_id, error_info="rate_limit: 429")
 
+        # Single auth failure is not enough
+        assert is_circuit_breaker_open(
+            db, "extractor", model_id="model-auth"
+        ) is False
+
+        job_id2 = enqueue_job(db, "extractor", "model-auth", "1.0.0", "auth_fail_2")
+        mark_job_failed(db, job_id2, error_info="rate_limit: 429")
+
+        # Two auth failures trips the breaker
         assert is_circuit_breaker_open(
             db, "extractor", model_id="model-auth"
         ) is True

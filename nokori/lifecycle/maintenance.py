@@ -127,7 +127,7 @@ def run_injection_cleanup(db: Db) -> int:
         deleted = cur.rowcount if cur.rowcount is not None else 0
     _set_last_run(db, "injection_cleanup")
     if deleted:
-        log.info("fire_event_cleanup deleted=%d", deleted)
+        log.info("injection_cleanup fire_events_deleted=%d", deleted)
     return deleted
 
 

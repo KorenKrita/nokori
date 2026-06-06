@@ -152,7 +152,6 @@ def run(_args: argparse.Namespace, cfg: Config) -> int:
     print(f"embed.server_idle {est['idle_seconds']}s")
     print(f"session.idle_s    {cfg.session_idle_seconds}")
     print(f"promotion.enabled   {cfg.promotion_enabled}")
-    print(f"promotion.threshold   3")
     print(f"rules.global          {global_rules['n'] if global_rules else 0}")
 
     if cfg.promotion_enabled:

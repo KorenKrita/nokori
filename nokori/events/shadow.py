@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -360,7 +361,6 @@ def run_shadow_counterfactual_evaluation(
         )
 
         try:
-            import json
             response = llm.call(
                 system=system_prompt,
                 user=user_prompt,

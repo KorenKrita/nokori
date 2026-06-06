@@ -1,1 +1,0 @@
-"""Cross-project promotion constants."""
