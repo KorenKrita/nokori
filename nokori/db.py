@@ -9,7 +9,7 @@ from pathlib import Path
 
 from .errors import DbError
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 _SCHEMA_DDL = """
 CREATE TABLE IF NOT EXISTS rules (
@@ -253,6 +253,36 @@ CREATE INDEX IF NOT EXISTS idx_archived_fp_signature ON archived_fingerprints(si
 CREATE INDEX IF NOT EXISTS idx_llm_jobs_status ON llm_jobs(status, next_retry_at);
 CREATE INDEX IF NOT EXISTS idx_posthoc_jobs_status ON posthoc_jobs(status);
 CREATE INDEX IF NOT EXISTS idx_posthoc_jobs_fire ON posthoc_jobs(fire_event_id);
+
+CREATE TABLE IF NOT EXISTS hook_events (
+    id TEXT PRIMARY KEY,
+    session_id TEXT,
+    source TEXT NOT NULL,
+    outcome TEXT,
+    prompt_snippet TEXT,
+    details TEXT,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS error_events (
+    id TEXT PRIMARY KEY,
+    session_id TEXT,
+    source TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'system',
+    model_id TEXT,
+    error_type TEXT NOT NULL,
+    message TEXT,
+    details TEXT,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_hook_events_session ON hook_events(session_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_hook_events_source ON hook_events(source, created_at);
+CREATE INDEX IF NOT EXISTS idx_hook_events_created ON hook_events(created_at);
+CREATE INDEX IF NOT EXISTS idx_error_events_role_model ON error_events(role, model_id, error_type);
+CREATE INDEX IF NOT EXISTS idx_error_events_created ON error_events(created_at);
+CREATE INDEX IF NOT EXISTS idx_error_events_source ON error_events(source, created_at);
+CREATE INDEX IF NOT EXISTS idx_error_events_session ON error_events(session_id, created_at);
 """
 
 
@@ -351,9 +381,42 @@ def _migrate(conn: sqlite3.Connection) -> None:
             f"PRAGMA user_version = {int(SCHEMA_VERSION)};\n"
             "COMMIT;\n"
         )
+    elif current == 6:
+        script = (
+            "BEGIN;\n"
+            "CREATE TABLE IF NOT EXISTS hook_events (\n"
+            "    id TEXT PRIMARY KEY,\n"
+            "    session_id TEXT,\n"
+            "    source TEXT NOT NULL,\n"
+            "    outcome TEXT,\n"
+            "    prompt_snippet TEXT,\n"
+            "    details TEXT,\n"
+            "    created_at TEXT NOT NULL\n"
+            ");\n"
+            "CREATE TABLE IF NOT EXISTS error_events (\n"
+            "    id TEXT PRIMARY KEY,\n"
+            "    session_id TEXT,\n"
+            "    source TEXT NOT NULL,\n"
+            "    role TEXT NOT NULL DEFAULT 'system',\n"
+            "    model_id TEXT,\n"
+            "    error_type TEXT NOT NULL,\n"
+            "    message TEXT,\n"
+            "    details TEXT,\n"
+            "    created_at TEXT NOT NULL\n"
+            ");\n"
+            "CREATE INDEX IF NOT EXISTS idx_hook_events_session ON hook_events(session_id, created_at);\n"
+            "CREATE INDEX IF NOT EXISTS idx_hook_events_source ON hook_events(source, created_at);\n"
+            "CREATE INDEX IF NOT EXISTS idx_hook_events_created ON hook_events(created_at);\n"
+            "CREATE INDEX IF NOT EXISTS idx_error_events_role_model ON error_events(role, model_id, error_type);\n"
+            "CREATE INDEX IF NOT EXISTS idx_error_events_created ON error_events(created_at);\n"
+            "CREATE INDEX IF NOT EXISTS idx_error_events_source ON error_events(source, created_at);\n"
+            "CREATE INDEX IF NOT EXISTS idx_error_events_session ON error_events(session_id, created_at);\n"
+            f"PRAGMA user_version = {int(SCHEMA_VERSION)};\n"
+            "COMMIT;\n"
+        )
     else:
         raise DbError(
-            "rules.db schema version is incompatible with this nokori (v6 redesign). "
+            "rules.db schema version is incompatible with this nokori. "
             "Use a fresh NOKORI_DATA_DIR or export rules and reinitialize."
         )
     try:

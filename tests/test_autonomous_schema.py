@@ -332,6 +332,8 @@ class TestOpenDbFreshPath:
                 "posthoc_jobs",
                 "extract_state",
                 "maintenance_meta",
+                "hook_events",
+                "error_events",
             }
             assert expected.issubset(tables)
             assert db.schema_version() == SCHEMA_VERSION

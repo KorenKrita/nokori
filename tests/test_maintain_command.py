@@ -29,6 +29,7 @@ def test_maintain_runs_shadow_counterfactual_worker(monkeypatch, tmp_path, capsy
             "candidate_cleanup": 0,
             "injection_cleanup": 0,
             "unmerge_check": 0,
+            "observability_cleanup": {"hook_events_deleted": 0, "error_events_deleted": 0},
         },
     )
     monkeypatch.setattr(
