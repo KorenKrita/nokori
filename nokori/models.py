@@ -40,10 +40,10 @@ class Rule:
     # Trigger
     trigger_canonical: str
     trigger_canonical_zh: str | None = None
-    concepts: str = "[]"  # JSON list[str]
+    concepts: str = "[]"  # JSON list[dict] — concept objects with aliases
     concept_aliases: str = "[]"  # JSON list[str]
-    required_concept_groups: str = "[]"  # JSON list[str]
-    excluded_contexts: str = "[]"  # JSON list[str]
+    required_concept_groups: str = "[]"  # JSON list[dict] — objects with "id", "all_of"
+    excluded_contexts: str = "[]"  # JSON list[dict] — exclusion scope objects
     non_generalization_boundaries: str = "[]"  # JSON list[str]
     near_miss_examples: list[str] = field(default_factory=list)
     trigger_variants: str = "[]"  # JSON list of Variant objects
