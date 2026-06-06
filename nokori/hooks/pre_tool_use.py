@@ -275,23 +275,22 @@ def _run_gate(payload: dict, cfg: Config, session_id: str, host) -> tuple[dict, 
 
 def _write_pre_tool_event(cfg: Config, session_id: str, payload: dict, outcome: str, blocked_by: list[str] | None = None) -> None:
     """Write pre_tool_use observability event. Opens its own DB connection (fail-open)."""
-    tool_name = payload.get("tool_name") or payload.get("tool")
-    details: dict = {"tool_name": tool_name}
-    if blocked_by:
-        details["blocked_by"] = blocked_by
     try:
+        tool_name = payload.get("tool_name") or payload.get("tool")
+        details: dict = {"tool_name": tool_name}
+        if blocked_by:
+            details["blocked_by"] = blocked_by
         db = open_db(cfg.db_path)
+        try:
+            write_event(
+                db, source="pre_tool_use", session_id=session_id,
+                outcome=outcome,
+                details=details,
+            )
+        finally:
+            db.close()
     except Exception as e:
-        log.warning("pre_tool_use observability db open failed: %s", e)
-        return
-    try:
-        write_event(
-            db, source="pre_tool_use", session_id=session_id,
-            outcome=outcome,
-            details=details,
-        )
-    finally:
-        db.close()
+        log.warning("pre_tool_use observability failed: %s", e)
 
 
 def handle(payload: dict, cfg: Config, *, host: Host) -> dict:

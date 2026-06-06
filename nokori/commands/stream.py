@@ -62,7 +62,7 @@ def _follow_mode(cfg: Config, *, since: str, session_id: str | None, source: str
             try:
                 events = query_events(
                     db, session_id=session_id, source=source,
-                    after_id=last_id, since=since if last_id is None else None,
+                    after_id=last_id, since=since,
                     limit=50,
                 )
                 for event in events:
@@ -70,7 +70,7 @@ def _follow_mode(cfg: Config, *, since: str, session_id: str | None, source: str
                     last_id = event["id"]
             finally:
                 db.close()
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, BrokenPipeError):
         return 0
 
 

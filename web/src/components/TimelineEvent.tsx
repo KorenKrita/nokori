@@ -84,7 +84,7 @@ function renderDetailValue(key: string, value: unknown): React.ReactNode {
   if (typeof value === 'boolean') return value ? '✓' : '✗'
   if (typeof value === 'number') return String(value)
   if (typeof value === 'string') {
-    if (key.includes('rule') && /^[a-f0-9]{6,}$/.test(value)) {
+    if (key.includes('rule') && /^[a-f0-9]{6,32}$/.test(value)) {
       return <Link to={`/rules/${value}`} className="text-accent-sky hover:underline">{value}</Link>
     }
     return value

@@ -119,7 +119,7 @@ def query_events(
         where.append("created_at >= ?")
         params.append(since)
     if after_id is not None:
-        where.append("rowid > COALESCE((SELECT rowid FROM hook_events WHERE id = ?), 0)")
+        where.append("rowid > (SELECT rowid FROM hook_events WHERE id = ?)")
         params.append(after_id)
 
     sql = "SELECT * FROM hook_events"
