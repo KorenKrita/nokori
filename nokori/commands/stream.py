@@ -66,10 +66,15 @@ def _follow_mode(cfg: Config, *, since: str, session_id: str | None, source: str
                     limit=50,
                 )
                 if not events and last_id is not None:
-                    events = query_events(
-                        db, session_id=session_id, source=source,
-                        since=since, limit=50,
+                    cursor_exists = db.fetchone(
+                        "SELECT 1 FROM hook_events WHERE id = ?", (last_id,)
                     )
+                    if cursor_exists is None:
+                        last_id = None
+                        events = query_events(
+                            db, session_id=session_id, source=source,
+                            since=since, limit=50,
+                        )
                 for event in events:
                     _print_event(event, verbose=verbose)
                     last_id = event["id"]
