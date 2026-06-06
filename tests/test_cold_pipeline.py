@@ -288,7 +288,38 @@ class TestFailedRoleNoDurableRules:
         assert row["n"] == 0
 
     def test_schema_invalid_role_output_is_not_cached_as_done(self, db: Db):
-        """Parseable JSON that fails role schema validation must be retried."""
+        """Parseable JSON that fails role schema validation must be retried.
+
+        With immediate retry (2 attempts), the first invalid response triggers
+        a retry. If the second attempt also fails, it raises ValueError and
+        marks the job as failed. If the second attempt succeeds, it returns
+        successfully without caching the invalid first response.
+        """
+
+        class SeqLLM:
+            """Returns invalid on both attempts to trigger failure after retries."""
+            def __init__(self):
+                self.calls = 0
+
+            def call(self, **_kwargs):
+                self.calls += 1
+                # Both attempts return invalid (missing scores)
+                return json.dumps({"decision": "accept"})
+
+        llm = SeqLLM()
+
+        with pytest.raises(ValueError, match="schema validation failed"):
+            _run_admission_judge(db, llm, _extractor_candidate(), "test-model")
+
+        # Both retry attempts were made
+        assert llm.calls == 2
+
+        row = db.fetchone("SELECT status, output_json FROM llm_jobs")
+        assert row["status"] == "failed"
+        assert "schema validation failed" in row["output_json"]
+
+    def test_schema_invalid_then_valid_succeeds_via_retry(self, db: Db):
+        """Immediate retry recovers when first attempt fails validation but second succeeds."""
 
         class SeqLLM:
             def __init__(self):
@@ -301,13 +332,6 @@ class TestFailedRoleNoDurableRules:
                 return _admission_json("accept")
 
         llm = SeqLLM()
-
-        with pytest.raises(ValueError, match="schema validation failed"):
-            _run_admission_judge(db, llm, _extractor_candidate(), "test-model")
-
-        row = db.fetchone("SELECT status, output_json FROM llm_jobs")
-        assert row["status"] == "failed"
-        assert "schema validation failed" in row["output_json"]
 
         decision, scores = _run_admission_judge(
             db, llm, _extractor_candidate(), "test-model"

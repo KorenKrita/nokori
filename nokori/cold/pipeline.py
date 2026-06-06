@@ -630,35 +630,50 @@ def _call_llm_role(
 
     log.info("role=%s model=%s calling LLM (max_tokens=%d timeout=%ds)", role, model_id, max_tokens, timeout)
     job_id = enqueue_job(db, role, model_id, prompt_version, input_hash)
-    try:
-        response = llm.call(
-            model=model_id,
-            system=system,
-            user=user,
-            max_tokens=max_tokens,
-            timeout=timeout,
-        )
-    except Exception as exc:
-        error_info = f"{type(exc).__name__}: {exc}"
-        mark_job_failed(db, job_id, error_info=error_info)
-        log.warning("role=%s model=%s LLM call failed: %s", role, model_id, error_info)
-        raise
 
-    # Only cache validated output; malformed/schema-invalid responses must be
-    # retryable instead of becoming permanent done-job cache entries.
-    try:
-        if validate_response is not None:
-            validate_response(response)
-        else:
-            json.loads(response)
-    except (json.JSONDecodeError, TypeError, ValueError) as exc:
-        error_info = f"schema validation failed: {exc}"
-        mark_job_failed(db, job_id, error_info=error_info)
-        log.warning("role=%s model=%s validation failed: %s", role, model_id, error_info)
-        raise ValueError(f"LLM role {role} returned invalid output: {exc}") from exc
-    log.info("role=%s model=%s call OK (response_len=%d)", role, model_id, len(response))
-    mark_job_complete(db, job_id, response)
-    return response
+    _MAX_IMMEDIATE_RETRIES = 2
+    last_error: Exception | None = None
+    for attempt in range(_MAX_IMMEDIATE_RETRIES):
+        try:
+            response = llm.call(
+                model=model_id,
+                system=system,
+                user=user,
+                max_tokens=max_tokens,
+                timeout=timeout,
+            )
+        except Exception as exc:
+            last_error = exc
+            if attempt < _MAX_IMMEDIATE_RETRIES - 1:
+                log.warning("role=%s model=%s attempt %d/%d LLM call failed: %s, retrying", role, model_id, attempt + 1, _MAX_IMMEDIATE_RETRIES, exc)
+                continue
+            error_info = f"{type(exc).__name__}: {exc}"
+            mark_job_failed(db, job_id, error_info=error_info)
+            raise
+
+        # Only cache validated output; malformed/schema-invalid responses must be
+        # retryable instead of becoming permanent done-job cache entries.
+        try:
+            if validate_response is not None:
+                validate_response(response)
+            else:
+                json.loads(response)
+        except (json.JSONDecodeError, TypeError, ValueError) as exc:
+            last_error = exc
+            if attempt < _MAX_IMMEDIATE_RETRIES - 1:
+                log.warning("role=%s model=%s attempt %d/%d validation failed: %s, retrying", role, model_id, attempt + 1, _MAX_IMMEDIATE_RETRIES, exc)
+                continue
+            error_info = f"schema validation failed: {exc}"
+            mark_job_failed(db, job_id, error_info=error_info)
+            raise ValueError(f"LLM role {role} returned invalid output: {exc}") from exc
+
+        # Success
+        log.info("role=%s model=%s call OK (response_len=%d)", role, model_id, len(response))
+        mark_job_complete(db, job_id, response)
+        return response
+
+    # Should not reach here, but safety:
+    raise last_error  # type: ignore[misc]
 
 
 def _role_max_tokens(
@@ -697,12 +712,35 @@ def _run_admission_judge(
         "verbatim transcript excerpts. Verify that these quotes actually support "
         "the trigger and action claimed. If the quotes are unrelated to the rule's "
         "topic, score evidence_support near 0 regardless of how plausible the rule sounds.\n\n"
-        "Output strict JSON:\n"
-        '{"scores":{"overall_quality":0.0-1.0,"evidence_support":0.0-1.0,'
-        '"trigger_specificity":0.0-1.0,"action_clarity":0.0-1.0,'
-        '"scope_control":0.0-1.0,"generalization_safety":0.0-1.0,'
-        '"retrieval_readiness":0.0-1.0},'
-        '"decision":"accept|revise|reject","reasoning":"..."}'
+        "Output a single JSON object with these fields:\n\n"
+        "REQUIRED fields:\n"
+        "- \"scores\" (object): quality scores, each a number from 0.0 to 1.0\n"
+        "  - \"overall_quality\" (number, REQUIRED): composite quality assessment, 0.0-1.0\n"
+        "  - \"evidence_support\" (number, REQUIRED): how well evidence_quotes support the rule, 0.0-1.0\n"
+        "  - \"trigger_specificity\" (number, REQUIRED): how specific/narrow the trigger is, 0.0-1.0\n"
+        "  - \"action_clarity\" (number, optional): how clear the action instruction is, 0.0-1.0\n"
+        "  - \"scope_control\" (number, REQUIRED): how well-bounded the scope is, 0.0-1.0\n"
+        "  - \"generalization_safety\" (number, optional): risk of over-generalizing, 0.0-1.0\n"
+        "  - \"retrieval_readiness\" (number, REQUIRED): whether trigger has enough retrievable terms, 0.0-1.0\n"
+        "- \"decision\" (string, REQUIRED): one of \"accept\", \"revise\", \"reject\"\n"
+        "- \"reasoning\" (string, optional): brief explanation of your decision\n\n"
+        "Example output:\n"
+        "```json\n"
+        "{\n"
+        "  \"scores\": {\n"
+        "    \"overall_quality\": 0.85,\n"
+        "    \"evidence_support\": 0.90,\n"
+        "    \"trigger_specificity\": 0.80,\n"
+        "    \"action_clarity\": 0.88,\n"
+        "    \"scope_control\": 0.82,\n"
+        "    \"generalization_safety\": 0.75,\n"
+        "    \"retrieval_readiness\": 0.78\n"
+        "  },\n"
+        "  \"decision\": \"accept\",\n"
+        "  \"reasoning\": \"Strong transcript evidence directly supports the trigger and action. Scope is narrow enough for reliable retrieval.\"\n"
+        "}\n"
+        "```\n"
+        "Output ONLY the JSON object, no markdown fences, no extra text."
     )
 
     candidate_text = _prompt_text(json.dumps(candidate, ensure_ascii=False, indent=2))
@@ -784,11 +822,44 @@ def _run_rewriter(
         "You are a rule rewriter for an autonomous memory system. "
         "Narrow and structure the candidate without inventing facts or broadening beyond evidence. "
         "Separate trigger, action, variants, search_terms, required_concepts, and excluded_contexts.\n\n"
-        "Output strict JSON:\n"
-        '{"trigger_canonical":"...","required_concept_groups":[{"concepts":["term"],"match":"all|any"}],'
-        '"excluded_contexts":[{"pattern":"...","scope":"trigger|action"}],'
-        '"action_instruction":"...","severity":"reminder|high_risk|gate_eligible",'
-        '"scope":{"domain_tags":[],"path_patterns":[],"tool_tags":[]},"rewrite_rationale":"..."}'
+        "Output a single JSON object with these fields:\n\n"
+        "REQUIRED fields:\n"
+        "- \"trigger_canonical\" (string, REQUIRED): the canonical trigger text, concise and specific\n"
+        "- \"required_concept_groups\" (array of objects, REQUIRED): each object has:\n"
+        "  - \"concepts\" (array of strings): terms that must all be present\n"
+        "  - \"match\" (string): \"all\" or \"any\"\n"
+        "- \"excluded_contexts\" (array of objects, REQUIRED): situations where the rule should NOT fire\n"
+        "  - \"pattern\" (string): text pattern to match\n"
+        "  - \"scope\" (string): \"trigger\" or \"action\" or \"global\"\n"
+        "- \"action_instruction\" (string, REQUIRED): what the agent should do\n"
+        "- \"severity\" (string, REQUIRED): one of \"reminder\", \"high_risk\", \"gate_eligible\"\n"
+        "- \"scope\" (object, REQUIRED): matching scope constraints\n"
+        "  - \"domain_tags\" (array of strings): e.g. [\"git\", \"testing\"]\n"
+        "  - \"path_patterns\" (array of strings): e.g. [\"*.py\", \"tests/\"]\n"
+        "  - \"tool_tags\" (array of strings): e.g. [\"Bash\", \"Write\"]\n\n"
+        "OPTIONAL fields:\n"
+        "- \"rewrite_rationale\" (string): explanation of what was changed and why\n\n"
+        "Example output:\n"
+        "```json\n"
+        "{\n"
+        "  \"trigger_canonical\": \"When force-pushing to a shared branch without --force-with-lease\",\n"
+        "  \"required_concept_groups\": [\n"
+        "    {\"concepts\": [\"git push\", \"force\"], \"match\": \"all\"}\n"
+        "  ],\n"
+        "  \"excluded_contexts\": [\n"
+        "    {\"pattern\": \"personal branch\", \"scope\": \"trigger\"}\n"
+        "  ],\n"
+        "  \"action_instruction\": \"Use --force-with-lease instead of --force to prevent overwriting others' work.\",\n"
+        "  \"severity\": \"high_risk\",\n"
+        "  \"scope\": {\n"
+        "    \"domain_tags\": [\"git\"],\n"
+        "    \"path_patterns\": [],\n"
+        "    \"tool_tags\": [\"Bash\"]\n"
+        "  },\n"
+        "  \"rewrite_rationale\": \"Narrowed from generic 'git push' to specifically force-push on shared branches.\"\n"
+        "}\n"
+        "```\n"
+        "Output ONLY the JSON object, no markdown fences, no extra text."
     )
 
     candidate_text = _prompt_text(json.dumps(candidate, ensure_ascii=False, indent=2))
@@ -837,9 +908,27 @@ def _run_final_judge(
         "Verify the structured rule against original evidence. "
         "Do not let rewriter polish hide weak evidence. "
         "You must cite evidence for any accept decision.\n\n"
-        "Output strict JSON:\n"
-        '{"decision":"accept_active|accept_candidate|reject",'
-        '"reasoning":"...","evidence_citations":["quote1","quote2"]}'
+        "Output a single JSON object with these fields:\n\n"
+        "REQUIRED fields:\n"
+        "- \"decision\" (string, REQUIRED): one of:\n"
+        "  - \"accept_active\": narrow, evidence-rich, low-near-miss rule ready for active use\n"
+        "  - \"accept_candidate\": good rule but needs shadow proof before active\n"
+        "  - \"reject\": insufficient evidence or too broad\n\n"
+        "OPTIONAL fields:\n"
+        "- \"reasoning\" (string): explanation of your decision\n"
+        "- \"evidence_citations\" (array of strings): verbatim quotes from the evidence that support your decision\n\n"
+        "Example output:\n"
+        "```json\n"
+        "{\n"
+        "  \"decision\": \"accept_candidate\",\n"
+        "  \"reasoning\": \"Rule has solid evidence but trigger is moderately broad. Needs shadow observation to confirm precision.\",\n"
+        "  \"evidence_citations\": [\n"
+        "    \"user said: always use --force-with-lease not --force\",\n"
+        "    \"the assistant corrected itself after the user's feedback\"\n"
+        "  ]\n"
+        "}\n"
+        "```\n"
+        "Output ONLY the JSON object, no markdown fences, no extra text."
     )
 
     rule_text = _prompt_text(json.dumps(rule_data, ensure_ascii=False, indent=2))
@@ -899,13 +988,42 @@ def _run_merge_planner(
         "You are a merge planner for an autonomous rule memory system. "
         "Determine the relationship between a new rule and existing rules. "
         "Do not replace trusted rules with plausible but weaker text.\n\n"
-        "Output strict JSON:\n"
-        '{"relation_shape":"equivalent|new_broader|new_narrower|overlap|complementary|contradiction|obsolete|unrelated|split_required",'
-        '"new_rule_safety":"safe|unsafe|uncertain",'
-        '"operation_safety":"safe|unsafe|uncertain",'
-        '"quality_winner":"new|existing|both|neither",'
-        '"operation":"merge_into_existing|update_existing_fields|replace_existing|keep_both|reject_new|suppress_existing|archive_existing|split_required",'
-        '"confidence":0.0-1.0,"reason":"...","target_rule_ids":["id1"]}'
+        "Output a single JSON object with these fields:\n\n"
+        "REQUIRED fields:\n"
+        "- \"relation_shape\" (string, REQUIRED): one of:\n"
+        "  - \"equivalent\": same rule, different wording\n"
+        "  - \"new_broader\": new rule covers more ground than existing\n"
+        "  - \"new_narrower\": new rule is more specific than existing\n"
+        "  - \"overlap\": partial overlap in scope\n"
+        "  - \"complementary\": different aspects of same domain\n"
+        "  - \"contradiction\": rules conflict with each other\n"
+        "  - \"obsolete\": existing rule is outdated\n"
+        "  - \"unrelated\": no meaningful relationship\n"
+        "  - \"split_required\": new rule contains multiple independent concerns\n"
+        "- \"new_rule_safety\" (string, REQUIRED): \"safe\", \"unsafe\", or \"uncertain\"\n"
+        "- \"operation_safety\" (string, REQUIRED): \"safe\", \"unsafe\", or \"uncertain\"\n"
+        "- \"quality_winner\" (string, REQUIRED): \"new\", \"existing\", \"both\", or \"neither\"\n"
+        "- \"operation\" (string, REQUIRED): one of:\n"
+        "  - \"merge_into_existing\", \"update_existing_fields\", \"replace_existing\",\n"
+        "  - \"keep_both\", \"reject_new\", \"suppress_existing\", \"archive_existing\", \"split_required\"\n"
+        "- \"confidence\" (number, REQUIRED): 0.0 to 1.0, how confident in this assessment\n"
+        "- \"reason\" (string, REQUIRED): brief explanation\n\n"
+        "OPTIONAL fields:\n"
+        "- \"target_rule_ids\" (array of strings): IDs of existing rules this relates to\n\n"
+        "Example output:\n"
+        "```json\n"
+        "{\n"
+        "  \"relation_shape\": \"new_narrower\",\n"
+        "  \"new_rule_safety\": \"safe\",\n"
+        "  \"operation_safety\": \"safe\",\n"
+        "  \"quality_winner\": \"new\",\n"
+        "  \"operation\": \"keep_both\",\n"
+        "  \"confidence\": 0.82,\n"
+        "  \"reason\": \"New rule covers a specific subset (Python testing) of the existing general testing rule. Both are valuable.\",\n"
+        "  \"target_rule_ids\": [\"abc123-def456\"]\n"
+        "}\n"
+        "```\n"
+        "Output ONLY the JSON object, no markdown fences, no extra text."
     )
 
     rule_text = _prompt_text(json.dumps(rule_data, ensure_ascii=False, indent=2))
@@ -1512,8 +1630,43 @@ def _generate_eval_cases(
 
     system_prompt = (
         "You are a synthetic evaluation case generator for an autonomous rule memory system. "
-        "Produce diverse, tricky test cases. Near-miss cases must be genuinely hard to distinguish. "
-        'Output strict JSON object: {"cases": [...]}'
+        "Produce diverse, tricky test cases. Near-miss cases must be genuinely hard to distinguish.\n\n"
+        "Output a single JSON object with a \"cases\" array. Each case object has:\n\n"
+        "REQUIRED fields per case:\n"
+        "- \"prompt\" (string, REQUIRED): a realistic developer prompt/context\n"
+        "- \"case_type\" (string, REQUIRED): one of \"positive\", \"medium_positive\", \"near_miss\", \"negative\"\n\n"
+        "CONDITIONAL fields (depending on case_type):\n"
+        "- \"expected_min_decision\" (string): for positive cases, the minimum expected decision: \"warm\" or \"hot\"\n"
+        "- \"expected_max_decision\" (string): for near_miss/negative cases, the maximum allowed: \"cold\"\n"
+        "  For medium_positive: \"warm\" (may match but should not be hot)\n\n"
+        "REQUIRED per case:\n"
+        "- \"rationale\" (string, REQUIRED): brief explanation of why this case should produce the expected decision\n\n"
+        "Example output:\n"
+        "```json\n"
+        "{\n"
+        "  \"cases\": [\n"
+        "    {\n"
+        "      \"prompt\": \"I need to force push to the main branch to fix a rebase issue\",\n"
+        "      \"case_type\": \"positive\",\n"
+        "      \"expected_min_decision\": \"warm\",\n"
+        "      \"rationale\": \"Contains force push + shared branch context, rule should fire\"\n"
+        "    },\n"
+        "    {\n"
+        "      \"prompt\": \"Let me push my changes to my personal feature branch\",\n"
+        "      \"case_type\": \"near_miss\",\n"
+        "      \"expected_max_decision\": \"cold\",\n"
+        "      \"rationale\": \"Push without force, personal branch — rule should not fire\"\n"
+        "    },\n"
+        "    {\n"
+        "      \"prompt\": \"How do I set up ESLint in my React project?\",\n"
+        "      \"case_type\": \"negative\",\n"
+        "      \"expected_max_decision\": \"cold\",\n"
+        "      \"rationale\": \"Completely unrelated to git push\"\n"
+        "    }\n"
+        "  ]\n"
+        "}\n"
+        "```\n"
+        "Output ONLY the JSON object, no markdown fences, no extra text."
     )
 
     def _validate_eval_cases_response(raw: str) -> None:

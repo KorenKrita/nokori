@@ -258,7 +258,7 @@ SYNTHETIC_EVAL_GENERATOR_SCHEMA: dict[str, Any] = {
                     },
                     "rationale": {"type": "string"},
                 },
-                "required": ["prompt", "case_type", "expected_min_decision", "expected_max_decision"],
+                "required": ["prompt", "case_type", "expected_min_decision", "expected_max_decision", "rationale"],
             },
         },
     },

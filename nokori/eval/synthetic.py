@@ -345,10 +345,10 @@ Rules for case generation:
 
 Output strict JSON array:
 [
-  {{"prompt": "...", "case_type": "positive", "expected_min_decision": "warm"}},
-  {{"prompt": "...", "case_type": "medium_positive", "expected_max_decision": "warm"}},
-  {{"prompt": "...", "case_type": "near_miss", "expected_max_decision": "cold"}},
-  {{"prompt": "...", "case_type": "negative", "expected_max_decision": "cold"}}
+  {{"prompt": "...", "case_type": "positive", "expected_min_decision": "warm", "rationale": "Contains required concepts and trigger evidence"}},
+  {{"prompt": "...", "case_type": "medium_positive", "expected_max_decision": "warm", "rationale": "Topic present but context is ambiguous"}},
+  {{"prompt": "...", "case_type": "near_miss", "expected_max_decision": "cold", "rationale": "Shares vocabulary but different intent"}},
+  {{"prompt": "...", "case_type": "negative", "expected_max_decision": "cold", "rationale": "Completely unrelated topic"}}
 ]"""
 
 
