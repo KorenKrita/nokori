@@ -16,7 +16,15 @@ from nokori.web.models import RuleResponse
 router = APIRouter()
 
 
-def _rule_to_response(rule, *, fire_count: int = 0) -> dict:
+def _rule_to_response(
+    rule,
+    *,
+    fire_count: int = 0,
+    fire_last_at: str | None = None,
+    fire_levels: dict | None = None,
+    posthoc_labels: dict | None = None,
+    shadow_count: int = 0,
+) -> dict:
     """Convert a Rule dataclass to a RuleResponse dict with all structured fields."""
     return RuleResponse(
         id=rule.id,
@@ -65,6 +73,10 @@ def _rule_to_response(rule, *, fire_count: int = 0) -> dict:
         created_at=rule.created_at,
         updated_at=rule.updated_at,
         fire_count=fire_count,
+        fire_last_at=fire_last_at,
+        fire_levels=fire_levels or {},
+        posthoc_labels=posthoc_labels or {},
+        shadow_count=shadow_count,
     ).model_dump()
 
 
@@ -137,26 +149,33 @@ def show_rule(short_id: str):
         )
         fire_count = row["cnt"] if row else 0
         fire_last_at = row["last_at"] if row else None
-        data = _rule_to_response(rule, fire_count=fire_count)
-        data["fire_last_at"] = fire_last_at
 
         levels_rows = db.fetchall(
             "SELECT level, COUNT(*) as cnt FROM rule_fire_events WHERE rule_id = ? GROUP BY level",
             (rule.id,),
         )
-        data["fire_levels"] = {r["level"]: r["cnt"] for r in levels_rows}
+        fire_levels = {r["level"]: r["cnt"] for r in levels_rows}
 
         posthoc_rows = db.fetchall(
             "SELECT posthoc_label, COUNT(*) as cnt FROM rule_fire_events WHERE rule_id = ? AND posthoc_label IS NOT NULL GROUP BY posthoc_label",
             (rule.id,),
         )
-        data["posthoc_labels"] = {r["posthoc_label"]: r["cnt"] for r in posthoc_rows}
+        posthoc_labels = {r["posthoc_label"]: r["cnt"] for r in posthoc_rows}
 
         shadow_row = db.fetchone(
             "SELECT COUNT(*) as cnt FROM rule_shadow_events WHERE rule_id = ?",
             (rule.id,),
         )
-        data["shadow_count"] = shadow_row["cnt"] if shadow_row else 0
+        shadow_count = shadow_row["cnt"] if shadow_row else 0
+
+        data = _rule_to_response(
+            rule,
+            fire_count=fire_count,
+            fire_last_at=fire_last_at,
+            fire_levels=fire_levels,
+            posthoc_labels=posthoc_labels,
+            shadow_count=shadow_count,
+        )
     finally:
         db.close()
     return {"data": data}

@@ -181,7 +181,7 @@ export function RuleDetail() {
                 </div>
               )}
               {(rule.shadow_count ?? 0) > 0 && (
-                <div className="flex justify-between gap-3 mt-2">
+                <div className="flex justify-between gap-3">
                   <dt className="text-text-tertiary">{t('rules.shadow_count')}</dt>
                   <dd className="font-mono text-text-secondary">{rule.shadow_count}</dd>
                 </div>
