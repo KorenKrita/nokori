@@ -779,7 +779,12 @@ class TestTriggerEvidencePassFail:
         assert result.trigger_evidence_passed is False
 
     def test_small_pool_stricter_thresholds(self):
-        """N<20: requires coverage >= 0.40 and distinct >= 2."""
+        """N<20: requires coverage >= 0.40 and distinct >= 2.
+
+        The concept DOES match (pytest parametrize in prompt), but the small pool's
+        stricter IDF/coverage requirements cause trigger_evidence_passed=False when
+        IDF stats are insufficient (only one token in df_by_token).
+        """
         matcher = self._compile_simple_rule()
         idf_stats = {
             "pool_size": 5,
@@ -788,9 +793,9 @@ class TestTriggerEvidencePassFail:
             "is_shadow": False,
             "idf_max": 3.0,
         }
-        # Single token, coverage too low for small pool stricter thresholds
-        result = evaluate_match(matcher, "pytest framework usage", idf_stats=idf_stats)
-        # Should not pass with insufficient coverage/distinct terms for small pool
+        # Concept matches (pytest parametrize present) but IDF stats insufficient
+        # for small pool stricter thresholds (coverage < 0.40, distinct < 2)
+        result = evaluate_match(matcher, "pytest parametrize in code review", idf_stats=idf_stats)
         assert result.trigger_evidence_passed is False
 
     def test_shadow_idf_cap(self):

@@ -82,6 +82,8 @@ export function RuleDetail() {
                 ? triggerVariantsZh
                 : triggerVariants
               ).map((v, i) => (
+                // Only variant text is shown on the list/detail view; kind/requires_concepts
+                // are intentionally omitted from display — they're internal matcher metadata.
                 <p key={i} className="text-xs text-text-secondary font-mono pl-2">{triggerVariantText(v)}</p>
               ))}
             </div>

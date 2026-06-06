@@ -284,7 +284,7 @@ def _is_narrower_scope(
     old_in_new = len(new_tokens & old_tokens) / len(old_tokens) if old_tokens else 0
 
     # Structural narrowness: new has domain_tags that old's scope_summary lacks
-    scope_summary = fingerprint_row.get("scope_summary") or ""
+    scope_summary = (fingerprint_row["scope_summary"] if "scope_summary" in fingerprint_row.keys() else "") or ""
     has_structural_narrowing = (
         new_domain_tags
         and len(new_domain_tags) > 0

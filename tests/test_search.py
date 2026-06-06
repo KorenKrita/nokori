@@ -71,7 +71,10 @@ def test_tier_hot_when_top1_dominant():
     assert sel.hot[0].rule.short_id == "aaa111"
 
 
-def test_tier_preserves_ranked_results_before_status_filtering():
+def test_select_injection_is_status_agnostic():
+    # select_injection itself does not filter by status; status filtering happens
+    # upstream in applicability (_fetch_formal_and_shadow). This test verifies
+    # that if a suppressed rule reaches ranking, it still appears in results.
     rules = [
         _rule("aaa111", "force push", variants=("git push --force",),
               action="use lease", status="suppressed"),
@@ -97,7 +100,9 @@ def test_tier_min_evidence_blocks_single_token_match():
     assert sel.warm == []
 
 
-def test_meets_min_evidence_does_not_use_fixed_cosine_threshold():
+def test_meets_min_evidence_rejects_embedding_only_match():
+    # A result with high cosine but no BM25 trigger/variant tokens fails min_evidence.
+    # Embedding-only matches are not sufficient for injection.
     rules = [_rule("aaa111", "force push to main", action="use lease")]
     result = bm25.ScoredResult(rule=rules[0], cosine=0.99)
     assert meets_min_evidence(result) is False

@@ -70,7 +70,7 @@ export interface ScoredResult {
     matched_variant_tokens: string[]
     matched_action_tokens?: string[]
     matched_search_tokens?: string[]
-    decision_reason: string
+    decision_reason: string // same as top-level decision_reason; included in snapshot for completeness
   }
   eligibility: {
     decision: string

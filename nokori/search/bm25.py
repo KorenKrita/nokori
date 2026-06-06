@@ -17,6 +17,11 @@ _INDEX_CACHE: OrderedDict[tuple, tuple] = OrderedDict()
 _INDEX_CACHE_MAX = 64
 
 
+def clear_index_cache() -> None:
+    """Clear the internal BM25 index cache (useful in tests)."""
+    _INDEX_CACHE.clear()
+
+
 # ---------------------------------------------------------------------------
 # Fielded token extraction
 # ---------------------------------------------------------------------------

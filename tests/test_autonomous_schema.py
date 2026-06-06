@@ -334,7 +334,7 @@ class TestOpenDbFreshPath:
                 "maintenance_meta",
             }
             assert expected.issubset(tables)
-            assert db.schema_version() == SCHEMA_VERSION == 6
+            assert db.schema_version() == SCHEMA_VERSION
         finally:
             db.close()
 

@@ -110,6 +110,9 @@ class TestResolveModelId:
         with pytest.raises(ValueError, match="unknown role"):
             resolve_model_id("nonexistent", default_model="x")
 
+    # NOTE: resolve_model_id is tested here but complete_role uses inline logic
+    # (Config lookup -> default_model -> provider default) rather than calling
+    # resolve_model_id directly. The adapter has its own resolution path.
     def test_ignores_empty_role_model(self):
         result = resolve_model_id(
             "extractor",
@@ -304,7 +307,10 @@ class TestRoleSpecificLimits:
         adapter = LLMAdapter(cfg, http_open=fake_open)
         adapter.complete_role("extractor", "sys", "user")
 
-        # Falls back to hardcoded defaults: max_tokens=2000, timeout=30
+        # Falls back to hardcoded defaults: max_tokens=2000, timeout=30.
+        # NOTE: These 2000/30 defaults are adapter-level fallbacks that are never
+        # reached in production because Config always populates role_max_tokens
+        # and role_timeouts from TOML/env.
         assert captured["body"]["max_tokens"] == 2000
         assert captured["timeout"] == 30
 

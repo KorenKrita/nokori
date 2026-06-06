@@ -23,7 +23,7 @@ def test_fresh_db_is_current_schema(monkeypatch, tmp_path):
     monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
     db = open_db(tmp_path / "rules.db")
     try:
-        assert db.schema_version() == SCHEMA_VERSION == 6
+        assert db.schema_version() == SCHEMA_VERSION
         cols = {r[1] for r in db.fetchall("PRAGMA table_info(rules)")}
         assert "trigger_canonical" in cols
         assert "action_instruction" in cols
@@ -53,14 +53,14 @@ def _create_old_db(path: Path, version: int) -> None:
     conn.close()
 
 
-def test_v2_schema_rejected(monkeypatch, tmp_path):
+def test_v2_schema_rejected(tmp_path):
     db_path = tmp_path / "rules.db"
     _create_old_db(db_path, 2)
     with pytest.raises(DbError, match="incompatible"):
         open_db(db_path)
 
 
-def test_v3_schema_rejected(monkeypatch, tmp_path):
+def test_v3_schema_rejected(tmp_path):
     db_path = tmp_path / "rules.db"
     _create_old_db(db_path, 3)
     with pytest.raises(DbError, match="incompatible"):

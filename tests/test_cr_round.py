@@ -116,5 +116,12 @@ def test_active_rule_retrieval_in_same_session(monkeypatch, tmp_path):
         }, cfg, host=Host.CLAUDE)
         row = db.fetchone("SELECT status FROM rules WHERE id = 'd1'")
         assert row["status"] == "active"
+
+        # Verify the retrieval actually matched: a rule_fire_event should be recorded
+        fire_row = db.fetchone(
+            "SELECT rule_id, level FROM rule_fire_events WHERE rule_id = 'd1'"
+        )
+        assert fire_row is not None, "handle() should record a fire event for the matched rule"
+        assert fire_row["rule_id"] == "d1"
     finally:
         db.close()
