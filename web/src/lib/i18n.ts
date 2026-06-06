@@ -202,6 +202,8 @@ const translations: Record<Locale, Record<string, string>> = {
     'activity.filter.all_types': '全部类型',
     'activity.auto_scroll': '自动滚动',
     'activity.empty': '暂无事件',
+    'activity.dashboard.overview': '总览',
+    'activity.dashboard.errors': '错误',
   },
   en: {
     // Nav
@@ -404,6 +406,8 @@ const translations: Record<Locale, Record<string, string>> = {
     'activity.filter.all_types': 'All Types',
     'activity.auto_scroll': 'Auto-scroll',
     'activity.empty': 'No events yet',
+    'activity.dashboard.overview': 'Overview',
+    'activity.dashboard.errors': 'Errors',
   },
   ja: {
     // Nav
@@ -606,6 +610,8 @@ const translations: Record<Locale, Record<string, string>> = {
     'activity.filter.all_types': '全タイプ',
     'activity.auto_scroll': '自動スクロール',
     'activity.empty': 'イベントなし',
+    'activity.dashboard.overview': '概要',
+    'activity.dashboard.errors': 'エラー',
   },
 }
 

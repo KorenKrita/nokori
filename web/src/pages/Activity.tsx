@@ -242,7 +242,7 @@ function DashboardContent({
               : 'border-transparent text-text-secondary hover:text-[var(--color-text)]'
           }`}
         >
-          Overview
+          {t('activity.dashboard.overview')}
         </button>
         <button
           onClick={() => setSubTab('errors')}
@@ -252,7 +252,7 @@ function DashboardContent({
               : 'border-transparent text-text-secondary hover:text-[var(--color-text)]'
           }`}
         >
-          Errors
+          {t('activity.dashboard.errors')}
         </button>
       </div>
 

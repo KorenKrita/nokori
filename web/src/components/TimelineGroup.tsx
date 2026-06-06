@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import { CaretDownIcon } from '@phosphor-icons/react'
+import { formatDateTime } from '@/lib/formatDateTime'
 import { getSourceColor } from '@/lib/sourceColors'
 import { TimelineEventRow } from './TimelineEvent'
 import type { TimelineEvent } from '@/lib/types'
@@ -48,7 +49,7 @@ export function TimelineGroup({ group }: { group: EventGroup }) {
         className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-[var(--color-row-hover)] transition-colors text-sm"
       >
         <span className="text-xs text-text-tertiary font-mono w-[7.5rem] shrink-0">
-          {group.latest_time.slice(11, 19)}
+          {formatDateTime(group.latest_time)}
         </span>
         <span className={`font-medium w-[10rem] shrink-0 ${getSourceColor(group.source)}`}>
           {group.source}

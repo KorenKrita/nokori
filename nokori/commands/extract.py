@@ -128,6 +128,11 @@ def _process_path(path: Path, project_id: str | None, cfg: Config,
         candidates, llm_ok = extract_candidates(text, llm)
         if not llm_ok:
             log.warning("extract failed (llm): %s", path)
+            write_event(
+                db, source="cli_extract",
+                outcome="llm_failure",
+                details={"transcript": path.name, "project_id": project_id},
+            )
             return (0, 0, False)
         if dry_run:
             return (len(candidates), 0, False)

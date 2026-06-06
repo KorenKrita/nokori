@@ -185,7 +185,16 @@ def run_cold_pipeline(
     except (RuntimeError, OSError, TimeoutError, ConnectionError, ValueError) as e:
         # Spec section 13: failed role calls leave jobs pending for retry
         log.warning("cold_pipeline pending (role failure): trigger=%r %s: %s", trigger_preview, type(e).__name__, e)
-        error_type = "timeout" if isinstance(e, TimeoutError) else "connection" if isinstance(e, OSError) else "validation" if isinstance(e, ValueError) else "runtime"
+        if isinstance(e, TimeoutError):
+            error_type = "timeout"
+        elif isinstance(e, ConnectionError):
+            error_type = "connection"
+        elif isinstance(e, OSError):
+            error_type = "io"
+        elif isinstance(e, ValueError):
+            error_type = "validation"
+        else:
+            error_type = "runtime"
         write_error(
             db, source="cold_pipeline", role="system",
             error_type=error_type,

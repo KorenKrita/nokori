@@ -138,6 +138,7 @@ def query_errors(
     group_by: str = "role",
     session_id: str | None = None,
     since: str | None = None,
+    until: str | None = None,
 ) -> list[dict]:
     """Aggregate error_events by a dimension. Returns list of dicts with count."""
     column_map = {"role": "role", "model_id": "model_id", "error_type": "error_type", "source": "source"}
@@ -152,6 +153,9 @@ def query_errors(
     if since is not None:
         where.append("created_at >= ?")
         params.append(since)
+    if until is not None:
+        where.append("created_at <= ?")
+        params.append(until)
 
     sql = f"SELECT {group_by}, COUNT(*) AS count FROM error_events"
     if where:

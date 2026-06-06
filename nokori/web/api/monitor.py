@@ -55,7 +55,7 @@ def get_monitor_overview(
             tuple(params),
         )
 
-        error_summary = query_errors(db, group_by="role", session_id=session_id, since=since)
+        error_summary = query_errors(db, group_by="role", session_id=session_id, since=since, until=until)
 
         # Conversion funnel: cold pipeline events
         pipeline_where = list(where_parts)

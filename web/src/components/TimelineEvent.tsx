@@ -43,7 +43,7 @@ export function TimelineEventRow({ event }: { event: TEvent }) {
         <OutcomeBadge outcome={event.outcome} />
         {event.prompt_snippet && (
           <span className="text-text-tertiary truncate ml-2 text-xs italic">
-            "{event.prompt_snippet.slice(0, 60)}{event.prompt_snippet.length > 60 ? '...' : ''}"
+            "{event.prompt_snippet}"
           </span>
         )}
         <CaretDownIcon
