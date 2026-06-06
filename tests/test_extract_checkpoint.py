@@ -17,7 +17,7 @@ class _FakeColdResult:
 
 
 def test_partial_extract_retry_deduplicates_via_segment_hash(monkeypatch, tmp_path):
-    """On partial failure + retry, transcript_ingest_jobs dedup prevents reprocessing."""
+    """On partial failure + retry, transcript_ingest_jobs dedup prevents re-enqueue (job-level idempotency)."""
     monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
     cfg = Config.from_env()
     path = tmp_path / "partial.jsonl"
@@ -83,6 +83,10 @@ def test_partial_extract_retry_deduplicates_via_segment_hash(monkeypatch, tmp_pa
 
     # Same candidates extracted again (transcript not marked)
     assert cands2 == 2
+    # Retry still partially fails (the "unrelated" candidate still raises)
+    assert finished2 is False
+    # Cold pipeline called for both candidates on retry
+    assert cold_call_count[0] == 2
     # Cold pipeline is still called for both (segment_hash dedup is at job level)
     # but the enqueue_transcript_ingest idempotently returns existing job ids
     db = open_db(cfg.db_path)

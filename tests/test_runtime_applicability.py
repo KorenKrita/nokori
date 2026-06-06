@@ -321,6 +321,11 @@ class TestSmallPool:
 
     def test_normal_thresholds_insufficient_for_small_pool(self):
         """Normal policy thresholds are lower; they fail under small pool."""
+        # Guard: normal thresholds must be strictly lower than small-pool thresholds
+        assert DYNAMIC_IDF_NORMAL.absolute_trigger_info_min < DYNAMIC_IDF_SMALL_POOL.absolute_trigger_info_min
+        assert DYNAMIC_IDF_NORMAL.trigger_coverage_min < DYNAMIC_IDF_SMALL_POOL.trigger_coverage_min
+        assert DYNAMIC_IDF_NORMAL.distinct_trigger_terms_min < DYNAMIC_IDF_SMALL_POOL.distinct_trigger_terms_min
+
         small_pool = SMALL_POOL_THRESHOLD - 1
         normal_policy = DYNAMIC_IDF_NORMAL
 

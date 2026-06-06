@@ -323,7 +323,11 @@ def _is_single_generic_token(text: str) -> bool:
 
 
 def _compile_phrase_pattern(text: str) -> re.Pattern[str]:
-    """Create a case-insensitive regex for phrase substring matching."""
+    """Create a case-insensitive regex for phrase substring matching.
+
+    Intentionally uses substring matching (no \\b word boundaries) for broader
+    recall — the concept/variant mechanism provides the precision layer.
+    """
     escaped = re.escape(text.lower())
     return re.compile(escaped, re.IGNORECASE)
 
@@ -443,10 +447,6 @@ def _compile_variant(data: dict[str, Any]) -> CompiledVariant:
         if not _is_multi_token(text):
             raise CompilationError(
                 f"strong_anchor variant '{text}' must be multi-token"
-            )
-        if _is_single_generic_token(text):
-            raise CompilationError(
-                f"strong_anchor variant '{text}' cannot be a single generic token"
             )
 
     text_lower = text.lower()

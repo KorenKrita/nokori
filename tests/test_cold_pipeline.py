@@ -917,6 +917,9 @@ def test_non_destructive_merge_failed_reeval_revert_uses_full_cas(db: Db):
         if fake_run_synthetic_eval.calls == 0:
             fake_run_synthetic_eval.calls += 1
             return passed_eval
+        # Simulate a concurrent status mutation to 'trusted' between the first
+        # and second eval calls. This intentionally breaks the CAS revert,
+        # proving the revert won't overwrite state that changed concurrently.
         with db.transaction() as tx:
             tx.execute(
                 "UPDATE rules SET status = 'trusted' WHERE id = ?",

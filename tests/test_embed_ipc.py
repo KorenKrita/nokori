@@ -108,6 +108,8 @@ def test_hook_search_skips_embed_when_server_not_ready(monkeypatch, tmp_path):
             return True
 
         monkeypatch.setattr(embedding, "_sentence_transformers_available", lambda: True)
+        monkeypatch.setattr(embedding, "local_model_cached", lambda c: True)
+        monkeypatch.setattr(embedding, "local_embed_package_available", lambda: True)
         monkeypatch.setattr(embed_ipc, "kickstart_server", lambda c: False)
         monkeypatch.setattr(embed_ipc, "ensure_running", fake_ensure)
         results, mode = embedding.search_local_shared(

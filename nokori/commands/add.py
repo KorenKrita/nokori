@@ -7,8 +7,8 @@ from ..db import SCHEMA_VERSION, dumps_json, fetch_rule_by_short_id, fetch_short
 from ..errors import NokoriError
 from ..policy import RUNTIME_POLICY_VERSION
 from ..search.embedding import index_rule_if_enabled
-from ..utils.ids import new_uuid, short_id_for
 from ..search.tokenizer import tokenize
+from ..utils.ids import new_uuid, short_id_for
 from ..utils.text import split_csv
 from ..utils.time import now_iso
 
@@ -18,6 +18,12 @@ _MAX_ACTION = 8_192
 
 
 def _variant_entry(text: str, concept_id: str) -> dict:
+    """Build a variant entry for a trigger text.
+
+    Single-token triggers become `weak_recall` intentionally: the required concept
+    mechanism already provides trigger evidence via alias matching, so a single token
+    alone does not need strong_anchor status.
+    """
     text = text.strip()
     if len(tokenize(text)) >= 2:
         return {

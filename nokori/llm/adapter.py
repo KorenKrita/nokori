@@ -69,6 +69,7 @@ class LLMAdapter:
         timeout: int,
         *,
         model_id: str | None = None,
+        response_format: dict | None = {"type": "json_object"},
     ) -> str | None:
         messages: list[dict[str, str]] = []
         if system:
@@ -78,8 +79,9 @@ class LLMAdapter:
             "model": model_id or self.cfg.llm_model,
             "messages": messages,
             "max_tokens": max_tokens,
-            "response_format": {"type": "json_object"},
         }
+        if response_format is not None:
+            payload["response_format"] = response_format
         headers = {"Content-Type": "application/json"}
         if self.cfg.llm_api_key:
             headers["Authorization"] = f"Bearer {self.cfg.llm_api_key}"

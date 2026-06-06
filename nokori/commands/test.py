@@ -28,7 +28,7 @@ def _format_eligibility(r, pool_size: int) -> str:
         action_only_match=r.action_only_match,
         search_only_match=r.search_only_match,
         embedding_only_match=r.embedding_only_match,
-        idf_stats_available=True,
+        idf_stats_available=True,  # TODO: derive from actual IDF stats availability
         pool_size=pool_size,
         has_tool_input=False,
         false_positive_score=r.rule.false_positive_score,

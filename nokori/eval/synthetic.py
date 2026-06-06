@@ -357,6 +357,14 @@ Output strict JSON array:
 # ---------------------------------------------------------------------------
 
 
+def is_eval_stale(stored: SyntheticEvalResult, current_idf_pool_version: str,
+                  current_matcher_version: str, current_rule_version: int) -> bool:
+    """Check whether stored eval results match current component versions."""
+    return (stored.trigger_idf_pool_version != current_idf_pool_version
+            or stored.matcher_compiler_version != current_matcher_version
+            or stored.rule_version != current_rule_version)
+
+
 # ---------------------------------------------------------------------------
 # Database persistence
 # ---------------------------------------------------------------------------

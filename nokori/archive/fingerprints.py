@@ -7,6 +7,7 @@ import uuid
 from ..db import Db
 
 _STRENGTH_ORDER = ("replacement", "system", "user")
+_STRENGTH_RANK = {s: i for i, s in enumerate(_STRENGTH_ORDER)}
 
 
 def compute_signature(
@@ -67,7 +68,7 @@ def create_archived_fingerprint_from_data(
             ).fetchone()
             if existing:
                 existing_strength = existing["archive_strength"]
-                if _STRENGTH_ORDER.index(strength) > _STRENGTH_ORDER.index(existing_strength):
+                if _STRENGTH_RANK.get(strength, -1) > _STRENGTH_RANK.get(existing_strength, -1):
                     tx.execute(
                         "UPDATE archived_fingerprints SET archive_strength = ?, "
                         "can_be_overridden_by_changed_scope = ?, created_at = ? "
@@ -84,7 +85,7 @@ def check_fingerprint_block(
     action_instruction: str,
     domain_tags: list[str] | None = None,
     stronger_evidence: str | None = None,
-    synthetic_eval_passed: bool = True,
+    synthetic_eval_passed: bool = False,
     admission_judge_cited: bool = False,
 ) -> dict | None:
     """Check if an archived fingerprint blocks a proposed rule.
@@ -146,7 +147,7 @@ def _fingerprint_decision(
     stronger_evidence: str | None,
     exact_match: bool,
     is_narrower_scope: bool = False,
-    synthetic_eval_passed: bool = True,
+    synthetic_eval_passed: bool = False,
     admission_judge_cited: bool = False,
 ):
     strength = row["archive_strength"]
@@ -162,7 +163,7 @@ def _fingerprint_decision(
                 "blocked_trigger_area": row["blocked_trigger_area"],
                 "blocked_action_area": row["blocked_action_area"],
                 "reason": "replacement_blocks_equivalent_or_weaker",
-                "overridable": True,
+                "overridable": False,
             }
         # Non-exact fuzzy match: block if new rule is broader/weaker (not narrower)
         if not is_narrower_scope:
@@ -174,7 +175,7 @@ def _fingerprint_decision(
                 "blocked_trigger_area": row["blocked_trigger_area"],
                 "blocked_action_area": row["blocked_action_area"],
                 "reason": "replacement_blocks_weaker_replacement",
-                "overridable": True,
+                "overridable": False,
             }
         return None
 
@@ -250,7 +251,7 @@ def _find_related_fingerprint(
         score = max(overlap, containment)
         threshold = _thresholds.get(row["archive_strength"], 0.75)
         if score >= threshold:
-            priority = _STRENGTH_ORDER.index(row["archive_strength"])
+            priority = _STRENGTH_RANK.get(row["archive_strength"], -1)
             candidates.append((priority, score, row))
 
     if not candidates:

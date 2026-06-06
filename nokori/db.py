@@ -475,6 +475,8 @@ def fetch_rules(
     project_id: str | None = None,
     global_only: bool = False,
     project_scope_exact: bool = False,
+    source_origins: tuple[str, ...] | None = None,
+    severities: tuple[str, ...] | None = None,
 ) -> list:
     where = []
     params: list = []
@@ -482,6 +484,14 @@ def fetch_rules(
         placeholders = ",".join("?" * len(statuses))
         where.append(f"status IN ({placeholders})")
         params.extend(statuses)
+    if source_origins:
+        placeholders = ",".join("?" * len(source_origins))
+        where.append(f"source_origin IN ({placeholders})")
+        params.extend(source_origins)
+    if severities:
+        placeholders = ",".join("?" * len(severities))
+        where.append(f"severity IN ({placeholders})")
+        params.extend(severities)
     if global_only:
         where.append("project_scope = 'global'")
     elif project_id is not None:
@@ -509,9 +519,16 @@ def fetch_short_ids(db: "Db") -> set[str]:
     return {r["short_id"] for r in rows}
 
 
-def fetch_shadow_rules(db: "Db", *, project_id: str | None) -> list:
+def fetch_shadow_rules(db: "Db", *, project_id: str | None, global_only: bool = False) -> list:
     """Fetch shadow pool: candidate and suppressed rules for shadow matching."""
-    if project_id is None:
+    if global_only:
+        rows = db.fetchall(
+            f"SELECT {RULE_COLUMNS} FROM rules "
+            "WHERE status IN ('candidate','suppressed') "
+            "AND project_scope = 'global' "
+            "ORDER BY updated_at DESC",
+        )
+    elif project_id is None:
         rows = db.fetchall(
             f"SELECT {RULE_COLUMNS} FROM rules "
             "WHERE status IN ('candidate','suppressed') "

@@ -20,6 +20,8 @@ from .tokenizer import tokenize
 
 InteractionKind = Literal["hook", "cli"]
 
+_last_stored_pool_version: str | None = None
+
 
 @dataclass(frozen=True)
 class RetrievalResult:
@@ -179,8 +181,6 @@ def _apply_runtime_applicability(
         return None
 
     level = applicability.decision
-    if level == "cold" and result.rule.status not in ("candidate", "suppressed"):
-        level = "hot" if match.strong_variant_hits else "warm"
 
     return replace(
         result,
@@ -265,7 +265,10 @@ def retrieve_and_tier(
     # For shadow scoring, use the formal (active/trusted) pool's IDF stats (spec 9.3)
     idf_pool = background_idf_rules if background_idf_rules is not None else rules
     idf_stats = build_idf_stats(r for r in idf_pool if r.status in ("active", "trusted"))
-    store_idf_stats(db, idf_stats)
+    global _last_stored_pool_version
+    if idf_stats.pool_version != _last_stored_pool_version:
+        store_idf_stats(db, idf_stats)
+        _last_stored_pool_version = idf_stats.pool_version
     eligible = [
         applied
         for r in fused

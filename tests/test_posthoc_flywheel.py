@@ -352,11 +352,15 @@ class TestParsePosthocOutput:
 
     def test_all_valid_labels_accepted(self):
         for label in POSTHOC_LABELS:
-            # Pick a compatible reason_code
+            # Pick a semantically matching reason_code for each label
             if label == "harmful":
                 reason = "harmful_distracted"
             elif label == "irrelevant":
                 reason = "irrelevant_not_applicable"
+            elif label == "unclear":
+                reason = "irrelevant_unused"
+            elif label == "plausible_useful":
+                reason = "useful_improved_quality"
             else:
                 reason = "useful_prevented_error"
             raw = json.dumps({

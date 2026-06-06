@@ -14,6 +14,7 @@ HOT_CACHE_BUDGET_CHARS = 500
 HOT_CACHE_RECENT_TURNS = 3
 # Include trusted rules that fired in the last N days
 TRUSTED_RECENT_WINDOW_DAYS = 7
+_TRUSTED_RULES_BUDGET = 500
 
 
 def find_previous_transcript(current: Path) -> Path | None:
@@ -126,12 +127,17 @@ def _recent_trusted_rules_summary(db: Db) -> str | None:
         return None
 
     parts = ["[Nokori hot-cache] recently active trusted rules:"]
+    used = len(parts[0])
     for row in rows:
         trigger = (row["trigger_canonical"] or "").strip().replace("\n", " ")[:80]
         action = (row["action_instruction"] or "").strip().replace("\n", " ")[:80]
         content = f"{trigger} -> {action}" if trigger else action
         if content:
-            parts.append(f"\n- {content}")
+            line = f"\n- {content}"
+            if used + len(line) > _TRUSTED_RULES_BUDGET:
+                break
+            parts.append(line)
+            used += len(line)
     if len(parts) == 1:
         return None
     return "".join(parts)

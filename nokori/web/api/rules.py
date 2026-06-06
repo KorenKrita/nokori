@@ -79,6 +79,8 @@ def list_rules(
 ):
     cfg = get_config()
     statuses = tuple(status.split(",")) if status else None
+    source_origins = tuple(source_origin.split(",")) if source_origin else None
+    severities = tuple(severity.split(",")) if severity else None
     db = open_db(cfg.db_path)
     try:
         rules = fetch_rules(
@@ -87,17 +89,11 @@ def list_rules(
             project_id=project,
             global_only=(scope == "global"),
             project_scope_exact=(project is not None and scope != "global"),
+            source_origins=source_origins,
+            severities=severities,
         )
     finally:
         db.close()
-
-    if source_origin:
-        allowed_origins = set(source_origin.split(","))
-        rules = [r for r in rules if r.source_origin in allowed_origins]
-
-    if severity:
-        allowed_severities = set(severity.split(","))
-        rules = [r for r in rules if r.severity in allowed_severities]
 
     total = len(rules)
     start = (page - 1) * per_page
@@ -162,7 +158,7 @@ def dismiss_rule(short_id: str):
 # ---------------------------------------------------------------------------
 
 
-@router.post("/rules/{short_id}/promote", dependencies=[Depends(require_write_auth)])
+@router.post("/rules/{short_id}/promote")
 def reject_promote(short_id: str):
     """Manual promote is not allowed. Lifecycle transitions are autonomous."""
     raise HTTPException(
@@ -172,7 +168,7 @@ def reject_promote(short_id: str):
     )
 
 
-@router.post("/rules/{short_id}/trust", dependencies=[Depends(require_write_auth)])
+@router.post("/rules/{short_id}/trust")
 def reject_trust(short_id: str):
     """Manual trust is not allowed. Trust is earned through observed usefulness."""
     raise HTTPException(
@@ -182,7 +178,7 @@ def reject_trust(short_id: str):
     )
 
 
-@router.post("/rules/{short_id}/suppress", dependencies=[Depends(require_write_auth)])
+@router.post("/rules/{short_id}/suppress")
 def reject_suppress(short_id: str):
     """Manual suppress is not allowed. Suppression is evidence-driven."""
     raise HTTPException(

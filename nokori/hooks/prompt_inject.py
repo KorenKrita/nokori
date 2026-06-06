@@ -47,11 +47,7 @@ def _fetch_formal_and_shadow(
         )
     if cfg.promotion_enabled:
         if project_id is None:
-            shadow_rules = [
-                r
-                for r in fetch_shadow_rules(db, project_id=None)
-                if r.project_scope == "global"
-            ]
+            shadow_rules = fetch_shadow_rules(db, project_id=None, global_only=True)
         else:
             shadow_rules = fetch_shadow_rules(db, project_id=project_id)
     else:

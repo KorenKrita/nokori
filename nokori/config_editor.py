@@ -310,11 +310,14 @@ def save_editor(
             if was_set:
                 # Remove only if user actively changed from a non-default file value.
                 # If file_val == coerced (both are default/empty), nothing changed — skip.
-                if file_val is not None and not _values_equal(field, _coerce_field(field, file_val), default):
-                    removes.append(field.id)
-            continue
-
-        if not was_set and _values_equal(field, coerced, default):
+                try:
+                    file_coerced = _coerce_field(field, file_val)
+                except ConfigError:
+                    # Coercion failed — treat file value as non-default (don't add to removals)
+                    pass
+                else:
+                    if file_val is not None and not _values_equal(field, file_coerced, default):
+                        removes.append(field.id)
             continue
 
         sets[field.id] = coerced

@@ -159,6 +159,15 @@ def _process_path(path: Path, project_id: str | None, cfg: Config,
             seg_hash = _segment_hash(segment_text)
             transcript_ref = str(path)
 
+            # Dedup: skip if this segment was already successfully ingested
+            existing_job = db.fetchone(
+                "SELECT id FROM transcript_ingest_jobs "
+                "WHERE segment_hash = ? AND status = 'done'",
+                (seg_hash,),
+            )
+            if existing_job:
+                continue
+
             enqueue_transcript_ingest(
                 db,
                 transcript_ref=transcript_ref,
@@ -226,7 +235,10 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
         # Expire stale ingest jobs before processing
         db = open_db(cfg.db_path)
         try:
-            expire_stale_ingest_jobs(db)
+            try:
+                expire_stale_ingest_jobs(db)
+            except Exception as exc:
+                log.warning("expire_stale_ingest_jobs failed (non-fatal): %s", exc)
         finally:
             db.close()
 

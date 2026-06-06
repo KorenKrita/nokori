@@ -409,7 +409,6 @@ def _evaluate_candidate(db: Db, row, rule_version: int) -> TransitionResult:
     th = CANDIDATE_TO_ACTIVE
     # shadow_strong_match_count = would_help_high only (spec: strong match)
     strong_count = shadow.get("would_help_high", 0)
-    would_help_high = shadow.get("would_help_high", 0)
     # Denominator excludes 'unclear' per spec section 3.4
     evaluated_count = (
         shadow.get("would_help_high", 0)
@@ -439,7 +438,7 @@ def _evaluate_candidate(db: Db, row, rule_version: int) -> TransitionResult:
         strong_count >= th.shadow_strong_match_count_min
         and evaluated_count >= th.evaluated_shadow_match_count_min
         and distinct_sessions >= th.distinct_shadow_sessions_min
-        and would_help_high >= th.counterfactual_would_help_high_min
+        and strong_count >= th.counterfactual_would_help_high_min
         and risky_harmful <= th.risky_or_near_miss_shadow_count_max
         and shadow_fp_rate <= th.shadow_false_positive_rate_max
     )
@@ -498,7 +497,7 @@ def _evaluate_candidate(db: Db, row, rule_version: int) -> TransitionResult:
         if has_miss_evidence:
             reason = (
                 f"single_session_exception: quality={admission_quality:.2f} "
-                f"strong={strong_count} would_help_high={would_help_high} "
+                f"strong={strong_count} "
                 f"contexts={best_session_contexts}"
             )
             applied = _apply_transition(

@@ -130,12 +130,12 @@ class TestRules:
         assert resp.json()["detail"] == "write authentication required"
 
     @pytest.mark.parametrize("action", ["promote", "trust", "suppress"])
-    def test_manual_lifecycle_rejections_require_write_auth_first(
+    def test_manual_lifecycle_rejections_always_forbidden(
         self, client_with_rule, action
     ):
         resp = client_with_rule.post(f"/api/rules/abc/{action}")
         assert resp.status_code == 403
-        assert resp.json()["detail"] == "write authentication required"
+        assert "not supported" in resp.json()["detail"]
 
     @pytest.mark.parametrize("action", ["promote", "trust", "suppress"])
     def test_manual_lifecycle_rejected_after_auth(self, client_with_rule, action):
