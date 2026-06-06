@@ -21,8 +21,8 @@ def _rule_to_response(
     *,
     fire_count: int = 0,
     fire_last_at: str | None = None,
-    fire_levels: dict | None = None,
-    posthoc_labels: dict | None = None,
+    fire_levels: dict[str, int] | None = None,
+    posthoc_labels: dict[str, int] | None = None,
     shadow_count: int = 0,
 ) -> dict:
     """Convert a Rule dataclass to a RuleResponse dict with all structured fields."""
