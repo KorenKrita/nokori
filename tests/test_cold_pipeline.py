@@ -318,31 +318,6 @@ class TestFailedRoleNoDurableRules:
         assert row["status"] == "failed"
         assert "schema validation failed" in row["output_json"]
 
-    def test_schema_invalid_then_valid_succeeds_via_retry(self, db: Db):
-        """Immediate retry recovers when first attempt fails validation but second succeeds."""
-
-        class SeqLLM:
-            def __init__(self):
-                self.calls = 0
-
-            def call(self, **_kwargs):
-                self.calls += 1
-                if self.calls == 1:
-                    return json.dumps({"decision": "accept"})
-                return _admission_json("accept")
-
-        llm = SeqLLM()
-
-        decision, scores = _run_admission_judge(
-            db, llm, _extractor_candidate(), "test-model"
-        )
-
-        assert llm.calls == 2
-        assert decision == "accept"
-        assert scores["overall_quality"] >= 0.82
-        row = db.fetchone("SELECT status, output_json FROM llm_jobs")
-        assert row["status"] == "done"
-
     def test_eval_cases_without_positive_are_not_cached_as_done(self, db: Db):
         """Synthetic eval role output must prove retrieval with positive cases."""
         llm = _make_llm_mock({
@@ -401,6 +376,35 @@ class TestFailedRoleNoDurableRules:
         assert row is not None
         assert row["status"] == "failed"
         assert row["retries"] == 1
+
+
+class TestImmediateRetry:
+    """Tests for the immediate retry mechanism in _call_llm_role."""
+
+    def test_schema_invalid_then_valid_succeeds_via_retry(self, db: Db):
+        """Immediate retry recovers when first attempt fails validation but second succeeds."""
+
+        class SeqLLM:
+            def __init__(self):
+                self.calls = 0
+
+            def call(self, **_kwargs):
+                self.calls += 1
+                if self.calls == 1:
+                    return json.dumps({"decision": "accept"})
+                return _admission_json("accept")
+
+        llm = SeqLLM()
+
+        decision, scores = _run_admission_judge(
+            db, llm, _extractor_candidate(), "test-model"
+        )
+
+        assert llm.calls == 2
+        assert decision == "accept"
+        assert scores["overall_quality"] >= 0.82
+        row = db.fetchone("SELECT status, output_json FROM llm_jobs")
+        assert row["status"] == "done"
 
 
 class TestRewriterFailure:
