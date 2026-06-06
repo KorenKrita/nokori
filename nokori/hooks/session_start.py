@@ -4,8 +4,6 @@ import uuid
 
 from ..config import Config
 from ..db import open_db, total_rule_count
-from ..extract import jobs as job_io
-from ..extract.lock import is_locked
 from ..lifecycle import hot_cache, maintenance
 from ..search import embedding as embedding_search
 from ..search import embed_ipc
@@ -67,12 +65,6 @@ def handle(payload: dict, cfg: Config, *, host: Host) -> dict:
             cache_text = hot_cache.maybe_inject(payload, cfg, db)
         except Exception:
             log.exception("session_start hot_cache failed")
-        if cfg.extract_mode == "async" and job_io.list_jobs(cfg, status="pending"):
-            if not is_locked(cfg):
-                from .session_end import _spawn_async_extract
-
-                _spawn_async_extract(cfg)
-                log.info("session_start retrying pending extract jobs")
     finally:
         db.close()
 

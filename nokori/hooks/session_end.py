@@ -52,16 +52,27 @@ def handle(payload: dict, cfg: Config, *, host: Host) -> dict:
         db.close()
 
     # Write extract job so the cold pipeline can process this session's transcript
-    _enqueue_extract_job(payload, cfg)
+    job_enqueued = _enqueue_extract_job(payload, cfg)
+
+    # Spawn async extract immediately — detached subprocess won't block hook return
+    # (start_new_session=True ensures child survives parent exit)
+    if job_enqueued and cfg.extract_mode == "async":
+        from ..extract.lock import is_locked
+        if not is_locked(cfg):
+            _spawn_async_extract(cfg)
+            log.info("spawned async extract after session end")
 
     return {"continue": True}
 
 
-def _enqueue_extract_job(payload: dict, cfg: Config) -> None:
-    """Write an extract job file for the session's transcript (spec cold-path trigger)."""
+def _enqueue_extract_job(payload: dict, cfg: Config) -> bool:
+    """Write an extract job file for the session's transcript (spec cold-path trigger).
+
+    Returns True if job was successfully enqueued, False otherwise.
+    """
     transcript_path = resolve_transcript_path(payload)
     if transcript_path is None or not transcript_path.exists():
-        return
+        return False
     try:
         mtime = transcript_path.stat().st_mtime
         project_id = payload.get("project_id") or resolve_project_id(
@@ -69,8 +80,10 @@ def _enqueue_extract_job(payload: dict, cfg: Config) -> None:
         )
         write_extract_job(cfg, transcript_path, project_id, mtime)
         log.info("wrote extract job for %s", transcript_path.name)
+        return True
     except Exception as e:
         log.warning("extract job write failed: %s", e)
+        return False
 
 
 def _extract_session_turns(payload: dict) -> list[dict]:
