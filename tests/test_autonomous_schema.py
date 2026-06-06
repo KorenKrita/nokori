@@ -325,7 +325,6 @@ class TestOpenDbFreshPath:
                 "trigger_idf_stats",
                 "rule_fire_events",
                 "rule_shadow_events",
-                "rule_feedback_events",
                 "rule_lineage",
                 "archived_fingerprints",
                 "llm_jobs",

@@ -168,21 +168,9 @@ def process_pending_posthoc_jobs(db: Db, llm, *, limit: int = 20) -> dict[str, i
             label == "observed_useful"
             and result.get("would_likely_have_happened_without_rule") == "yes"
         ):
-            # Spec 10.4: check if feedback events exist supporting this rule
-            fire_event_id = job["fire_event_id"]
-            supporting_feedback = db.fetchone(
-                "SELECT id FROM rule_feedback_events "
-                "WHERE fire_event_id = ? AND label = 'helped'",
-                (fire_event_id,),
-            )
-            if supporting_feedback:
-                # Feedback supports the rule: keep as observed_useful with weak weight
-                attribution_weight = 0.3
-            else:
-                # No feedback exists: convert to irrelevant
-                label = "irrelevant"
-                reason_code = "irrelevant_redundant"
-                attribution_weight = 0.0
+            label = "irrelevant"
+            reason_code = "irrelevant_redundant"
+            attribution_weight = 0.0
 
         mark_posthoc_job_complete(
             db,
@@ -275,17 +263,7 @@ def build_evaluator_input(db: Db, fire_event: dict) -> dict | None:
     for k in _BLIND_KEYS:
         decision_features.pop(k, None)
 
-    # Fetch feedback events tied to this fire event, if any
-    feedback_rows = db.fetchall(
-        "SELECT source, label, confidence, evidence FROM rule_feedback_events "
-        "WHERE fire_event_id = ? ORDER BY created_at ASC",
-        (fire_event_id,),
-    )
-    feedback = [dict(r) for r in feedback_rows]
-
-    # Spec 10.4: down-weight repeated feedback without transcript/tool evidence.
-    # Detect repeated low-evidence feedback from same source and annotate weight.
-    feedback = _annotate_feedback_weights(feedback)
+    feedback: list[dict] = []
 
     # Load actual transcript window content from posthoc_jobs redacted_window_json
     transcript_window_content = _load_transcript_window(
@@ -316,25 +294,6 @@ def build_evaluator_input(db: Db, fire_event: dict) -> dict | None:
         "feedback_events": feedback,
     }
 
-
-def _annotate_feedback_weights(feedback: list[dict]) -> list[dict]:
-    """Down-weight repeated low-evidence feedback from the same source (spec 10.4)."""
-    if not feedback:
-        return feedback
-    source_counts: dict[str, int] = {}
-    result = []
-    for fb in feedback:
-        src = fb.get("source", "")
-        source_counts[src] = source_counts.get(src, 0) + 1
-        evidence_text = fb.get("evidence", "")
-        is_low_evidence = not evidence_text or len(evidence_text) < 30
-        repeat_count = source_counts[src]
-        if is_low_evidence and repeat_count > 1:
-            fb = {**fb, "weight": max(0.1, 1.0 / repeat_count)}
-        else:
-            fb = {**fb, "weight": 1.0}
-        result.append(fb)
-    return result
 
 
 def _load_transcript_window(

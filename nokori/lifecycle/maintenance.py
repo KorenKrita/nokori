@@ -110,12 +110,6 @@ def run_injection_cleanup(db: Db) -> int:
     cutoff = _now() - timedelta(days=INJECTION_RETENTION_DAYS)
     cutoff_iso = iso_of(cutoff)
     with db.transaction() as tx:
-        # Delete feedback events referencing old fire events
-        tx.execute(
-            "DELETE FROM rule_feedback_events WHERE fire_event_id IN "
-            "(SELECT id FROM rule_fire_events WHERE created_at < ?)",
-            (cutoff_iso,),
-        )
         # Delete posthoc jobs referencing old fire events
         tx.execute(
             "DELETE FROM posthoc_jobs WHERE fire_event_id IN "

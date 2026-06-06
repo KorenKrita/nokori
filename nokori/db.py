@@ -167,15 +167,6 @@ CREATE TABLE IF NOT EXISTS rule_shadow_events (
     created_at TEXT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS rule_feedback_events (
-    id TEXT PRIMARY KEY,
-    fire_event_id TEXT REFERENCES rule_fire_events(id),
-    source TEXT,
-    label TEXT,
-    confidence REAL,
-    evidence TEXT,
-    created_at TEXT NOT NULL
-);
 
 CREATE TABLE IF NOT EXISTS rule_lineage (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -258,7 +249,6 @@ CREATE INDEX IF NOT EXISTS idx_fire_events_session_prompt ON rule_fire_events(se
 CREATE INDEX IF NOT EXISTS idx_shadow_events_rule ON rule_shadow_events(rule_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_shadow_events_fingerprint ON rule_shadow_events(rule_id, context_fingerprint);
 CREATE INDEX IF NOT EXISTS idx_shadow_events_rule_label ON rule_shadow_events(rule_id, shadow_label);
-CREATE INDEX IF NOT EXISTS idx_feedback_events_fire ON rule_feedback_events(fire_event_id);
 CREATE INDEX IF NOT EXISTS idx_archived_fp_signature ON archived_fingerprints(signature);
 CREATE INDEX IF NOT EXISTS idx_llm_jobs_status ON llm_jobs(status, next_retry_at);
 CREATE INDEX IF NOT EXISTS idx_posthoc_jobs_status ON posthoc_jobs(status);
@@ -607,8 +597,6 @@ def archive_rule(db: "Db", rule_id: str, reason: str, now: str, *, strength: str
 def _delete_rule_cascade_tx(tx, rule_id: str) -> None:
     """Remove rule and dependent rows within an existing transaction cursor."""
     # Delete children of fire_events first (they reference fire_event_id)
-    tx.execute("DELETE FROM rule_feedback_events WHERE fire_event_id IN "
-               "(SELECT id FROM rule_fire_events WHERE rule_id = ?)", (rule_id,))
     tx.execute("DELETE FROM posthoc_jobs WHERE fire_event_id IN "
                "(SELECT id FROM rule_fire_events WHERE rule_id = ?)", (rule_id,))
     # Then fire/shadow events themselves
