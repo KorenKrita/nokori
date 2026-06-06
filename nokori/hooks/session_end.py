@@ -5,6 +5,7 @@ import json
 from ..config import Config
 from ..db import open_db
 from ..errors import DbError
+from ..events.observability import write_event
 from ..extract.jobs import write_job as write_extract_job
 from ..gate import prompt_ack
 from ..posthoc import enqueue_posthoc_for_session
@@ -28,6 +29,8 @@ def handle(payload: dict, cfg: Config, *, host: Host) -> dict:
     if ack_removed:
         log.info("cleaned prompt ack/deferred session=%s files=%d", session_id, ack_removed)
 
+    posthoc_enqueued = False
+    posthoc_failed = False
     # Enqueue posthoc evaluation jobs with transcript window content (spec section 10.1)
     try:
         db = open_db(cfg.db_path)
@@ -40,6 +43,7 @@ def handle(payload: dict, cfg: Config, *, host: Host) -> dict:
 
         # Enqueue posthoc jobs
         enqueue_posthoc_for_session(db, session_id)
+        posthoc_enqueued = True
 
         # Store bounded transcript windows in posthoc_jobs.redacted_window_json
         if session_turns:
@@ -48,6 +52,7 @@ def handle(payload: dict, cfg: Config, *, host: Host) -> dict:
         log.info("enqueued posthoc jobs session=%s", session_id)
     except Exception as e:
         log.warning("posthoc enqueue failed session=%s: %s", session_id, e)
+        posthoc_failed = True
     finally:
         db.close()
 
@@ -56,11 +61,31 @@ def handle(payload: dict, cfg: Config, *, host: Host) -> dict:
 
     # Spawn async extract immediately — detached subprocess won't block hook return
     # (start_new_session=True ensures child survives parent exit)
+    async_spawned = False
     if job_enqueued and cfg.extract_mode == "async":
         from ..extract.lock import is_locked
         if not is_locked(cfg):
             _spawn_async_extract(cfg)
+            async_spawned = True
             log.info("spawned async extract after session end")
+
+    try:
+        obs_db = open_db(cfg.db_path)
+    except Exception:
+        obs_db = None
+    if obs_db is not None:
+        try:
+            write_event(
+                obs_db, source="session_end", session_id=session_id,
+                outcome="ok" if not posthoc_failed else "posthoc_failed",
+                details={
+                    "posthoc_enqueued": posthoc_enqueued,
+                    "extract_job_written": job_enqueued,
+                    "async_extract_spawned": async_spawned,
+                },
+            )
+        finally:
+            obs_db.close()
 
     return {"continue": True}
 

@@ -47,6 +47,7 @@ from .jobs import (
     mark_job_complete,
     mark_job_failed,
 )
+from ..events.observability import write_error, write_event
 from ..utils.logging import get_logger
 
 log = get_logger("nokori.cold.pipeline")
@@ -152,10 +153,29 @@ def run_cold_pipeline(
             "cold_pipeline done: trigger=%r status=%s rule_id=%s rejection=%s",
             trigger_preview, result.status, result.rule_id, result.rejection_reason,
         )
+        write_event(
+            db, source="cold_pipeline",
+            outcome=result.status,
+            details={
+                "trigger_preview": trigger_preview,
+                "rule_id": result.rule_id,
+                "rejection_reason": result.rejection_reason,
+                "scores": result.scores,
+                "transcript_ref": transcript_ref,
+                "source_origin": source_origin,
+                "project_id": project_id,
+            },
+        )
         return result
     except CircuitBreakerOpenError as e:
         # Spec section 5.2: paused jobs remain pending, not rejected
         log.warning("cold_pipeline pending (circuit breaker): trigger=%r %s", trigger_preview, e)
+        write_error(
+            db, source="cold_pipeline", role="system",
+            error_type="circuit_breaker",
+            message=str(e),
+            details={"trigger_preview": trigger_preview},
+        )
         return ColdPipelineResult(
             status="pending",
             rule_id=None,
@@ -165,6 +185,22 @@ def run_cold_pipeline(
     except (RuntimeError, OSError, TimeoutError, ConnectionError, ValueError) as e:
         # Spec section 13: failed role calls leave jobs pending for retry
         log.warning("cold_pipeline pending (role failure): trigger=%r %s: %s", trigger_preview, type(e).__name__, e)
+        if isinstance(e, TimeoutError):
+            error_type = "timeout"
+        elif isinstance(e, ConnectionError):
+            error_type = "connection"
+        elif isinstance(e, OSError):
+            error_type = "io"
+        elif isinstance(e, ValueError):
+            error_type = "validation"
+        else:
+            error_type = "runtime"
+        write_error(
+            db, source="cold_pipeline", role="system",
+            error_type=error_type,
+            message=f"{type(e).__name__}: {e}",
+            details={"trigger_preview": trigger_preview},
+        )
         return ColdPipelineResult(
             status="pending",
             rule_id=None,

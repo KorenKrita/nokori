@@ -37,8 +37,10 @@ def create_app(cfg: Config) -> FastAPI:
         injections,
         lifecycle,
         logs,
+        monitor,
         retrieve,
         rules,
+        timeline,
     )
 
     app.include_router(dashboard.router, prefix="/api")
@@ -51,6 +53,8 @@ def create_app(cfg: Config) -> FastAPI:
     app.include_router(health.router, prefix="/api")
     app.include_router(embed.router, prefix="/api")
     app.include_router(logs.router, prefix="/api")
+    app.include_router(timeline.router, prefix="/api")
+    app.include_router(monitor.router, prefix="/api")
 
     static_dir = Path(__file__).parent / "static"
     if static_dir.is_dir():

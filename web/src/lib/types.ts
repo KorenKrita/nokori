@@ -125,3 +125,19 @@ export interface Meta {
   page: number
   per_page: number
 }
+
+export interface TimelineEvent {
+  id: string
+  session_id: string | null
+  source: string
+  outcome: string | null
+  prompt_snippet: string | null
+  details: Record<string, unknown> | null
+  created_at: string
+}
+
+export interface TimelineSession {
+  session_id: string
+  last_active: string
+  event_count: number
+}

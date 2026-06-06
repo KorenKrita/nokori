@@ -9,6 +9,7 @@ from ..db import (
     open_db,
 )
 from ..errors import NokoriError
+from ..events.observability import write_event
 from ..gate.marker import strip_short_id_from_all_markers
 from ..utils.time import now_iso
 
@@ -26,6 +27,11 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
         now = now_iso()
         archive_rule(db, rule.id, "user_archived", now)
         strip_short_id_from_all_markers(cfg, rule.short_id)
+        write_event(
+            db, source="cli_dismiss",
+            outcome="archived",
+            details={"short_id": args.short_id, "rule_id": rule.id},
+        )
     finally:
         db.close()
     print(f"archived {args.short_id}")

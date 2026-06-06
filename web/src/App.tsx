@@ -14,6 +14,7 @@ const Extract = lazy(() => import('@/pages/Extract').then((m) => ({ default: m.E
 const Lifecycle = lazy(() => import('@/pages/Lifecycle').then((m) => ({ default: m.Lifecycle })))
 const Config = lazy(() => import('@/pages/Config').then((m) => ({ default: m.Config })))
 const Logs = lazy(() => import('@/pages/Logs').then((m) => ({ default: m.Logs })))
+const Activity = lazy(() => import('@/pages/Activity').then((m) => ({ default: m.Activity })))
 
 function Page({ children }: { children: React.ReactNode }) {
   return (
@@ -36,6 +37,7 @@ const router = createBrowserRouter([
       { path: '/lifecycle', element: <Page><Lifecycle /></Page> },
       { path: '/config', element: <Page><Config /></Page> },
       { path: '/logs', element: <Page><Logs /></Page> },
+      { path: '/activity', element: <Page><Activity /></Page> },
     ],
   },
 ])

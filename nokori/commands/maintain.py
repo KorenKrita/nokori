@@ -88,6 +88,9 @@ def run(_args: argparse.Namespace, cfg: Config) -> int:
         print(f"candidate_cleanup     deleted={summary['candidate_cleanup']}")
         print(f"injection_cleanup     deleted={summary['injection_cleanup']}")
         print(f"unmerge_check         restored={summary['unmerge_check']}")
+        obs = summary.get("observability_cleanup")
+        if obs and (obs["hook_events_deleted"] or obs["error_events_deleted"]):
+            print(f"observability_cleanup hook_events={obs['hook_events_deleted']} errors={obs['error_events_deleted']}")
     else:
         print("transitions.applied   (failed)")
 

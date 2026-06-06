@@ -22,7 +22,7 @@ from ..policy import RUNTIME_POLICY_VERSION
 from ..utils.ids import new_uuid, short_id_for
 from ..utils.time import now_iso
 
-_COMPATIBLE_IMPORT_VERSIONS = frozenset({6})
+_COMPATIBLE_IMPORT_VERSIONS = frozenset({6, 7})
 
 _MAX_TRIGGER_TEXT = 16_384
 _MAX_ACTION = 8_192

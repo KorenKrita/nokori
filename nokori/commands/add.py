@@ -4,6 +4,7 @@ import argparse
 
 from ..config import Config
 from ..db import SCHEMA_VERSION, dumps_json, fetch_rule_by_short_id, fetch_short_ids, open_db
+from ..events.observability import write_event
 from ..errors import NokoriError
 from ..policy import RUNTIME_POLICY_VERSION
 from ..search.embedding import index_rule_if_enabled
@@ -133,6 +134,16 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
         rule = fetch_rule_by_short_id(db, sid)
         if rule:
             index_rule_if_enabled(db, rule, cfg)
+        write_event(
+            db, source="cli_add",
+            outcome="added",
+            details={
+                "short_id": sid,
+                "status": status,
+                "trigger_preview": args.trigger[:60],
+                "project_id": project_id,
+            },
+        )
     finally:
         db.close()
 

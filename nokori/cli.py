@@ -85,6 +85,20 @@ def _build_parser() -> argparse.ArgumentParser:
         help="connectivity checks: db, hooks, LLM, embedding readiness",
     )
     sub.add_parser("maintain", help="run maintenance jobs now")
+
+    sp_report = sub.add_parser("report", help="AI-friendly system status report")
+    sp_report.add_argument("--since", default=None, help="ISO timestamp start (default: 7 days ago)")
+    sp_report.add_argument("--session", default=None, help="filter to a specific session_id")
+    sp_report.add_argument("--json", action="store_true", help="output JSON instead of markdown")
+
+    sp_stream = sub.add_parser("stream", help="AI-friendly event stream")
+    sp_stream.add_argument("--since", default=None, help="ISO timestamp start (default: 1 hour ago)")
+    sp_stream.add_argument("--session", default=None, help="filter to a specific session_id")
+    sp_stream.add_argument("--type", default=None, help="filter by event source type")
+    sp_stream.add_argument("--verbose", action="store_true", help="full JSON per event")
+    sp_stream.add_argument("--limit", type=int, default=100, help="max events (dump mode)")
+    sp_stream.add_argument("--follow", action="store_true", help="continuous mode (like tail -f)")
+
     sp_export = sub.add_parser("export", help="export rules to JSON")
     sp_export.add_argument("path")
     sp_import = sub.add_parser("import", help="import rules from JSON")
@@ -210,6 +224,14 @@ def _dispatch(args: argparse.Namespace, cfg: Config) -> int:
         from .commands import maintain
 
         return maintain.run(args, cfg)
+    if cmd == "report":
+        from .commands import report
+
+        return report.run(args, cfg)
+    if cmd == "stream":
+        from .commands import stream
+
+        return stream.run(args, cfg)
     if cmd == "export":
         from .commands import export_import
 

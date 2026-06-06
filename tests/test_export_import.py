@@ -2,6 +2,8 @@ import json
 import subprocess
 import sys
 
+from nokori.db import SCHEMA_VERSION
+
 
 def _run(*args, env_extra=None):
     env = {
@@ -82,7 +84,7 @@ def test_export_includes_v6_matcher_structure(tmp_path):
 
     payload = json.loads(out.read_text())
     rule = payload["rules"][0]
-    assert rule["schema_version"] == 6
+    assert rule["schema_version"] == SCHEMA_VERSION
     assert rule["runtime_policy_version"] == "1.0.0"
     assert rule["concepts"]
     assert rule["required_concept_groups"]
@@ -205,7 +207,7 @@ def test_import_forces_current_schema_policy_and_keeps_structure(tmp_path):
         )
     finally:
         db.close()
-    assert row["schema_version"] == 6
+    assert row["schema_version"] == SCHEMA_VERSION
     assert row["runtime_policy_version"] == "1.0.0"
     assert json.loads(row["concepts"])
     assert json.loads(row["required_concept_groups"])

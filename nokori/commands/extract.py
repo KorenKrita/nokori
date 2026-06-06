@@ -9,6 +9,7 @@ from ..cold.jobs import enqueue_transcript_ingest, expire_stale_ingest_jobs
 from ..cold.pipeline import run_cold_pipeline
 from ..cold.roles import PROMPT_VERSIONS
 from ..config import Config
+from ..events.observability import write_event
 from ..constants import TRANSCRIPT_MTIME_EPSILON_SEC
 from ..db import open_db
 from ..extract import jobs as job_io
@@ -127,6 +128,11 @@ def _process_path(path: Path, project_id: str | None, cfg: Config,
         candidates, llm_ok = extract_candidates(text, llm)
         if not llm_ok:
             log.warning("extract failed (llm): %s", path)
+            write_event(
+                db, source="cli_extract",
+                outcome="llm_failure",
+                details={"transcript": path.name, "project_id": project_id},
+            )
             return (0, 0, False)
         if dry_run:
             return (len(candidates), 0, False)
@@ -198,6 +204,18 @@ def _process_path(path: Path, project_id: str | None, cfg: Config,
             mark_extracted(db, path, _safe_mtime(path), new_offset)
         else:
             log.warning("extract incomplete (cold pipeline errors), transcript not marked: %s", path)
+
+        write_event(
+            db, source="cli_extract",
+            outcome="ok" if all_ok else "partial_failure",
+            details={
+                "transcript": path.name,
+                "candidates_found": len(candidates),
+                "rules_created": rules_created,
+                "all_ok": all_ok,
+                "project_id": project_id,
+            },
+        )
     finally:
         db.close()
     return (len(candidates), rules_created, all_ok)

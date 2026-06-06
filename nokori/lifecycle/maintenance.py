@@ -197,6 +197,31 @@ def run_session_file_cleanup(cfg) -> int:
     return sessions.prune_ended_session_files(cfg)
 
 
+def run_observability_cleanup(db: Db, *, force: bool = False) -> dict:
+    """Delete hook_events and error_events older than retention period."""
+    from ..events.observability import (
+        OBSERVABILITY_CLEANUP_INTERVAL_DAYS,
+        OBSERVABILITY_RETENTION_DAYS,
+    )
+
+    if not force and not _due(db, "observability_cleanup", OBSERVABILITY_CLEANUP_INTERVAL_DAYS):
+        return {"hook_events_deleted": 0, "error_events_deleted": 0}
+
+    cutoff = _now() - timedelta(days=OBSERVABILITY_RETENTION_DAYS)
+    cutoff_iso = iso_of(cutoff)
+
+    with db.transaction() as tx:
+        cur1 = tx.execute("DELETE FROM hook_events WHERE created_at < ?", (cutoff_iso,))
+        hook_deleted = cur1.rowcount if cur1.rowcount is not None else 0
+        cur2 = tx.execute("DELETE FROM error_events WHERE created_at < ?", (cutoff_iso,))
+        error_deleted = cur2.rowcount if cur2.rowcount is not None else 0
+
+    _set_last_run(db, "observability_cleanup")
+    if hook_deleted or error_deleted:
+        log.info("observability_cleanup hook_events=%d error_events=%d", hook_deleted, error_deleted)
+    return {"hook_events_deleted": hook_deleted, "error_events_deleted": error_deleted}
+
+
 def run_due_jobs(db: Db, cfg=None, transition_results=None) -> dict:
     session_cleanup = 0
     coalesce_cleanup = 0
@@ -223,5 +248,6 @@ def run_due_jobs(db: Db, cfg=None, transition_results=None) -> dict:
         "session_cleanup": session_cleanup,
         "coalesce_cleanup": coalesce_cleanup,
         "prompt_ack_cleanup": prompt_ack_cleanup,
+        "observability_cleanup": run_observability_cleanup(db),
     }
     return summary
