@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime, timedelta, timezone
 
 from ..db import Db, dumps_json, loads_json
 from ..policy import RUNTIME_POLICY_VERSION
@@ -29,10 +30,13 @@ def create_fire_event(
     resolved_decision_reason = decision_reason or (decision_features.get("decision_reason") if decision_features else None)
 
     injected_structured_snapshot = dumps_json({
-        "concepts": loads_json(rule.concepts, []),
-        "required_concept_groups": loads_json(rule.required_concept_groups, []),
-        "trigger_variants": loads_json(rule.trigger_variants, []) if isinstance(rule.trigger_variants, str) else (rule.trigger_variants or []),
-        "excluded_contexts": loads_json(rule.excluded_contexts, []),
+        "concepts": rule.concepts if isinstance(rule.concepts, list) else loads_json(rule.concepts, []),
+        "required_concept_groups": rule.required_concept_groups if isinstance(rule.required_concept_groups, list) else loads_json(rule.required_concept_groups, []),
+        "trigger_variants": rule.trigger_variants if isinstance(rule.trigger_variants, list) else loads_json(rule.trigger_variants, []),
+        "excluded_contexts": rule.excluded_contexts if isinstance(rule.excluded_contexts, list) else loads_json(rule.excluded_contexts, []),
+        "domain_tags": rule.domain_tags,
+        "tool_tags": rule.tool_tags,
+        "path_patterns": rule.path_patterns,
     })
 
     transcript_window_ref = f"session:{session_id}:turn:{turn_index}" if turn_index is not None else f"session:{session_id}"
@@ -132,8 +136,6 @@ def count_evaluated_fire_events(
 
     Returns counts keyed by label plus total_evaluated.
     """
-    from datetime import datetime, timedelta, timezone
-
     cutoff = (
         datetime.now(timezone.utc) - timedelta(days=window_days)
     ).isoformat(timespec="seconds").replace("+00:00", "Z")

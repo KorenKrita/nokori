@@ -559,7 +559,7 @@ def evaluate_match(
 
     # 8. Evaluate trigger evidence pass/fail (spec section 9.3)
     # Excluded context match forces COLD regardless of trigger evidence (spec 9.4)
-    has_exclusion = bool(excluded_context_hits)
+    has_exclusion = _has_non_overridden_hit
     trigger_evidence_passed = (not has_exclusion) and _evaluate_trigger_evidence(
         strong_variant_phrase_hit=bool(strong_variant_hits),
         required_concepts_match=required_concepts_match,

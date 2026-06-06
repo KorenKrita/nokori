@@ -348,7 +348,7 @@ def _validate_type(value: Any, schema: dict[str, Any], path: str) -> list[str]:
             errors.append(f"{path}: value {value!r} not in {schema['enum']}")
 
     elif expected_type == "number":
-        if not isinstance(value, (int, float)):
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
             errors.append(f"{path}: expected number, got {type(value).__name__}")
         else:
             if "minimum" in schema and value < schema["minimum"]:
@@ -514,7 +514,9 @@ def _normalize_role_output(role: str, data: dict[str, Any]) -> dict[str, Any]:
                 data, "without_rule", "counterfactual", default="unclear"
             )
         if "reason_code" not in data:
-            data["reason_code"] = _pop_first(data, "reason", "code", default="unclear")
+            rc = _pop_first(data, "reason", "code")
+            if rc is not None:
+                data["reason_code"] = rc
 
     return data
 

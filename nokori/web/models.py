@@ -63,11 +63,12 @@ class ShadowEventOut(BaseModel):
     id: str
     rule_id: str
     session_id: str
-    rule_version: int | None = None
+    shadow_rule_version: int | None = None
     prompt_hash: str | None = None
-    label: str | None = None
-    counterfactual: str | None = None
-    fingerprint: str | None = None
+    shadow_label: str | None = None
+    shadow_type: str | None = None
+    context_fingerprint: str | None = None
+    status_at_match: str | None = None
     created_at: str
 
 

@@ -115,11 +115,12 @@ def rule_shadow_events(
             id=row["id"],
             rule_id=row["rule_id"],
             session_id=row["session_id"],
-            rule_version=row.get("rule_version"),
+            shadow_rule_version=row.get("shadow_rule_version"),
             prompt_hash=row.get("prompt_hash"),
-            label=row.get("label"),
-            counterfactual=row.get("counterfactual"),
-            fingerprint=row.get("fingerprint"),
+            shadow_label=row.get("shadow_label"),
+            shadow_type=row.get("shadow_type"),
+            context_fingerprint=row.get("context_fingerprint"),
+            status_at_match=row.get("status_at_match"),
             created_at=row["created_at"],
         ).model_dump())
     return {"data": events}

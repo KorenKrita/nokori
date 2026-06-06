@@ -691,6 +691,19 @@ def _evaluate_suppressed(db: Db, row, rule_version: int) -> TransitionResult:
 
     # Only count shadow evidence AFTER suppression with recovery type (spec 10.3)
     suppressed_at_iso = row["suppressed_at"]
+
+    # Guard: if suppressed_at is NULL (e.g. migrated rule), skip evaluation entirely.
+    # Without a valid suppression timestamp we cannot correctly scope recovery evidence
+    # or compute TTL expiry.
+    if suppressed_at_iso is None:
+        return TransitionResult(
+            rule_id=rule_id,
+            old_status=old_status,
+            new_status=None,
+            reason="missing suppressed_at timestamp",
+            applied=False,
+        )
+
     shadow = _aggregate_shadow_evidence(
         db, rule_id, rule_version, since_iso=suppressed_at_iso,
         shadow_type="suppression_recovery",
@@ -745,7 +758,6 @@ def _evaluate_suppressed(db: Db, row, rule_version: int) -> TransitionResult:
     distinct_sessions = shadow.get("distinct_sessions", 0)
 
     # Recent harmful from fire events after suppression
-    suppressed_at_iso = row["suppressed_at"]
     recent_harmful = 0
     if suppressed_at_iso:
         harmful_row = db.fetchone(

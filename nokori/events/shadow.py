@@ -232,7 +232,6 @@ def _compute_task_deduped_count(deduped_rows: list[dict]) -> int:
             # Start a new task group from this row
             assigned[i] = True
             group_prefix = (session_rows[i].get("prompt_hash") or "")[:8]
-            group_max_pos = i
 
             for j in range(i + 1, len(session_rows)):
                 if assigned[j]:
@@ -245,14 +244,11 @@ def _compute_task_deduped_count(deduped_rows: list[dict]) -> int:
                     and j_prefix
                     and group_prefix == j_prefix
                 )
-                # Same task if within 3 consecutive positions in session order
-                consecutive = (j - group_max_pos) <= 3
+                # Same task if within 3 consecutive positions from group start
+                consecutive = (j - i) <= 3
 
                 if same_prefix or consecutive:
                     assigned[j] = True
-                    # Expand group position range
-                    if j > group_max_pos:
-                        group_max_pos = j
 
             total_tasks += 1
 
