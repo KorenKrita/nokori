@@ -29,7 +29,7 @@ class Rule:
     # Versioning
     schema_version: int
     rule_version: int
-    created_by_pipeline_version: str
+    created_by_pipeline_version: str | None
     runtime_policy_version: str | None
     last_rewritten_by_role: str | None
 
