@@ -44,8 +44,13 @@ def _manual_trigger_structure(
     variants: list[str],
 ) -> tuple[list[dict], list[dict], list[dict]]:
     concept_id = "manual_trigger"
+    seen_aliases: set[str] = {trigger.strip()}
     aliases = [{"text": trigger, "strength": "strong"}]
-    aliases.extend({"text": v, "strength": "strong"} for v in variants)
+    for v in variants:
+        v_stripped = v.strip()
+        if v_stripped and v_stripped not in seen_aliases:
+            seen_aliases.add(v_stripped)
+            aliases.append({"text": v_stripped, "strength": "strong"})
     concepts = [{
         "id": concept_id,
         "label": trigger[:80],
@@ -94,9 +99,9 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
 
     db = open_db(cfg.db_path)
     try:
-        existing = fetch_short_ids(db)
-        sid = short_id_for(rid, existing)
         with db.transaction() as tx:
+            existing = {r["short_id"] for r in tx.execute("SELECT short_id FROM rules").fetchall()}
+            sid = short_id_for(rid, existing)
             tx.execute(
                 "INSERT INTO rules (id, short_id, schema_version, rule_version, "
                 "created_by_pipeline_version, runtime_policy_version, "

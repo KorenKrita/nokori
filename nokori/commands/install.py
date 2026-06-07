@@ -129,7 +129,8 @@ def _merge_claude_settings(current: dict, command: str) -> dict:
     merged = copy.deepcopy(current) if current else {}
     hooks = merged.setdefault("hooks", {})
     for event, matcher, event_arg, timeout in _CLAUDE_HOOK_SPECS:
-        spec = list(hooks.get(event) or [])
+        raw = hooks.get(event)
+        spec = list(raw) if isinstance(raw, list) else []
         spec = _strip_nokori_claude(spec)
         spec.append(_build_claude_hook_entry(matcher, command, event_arg, timeout))
         hooks[event] = spec
@@ -141,7 +142,8 @@ def _merge_cursor_hooks(current: dict, command: str) -> dict:
     merged.setdefault("version", 1)
     hooks = merged.setdefault("hooks", {})
     for event, matcher, event_arg, timeout in _CURSOR_HOOK_SPECS:
-        spec = list(hooks.get(event) or [])
+        raw = hooks.get(event)
+        spec = list(raw) if isinstance(raw, list) else []
         spec = _strip_nokori_cursor(spec)
         spec.append(_build_cursor_hook_entry(matcher, command, event_arg, timeout))
         hooks[event] = spec
@@ -153,6 +155,8 @@ def _remove_nokori_claude(current: dict) -> dict:
         return {}
     merged = copy.deepcopy(current)
     hooks = merged.get("hooks", {})
+    if not isinstance(hooks, dict):
+        hooks = {}
     for event in [e for e, *_ in _CLAUDE_HOOK_SPECS]:
         spec = hooks.get(event)
         if not spec:
@@ -172,6 +176,8 @@ def _remove_nokori_cursor(current: dict) -> dict:
         return {}
     merged = copy.deepcopy(current)
     hooks = merged.get("hooks", {})
+    if not isinstance(hooks, dict):
+        hooks = {}
     for event in [e for e, *_ in _CURSOR_HOOK_SPECS]:
         spec = hooks.get(event)
         if not spec:

@@ -30,6 +30,7 @@ _MAX_SHORT_ID = 64
 _MAX_VARIANTS = 32
 _MAX_VARIANT_LEN = 512
 _MAX_SEARCH_LANGS = 16
+_MAX_IMPORT_RULES = 10_000
 _MAX_IMPORT_FILE_BYTES = 100 * 1024 * 1024
 _STATUSES = frozenset({"candidate", "active", "trusted", "suppressed", "archived"})
 _PROJECT_SCOPES = frozenset({"project", "global"})
@@ -282,6 +283,10 @@ def run_import(args: argparse.Namespace, cfg: Config) -> int:
             f"(rules.db expects {SCHEMA_VERSION}); re-export or use matching release"
         )
     rules_in = data.get("rules") or []
+    if len(rules_in) > _MAX_IMPORT_RULES:
+        raise NokoriError(
+            f"import file contains {len(rules_in)} rules, exceeds limit of {_MAX_IMPORT_RULES}"
+        )
 
     db = open_db(cfg.db_path)
     inserted = skipped = 0

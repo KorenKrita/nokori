@@ -234,7 +234,8 @@ def _find_related_fingerprint(
         "blocked_action_area, archive_strength, "
         "can_be_overridden_by_changed_scope, rule_id, created_at "
         "FROM archived_fingerprints "
-        "WHERE archive_strength IN ('user','system','replacement')",
+        "WHERE archive_strength IN ('user','system','replacement') "
+        "ORDER BY created_at DESC LIMIT 500",
     )
     # Collect all matches that pass their per-strength threshold.
     # Return the strongest match (user > system > replacement).
