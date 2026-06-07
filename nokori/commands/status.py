@@ -50,8 +50,9 @@ def _print_hook_platform(label: str, state: dict[str, object], *, disable_hint: 
 
 
 def run(_args: argparse.Namespace, cfg: Config) -> int:
-    db = open_db(cfg.db_path)
+    db = None
     try:
+        db = open_db(cfg.db_path)
         rules = db.fetchall("SELECT status, COUNT(*) AS n FROM rules GROUP BY status")
         cutoff = iso_of(datetime.now(timezone.utc) - timedelta(hours=24))
         injected_24h = db.fetchone(
@@ -91,7 +92,8 @@ def run(_args: argparse.Namespace, cfg: Config) -> int:
                 "ORDER BY updated_at DESC"
             )
     finally:
-        db.close()
+        if db is not None:
+            db.close()
 
     by_status = {r["status"]: r["n"] for r in rules}
     total = sum(by_status.values())

@@ -145,16 +145,16 @@ def _process_path(path: Path, project_id: str | None, cfg: Config,
         for cand in candidates:
             # Build extractor_output dict matching cold pipeline's expected format
             extractor_output = {
-                "trigger": cand.trigger,
-                "trigger_draft": cand.trigger,
-                "trigger_zh": cand.trigger_text_zh,
-                "action": cand.action,
-                "action_draft": cand.action,
-                "action_zh": cand.action_zh,
+                "trigger": cand.trigger or "",
+                "trigger_draft": cand.trigger or "",
+                "trigger_zh": cand.trigger_text_zh or "",
+                "action": cand.action or "",
+                "action_draft": cand.action or "",
+                "action_zh": cand.action_zh or "",
                 "evidence_quotes": _candidate_evidence_quotes(cand, text),
-                "trigger_variants_draft": cand.trigger_variants,
-                "trigger_variants_zh": cand.trigger_variants_zh,
-                "search_terms_draft": cand.search_terms,
+                "trigger_variants_draft": cand.trigger_variants or [],
+                "trigger_variants_zh": cand.trigger_variants_zh or [],
+                "search_terms_draft": cand.search_terms or [],
                 "domain_tags": [],
                 "tool_tags": [],
                 "path_patterns": [],
@@ -166,20 +166,30 @@ def _process_path(path: Path, project_id: str | None, cfg: Config,
             transcript_ref = str(path)
 
             # Dedup: skip if this segment was already successfully ingested
-            existing_job = db.fetchone(
-                "SELECT id FROM transcript_ingest_jobs "
-                "WHERE segment_hash = ? AND status = 'done'",
-                (seg_hash,),
-            )
-            if existing_job:
+            try:
+                existing_job = db.fetchone(
+                    "SELECT id FROM transcript_ingest_jobs "
+                    "WHERE segment_hash = ? AND status = 'done'",
+                    (seg_hash,),
+                )
+                if existing_job:
+                    continue
+            except Exception as exc:
+                log.warning("dedup check failed segment=%s: %s", seg_hash[:8], exc)
+                all_ok = False
                 continue
 
-            enqueue_transcript_ingest(
-                db,
-                transcript_ref=transcript_ref,
-                segment_hash=seg_hash,
-                extractor_prompt_version=PROMPT_VERSIONS["extractor"],
-            )
+            try:
+                enqueue_transcript_ingest(
+                    db,
+                    transcript_ref=transcript_ref,
+                    segment_hash=seg_hash,
+                    extractor_prompt_version=PROMPT_VERSIONS["extractor"],
+                )
+            except Exception as exc:
+                log.warning("enqueue_transcript_ingest failed: %s", exc)
+                all_ok = False
+                continue
 
             # Run through cold pipeline
             try:
@@ -241,9 +251,13 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
                 project_id = job_io.find_project_id_for_transcript(cfg, path)
                 if project_id is None:
                     project_id = resolve_project_id(os.getcwd())
-            cands, applied, _finished = _process_path(
-                path, project_id, cfg, dry_run=args.dry_run
-            )
+            try:
+                cands, applied, _finished = _process_path(
+                    path, project_id, cfg, dry_run=args.dry_run
+                )
+            except Exception as exc:
+                print(f"nokori: extract failed for {path}: {exc}")
+                return 1
             print(f"transcript: {path}")
             print(f"candidates: {cands}")
             if not args.dry_run:
@@ -284,15 +298,23 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
                 and abs(float(job_mtime) - float(current_mtime))
                 > TRANSCRIPT_MTIME_EPSILON_SEC
             ):
-                job_path = job_io.refresh_job_mtime(
+                new_job_path = job_io.refresh_job_mtime(
                     cfg, job_path, path, job.get("project_id"), current_mtime,
                 )
+                if new_job_path is None:
+                    log.warning("refresh_job_mtime returned None for: %s", path)
+                    continue
+                job_path = new_job_path
                 job = job_io.read_job(job_path)
                 if not job:
                     continue
-            cands, applied, finished = _process_path(
-                path, job.get("project_id"), cfg, dry_run=args.dry_run
-            )
+            try:
+                cands, applied, finished = _process_path(
+                    path, job.get("project_id"), cfg, dry_run=args.dry_run
+                )
+            except Exception as exc:
+                log.warning("extract job failed: %s (%s)", job_path.name, exc)
+                continue
             total_cands += cands
             total_applied += applied
             if not args.dry_run:

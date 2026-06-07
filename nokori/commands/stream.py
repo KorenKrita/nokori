@@ -88,13 +88,14 @@ def _follow_mode(cfg: Config, *, since: str, session_id: str | None, source: str
 
 def _print_event(event: dict, *, verbose: bool) -> None:
     if verbose:
+        out = event
         details = event.get("details")
         if isinstance(details, str):
             try:
-                event["details"] = json.loads(details)
+                out = {**event, "details": json.loads(details)}
             except (json.JSONDecodeError, TypeError):
                 pass
-        print(json.dumps(event, ensure_ascii=False))
+        print(json.dumps(out, ensure_ascii=False))
     else:
         ts = event.get("created_at", "")
         source = event.get("source", "")
