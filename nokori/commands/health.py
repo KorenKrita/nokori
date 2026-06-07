@@ -205,8 +205,8 @@ def _check_claude_hooks_registered() -> tuple[str, str]:
         return ("skip", f"{settings} missing")
     try:
         data = json.loads(settings.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as e:
-        return ("fail", f"json parse error: {e}")
+    except (json.JSONDecodeError, OSError) as e:
+        return ("fail", f"cannot read {settings}: {e}")
     hooks = data.get("hooks", {})
     needed = ("SessionStart", "UserPromptSubmit", "PreToolUse", "SessionEnd")
     missing = []
@@ -232,8 +232,8 @@ def _check_cursor_hooks_registered() -> tuple[str, str]:
         return ("skip", f"{path} missing")
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as e:
-        return ("fail", f"json parse error: {e}")
+    except (json.JSONDecodeError, OSError) as e:
+        return ("fail", f"cannot read {path}: {e}")
     hooks = data.get("hooks", {})
     needed = ("sessionStart", "beforeSubmitPrompt", "preToolUse", "sessionEnd")
     missing = []

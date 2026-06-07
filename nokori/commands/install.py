@@ -75,7 +75,8 @@ def _cursor_hooks_path() -> Path:
 def _build_command() -> str:
     # -I: ignore PYTHONPATH / cwd so hooks always use the installed package
     # (avoids shadowing by a repo-local ``nokori/`` when cwd is the project).
-    return f"{sys.executable} -I -m nokori hook"
+    import shlex
+    return f"{shlex.quote(sys.executable)} -I -m nokori hook"
 
 
 def _build_claude_hook_entry(matcher: str, command: str, event_arg: str, timeout: int) -> dict:

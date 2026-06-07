@@ -121,14 +121,20 @@ def _print_markdown(data: dict) -> None:
     if usage["events_by_source"]:
         print("### Events by Source")
         for row in usage["events_by_source"]:
-            print(f"  {row['source']}: {row['count']}")
+            print(f"  {row['source'] or '(unspecified)'}: {row['count']}")
+        print()
+
+    if usage["events_by_outcome"]:
+        print("### Events by Outcome")
+        for row in usage["events_by_outcome"]:
+            print(f"  {row['outcome'] or '(unspecified)'}: {row['count']}")
         print()
 
     funnel = data["pipeline_funnel"]
     if funnel:
         print("## Pipeline Funnel")
         for outcome, count in sorted(funnel.items(), key=lambda x: -x[1]):
-            print(f"  {outcome}: {count}")
+            print(f"  {outcome or '(unspecified)'}: {count}")
         print()
 
     rules = data["rules"]
@@ -144,12 +150,12 @@ def _print_markdown(data: dict) -> None:
         if errors["by_role"]:
             print("### By Role")
             for row in errors["by_role"]:
-                print(f"  {row['role']}: {row['count']}")
+                print(f"  {row['role'] or '(unspecified)'}: {row['count']}")
         if errors["by_type"]:
             print("### By Type")
             for row in errors["by_type"]:
-                print(f"  {row['error_type']}: {row['count']}")
+                print(f"  {row['error_type'] or '(unspecified)'}: {row['count']}")
         if errors["by_model"]:
             print("### By Model")
             for row in errors["by_model"]:
-                print(f"  {row['model_id']}: {row['count']}")
+                print(f"  {row['model_id'] or '(unspecified)'}: {row['count']}")

@@ -31,7 +31,11 @@ def run(_args: argparse.Namespace, cfg: Config) -> int:
         print("nokori: disabled (NOKORI_DISABLED)")
         return 0
 
-    db = open_db(cfg.db_path)
+    try:
+        db = open_db(cfg.db_path)
+    except Exception as exc:
+        print(f"maintain: cannot open database: {exc}")
+        return 1
     try:
         # Core maintenance (includes lifecycle transitions via run_maintenance)
         summary: dict | None = None

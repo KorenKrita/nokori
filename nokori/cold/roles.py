@@ -319,8 +319,10 @@ ROLE_SCHEMAS: dict[str, dict[str, Any]] = {
 # --- Schema Validation Helpers ---
 
 
-def _validate_type(value: Any, schema: dict[str, Any], path: str) -> list[str]:
+def _validate_type(value: Any, schema: dict[str, Any], path: str, _depth: int = 0) -> list[str]:
     """Minimal JSON schema type/required/enum validation. Returns error messages."""
+    if _depth > 20:
+        return [f"{path}: exceeded max validation depth"]
     errors: list[str] = []
     expected_type = schema.get("type")
 
@@ -333,7 +335,7 @@ def _validate_type(value: Any, schema: dict[str, Any], path: str) -> list[str]:
         props = schema.get("properties", {})
         for key, prop_schema in props.items():
             if key in value:
-                errors.extend(_validate_type(value[key], prop_schema, f"{path}.{key}"))
+                errors.extend(_validate_type(value[key], prop_schema, f"{path}.{key}", _depth + 1))
 
     elif expected_type == "array":
         if not isinstance(value, list):
@@ -341,7 +343,7 @@ def _validate_type(value: Any, schema: dict[str, Any], path: str) -> list[str]:
         items_schema = schema.get("items")
         if items_schema:
             for i, item in enumerate(value):
-                errors.extend(_validate_type(item, items_schema, f"{path}[{i}]"))
+                errors.extend(_validate_type(item, items_schema, f"{path}[{i}]", _depth + 1))
 
     elif expected_type == "string":
         if not isinstance(value, str):

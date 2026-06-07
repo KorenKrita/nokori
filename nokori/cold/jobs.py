@@ -20,6 +20,8 @@ CIRCUIT_BREAKER_COOLDOWN_SECONDS = 300
 TRANSCRIPT_INGEST_TTL_HOURS = 72
 SCHEMA_PARSE_FAILURE_CONSECUTIVE_MAX = 3
 PROVIDER_AUTH_RATE_LIMIT_ERRORS = ("auth_error", "rate_limit", "401", "429")
+PROVIDER_AUTH_SAMPLE_SIZE = 5
+MAX_JOB_RETRIES = 6
 
 
 # --- Helpers ---
@@ -109,6 +111,12 @@ def mark_job_failed(db: Db, job_id: str, error_info: str | None = None) -> None:
         if row is None:
             return
         new_retries = row["retries"] + 1
+        if new_retries > MAX_JOB_RETRIES:
+            tx.execute(
+                "UPDATE llm_jobs SET status = 'dead', output_json = ?, updated_at = ? WHERE id = ?",
+                (error_info, now, job_id),
+            )
+            return
         backoff = _retry_backoff_seconds(new_retries)
         next_retry_at = datetime.now(timezone.utc).timestamp() + backoff
         next_retry_iso = datetime.fromtimestamp(
@@ -140,11 +148,12 @@ def is_circuit_breaker_open(db: Db, role: str, model_id: str | None = None) -> b
         total = len(rows)
         failure_rate = failure_count / total if total > 0 else 0.0
         if failure_rate >= CIRCUIT_BREAKER_RATE_THRESHOLD:
-            # Check cooldown: if most recent failure is within cooldown, breaker open
-            most_recent = rows[0]["updated_at"] if rows else None
-            if most_recent:
+            last_failure = next(
+                (r["updated_at"] for r in rows if r["status"] == "failed"), None
+            )
+            if last_failure:
                 try:
-                    recent_dt = datetime.fromisoformat(most_recent.replace("Z", "+00:00"))
+                    recent_dt = datetime.fromisoformat(last_failure.replace("Z", "+00:00"))
                     elapsed = (datetime.now(timezone.utc) - recent_dt).total_seconds()
                     if elapsed < CIRCUIT_BREAKER_COOLDOWN_SECONDS:
                         return True
@@ -155,8 +164,8 @@ def is_circuit_breaker_open(db: Db, role: str, model_id: str | None = None) -> b
     if model_id:
         provider_rows = db.fetchall(
             "SELECT status, output_json, updated_at FROM llm_jobs WHERE model_id = ? "
-            "ORDER BY updated_at DESC LIMIT 5",
-            (model_id,),
+            "ORDER BY updated_at DESC LIMIT ?",
+            (model_id, PROVIDER_AUTH_SAMPLE_SIZE),
         )
         auth_failures = sum(
             1 for r in provider_rows

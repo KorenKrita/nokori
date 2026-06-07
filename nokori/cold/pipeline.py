@@ -441,6 +441,13 @@ def _run_cold_pipeline_inner(
 
     # Determine final status
     existing_rule = merge_info.get("existing_rule")
+    if merge_op in DESTRUCTIVE_MERGE_OPS and not existing_rule:
+        return ColdPipelineResult(
+            status="rejected",
+            rule_id=None,
+            rejection_reason="merge_transaction_invalid: no existing rule for destructive merge",
+            scores=scores,
+        )
     if merge_op in DESTRUCTIVE_MERGE_OPS:
         merge_decision = MergeDecision(
             operation=merge_op,  # type: ignore[arg-type]
@@ -862,7 +869,8 @@ def _run_rewriter(
         "REQUIRED fields:\n"
         "- \"trigger_canonical\" (string, REQUIRED): the canonical trigger text, concise and specific\n"
         "- \"required_concept_groups\" (array of objects, REQUIRED): each object has:\n"
-        "  - \"concepts\" (array of strings): terms that must all be present\n"
+        "  - \"id\" (string): group identifier\n"
+        "  - \"all_of\" (array of strings): concept IDs that must all be present\n"
         "  - \"match\" (string): \"all\" or \"any\"\n"
         "- \"excluded_contexts\" (array of objects, REQUIRED): situations where the rule should NOT fire\n"
         "  - \"pattern\" (string): text pattern to match\n"
@@ -880,7 +888,7 @@ def _run_rewriter(
         "{\n"
         "  \"trigger_canonical\": \"When force-pushing to a shared branch without --force-with-lease\",\n"
         "  \"required_concept_groups\": [\n"
-        "    {\"concepts\": [\"git push\", \"force\"], \"match\": \"all\"}\n"
+        "    {\"id\": \"grp1\", \"all_of\": [\"git_push\", \"force\"], \"match\": \"all\"}\n"
         "  ],\n"
         "  \"excluded_contexts\": [\n"
         "    {\"pattern\": \"personal branch\", \"scope\": \"trigger\"}\n"
@@ -1088,7 +1096,7 @@ def _run_merge_planner(
         target_ids = result.get("target_rule_ids") or []
         existing = next(
             (r for r in existing_rules if r["id"] in target_ids),
-            existing_rules[0],
+            None,
         )
         planner_output = {
             "relation_shape": result.get("relation_shape", "unrelated"),
@@ -1774,6 +1782,9 @@ def _generate_eval_cases(
         raise  # Propagate for retry (spec section 13)
 
 
+_MAX_SPLIT_DEPTH = 3
+
+
 def _handle_split_required(
     db: Db,
     llm,
@@ -1787,7 +1798,11 @@ def _handle_split_required(
     role_max_tokens: dict[str, int] | None = None,
     role_timeouts: dict[str, int] | None = None,
     project_id: str | None = None,
+    _split_depth: int = 0,
 ) -> list[ColdPipelineResult]:
+    if _split_depth >= _MAX_SPLIT_DEPTH:
+        log.warning("split_required recursion depth exceeded; rejecting")
+        return []
     """Handle split_required by invoking rewriter to produce sub-rules, then re-process each.
 
     Spec section 6.7: 'return to rewrite/split if merge operation is split_required'.

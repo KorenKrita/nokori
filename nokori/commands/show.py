@@ -19,8 +19,9 @@ def _json_list(raw: str) -> list:
 
 
 def run(args: argparse.Namespace, cfg: Config) -> int:
-    db = open_db(cfg.db_path)
+    db = None
     try:
+        db = open_db(cfg.db_path)
         rule = fetch_rule_by_short_id(db, args.short_id)
         if rule is None:
             raise NokoriError(f"no rule with short_id {args.short_id!r}")
@@ -36,7 +37,8 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
                 "replacement_id": rule.replacement_id,
             }
     finally:
-        db.close()
+        if db is not None:
+            db.close()
 
     # --- Identity ---
     print(f"id              {rule.id}")

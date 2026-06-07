@@ -29,9 +29,14 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
         if args.action is not None:
             updates.append(("action_instruction", args.action))
         if getattr(args, "severity", None) is not None:
+            _VALID_SEVERITIES = frozenset({"reminder", "high_risk", "gate_eligible"})
+            if args.severity not in _VALID_SEVERITIES:
+                raise NokoriError(
+                    f"invalid severity {args.severity!r}; must be one of {sorted(_VALID_SEVERITIES)}"
+                )
             if args.severity == "gate_eligible":
                 raise NokoriError(
-                    "manual gate_eligible severity changes are disabled in v6; "
+                    "manual gate_eligible severity changes are disabled; "
                     "Gate eligibility is assigned autonomously"
                 )
             updates.append(("severity", args.severity))
