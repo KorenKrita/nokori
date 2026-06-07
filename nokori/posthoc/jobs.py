@@ -12,6 +12,7 @@ import uuid
 
 from ..db import Db, loads_json
 from ..events.fire import get_fire_events_for_session, update_first_observed_useful
+from ..events.observability import write_event
 from .evaluator import run_posthoc_evaluation
 from ..utils.logging import get_logger
 from ..utils.time import now_iso
@@ -181,6 +182,16 @@ def process_pending_posthoc_jobs(db: Db, llm, *, limit: int = 20) -> dict[str, i
             label,
             reason_code,
             attribution_weight,
+        )
+        write_event(
+            db, source="posthoc_evaluation",
+            outcome=label,
+            details={
+                "rule_id": row["rule_id"],
+                "fire_event_id": job["fire_event_id"],
+                "reason_code": reason_code,
+                "attribution_weight": attribution_weight,
+            },
         )
         summary["processed"] += 1
         summary["done"] += 1

@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 
 from ..db import Db, dumps_json, loads_json
+from ..events.observability import write_event
 from ..llm.json_payload import parse_json_payload
 from ..utils.time import now_iso
 
@@ -334,6 +335,11 @@ def run_shadow_counterfactual_evaluation(
             mark_shadow_label(db, shadow_event_id, "unclear")
             if rule_id:
                 affected_rule_ids.add(rule_id)
+            write_event(
+                db, source="shadow_counterfactual",
+                outcome="unclear",
+                details={"rule_id": rule_id, "shadow_event_id": shadow_event_id, "reason": "empty_snapshot"},
+            )
             summary["processed"] += 1
             summary["labeled"] += 1
             continue
@@ -383,6 +389,11 @@ def run_shadow_counterfactual_evaluation(
             mark_shadow_label(db, shadow_event_id, "unclear")
             if rule_id:
                 affected_rule_ids.add(rule_id)
+            write_event(
+                db, source="shadow_counterfactual",
+                outcome="unclear",
+                details={"rule_id": rule_id, "shadow_event_id": shadow_event_id, "reason": "llm_failed"},
+            )
             summary["failed"] += 1
             summary["processed"] += 1
             continue
@@ -397,19 +408,35 @@ def run_shadow_counterfactual_evaluation(
             mark_shadow_label(db, shadow_event_id, "unclear")
             if rule_id:
                 affected_rule_ids.add(rule_id)
+            write_event(
+                db, source="shadow_counterfactual",
+                outcome="unclear",
+                details={"rule_id": rule_id, "shadow_event_id": shadow_event_id, "reason": "parse_failed"},
+            )
             summary["labeled"] += 1
             summary["processed"] += 1
             continue
-        label = data.get("label", "unclear")
+        raw_label = data.get("label", "unclear")
         valid_labels = (
             "would_help_high", "would_help_low", "irrelevant",
             "risky", "near_miss", "unclear",
         )
-        if label not in valid_labels:
-            label = "unclear"
+        label_invalid = raw_label not in valid_labels
+        label = "unclear" if label_invalid else raw_label
         mark_shadow_label(db, shadow_event_id, label)
         if rule_id:
             affected_rule_ids.add(rule_id)
+        event_details: dict = {
+            "rule_id": rule_id,
+            "shadow_event_id": shadow_event_id,
+        }
+        if label_invalid:
+            event_details["reason"] = "invalid_label"
+        write_event(
+            db, source="shadow_counterfactual",
+            outcome=label,
+            details=event_details,
+        )
         summary["labeled"] += 1
 
         summary["processed"] += 1

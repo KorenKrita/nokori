@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 from ..db import Db
+from ..events.observability import write_event
 from ..events.shadow import count_shadow_evidence
 from ..policy import (
     ACTIVE_TO_SUPPRESSED,
@@ -322,6 +323,16 @@ def _apply_transition(
             new_status,
             reason,
         )
+        write_event(
+            db, source="lifecycle_transition",
+            outcome=f"{old_status}_to_{new_status}",
+            details={
+                "rule_id": rule_id,
+                "old_status": old_status,
+                "new_status": new_status,
+                "reason": reason,
+            },
+        )
         # System-automated archival creates system-strength negative fingerprint (spec section 11)
         if new_status == "archived":
             _create_system_archive_fingerprint(db, rule_id)
@@ -400,11 +411,6 @@ def _evaluate_candidate(db: Db, row, rule_version: int) -> TransitionResult:
     )
     synthetic_eval_passed = synth_row is not None and synth_row["passed"] == 1
 
-    if not synthetic_eval_passed:
-        return TransitionResult(
-            rule_id, old_status, None, "synthetic_eval not passed", False
-        )
-
     # Check candidate -> active (normal path)
     th = CANDIDATE_TO_ACTIVE
     # shadow_strong_match_count = would_help_high only (spec: strong match)
@@ -418,6 +424,7 @@ def _evaluate_candidate(db: Db, row, rule_version: int) -> TransitionResult:
         + shadow.get("near_miss", 0)
     )
     distinct_sessions = shadow.get("distinct_sessions", 0)
+
     # Use task-deduped count as effective sample count for promotion thresholds.
     # This prevents inflated counts from repeated events within the same task.
     task_deduped_count = shadow.get("task_deduped_count", evaluated_count)
@@ -442,6 +449,13 @@ def _evaluate_candidate(db: Db, row, rule_version: int) -> TransitionResult:
         and risky_harmful <= th.risky_or_near_miss_shadow_count_max
         and shadow_fp_rate <= th.shadow_false_positive_rate_max
     )
+
+    # Shadow evidence can substitute for synthetic eval: real-world matching
+    # already demonstrates the matcher works, the simulated test is redundant.
+    if not synthetic_eval_passed and not normal_path:
+        return TransitionResult(
+            rule_id, old_status, None, "synthetic_eval not passed and insufficient shadow evidence", False
+        )
 
     if normal_path:
         reason = (

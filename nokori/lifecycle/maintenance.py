@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 from ..db import Db, _delete_rule_cascade_tx
+from ..events.observability import write_event
 from ..utils.logging import get_logger
 from ..utils.time import iso_of, now_iso, parse_iso
 
@@ -62,6 +63,7 @@ def run_candidate_cleanup(db: Db) -> int:
         ttl = ANTI_PATTERN_TTL_DAYS if r["source_origin"] == "external_source_material" else CANDIDATE_TTL_DAYS
         age = _days_since_iso(r["created_at"])
         if age is not None and age >= ttl:
+            actually_deleted = False
             with db.transaction() as tx:
                 still = tx.execute(
                     "SELECT id FROM rules WHERE id = ? AND status = 'candidate'",
@@ -71,6 +73,13 @@ def run_candidate_cleanup(db: Db) -> int:
                     continue
                 _delete_rule_cascade_tx(tx, r["id"])
                 deleted += 1
+                actually_deleted = True
+            if actually_deleted:
+                write_event(
+                    db, source="candidate_cleanup",
+                    outcome="deleted",
+                    details={"rule_id": r["id"], "age_days": age, "ttl_days": ttl},
+                )
     _set_last_run(db, "candidate_cleanup")
     if deleted:
         log.info("candidate_cleanup deleted=%d", deleted)

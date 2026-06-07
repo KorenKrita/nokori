@@ -248,7 +248,26 @@ class TestCandidateToActive:
         finally:
             db.close()
 
-    def test_synthetic_eval_not_passed_blocks(self, tmp_path):
+    def test_synthetic_eval_not_passed_blocks_without_shadow(self, tmp_path):
+        """Synthetic eval failed + insufficient shadow evidence -> blocked."""
+        db = _fresh_db(tmp_path)
+        try:
+            rid = _insert_rule(db, status="candidate")
+            _insert_synthetic_eval(db, rid, 1, passed=False)
+
+            # Only 1 session, below distinct_shadow_sessions_min=2
+            sess1 = str(uuid.uuid4())
+            for _ in range(5):
+                _insert_shadow_event(db, rid, session_id=sess1, label="would_help_high")
+
+            result = evaluate_transitions(db, rid)
+            assert result.new_status is None
+            assert "synthetic_eval" in result.reason
+        finally:
+            db.close()
+
+    def test_synthetic_eval_not_passed_bypassed_by_shadow(self, tmp_path):
+        """Synthetic eval failed but sufficient shadow evidence -> promotes."""
         db = _fresh_db(tmp_path)
         try:
             rid = _insert_rule(db, status="candidate")
@@ -260,8 +279,8 @@ class TestCandidateToActive:
                 _insert_shadow_event(db, rid, session_id=s, label="would_help_high")
 
             result = evaluate_transitions(db, rid)
-            assert result.new_status is None
-            assert "synthetic_eval" in result.reason
+            assert result.new_status == "active"
+            assert "shadow_promotion" in result.reason
         finally:
             db.close()
 

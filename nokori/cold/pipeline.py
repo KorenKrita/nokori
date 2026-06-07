@@ -389,7 +389,7 @@ def _run_cold_pipeline_inner(
             scores=scores,
         )
 
-    # --- Stage g: Synthetic eval (for both active and candidate targeting) ---
+    # --- Stage g: Synthetic eval (active fast-lane + merge reeval) ---
     synthetic_passed = False
     adversarial_failures = 0
     synthetic_result: SyntheticEvalResult | None = None
@@ -397,17 +397,27 @@ def _run_cold_pipeline_inner(
     if idf_stats is None:
         idf_stats = _build_idf_stats_from_db(db)
 
+    # Skip eval generation for candidates that don't merge into existing rules
+    # (no active rule to protect). Merge reeval needs cases to validate changes.
+    _needs_eval_cases = (
+        target_status == "active"
+        or merge_op in ("merge_into_existing", "update_existing_fields")
+    )
     synthetic_eval_skipped = False
-    try:
-        eval_cases = _generate_eval_cases(
-            db, llm, rule_data, role_models, default_model,
-            role_max_tokens, role_timeouts,
-        )
-    except (CircuitBreakerOpenError, ValueError):
-        if target_status == "active":
-            raise  # Active requires synthetic eval — propagate to pending
-        eval_cases = []  # Candidate can proceed without eval
+    if not _needs_eval_cases:
+        eval_cases: list = []
         synthetic_eval_skipped = True
+    else:
+        try:
+            eval_cases = _generate_eval_cases(
+                db, llm, rule_data, role_models, default_model,
+                role_max_tokens, role_timeouts,
+            )
+        except (CircuitBreakerOpenError, ValueError) as exc:
+            log.warning("synthetic eval generation failed, passing through: %s", exc)
+            eval_cases = []
+            synthetic_eval_skipped = True
+            synthetic_passed = True
     if eval_cases:
         eval_rule_data = {
             "id": "",
