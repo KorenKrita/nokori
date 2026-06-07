@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 
 from ..config import Config
-from ..db import SCHEMA_VERSION, dumps_json, fetch_rule_by_short_id, fetch_short_ids, open_db
+from ..db import SCHEMA_VERSION, dumps_json, fetch_rule_by_short_id, open_db
 from ..events.observability import write_event
 from ..errors import NokoriError
 from ..policy import RUNTIME_POLICY_VERSION
@@ -45,7 +45,7 @@ def _manual_trigger_structure(
 ) -> tuple[list[dict], list[dict], list[dict]]:
     concept_id = "manual_trigger"
     seen_aliases: set[str] = {trigger.strip()}
-    aliases = [{"text": trigger, "strength": "strong"}]
+    aliases = [{"text": trigger.strip(), "strength": "strong"}]
     for v in variants:
         v_stripped = v.strip()
         if v_stripped and v_stripped not in seen_aliases:

@@ -156,7 +156,8 @@ def _remove_nokori_claude(current: dict) -> dict:
     merged = copy.deepcopy(current)
     hooks = merged.get("hooks", {})
     if not isinstance(hooks, dict):
-        hooks = {}
+        merged.pop("hooks", None)
+        return merged
     for event in [e for e, *_ in _CLAUDE_HOOK_SPECS]:
         spec = hooks.get(event)
         if not spec:
@@ -177,7 +178,8 @@ def _remove_nokori_cursor(current: dict) -> dict:
     merged = copy.deepcopy(current)
     hooks = merged.get("hooks", {})
     if not isinstance(hooks, dict):
-        hooks = {}
+        merged.pop("hooks", None)
+        return merged
     for event in [e for e, *_ in _CURSOR_HOOK_SPECS]:
         spec = hooks.get(event)
         if not spec:
@@ -323,6 +325,10 @@ def _write_json_file(path: Path, data: dict) -> None:
         tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         os.replace(tmp, path)
     except OSError as e:
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:
+            pass
         raise ValueError(f"cannot write {path}: {e}") from e
 
 

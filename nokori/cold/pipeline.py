@@ -23,7 +23,7 @@ from typing import Any, Callable
 
 from ..archive.fingerprints import check_fingerprint_block
 from ..db import Db, SCHEMA_VERSION, dumps_json
-from ..errors import NokoriError
+from ..errors import LlmError, NokoriError
 from ..matcher.compiler import CompilationError, CompiledMatcher, compile_rule
 from ..eval.synthetic import SyntheticEvalResult, run_synthetic_eval
 from ..policy import (
@@ -183,7 +183,7 @@ def run_cold_pipeline(
             rejection_reason=f"circuit_breaker_pending: {e}",
             scores=None,
         )
-    except (RuntimeError, OSError, TimeoutError, ConnectionError, ValueError, NokoriError) as e:
+    except (RuntimeError, OSError, TimeoutError, ConnectionError, ValueError, LlmError) as e:
         # Spec section 13: failed role calls leave jobs pending for retry
         log.warning("cold_pipeline pending (role failure): trigger=%r %s: %s", trigger_preview, type(e).__name__, e)
         if isinstance(e, TimeoutError):
@@ -194,7 +194,7 @@ def run_cold_pipeline(
             error_type = "io"
         elif isinstance(e, ValueError):
             error_type = "validation"
-        elif isinstance(e, NokoriError):
+        elif isinstance(e, LlmError):
             error_type = "llm"
         else:
             error_type = "runtime"

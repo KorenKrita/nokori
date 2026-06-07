@@ -8,7 +8,7 @@ import pytest
 
 from nokori.commands.add import run, _manual_trigger_structure
 from nokori.config import Config
-from nokori.db import open_db, fetch_rule_by_short_id
+from nokori.db import open_db
 from nokori.errors import NokoriError
 
 

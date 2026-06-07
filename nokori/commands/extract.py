@@ -161,7 +161,7 @@ def _process_path(path: Path, project_id: str | None, cfg: Config,
             }
 
             # Enqueue transcript ingest job for auditability
-            segment_text = f"{str(path)}::{cand.trigger}::{cand.action}"
+            segment_text = f"{str(path)}::{extractor_output['trigger']}::{extractor_output['action']}"
             seg_hash = _segment_hash(segment_text)
             transcript_ref = str(path)
 
