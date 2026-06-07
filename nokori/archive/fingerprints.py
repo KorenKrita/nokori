@@ -286,10 +286,18 @@ def _is_narrower_scope(
 
     # Structural narrowness: new has domain_tags that old's scope_summary lacks
     scope_summary = (fingerprint_row["scope_summary"] if "scope_summary" in fingerprint_row.keys() else "") or ""
-    has_structural_narrowing = (
+    has_structural_narrowing = bool(
         new_domain_tags
         and len(new_domain_tags) > 0
-        and scope_summary == "general"
+        and (
+            scope_summary == "general"
+            or (
+                scope_summary.startswith("domain:")
+                and set(new_domain_tags).issubset(
+                    set(scope_summary[len("domain:"):].split(","))
+                )
+            )
+        )
     )
 
     token_narrower = new_in_old >= 0.80 and old_in_new < 0.70

@@ -186,6 +186,8 @@ def _check_embedding_index_gaps(cfg: Config) -> tuple[str, str]:
             "AND NOT EXISTS (SELECT 1 FROM rule_embeddings e WHERE e.rule_id = r.id)"
         )
         missing = int(row["n"]) if row else 0
+    except Exception as e:
+        return ("fail", str(e))
     finally:
         db.close()
     if missing:

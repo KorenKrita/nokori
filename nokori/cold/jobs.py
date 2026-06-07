@@ -11,6 +11,7 @@ import uuid
 from datetime import datetime, timezone
 
 from nokori.db import Db
+from nokori.utils.time import now_iso as _shared_now_iso
 
 # --- Constants ---
 
@@ -28,7 +29,7 @@ MAX_JOB_RETRIES = 6
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return _shared_now_iso()
 
 
 def _retry_backoff_seconds(retries: int) -> int:

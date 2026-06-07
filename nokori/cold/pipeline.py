@@ -23,6 +23,7 @@ from typing import Any, Callable
 
 from ..archive.fingerprints import check_fingerprint_block
 from ..db import Db, SCHEMA_VERSION, dumps_json
+from ..errors import NokoriError
 from ..matcher.compiler import CompilationError, CompiledMatcher, compile_rule
 from ..eval.synthetic import SyntheticEvalResult, run_synthetic_eval
 from ..policy import (
@@ -182,7 +183,7 @@ def run_cold_pipeline(
             rejection_reason=f"circuit_breaker_pending: {e}",
             scores=None,
         )
-    except (RuntimeError, OSError, TimeoutError, ConnectionError, ValueError) as e:
+    except (RuntimeError, OSError, TimeoutError, ConnectionError, ValueError, NokoriError) as e:
         # Spec section 13: failed role calls leave jobs pending for retry
         log.warning("cold_pipeline pending (role failure): trigger=%r %s: %s", trigger_preview, type(e).__name__, e)
         if isinstance(e, TimeoutError):
@@ -193,6 +194,8 @@ def run_cold_pipeline(
             error_type = "io"
         elif isinstance(e, ValueError):
             error_type = "validation"
+        elif isinstance(e, NokoriError):
+            error_type = "llm"
         else:
             error_type = "runtime"
         write_error(
@@ -612,6 +615,7 @@ def _run_cold_pipeline_inner(
         scores=scores,
         synthetic_eval_skipped=synthetic_eval_skipped,
         project_id=project_id,
+        admission_model_id=admission_model,
     )
 
     _apply_merge_side_effects(db, rule_id, merge_op, merge_info)
@@ -1212,6 +1216,7 @@ def insert_rule_from_pipeline(
     scores: dict | None = None,
     synthetic_eval_skipped: bool = False,
     project_id: str | None = None,
+    admission_model_id: str | None = None,
 ) -> str:
     """Insert a rule from the cold pipeline into the rules table.
 
@@ -1350,10 +1355,10 @@ def insert_rule_from_pipeline(
                 "VALUES (?,?,?,?,?,?,?,?,?)",
                 (
                     "admission_judge",
-                    None,
+                    admission_model_id,
                     PROMPT_VERSIONS.get("admission_judge"),
                     None,
-                    None,
+                    dumps_json(scores),
                     dumps_json(scores),
                     status,
                     rule_id,
@@ -1753,29 +1758,11 @@ def _generate_eval_cases(
             validate_response=_validate_eval_cases_response,
         )
         cases = json.loads(response)
-        # Accept both array and {cases:[...]} formats for robustness
-        case_list: list | None = None
         if isinstance(cases, list):
-            case_list = cases
-        elif isinstance(cases, dict) and "cases" in cases:
-            validate_role_output("synthetic_eval_generator", response)
-            case_list = cases["cases"]
-        if case_list is None:
-            raise ValueError("synthetic_eval_generator returned no cases")
-        # Validate each case has required 'prompt' key
-        has_positive = False
-        for case in case_list:
-            if not isinstance(case, dict):
-                raise ValueError(f"eval case must be an object: {case}")
-            if "prompt" not in case:
-                raise ValueError(f"eval case missing 'prompt' key: {case}")
-            if "case_type" not in case:
-                raise ValueError(f"eval case missing 'case_type' key: {case}")
-            if case.get("case_type") == "positive":
-                has_positive = True
-        if not has_positive:
-            raise ValueError("synthetic_eval_generator returned no positive cases")
-        return case_list
+            return cases
+        if isinstance(cases, dict) and "cases" in cases:
+            return cases["cases"]
+        raise ValueError("synthetic_eval_generator returned no cases")
     except CircuitBreakerOpenError:
         raise
     except (json.JSONDecodeError, ValueError):
@@ -1981,11 +1968,16 @@ def _apply_non_destructive_merge(
         params.append(current_version)
         params.append(current_status)
         with db.transaction() as tx:
-            tx.execute(
+            cur = tx.execute(
                 f"UPDATE rules SET {', '.join(updates)} "
                 f"WHERE id = ? AND rule_version = ? AND status = ? {rpv_where}",
                 tuple(params) + rpv_params,
             )
+            if cur.rowcount == 0:
+                log.warning(
+                    "non_destructive_merge CAS failed rule=%s version=%s",
+                    target_rule_id, current_version,
+                )
 
 
 def _build_idf_stats_from_db(db: Db) -> IdfPoolStats:

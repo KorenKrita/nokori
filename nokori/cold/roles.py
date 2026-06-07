@@ -412,7 +412,10 @@ _ADMISSION_SCORE_KEYS = (
 
 
 def _normalize_role_output(role: str, data: dict[str, Any]) -> dict[str, Any]:
-    """Fix common LLM schema deviations before validation."""
+    """Fix common LLM schema deviations before validation.
+
+    WARNING: Mutates *data* in-place. Callers should not rely on the original dict remaining unchanged.
+    """
     if role == "admission_judge":
         # Fix 1: scores flattened to top level
         if "scores" not in data:

@@ -314,7 +314,7 @@ def run_import(args: argparse.Namespace, cfg: Config) -> int:
                 rid, sid,
                 SCHEMA_VERSION,
                 rec.get("rule_version", 1),
-                rec.get("created_by_pipeline_version", "import_v6"),
+                rec.get("created_by_pipeline_version", f"import_v{file_schema}"),
                 RUNTIME_POLICY_VERSION,
                 rec.get("trigger_canonical", ""),
                 rec.get("trigger_canonical_zh"),

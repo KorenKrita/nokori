@@ -1,5 +1,5 @@
 # Build and upload to PyPI when a GitHub Release is published.
-# API token lives in GitHub Secrets (never in the repo). See .github/PUBLISHING.md.
+# API token lives in GitHub Secrets (never in the repo).
 
 name: Publish to PyPI
 
