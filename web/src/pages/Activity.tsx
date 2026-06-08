@@ -89,7 +89,7 @@ export function Activity() {
     }
   }, [events, autoScroll])
 
-  const groups = groupEvents(events)
+  const groups = sourceFilter ? groupEvents(events, false) : groupEvents(events)
 
   return (
     <motion.div

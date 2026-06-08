@@ -14,11 +14,11 @@ export interface EventGroup {
   latest_time: string
 }
 
-export function groupEvents(events: TimelineEvent[]): EventGroup[] {
+export function groupEvents(events: TimelineEvent[], aggregate = true): EventGroup[] {
   const groups: EventGroup[] = []
   for (const event of events) {
     const last = groups[groups.length - 1]
-    if (last && last.source === event.source && last.session_id === event.session_id) {
+    if (aggregate && last && last.source === event.source && last.session_id === event.session_id) {
       last.events.push(event)
       last.latest_time = event.created_at
     } else {
