@@ -13,11 +13,21 @@ router = APIRouter()
 def list_extract_jobs():
     cfg = get_config()
     pending = job_io.list_jobs(cfg, status="pending")
-    done = job_io.list_jobs(cfg, status="done")
+    db = open_db(cfg.db_path)
+    try:
+        done_rows = db.fetchall(
+            "SELECT transcript_path, extracted_at FROM extract_state "
+            "WHERE status = 'done' ORDER BY extracted_at DESC LIMIT 50"
+        )
+    finally:
+        db.close()
     return {
         "data": {
             "pending": [{"path": str(j)} for j in pending],
-            "done": [{"path": str(j)} for j in done],
+            "done": [
+                {"path": row["transcript_path"], "extracted_at": row["extracted_at"]}
+                for row in done_rows
+            ],
         }
     }
 

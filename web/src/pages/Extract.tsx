@@ -5,7 +5,7 @@ import { useApi } from '@/hooks/useApi'
 import { formatDateTime } from '@/lib/formatDateTime'
 import { t } from '@/lib/i18n'
 
-interface ExtractJobs { data: { pending: { path: string }[]; done: { path: string }[] } }
+interface ExtractJobs { data: { pending: { path: string }[]; done: { path: string; extracted_at?: string }[] } }
 interface ExtractState { data: { transcript_path: string; transcript_mtime: number; extracted_at: string; status: string; last_byte_offset: number }[] }
 
 function splitPath(fullPath: string) {
@@ -64,6 +64,9 @@ export function Extract() {
                 <div key={i} className="py-1">
                   <p className="text-[10px] text-text-tertiary truncate">{dir}/</p>
                   <p className="text-xs font-mono text-text-secondary">{file}</p>
+                  {j.extracted_at && (
+                    <p className="text-[10px] text-text-muted font-mono">{formatDateTime(j.extracted_at)}</p>
+                  )}
                 </div>
               )
             })}
