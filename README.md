@@ -5,14 +5,29 @@
 </p>
 
 <p align="center">
-  <strong>A behavioral memory layer forged for Claude Code and Cursor.</strong>
+  <strong>A local-first memory layer that turns corrections into durable agent behavior.</strong>
 </p>
 
 <p align="center">
-  <a href="https://pypi.org/project/nokori/"><img src="https://img.shields.io/pypi/v/nokori" alt="PyPI" /></a>
-  <a href="https://pypi.org/project/nokori/"><img src="https://img.shields.io/pypi/pyversions/nokori" alt="Python" /></a>
-  <a href="https://github.com/KorenKrita/nokori/blob/main/LICENSE"><img src="https://img.shields.io/github/license/KorenKrita/nokori" alt="License" /></a>
-  <a href="https://github.com/KorenKrita/nokori/stargazers"><img src="https://img.shields.io/github/stars/KorenKrita/nokori" alt="Stars" /></a>
+  <a href="https://pypi.org/project/nokori/"><img src="https://img.shields.io/pypi/v/nokori?style=flat-square&color=111827" alt="PyPI" /></a>
+  <img src="https://img.shields.io/badge/python-%E2%89%A53.11-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python >= 3.11" />
+  <a href="https://github.com/KorenKrita/nokori/blob/main/LICENSE"><img src="https://img.shields.io/github/license/KorenKrita/nokori?style=flat-square&color=0f766e" alt="License" /></a>
+  <a href="https://github.com/KorenKrita/nokori/stargazers"><img src="https://img.shields.io/github/stars/KorenKrita/nokori?style=flat-square&color=f59e0b" alt="Stars" /></a>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Claude%20Code-ready-4f46e5?style=flat-square" alt="Claude Code ready" />
+  <img src="https://img.shields.io/badge/Cursor-ready-2563eb?style=flat-square" alt="Cursor ready" />
+  <img src="https://img.shields.io/badge/local--first-SQLite-0f766e?style=flat-square&logo=sqlite&logoColor=white" alt="Local-first SQLite" />
+  <img src="https://img.shields.io/badge/retrieval-BM25%20%2B%20embeddings-7c3aed?style=flat-square" alt="BM25 plus embeddings" />
+  <img src="https://img.shields.io/badge/Gate-risk%20blocker-dc2626?style=flat-square" alt="Gate risk blocker" />
+  <img src="https://img.shields.io/badge/pipx-ready-9333ea?style=flat-square" alt="pipx ready" />
+  <img src="https://img.shields.io/badge/offline-optional-0891b2?style=flat-square" alt="Offline optional" />
+  <img src="https://img.shields.io/badge/status-alpha-f97316?style=flat-square" alt="Alpha status" />
+</p>
+
+<p align="center">
+  <sub>remembers corrections · recalls rules in context · blocks risky tools · stores everything locally</sub>
 </p>
 
 <p align="center">
@@ -39,9 +54,31 @@ Your data stays on your machine, in SQLite, the whole way through. Retrieval dur
 
 ## Who is it for
 
-- People who keep correcting the same class of problem: force pushes, forgotten migrations, commands fired at the wrong database
-- People who want cross-project "don't do that" knowledge they build once and carry across repos, instead of re-teaching every repo from scratch
-- People who trust local: rules sit in SQLite on your own machine, exportable anytime, whole chats never sent out
+<table>
+  <tr>
+    <td width="33%">
+      <strong>Repeat mistake hunters</strong><br />
+      Force pushes, forgotten migrations, commands fired at the wrong database: Nokori remembers the correction after the chat ends.
+    </td>
+    <td width="33%">
+      <strong>Cross-repo preference keepers</strong><br />
+      Teach a behavioral rule once and carry it across projects instead of rebuilding the same instruction stack in every repo.
+    </td>
+    <td width="33%">
+      <strong>Local-first operators</strong><br />
+      Rules sit in SQLite on your own machine, exportable anytime; whole chats are never sent out during retrieval.
+    </td>
+  </tr>
+</table>
+
+## Before / After
+
+| Without Nokori | With Nokori |
+|----------------|-------------|
+| The same correction is repeated every session | The correction becomes a durable behavioral rule |
+| Risky tool calls rely on the agent remembering context | Trusted Gate rules can block before the tool runs |
+| Preferences vanish with the chat window | Rules stay local and follow you across projects |
+| Retrieval means waiting on a model | Hot-path recall is deterministic file I/O + scoring |
 
 ---
 
@@ -61,6 +98,8 @@ During a chat Nokori only does retrieval and small file I/O, never making you wa
 ---
 
 ## Quick install
+
+Four commands. Local memory. No hosted database.
 
 **Prerequisites**: Python >= 3.11, Claude Code or Cursor already installed
 
@@ -125,32 +164,64 @@ Just open Claude Code or Cursor and work as usual. When a rule matches, the agen
 
 ## Core features
 
-| Feature | Description |
-|---------|-------------|
-| **Autonomous quality flywheel** | candidate -> active -> trusted; rules must earn evidence before gaining authority |
-| **Zero model calls on hot path** | Hooks do deterministic retrieval/matching/scoring only; no LLM wait between prompt and reply |
-| **Hybrid retrieval** | BM25 out of the box + optional local/remote semantic vectors, RRF fusion |
-| **Conservative Gate** | Only trusted + gate_eligible rules can block tools, and only once per turn |
-| **Shadow evidence** | Candidates accumulate counterfactual evidence in the background without disturbing the current chat |
-| **Local-first** | SQLite + filesystem, data never leaves your machine, optional offline LLM |
-| **Cross-tool support** | Native support for both Claude Code and Cursor |
-| **Web UI** | `nokori web` for a visual dashboard to manage all state |
+<table>
+  <tr>
+    <td width="50%">
+      <strong>Autonomous quality flywheel</strong><br />
+      candidate → active → trusted; rules must earn evidence before gaining authority.
+    </td>
+    <td width="50%">
+      <strong>Zero model calls on the hot path</strong><br />
+      Hooks do deterministic retrieval, matching, and scoring only; no LLM wait between prompt and reply.
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <strong>Hybrid retrieval</strong><br />
+      BM25 out of the box, optional local or remote semantic vectors, and RRF fusion when both are available.
+    </td>
+    <td width="50%">
+      <strong>Conservative Gate</strong><br />
+      Only trusted + gate_eligible rules can block tools, and only once per turn.
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <strong>Shadow evidence</strong><br />
+      Candidates accumulate counterfactual evidence in the background without disturbing the current chat.
+    </td>
+    <td width="50%">
+      <strong>Local-first storage</strong><br />
+      SQLite + filesystem, data never leaves your machine during recall, and offline LLMs are optional.
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <strong>Cross-tool support</strong><br />
+      Native support for both Claude Code and Cursor.
+    </td>
+    <td width="50%">
+      <strong>Web UI</strong><br />
+      Run <code>nokori web</code> for a visual dashboard to inspect rules, logs, lifecycle state, and configuration.
+    </td>
+  </tr>
+</table>
 
 ---
 
 ## Documentation
 
-| Document | Content |
-|----------|---------|
-| [Architecture](docs/en/architecture.md) | Flywheel mechanism, hook timing, injection vs Gate, Shadow Pool |
-| [Installation](docs/en/installation.md) | Platform install, Cursor config, updating & uninstalling |
-| [Configuration](docs/en/configuration.md) | config.toml, environment variables, full reference |
-| [Retrieval Engine](docs/en/retrieval.md) | BM25, embedding, injection tiers |
-| [Rule Lifecycle](docs/en/lifecycle.md) | State machine, promotion conditions, maintenance tasks |
-| [Automatic Extraction](docs/en/extraction.md) | Cold-path pipeline, merge strategy, async mode |
-| [Gate Mechanism](docs/en/gate.md) | Two-layer matching, configuration, prompt-hash safety |
-| [CLI Reference](docs/en/cli.md) | All commands and options |
-| [Web UI](docs/en/web-ui.md) | Visual dashboard features and development |
+| Guide | What it gives you |
+|-------|-------------------|
+| 🚀 [Installation](docs/en/installation.md) | pipx install, Cursor config, updates, uninstalling |
+| 🧠 [Architecture](docs/en/architecture.md) | flywheel mechanism, hook timing, injection vs Gate, Shadow Pool |
+| ⚙️ [Configuration](docs/en/configuration.md) | `config.toml`, environment variables, full reference |
+| 🔎 [Retrieval Engine](docs/en/retrieval.md) | BM25, embeddings, RRF fusion, injection tiers |
+| 🌱 [Rule Lifecycle](docs/en/lifecycle.md) | state machine, promotion evidence, maintenance tasks |
+| 🧊 [Automatic Extraction](docs/en/extraction.md) | cold-path pipeline, merge strategy, async mode |
+| 🛡️ [Gate Mechanism](docs/en/gate.md) | two-layer matching, configuration, prompt-hash safety |
+| ⌨️ [CLI Reference](docs/en/cli.md) | all commands and options |
+| 🖥️ [Web UI](docs/en/web-ui.md) | visual dashboard features and development |
 
 ---
 
