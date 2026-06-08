@@ -289,7 +289,9 @@ function PipelineEventRow({ event }: { event: PipelineEvent }) {
   }
 
   const details = event.details || {}
-  const trigger = typeof details.trigger_preview === 'string' ? details.trigger_preview : ''
+  const triggerEn = typeof details.trigger_preview === 'string' ? details.trigger_preview : ''
+  const triggerZh = typeof details.trigger_preview_zh === 'string' ? details.trigger_preview_zh : ''
+  const trigger = lz(triggerEn, triggerZh || null)
   const reason = typeof details.rejection_reason === 'string' ? details.rejection_reason : ''
 
   return (

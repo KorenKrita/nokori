@@ -141,6 +141,7 @@ def run_cold_pipeline(
         ColdPipelineResult with final status, rule_id (if inserted), rejection reason, and scores.
     """
     trigger_preview = str(extractor_output.get("trigger", ""))[:60]
+    trigger_preview_zh = str(extractor_output.get("trigger_zh", ""))[:60] or None
     try:
         result = _run_cold_pipeline_inner(
             db, llm, transcript_ref, extractor_output,
@@ -159,6 +160,7 @@ def run_cold_pipeline(
             outcome=result.status,
             details={
                 "trigger_preview": trigger_preview,
+                "trigger_preview_zh": trigger_preview_zh,
                 "rule_id": result.rule_id,
                 "rejection_reason": result.rejection_reason,
                 "scores": result.scores,
