@@ -107,7 +107,7 @@ export function Rules() {
             <colgroup>
               <col className="w-[4.5rem]" />
               <col className="w-[5.5rem]" />
-              <col className="w-[6.5rem]" />
+              <col className="w-[8.5rem]" />
               <col />
               <col className="w-[4.5rem]" />
               <col className="w-[6.5rem]" />
@@ -137,7 +137,7 @@ export function Rules() {
                     </Link>
                   </td>
                   <td className="py-3 px-2"><StatusBadge status={rule.status} /></td>
-                  <td className="py-3 px-2 text-text-secondary">{ruleSource(rule)}</td>
+                  <td className="py-3 px-2 text-text-secondary truncate">{ruleSource(rule)}</td>
                   <td className="py-3 px-2 text-text-secondary truncate">{lz(ruleTrigger(rule), ruleTriggerZh(rule))}</td>
                   <td className="py-3 pl-2 pr-6 text-right font-mono tabular-nums text-text-tertiary">{rule.fire_count ?? 0}</td>
                   <td className="py-3 pl-6 pr-2 text-text-tertiary text-xs font-mono truncate">

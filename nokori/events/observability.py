@@ -132,6 +132,34 @@ def query_events(
     return [dict(r) for r in rows]
 
 
+def query_events_latest(
+    db: Db,
+    *,
+    session_id: str | None = None,
+    source: str | None = None,
+    limit: int = 50,
+) -> list[dict]:
+    """Query the most recent hook_events. Returns list of dicts, oldest first."""
+    where = []
+    params: list = []
+
+    if session_id is not None:
+        where.append("session_id = ?")
+        params.append(session_id)
+    if source is not None:
+        where.append("source = ?")
+        params.append(source)
+
+    sql = "SELECT * FROM hook_events"
+    if where:
+        sql += " WHERE " + " AND ".join(where)
+    sql += " ORDER BY rowid DESC LIMIT ?"
+    params.append(limit)
+
+    rows = db.fetchall(sql, tuple(params))
+    return [dict(r) for r in reversed(rows)]
+
+
 def query_errors(
     db: Db,
     *,

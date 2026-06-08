@@ -6,7 +6,7 @@ import { PageSkeleton } from '@/components/PageSkeleton'
 import { useApi } from '@/hooks/useApi'
 import { mutateApi } from '@/lib/api'
 import { formatDateTime } from '@/lib/formatDateTime'
-import { t, lz, getLocale } from '@/lib/i18n'
+import { t } from '@/lib/i18n'
 import {
   ruleAction,
   ruleActionZh,
@@ -88,23 +88,32 @@ export function RuleDetail() {
       <div className="grid grid-cols-12 gap-4">
         <GlassCard className="col-span-8">
           <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary mb-3">{t('rules.trigger')}</h3>
-          <p className="text-sm text-[var(--color-text-primary)]">{lz(ruleTrigger(rule), ruleTriggerZh(rule))}</p>
+          <p className="text-sm text-[var(--color-text-primary)]">{ruleTrigger(rule)}</p>
+          {ruleTriggerZh(rule) && (
+            <p className="text-sm text-text-secondary mt-1">{ruleTriggerZh(rule)}</p>
+          )}
           {triggerVariants.length > 0 && (
             <div className="mt-3 space-y-1">
               <p className="text-xs text-text-tertiary">{t('rules.variants')}:</p>
-              {(getLocale() === 'zh' && triggerVariantsZh.length > 0
-                ? triggerVariantsZh
-                : triggerVariants
-              ).map((v, i) => (
-                // Only variant text is shown on the list/detail view; kind/requires_concepts
-                // are intentionally omitted from display — they're internal matcher metadata.
+              {triggerVariants.map((v, i) => (
                 <p key={i} className="text-xs text-text-secondary font-mono pl-2">{triggerVariantText(v)}</p>
               ))}
+              {triggerVariantsZh.length > 0 && (
+                <>
+                  <p className="text-xs text-text-tertiary mt-2">{t('rules.variants')} (zh):</p>
+                  {triggerVariantsZh.map((v, i) => (
+                    <p key={`zh-${i}`} className="text-xs text-text-secondary font-mono pl-2">{v}</p>
+                  ))}
+                </>
+              )}
             </div>
           )}
 
           <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary mt-6 mb-3">{t('rules.action')}</h3>
-          <p className="text-sm text-[var(--color-text-primary)]">{lz(ruleAction(rule), ruleActionZh(rule))}</p>
+          <p className="text-sm text-[var(--color-text-primary)]">{ruleAction(rule)}</p>
+          {ruleActionZh(rule) && (
+            <p className="text-sm text-text-secondary mt-1">{ruleActionZh(rule)}</p>
+          )}
 
         </GlassCard>
 

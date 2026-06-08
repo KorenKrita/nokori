@@ -86,7 +86,7 @@ export function Layout() {
           <LocaleSwitcher />
         </div>
       </aside>
-      <main className="ml-60 flex-1 p-6">
+      <main className="ml-60 flex-1 min-w-0 p-6">
         <div className="max-w-[1400px] mx-auto">
           <Outlet />
         </div>

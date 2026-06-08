@@ -45,11 +45,12 @@ export function Activity() {
   )
   const sessions = sessionsData?.sessions ?? []
 
-  const fetchEvents = useCallback(async () => {
+  const fetchEvents = useCallback(async (initial: boolean) => {
     const params: Record<string, string> = { limit: '100' }
     if (sessionFilter) params.session_id = sessionFilter
     if (sourceFilter) params.source = sourceFilter
-    if (lastIdRef.current) params.after_id = lastIdRef.current
+    if (!initial && lastIdRef.current) params.after_id = lastIdRef.current
+    if (initial) params.latest = 'true'
     const result = await fetchApi<{ events: TimelineEvent[]; has_more: boolean }>('/timeline', params)
     return result
   }, [sessionFilter, sourceFilter])
@@ -58,9 +59,11 @@ export function Activity() {
     setEvents([])
     lastIdRef.current = null
     let active = true
+    let isFirst = true
     const poll = async () => {
       try {
-        const result = await fetchEvents()
+        const result = await fetchEvents(isFirst)
+        isFirst = false
         if (!active) return
         if (result.events.length > 0) {
           setEvents((prev: TimelineEvent[]) => {
