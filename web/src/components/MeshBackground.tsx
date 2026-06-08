@@ -7,7 +7,7 @@ export function MeshBackground() {
       <motion.div
         className="absolute w-[800px] h-[800px] rounded-full"
         style={{
-          background: 'radial-gradient(circle, rgba(139, 92, 246, 0.10), transparent 60%)',
+          background: 'radial-gradient(circle, rgba(139, 92, 246, 0.12), transparent 60%)',
           left: '10%',
           top: '20%',
         }}
@@ -22,7 +22,7 @@ export function MeshBackground() {
       <motion.div
         className="absolute w-[600px] h-[600px] rounded-full"
         style={{
-          background: 'radial-gradient(circle, rgba(52, 211, 153, 0.07), transparent 60%)',
+          background: 'radial-gradient(circle, rgba(52, 211, 153, 0.09), transparent 60%)',
           right: '5%',
           top: '5%',
         }}
@@ -37,7 +37,7 @@ export function MeshBackground() {
       <motion.div
         className="absolute w-[500px] h-[500px] rounded-full"
         style={{
-          background: 'radial-gradient(circle, rgba(56, 189, 248, 0.06), transparent 60%)',
+          background: 'radial-gradient(circle, rgba(56, 189, 248, 0.08), transparent 60%)',
           left: '45%',
           bottom: '5%',
         }}
@@ -51,7 +51,7 @@ export function MeshBackground() {
       <motion.div
         className="absolute w-[400px] h-[400px] rounded-full"
         style={{
-          background: 'radial-gradient(circle, rgba(251, 113, 133, 0.05), transparent 60%)',
+          background: 'radial-gradient(circle, rgba(251, 113, 133, 0.07), transparent 60%)',
           right: '20%',
           bottom: '20%',
         }}

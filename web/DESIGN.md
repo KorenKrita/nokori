@@ -661,15 +661,15 @@ button:active {
 - [x] `whileInView` scroll reveal（非首屏元素）
 - [x] Sidebar `layoutId` active indicator
 - [x] PageSkeleton → shimmer 替代 pulse
-- [ ] Dashboard 标题 SplitText 入场
+- [x] Dashboard 标题 SplitText 入场
 - [x] AnimatePresence 页面切换
 
 ### Phase 3: Card Enhancement
 - [x] GlassCard 边框方向 glow
 - [x] AnimatedNumber 变化时语义色脉冲
-- [ ] hover border-color 升格
+- [x] hover border-color 升格
 
 ### Phase 4: Polish
-- [ ] 空状态 SVG 图标 + 微动画
-- [ ] Logs 终端增强（行号 gutter + level badge）
-- [ ] MeshBackground opacity 提升至 8%-12%
+- [x] 空状态 SVG 图标 + 微动画
+- [x] Logs 终端增强（行号 gutter + level badge）
+- [x] MeshBackground opacity 提升至 8%-12%

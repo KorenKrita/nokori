@@ -23,7 +23,8 @@ export function GlassCard({ children, className, hover = false }: GlassCardProps
     'rounded relative overflow-hidden',
     'bg-[var(--color-bg-surface)] border border-[var(--color-border-subtle)]',
     'shadow-[var(--color-card-shadow)]',
-    isHovered && hover && 'border-[var(--color-accent-glow)]',
+    'transition-[border-color] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]',
+    isHovered && hover && 'border-[var(--color-border-default)]',
     className
   )
 

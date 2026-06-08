@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { motion } from 'motion/react'
 import { FilterPill } from '@/components/FilterPill'
 import { GlassCard } from '@/components/GlassCard'
+import { EmptyState } from '@/components/EmptyState'
 import { TimelineGroup, groupEvents } from '@/components/TimelineGroup'
 import { OverviewTab } from '@/components/dashboard/OverviewTab'
 import { ErrorsTab } from '@/components/dashboard/ErrorsTab'
@@ -177,9 +178,7 @@ export function Activity() {
               className="max-h-[calc(100vh-20rem)] overflow-y-auto"
             >
               {groups.length === 0 ? (
-                <div className="text-center text-text-tertiary py-12 text-sm">
-                  {t('activity.empty')}
-                </div>
+                <EmptyState message={t('activity.empty')} />
               ) : (
                 groups.map((group) => (
                   <TimelineGroup key={group.key} group={group} />

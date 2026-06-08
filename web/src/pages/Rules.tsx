@@ -4,6 +4,7 @@ import { motion } from 'motion/react'
 import { FilterPill } from '@/components/FilterPill'
 import { GlassCard } from '@/components/GlassCard'
 import { StatusBadge } from '@/components/StatusBadge'
+import { EmptyState } from '@/components/EmptyState'
 import { PageSkeleton } from '@/components/PageSkeleton'
 import { useApi } from '@/hooks/useApi'
 import { t, lz } from '@/lib/i18n'
@@ -147,7 +148,7 @@ export function Rules() {
               ))}
               {rules.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="py-8 text-center text-text-tertiary">{t('rules.no_results')}</td>
+                  <td colSpan={6}><EmptyState message={t('rules.no_results')} /></td>
                 </tr>
               )}
             </tbody>

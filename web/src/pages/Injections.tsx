@@ -4,6 +4,7 @@ import { motion } from 'motion/react'
 import { FilterPill } from '@/components/FilterPill'
 import { GlassCard } from '@/components/GlassCard'
 import { StatusBadge } from '@/components/StatusBadge'
+import { EmptyState } from '@/components/EmptyState'
 import { PageSkeleton } from '@/components/PageSkeleton'
 import { useApi } from '@/hooks/useApi'
 import { formatDateTime } from '@/lib/formatDateTime'
@@ -93,7 +94,7 @@ export function Injections() {
               })}
               {injections.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="py-8 text-center text-text-tertiary">{t('injections.no_results')}</td>
+                  <td colSpan={5}><EmptyState message={t('injections.no_results')} /></td>
                 </tr>
               )}
             </tbody>
