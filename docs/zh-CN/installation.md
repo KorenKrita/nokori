@@ -6,7 +6,7 @@
 
 ## 开始之前
 
-- **Python ≥ 3.11**（核心引擎纯 stdlib；Web UI 依赖 fastapi + uvicorn + websockets，随包安装）
+- **Python ≥ 3.11**（热路径 hook 仅使用 stdlib；基础安装包含 fastapi + uvicorn + websockets 用于 Web 仪表盘）
 - 已装好 **Claude Code** 或 **Cursor** 任意一个
 - 想用本地语义检索，预留约 **220MB** 磁盘装嵌入模型权重（可选）
 

@@ -25,7 +25,7 @@ candidate → active → trusted
 
 ## 怎么变 active / trusted
 
-- **手动 `nokori add` 永远创建 `candidate`**。即使 `--confidence high --source-type correction`，也不会绕过生命周期。
+- **手动 `nokori add` 永远创建 `candidate`**。即使 `--severity high_risk`，也不会绕过生命周期。
 - **冷路径 fast-lane 直达 active** 要通过 matcher 编译、归档指纹检查、merge policy、synthetic eval 与 cold-fast-lane 阈值。
 - **Candidate → active 晋升**通过影子证据；跨多个 session 积累足够影子匹配则不需要 synthetic eval。
 - **trusted / gate-capable** 需要自治 posthoc / shadow 证据；`nokori edit --status` 会被刻意拒绝。

@@ -71,7 +71,7 @@ export NOKORI_EXTRACT_MODE=async
 | `manual`（デフォルト） | セッションを閉じるとジョブファイルだけ書く。抽出は手動 `nokori extract` |
 | `async` | セッション終了時にバックグラウンドで直接 extract を実行 |
 
-ログ：`~/.nokori/logs/async-extract.log`。LLM 未設定時はローカルの `claude -p` にフォールバック。
+ログ：`~/.nokori/logs/async-extract.log`。LLM 未設定（`NOKORI_LLM_BASE_URL` が空）の場合、async モードは `$PATH` 上のローカル `claude -p` CLI をフォールバックとして呼び出す。
 
 エッジケース：
 

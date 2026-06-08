@@ -71,7 +71,7 @@ export NOKORI_EXTRACT_MODE=async
 | `manual`（預設） | 關會話只落待辦檔案，需手動 `nokori extract` |
 | `async` | 關會話時後台直接跑 extract |
 
-日誌：`~/.nokori/logs/async-extract.log`。沒配 LLM 會試本機 `claude -p`。
+日誌：`~/.nokori/logs/async-extract.log`。未設定 LLM（`NOKORI_LLM_BASE_URL` 未設置）時，async 模式會嘗試呼叫本機 `$PATH` 中的 `claude -p` CLI 作為兜底。
 
 邊緣情況：
 

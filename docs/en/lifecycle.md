@@ -25,7 +25,7 @@ candidate → active → trusted
 
 ## How a rule turns active / trusted
 
-- **Manual `nokori add` always creates a `candidate`**. Even `--confidence high --source-type correction` does not bypass the lifecycle.
+- **Manual `nokori add` always creates a `candidate`**. Even `--severity high_risk` does not bypass the lifecycle.
 - **Cold-path fast-lane to active** requires matcher compilation, archived-fingerprint checks, merge policy, synthetic evaluation, and cold-fast-lane thresholds.
 - **Candidate → active promotion** via lifecycle uses shadow evidence; synthetic eval is not required if sufficient shadow matches accumulate across multiple sessions.
 - **trusted / gate-capable** rules require autonomous posthoc/shadow evidence; `nokori edit --status` is intentionally rejected.

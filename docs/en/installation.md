@@ -6,7 +6,7 @@
 
 ## Before you begin
 
-- **Python ≥ 3.11** (core engine is pure stdlib; web UI pulls in fastapi + uvicorn + websockets)
+- **Python ≥ 3.11** (hot-path hooks use only stdlib; base install includes fastapi + uvicorn + websockets for the web dashboard)
 - **Claude Code** or **Cursor** already installed (either one)
 - For local semantic retrieval, leave about **220MB** of disk for the embedding model weights (optional)
 

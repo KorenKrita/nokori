@@ -582,8 +582,8 @@ button:active {
 
 | # | 位置 | 效果 | 来源 |
 |---|------|------|------|
-| 1 | Dashboard 标题 | SplitText 逐字入场 + subtle glow | reactbits: SplitText |
-| 2 | 所有 GlassCard | Spotlight hover + 边框方向 glow | reactbits: SpotlightCard |
+| 1 | Dashboard 标题 | SplitText 逐字入场 + subtle glow | [reactbits.dev](https://www.reactbits.dev/): SplitText |
+| 2 | 所有 GlassCard | Spotlight hover + 边框方向 glow | [reactbits.dev](https://www.reactbits.dev/): SpotlightCard |
 | 3 | Sidebar 切换 | layoutId spring 滑动 | motion/react |
 | 4 | 数字变化 | AnimatedNumber + 语义色脉冲 | 自定义 |
 | 5 | 骨架屏 | 方向性 shimmer | CSS keyframes |
@@ -653,20 +653,20 @@ button:active {
 
 ### Phase 1: Token & Geometry（不改组件逻辑）
 - [x] CSS 变量体系 → 已有，保留
-- [ ] `border-radius: rounded-2xl` → 全局改为 `rounded` (4px)
-- [ ] 补充 `--accent-glow` 等新变量
-- [ ] Section 标题样式统一为 uppercase + tracking-wider
+- [x] `border-radius: rounded-2xl` → 全局改为 `rounded` (4px)
+- [x] 补充 `--accent-glow` 等新变量
+- [x] Section 标题样式统一为 uppercase + tracking-wider
 
 ### Phase 2: Motion Upgrade（补齐 L2 缺失项）
-- [ ] `whileInView` scroll reveal（非首屏元素）
-- [ ] Sidebar `layoutId` active indicator
-- [ ] PageSkeleton → shimmer 替代 pulse
+- [x] `whileInView` scroll reveal（非首屏元素）
+- [x] Sidebar `layoutId` active indicator
+- [x] PageSkeleton → shimmer 替代 pulse
 - [ ] Dashboard 标题 SplitText 入场
-- [ ] AnimatePresence 页面切换
+- [x] AnimatePresence 页面切换
 
 ### Phase 3: Card Enhancement
-- [ ] GlassCard 边框方向 glow
-- [ ] AnimatedNumber 变化时语义色脉冲
+- [x] GlassCard 边框方向 glow
+- [x] AnimatedNumber 变化时语义色脉冲
 - [ ] hover border-color 升格
 
 ### Phase 4: Polish

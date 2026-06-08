@@ -7,7 +7,7 @@
 ## Rule management
 
 ```bash
-nokori add [--trigger "..." --action "..." --source-type ... --confidence ...]
+nokori add --trigger "..." --action "..." [--severity reminder|high_risk] [--variants ...] [--terms-en ...] [--terms-zh ...] [--project-id ...]
 nokori list [--all] [--project <id>]
 nokori show <short_id>
 nokori dismiss <short_id>
@@ -49,7 +49,6 @@ nokori stream [--since <ISO>] [--session <id>] [--type <source>] [--verbose] [--
 
 ```bash
 nokori maintain
-nokori reset [--force]            # Non-interactive terminals must add --force
 ```
 
 ---

@@ -107,8 +107,7 @@ pip install -e ".[local-embed,dev]"
 nokori add \
   --trigger "Force pushing to a shared branch" \
   --action "Use --force-with-lease, or push to a new branch" \
-  --rationale "force push overwrites peers' work" \
-  --source-type correction --confidence high
+  --severity high_risk
 
 # 2. Verify the shadow match
 nokori test "I'll just git push --force this branch"
@@ -179,7 +178,7 @@ pip install -e ".[local-embed,dev]"
 python -m pytest tests/
 ```
 
-Project constraints: core engine is pure stdlib + urllib, no LLM calls on the hot path, all hooks wrapped in top-level try/except fail-open.
+Project constraints: hot-path hooks use only stdlib + urllib (no LLM calls between prompt and reply), all hooks wrapped in top-level try/except fail-open. Base install includes fastapi + uvicorn for the web dashboard.
 
 ---
 

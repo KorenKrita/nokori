@@ -71,7 +71,7 @@ export NOKORI_EXTRACT_MODE=async
 | `manual` (default) | Closing a session only drops a to-do file; extraction is yours to run with `nokori extract` |
 | `async` | Closing a session tries to run extract in the background directly |
 
-Logs: `~/.nokori/logs/async-extract.log`. With no LLM configured there's a fallback to local `claude -p`.
+Logs: `~/.nokori/logs/async-extract.log`. With no LLM configured (`NOKORI_LLM_BASE_URL` unset), async mode falls back to invoking the local `claude -p` CLI if available on `$PATH`.
 
 Edge cases:
 

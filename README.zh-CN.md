@@ -107,8 +107,7 @@ pip install -e ".[local-embed,dev]"
 nokori add \
   --trigger "Force pushing to a shared branch" \
   --action "Use --force-with-lease, or push to a new branch" \
-  --rationale "force push overwrites peers' work" \
-  --source-type correction --confidence high
+  --severity high_risk
 
 # 2. 验证影子命中
 nokori test "I'll just git push --force this branch"
@@ -179,7 +178,7 @@ pip install -e ".[local-embed,dev]"
 python -m pytest tests/
 ```
 
-项目约束：核心纯 stdlib + urllib，热路径禁 LLM 调用，所有 hook 顶层 try/except fail-open。
+项目约束：热路径 hook 仅使用 stdlib + urllib（prompt 到回复之间无 LLM 调用），所有 hook 顶层 try/except fail-open。基础安装包含 fastapi + uvicorn 用于 Web 仪表盘。
 
 ---
 

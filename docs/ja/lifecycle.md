@@ -25,7 +25,7 @@ candidate → active → trusted
 
 ## active / trusted になる条件
 
-- **手動 `nokori add` は常に `candidate` を作る**。`--confidence high --source-type correction` でもライフサイクルを飛ばせない。
+- **手動 `nokori add` は常に `candidate` を作る**。`--severity high_risk` でもライフサイクルを飛ばせない。
 - **コールドパス fast-lane で active に到達**するには、matcher コンパイル、archived 指紋チェック、merge policy、synthetic eval、cold-fast-lane 閾値が必要。
 - **Candidate → active の昇格**はシャドウエビデンスによる。複数セッションにわたり十分なシャドウマッチが蓄積されれば synthetic eval は不要。
 - **trusted / gate-capable** には自律 posthoc / shadow エビデンスが必要。`nokori edit --status` は意図的に拒否される。

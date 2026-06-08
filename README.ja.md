@@ -107,8 +107,7 @@ pip install -e ".[local-embed,dev]"
 nokori add \
   --trigger "Force pushing to a shared branch" \
   --action "Use --force-with-lease, or push to a new branch" \
-  --rationale "force push overwrites peers' work" \
-  --source-type correction --confidence high
+  --severity high_risk
 
 # 2. シャドウヒットを確認
 nokori test "I'll just git push --force this branch"
@@ -179,7 +178,7 @@ pip install -e ".[local-embed,dev]"
 python -m pytest tests/
 ```
 
-プロジェクト制約：コアは純 stdlib + urllib、ホットパスで LLM 呼び出し禁止、すべての hook はトップレベル try/except で fail-open。
+プロジェクト制約：ホットパス hook は stdlib + urllib のみ使用（prompt と返答の間に LLM 呼び出しなし）、すべての hook はトップレベル try/except で fail-open。ベースインストールには Web ダッシュボード用の fastapi + uvicorn を含む。
 
 ---
 

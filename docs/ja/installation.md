@@ -6,7 +6,7 @@
 
 ## はじめに
 
-- **Python >= 3.11**（コアエンジンは純 stdlib。Web UI は fastapi + uvicorn + websockets に依存、パッケージ同梱）
+- **Python >= 3.11**（ホットパス hook は stdlib のみ使用。ベースインストールには Web ダッシュボード用の fastapi + uvicorn + websockets を含む）
 - **Claude Code** または **Cursor** のいずれかがインストール済み
 - ローカル意味検索を使う場合、埋め込みモデルのウェイト用に約 **220MB** のディスクを確保（オプション）
 
