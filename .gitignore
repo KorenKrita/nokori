@@ -17,7 +17,11 @@ htmlcov/
 .nokori/
 
 # Project-local config (not for repo)
-docs/
+docs/*
+!docs/zh-CN/
+!docs/assets/
+docs/assets/*
+!docs/assets/logo.png
 .claude/
 .trellis/
 CLAUDE.md
