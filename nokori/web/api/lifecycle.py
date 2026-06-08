@@ -272,6 +272,7 @@ def promotion_progress():
     try:
         rows = db.fetchall(
             "SELECT r.short_id, r.project_id, r.trigger_canonical, "
+            "r.trigger_canonical_zh, "
             "r.status, r.rule_version, r.quality_score "
             "FROM rules r "
             "WHERE r.status = 'candidate' "
@@ -287,6 +288,7 @@ def promotion_progress():
             "short_id": row["short_id"],
             "project_id": row["project_id"],
             "trigger_canonical": row["trigger_canonical"],
+            "trigger_canonical_zh": row["trigger_canonical_zh"],
             "status": row["status"],
             "rule_version": row["rule_version"],
             "quality_score": row["quality_score"],
