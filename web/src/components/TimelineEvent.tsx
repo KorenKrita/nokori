@@ -61,7 +61,7 @@ export function TimelineEventRow({ event }: { event: TEvent }) {
             transition={{ duration: 0.2, ease: [0.32, 0.72, 0, 1] }}
             className="overflow-hidden"
           >
-            <div className="px-4 pb-3 pl-[8.5rem]">
+            <div className="px-4 pb-3 pl-[8.5rem] ml-4 border-l-2 border-l-[var(--color-border-subtle)]">
               <div className="text-xs font-mono text-text-secondary space-y-1 bg-[var(--color-bg-surface)] border border-[var(--color-border-subtle)] rounded p-3">
                 {Object.entries(event.details).map(([key, value]) => (
                   <div key={key} className="flex gap-2">

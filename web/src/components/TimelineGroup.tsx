@@ -71,7 +71,7 @@ export function TimelineGroup({ group }: { group: EventGroup }) {
             transition={{ duration: 0.25, ease: [0.32, 0.72, 0, 1] }}
             className="overflow-hidden"
           >
-            <div className="border-t border-[var(--color-border-subtle)]">
+            <div className="border-t border-[var(--color-border-subtle)] pl-6 border-l-2 border-l-[var(--color-border-subtle)] ml-4">
               {group.events.map((event) => (
                 <TimelineEventRow key={event.id} event={event} />
               ))}
