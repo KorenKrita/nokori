@@ -60,7 +60,7 @@ def handle(payload: dict, cfg: Config, *, host: Host) -> dict:
     db = open_db(cfg.db_path)
     try:
         try:
-            maintenance.run_due_jobs(db, cfg)
+            maintenance.run_maintenance(db, cfg)
         except Exception:
             log.exception("session_start maintenance failed")
             maintenance_ok = False
