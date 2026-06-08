@@ -269,11 +269,13 @@ def save_editor(
     *,
     values: dict[str, Any],
     embed_mode: EmbedMode | None,
-    initial_set_keys: set[str],  # TODO: implement optimistic concurrency check using initial_set_keys
+    initial_set_keys: set[str],
 ) -> dict[str, Any]:
     path = config_path(cfg.data_dir)
     doc = load_document(path)
     current_set = list_set_paths(doc)
+    if current_set != set(initial_set_keys):
+        raise ConfigError("config changed since it was loaded; refresh before saving")
     sets: dict[str, Any] = {}
     removes: list[str] = []
 

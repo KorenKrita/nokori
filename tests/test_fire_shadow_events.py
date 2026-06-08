@@ -5,7 +5,6 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from dataclasses import replace
 
-import pytest
 
 from nokori.db import open_db, dumps_json
 from nokori.events.fire import (

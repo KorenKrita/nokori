@@ -3,14 +3,16 @@ import { motion } from 'motion/react'
 import { FilterPill } from '@/components/FilterPill'
 import { GlassCard } from '@/components/GlassCard'
 import { EmptyState } from '@/components/EmptyState'
-import { TimelineGroup, groupEvents } from '@/components/TimelineGroup'
+import { TimelineGroup } from '@/components/TimelineGroup'
 import { OverviewTab } from '@/components/dashboard/OverviewTab'
 import { ErrorsTab } from '@/components/dashboard/ErrorsTab'
-import { TimeRangePicker, hoursToISO } from '@/components/dashboard/TimeRangePicker'
+import { TimeRangePicker } from '@/components/dashboard/TimeRangePicker'
 import { usePolling } from '@/hooks/usePolling'
 import { useApi } from '@/hooks/useApi'
 import { fetchApi } from '@/lib/api'
 import { t } from '@/lib/i18n'
+import { hoursToISO } from '@/lib/timeRange'
+import { groupEvents } from '@/lib/timelineGroups'
 import type { TimelineEvent, TimelineSession } from '@/lib/types'
 
 const POLL_INTERVAL = 5000
@@ -56,8 +58,12 @@ export function Activity() {
     return result
   }, [sessionFilter, sourceFilter])
 
-  useEffect(() => {
+  const resetTimeline = () => {
     setEvents([])
+    lastIdRef.current = null
+  }
+
+  useEffect(() => {
     lastIdRef.current = null
     let active = true
     let isFirst = true
@@ -133,7 +139,10 @@ export function Activity() {
           <div className="flex items-center gap-4 flex-wrap">
             <select
               value={sessionFilter}
-              onChange={(e) => setSessionFilter(e.target.value)}
+              onChange={(e) => {
+                resetTimeline()
+                setSessionFilter(e.target.value)
+              }}
               className="text-sm bg-[var(--color-bg-surface)] border border-[var(--color-border-subtle)] rounded px-3 py-1.5 text-[var(--color-text)] min-w-[12rem]"
             >
               <option value="">{t('activity.filter.all_sessions')}</option>
@@ -148,14 +157,20 @@ export function Activity() {
               <FilterPill
                 active={sourceFilter === ''}
                 label={t('activity.filter.all_types')}
-                onClick={() => setSourceFilter('')}
+                onClick={() => {
+                  resetTimeline()
+                  setSourceFilter('')
+                }}
               />
               {EVENT_SOURCES.map((src) => (
                 <FilterPill
                   key={src}
                   active={sourceFilter === src}
                   label={src.replace(/_/g, ' ')}
-                  onClick={() => setSourceFilter(src)}
+                  onClick={() => {
+                    resetTimeline()
+                    setSourceFilter(src)
+                  }}
                 />
               ))}
             </div>

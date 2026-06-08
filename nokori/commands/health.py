@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import urllib.error
+import urllib.parse
 import urllib.request
 
 from ..config import Config
@@ -37,6 +38,9 @@ def _probe_openai_post(
     if not base_url or not model:
         return ("skip", "not configured")
     url = f"{base_url.rstrip('/')}{path_suffix}"
+    scheme = urllib.parse.urlparse(url).scheme.lower()
+    if scheme not in {"http", "https"}:
+        return ("fail", f"unsupported URL scheme: {scheme or '<missing>'}")
     headers = {"Content-Type": "application/json"}
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
@@ -47,7 +51,8 @@ def _probe_openai_post(
         method="POST",
     )
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        # Scheme is allow-listed above before this Request reaches urlopen.
+        with urllib.request.urlopen(req, timeout=timeout) as resp:  # nosec B310
             return ("ok", f"{resp.status} {url}")
     except urllib.error.HTTPError as e:
         if 200 <= e.code < 300:

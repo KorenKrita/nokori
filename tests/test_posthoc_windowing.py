@@ -2,13 +2,9 @@
 
 from __future__ import annotations
 
-import pytest
 
 from nokori.posthoc.windowing import (
-    _is_topic_shift,
     _preceded_by_tool_sequence,
-    _tokenize,
-    _TOPIC_SHIFT_SIMILARITY_THRESHOLD,
     _LARGE_TURN_GAP,
     compute_event_window,
     extract_window_content,

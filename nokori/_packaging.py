@@ -19,6 +19,8 @@ class InstallWithPrefetch(install):
 
     def run(self) -> None:
         super().run()
+        if self.root:
+            return
         _prefetch_after_pip()
 
 

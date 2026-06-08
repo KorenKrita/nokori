@@ -2,7 +2,6 @@
 import json
 
 from nokori.config import Config
-from nokori.db import open_db
 from nokori.extract.extractor import _parse_candidates
 from nokori.extract.jobs import transcript_hash
 from nokori.gate.blocker import format_injection

@@ -5,6 +5,10 @@ from __future__ import annotations
 import zipfile
 from pathlib import Path
 
+from setuptools import Distribution
+
+from nokori._packaging import InstallWithPrefetch
+
 
 
 def test_wheel_includes_web_static(tmp_path: Path) -> None:
@@ -24,3 +28,29 @@ def test_wheel_includes_web_static(tmp_path: Path) -> None:
         names = zf.namelist()
     assert "nokori/web/static/index.html" in names
     assert any(n.startswith("nokori/web/static/assets/") for n in names)
+
+
+def test_install_hook_skips_prefetch_when_installing_into_wheel_root(monkeypatch) -> None:
+    calls: list[str] = []
+
+    monkeypatch.setattr("setuptools.command.install.install.run", lambda self: calls.append("install"))
+    monkeypatch.setattr("nokori._packaging._prefetch_after_pip", lambda: calls.append("prefetch"))
+
+    cmd = InstallWithPrefetch(Distribution())
+    cmd.root = "/tmp/wheel-staging"
+    cmd.run()
+
+    assert calls == ["install"]
+
+
+def test_install_hook_prefetches_for_real_environment_install(monkeypatch) -> None:
+    calls: list[str] = []
+
+    monkeypatch.setattr("setuptools.command.install.install.run", lambda self: calls.append("install"))
+    monkeypatch.setattr("nokori._packaging._prefetch_after_pip", lambda: calls.append("prefetch"))
+
+    cmd = InstallWithPrefetch(Distribution())
+    cmd.root = None
+    cmd.run()
+
+    assert calls == ["install", "prefetch"]

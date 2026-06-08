@@ -60,6 +60,31 @@ def test_save_removes_key_when_reset_to_default(monkeypatch, tmp_path):
     assert "log_level" not in doc
 
 
+def test_save_rejects_stale_editor_state(monkeypatch, tmp_path):
+    _clear_env(monkeypatch)
+    monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+    path = config_path(tmp_path)
+    cfg = Config.from_env()
+    state = get_editor_state(cfg)
+
+    # Simulate another editor/process saving after this editor loaded state.
+    path.write_text('log_level = "debug"\n', encoding="utf-8")
+
+    values = dict(state["values"])
+    values["gate.enabled"] = False
+    with pytest.raises(ConfigError, match="changed since it was loaded"):
+        save_editor(
+            cfg,
+            values=values,
+            embed_mode="local",
+            initial_set_keys=set(state["set_keys"]),
+        )
+
+    doc = load_document(path)
+    assert doc["log_level"] == "debug"
+    assert "gate" not in doc
+
+
 def test_embed_mode_local_clears_remote(monkeypatch, tmp_path):
     _clear_env(monkeypatch)
     monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))

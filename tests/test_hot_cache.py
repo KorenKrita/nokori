@@ -1,19 +1,15 @@
 """Tests for nokori.lifecycle.hot_cache module."""
 from __future__ import annotations
 
-import json
 import os
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from unittest.mock import patch
 
-import pytest
 
 from nokori.db import open_db
 from nokori.lifecycle.hot_cache import (
-    HOT_CACHE_BUDGET_CHARS,
     _recent_trusted_rules_summary,
     find_previous_transcript,
     maybe_inject,

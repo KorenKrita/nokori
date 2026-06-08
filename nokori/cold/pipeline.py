@@ -23,7 +23,7 @@ from typing import Any, Callable
 
 from ..archive.fingerprints import check_fingerprint_block
 from ..db import Db, SCHEMA_VERSION, dumps_json
-from ..errors import LlmError, NokoriError
+from ..errors import LlmError
 from ..matcher.compiler import CompilationError, CompiledMatcher, compile_rule
 from ..eval.synthetic import SyntheticEvalResult, run_synthetic_eval
 from ..policy import (
@@ -48,10 +48,6 @@ from .jobs import (
     mark_job_complete,
     mark_job_failed,
 )
-from ..events.observability import write_error, write_event
-from ..utils.logging import get_logger
-
-log = get_logger("nokori.cold.pipeline")
 from .roles import (
     DEFAULT_MAX_TOKENS,
     DEFAULT_TIMEOUTS,
@@ -59,6 +55,10 @@ from .roles import (
     resolve_model_id,
     validate_role_output,
 )
+from ..events.observability import write_error, write_event
+from ..utils.logging import get_logger
+
+log = get_logger("nokori.cold.pipeline")
 
 
 # ---------------------------------------------------------------------------

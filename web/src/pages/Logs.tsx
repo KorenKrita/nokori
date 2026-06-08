@@ -41,11 +41,15 @@ export function Logs() {
   const bufferRef = useRef<LogEntry[]>([])
   const flushRafRef = useRef(0)
 
-  useEffect(() => {
+  const resetEntries = () => {
     setEntries([])
+  }
+
+  useEffect(() => {
     idRef.current = 0
     bufferRef.current = []
     cancelAnimationFrame(flushRafRef.current)
+    flushRafRef.current = 0
     let stale = false
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     const ws = new WebSocket(`${protocol}//${window.location.host}/api/logs`)
@@ -97,7 +101,10 @@ export function Logs() {
         <div className="flex items-center gap-3">
           <select
             value={level}
-            onChange={(e) => { setLevel(e.target.value) }}
+            onChange={(e) => {
+              resetEntries()
+              setLevel(e.target.value)
+            }}
             className="bg-[var(--color-input-bg)] border border-[var(--color-input-border)] rounded-lg px-3 py-1.5 text-xs text-[var(--color-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-border-focus)]"
           >
             <option value="all">{t('logs.all_levels')}</option>

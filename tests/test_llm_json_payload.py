@@ -1,4 +1,4 @@
-from nokori.extract.extractor import Candidate, _parse_candidates, extract
+from nokori.extract.extractor import _parse_candidates, extract
 from nokori.llm.json_payload import parse_json_payload
 
 

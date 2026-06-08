@@ -5,6 +5,7 @@ import sys
 
 
 from nokori.config import Config
+from nokori.commands.health import _probe_openai_post
 from nokori.db import open_db
 from nokori.models import Rule
 from nokori.search import embedding
@@ -152,3 +153,21 @@ def test_embedding_search_filters_model_version(monkeypatch, tmp_path):
         assert len(hits) == 1
     finally:
         db.close()
+
+
+def test_health_probe_rejects_non_http_scheme(monkeypatch):
+    def fail_urlopen(*_args, **_kwargs):
+        raise AssertionError("urlopen must not be called for non-http schemes")
+
+    monkeypatch.setattr("urllib.request.urlopen", fail_urlopen)
+
+    status, detail = _probe_openai_post(
+        "file:///tmp/nokori",
+        "model",
+        None,
+        path_suffix="/chat/completions",
+        payload={"model": "model"},
+    )
+
+    assert status == "fail"
+    assert "unsupported URL scheme" in detail

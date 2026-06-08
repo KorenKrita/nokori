@@ -8,6 +8,7 @@ export function usePolling<T>(
   const [isLoading, setIsLoading] = useState(true)
   const fetcherRef = useRef(fetcher)
   const isFetchingRef = useRef(false)
+
   fetcherRef.current = fetcher
 
   const poll = useCallback(async () => {

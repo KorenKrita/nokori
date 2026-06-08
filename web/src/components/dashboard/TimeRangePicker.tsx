@@ -8,10 +8,6 @@ const PRESETS = [
   { label: '30d', hours: 720 },
 ]
 
-function hoursToISO(hours: number): string {
-  return new Date(Date.now() - hours * 3600_000).toISOString().replace(/\.\d{3}Z$/, 'Z')
-}
-
 interface TimeRangePickerProps {
   value: number
   onChange: (hours: number) => void
@@ -31,5 +27,3 @@ export function TimeRangePicker({ value, onChange }: TimeRangePickerProps) {
     </div>
   )
 }
-
-export { hoursToISO }
