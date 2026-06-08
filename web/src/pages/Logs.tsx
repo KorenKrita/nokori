@@ -38,10 +38,14 @@ export function Logs() {
   const wsRef = useRef<WebSocket | null>(null)
   const idRef = useRef(0)
   const rafRef = useRef(0)
+  const bufferRef = useRef<LogEntry[]>([])
+  const flushRafRef = useRef(0)
 
   useEffect(() => {
     setEntries([])
     idRef.current = 0
+    bufferRef.current = []
+    cancelAnimationFrame(flushRafRef.current)
     let stale = false
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     const ws = new WebSocket(`${protocol}//${window.location.host}/api/logs`)
@@ -57,15 +61,22 @@ export function Logs() {
       }
       if (msg.type === 'log') {
         const id = ++idRef.current
-        setEntries((prev) => [...prev.slice(-500), { id, line: msg.line }])
+        bufferRef.current.push({ id, line: msg.line })
+        if (!flushRafRef.current) {
+          flushRafRef.current = requestAnimationFrame(() => {
+            const batch = bufferRef.current
+            bufferRef.current = []
+            flushRafRef.current = 0
+            setEntries((prev) => [...prev, ...batch].slice(-500))
+          })
+        }
       }
     }
-    return () => { stale = true; ws.close() }
+    return () => { stale = true; ws.close(); cancelAnimationFrame(flushRafRef.current); flushRafRef.current = 0 }
   }, [level])
 
   useEffect(() => {
-    if (paused || !containerRef.current) return () => {}
-    cancelAnimationFrame(rafRef.current)
+    if (paused || !containerRef.current) return
     rafRef.current = requestAnimationFrame(() => {
       if (containerRef.current) {
         containerRef.current.scrollTop = containerRef.current.scrollHeight
