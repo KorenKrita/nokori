@@ -128,6 +128,9 @@ const translations: Record<Locale, Record<string, string>> = {
     'extract.no_state': '暂无提取记录',
     'extract.col.status': '状态',
     'extract.col.offset': '偏移量',
+    'extract.rules_label': '条规则',
+    'extract.events_label': '事件',
+    'extract.pipeline_events': '管道事件',
     // Lifecycle
     'lifecycle.title': '生命周期',
     'lifecycle.promotion': '提升进度',
@@ -138,6 +141,8 @@ const translations: Record<Locale, Record<string, string>> = {
     'lifecycle.job.candidate_cleanup': '候选规则清理',
     'lifecycle.job.injection_cleanup': '注入记录清理',
     'lifecycle.job.unmerge_check': '替代规则孤儿检查',
+    'lifecycle.job.transition_eval': '生命周期转换评估',
+    'lifecycle.job.observability_cleanup': '可观测性日志清理',
     'lifecycle.last_run_never': '从未运行',
     // Config
     'config.title': '配置与健康',
@@ -332,6 +337,9 @@ const translations: Record<Locale, Record<string, string>> = {
     'extract.no_state': 'No extractions',
     'extract.col.status': 'Status',
     'extract.col.offset': 'Offset',
+    'extract.rules_label': 'rules',
+    'extract.events_label': 'events',
+    'extract.pipeline_events': 'Pipeline Events',
     // Lifecycle
     'lifecycle.title': 'Lifecycle',
     'lifecycle.promotion': 'Promotion Progress',
@@ -342,6 +350,8 @@ const translations: Record<Locale, Record<string, string>> = {
     'lifecycle.job.candidate_cleanup': 'Candidate cleanup',
     'lifecycle.job.injection_cleanup': 'Injection history cleanup',
     'lifecycle.job.unmerge_check': 'Replacement orphan check',
+    'lifecycle.job.transition_eval': 'Lifecycle transition eval',
+    'lifecycle.job.observability_cleanup': 'Observability log cleanup',
     'lifecycle.last_run_never': 'Never run',
     // Config
     'config.title': 'Config & Health',
@@ -536,6 +546,9 @@ const translations: Record<Locale, Record<string, string>> = {
     'extract.no_state': '抽出記録なし',
     'extract.col.status': 'ステータス',
     'extract.col.offset': 'オフセット',
+    'extract.rules_label': 'ルール',
+    'extract.events_label': 'イベント',
+    'extract.pipeline_events': 'パイプラインイベント',
     // Lifecycle
     'lifecycle.title': 'ライフサイクル',
     'lifecycle.promotion': 'プロモーション進捗',
@@ -546,6 +559,8 @@ const translations: Record<Locale, Record<string, string>> = {
     'lifecycle.job.candidate_cleanup': '候補ルール掃除',
     'lifecycle.job.injection_cleanup': '注入履歴掃除',
     'lifecycle.job.unmerge_check': '代替ルール孤児チェック',
+    'lifecycle.job.transition_eval': 'ライフサイクル遷移評価',
+    'lifecycle.job.observability_cleanup': '観測ログ掃除',
     'lifecycle.last_run_never': '未実行',
     // Config
     'config.title': '設定とヘルスチェック',

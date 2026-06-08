@@ -36,6 +36,22 @@ def get_timeline(
             has_more = len(events) > limit
             if has_more:
                 events = events[:limit]
+
+        # When filtering by session, also include related pipeline events
+        # (cold_pipeline/cli_extract don't carry session_id but are causally linked)
+        # Only on first page (no after_id) to avoid repeats across pages.
+        if session_id and not source and not latest and after_id is None:
+            pipeline_events = _find_related_pipeline_events(db, session_id, limit)
+            if pipeline_events:
+                existing_ids = {e["id"] for e in events}
+                for pe in pipeline_events:
+                    if pe["id"] not in existing_ids:
+                        events.append(pe)
+                events.sort(key=lambda e: e.get("created_at", ""))
+                if len(events) > limit:
+                    has_more = True
+                    events = events[:limit]
+
         for event in events:
             if event.get("details") and isinstance(event["details"], str):
                 try:
@@ -45,6 +61,33 @@ def get_timeline(
         return {"events": events, "count": len(events), "has_more": has_more}
     finally:
         db.close()
+
+
+def _find_related_pipeline_events(db, session_id: str, limit: int) -> list[dict]:
+    """Find cold_pipeline/cli_extract events related to a session.
+
+    Strategy: find the session's time range, then get pipeline events
+    that occurred within a window after the session's last event.
+    """
+    session_range = db.fetchone(
+        "SELECT MAX(created_at) AS end_at "
+        "FROM hook_events WHERE session_id = ?",
+        (session_id,),
+    )
+    if not session_range or not session_range["end_at"]:
+        return []
+
+    # Pipeline events typically run shortly after session end
+    rows = db.fetchall(
+        "SELECT * FROM hook_events "
+        "WHERE source IN ('cold_pipeline', 'cli_extract') "
+        "AND session_id IS NULL "
+        "AND created_at >= datetime(?, '-1 minutes') "
+        "AND created_at <= datetime(?, '+10 minutes') "
+        "ORDER BY rowid ASC LIMIT ?",
+        (session_range["end_at"], session_range["end_at"], limit),
+    )
+    return [dict(r) for r in rows]
 
 
 @router.get("/timeline/sessions")
