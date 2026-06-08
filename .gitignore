@@ -19,6 +19,9 @@ htmlcov/
 # Project-local config (not for repo)
 docs/*
 !docs/zh-CN/
+!docs/zh-TW/
+!docs/en/
+!docs/ja/
 !docs/assets/
 docs/assets/*
 !docs/assets/logo.png
