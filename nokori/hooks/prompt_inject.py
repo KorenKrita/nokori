@@ -13,7 +13,7 @@ from ..events.shadow import (
 )
 from ..gate.blocker import format_injection
 from ..gate.marker import prompt_hash
-from ..search.retrieve import retrieve_formal_and_shadow
+from ..search.engine import RetrievalEngine
 from ..utils.logging import get_logger
 from ..utils.prompt_text import normalize_prompt_for_hash
 
@@ -188,25 +188,28 @@ def inject_for_prompt(
     turn_index: int | None = None,
     record_injections: bool = True,
     record_shadow_hits: bool = True,
+    engine: RetrievalEngine | None = None,
 ) -> PromptInjectOutcome | None:
     """Retrieve rules and build injection text. None if there are no rules to search."""
     formal_rules, shadow_rules = _fetch_formal_and_shadow(db, cfg, project_id)
     if not formal_rules and not shadow_rules:
         return None
 
+    if engine is None:
+        engine = RetrievalEngine(cfg, db)
+
     try:
-        result, shadow_hot, shadow_warm = retrieve_formal_and_shadow(
+        result = engine.retrieve(
             prompt,
             formal_rules,
             shadow_rules,
-            db,
-            cfg,
             interaction="hook",
         )
     except OSError as e:
         raise RetrieveFailed(str(e)) from e
 
     hot, warm = result.hot, result.warm
+    shadow_hot, shadow_warm = result.shadow_hot, result.shadow_warm
 
     normalized = normalize_prompt_for_hash(prompt)
     ph = prompt_hash(normalized or prompt)
