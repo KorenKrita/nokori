@@ -265,6 +265,10 @@ def retrieve_and_tier(
     # For shadow scoring, use the formal (active/trusted) pool's IDF stats (spec 9.3)
     idf_pool = background_idf_rules if background_idf_rules is not None else rules
     idf_stats = build_idf_stats(r for r in idf_pool if r.status in ("active", "trusted"))
+    # Cold start fallback: when no active/trusted rules exist, use the scored rules
+    # themselves as the IDF reference so Path B/C are available for shadow matching.
+    if idf_stats.rule_pool_size == 0 and rules:
+        idf_stats = build_idf_stats(rules)
     global _last_stored_pool_version
     if idf_stats.pool_version != _last_stored_pool_version:
         store_idf_stats(db, idf_stats)
