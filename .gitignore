@@ -37,6 +37,7 @@ docs/assets/*
 .trellis/
 CLAUDE.md
 AGENTS.md
+CONTEXT.md
 .ace-tool/
 web/node_modules
 .codegraph/
