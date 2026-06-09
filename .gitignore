@@ -25,6 +25,8 @@ docs/*
 !docs/assets/
 docs/assets/*
 !docs/assets/logo.png
+!docs/assets/readme-illustrations/
+!docs/assets/readme-illustrations/*.png
 .claude/
 .trellis/
 CLAUDE.md

@@ -9,21 +9,14 @@
 </p>
 
 <p align="center">
-  <a href="https://pypi.org/project/nokori/"><img src="https://img.shields.io/pypi/v/nokori?style=flat-square&color=111827" alt="PyPI" /></a>
-  <img src="https://img.shields.io/badge/python-%E2%89%A53.11-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python >= 3.11" />
-  <a href="https://github.com/KorenKrita/nokori/blob/main/LICENSE"><img src="https://img.shields.io/github/license/KorenKrita/nokori?style=flat-square&color=0f766e" alt="License" /></a>
-  <a href="https://github.com/KorenKrita/nokori/stargazers"><img src="https://img.shields.io/github/stars/KorenKrita/nokori?style=flat-square&color=f59e0b" alt="Stars" /></a>
-</p>
-
-<p align="center">
-  <img src="https://img.shields.io/badge/Claude%20Code-ready-4f46e5?style=flat-square" alt="Claude Code ready" />
-  <img src="https://img.shields.io/badge/Cursor-ready-2563eb?style=flat-square" alt="Cursor ready" />
-  <img src="https://img.shields.io/badge/local--first-SQLite-0f766e?style=flat-square&logo=sqlite&logoColor=white" alt="Local-first SQLite" />
-  <img src="https://img.shields.io/badge/retrieval-BM25%20%2B%20embeddings-7c3aed?style=flat-square" alt="BM25 plus embeddings" />
-  <img src="https://img.shields.io/badge/Gate-risk%20blocker-dc2626?style=flat-square" alt="Gate risk blocker" />
-  <img src="https://img.shields.io/badge/pipx-ready-9333ea?style=flat-square" alt="pipx ready" />
-  <img src="https://img.shields.io/badge/offline-optional-0891b2?style=flat-square" alt="Offline optional" />
-  <img src="https://img.shields.io/badge/status-alpha-f97316?style=flat-square" alt="Alpha status" />
+  <a href="https://pypi.org/project/nokori/"><img src="https://img.shields.io/pypi/v/nokori?style=for-the-badge&label=PyPI&color=111827" alt="PyPI version" /></a>
+  <img src="https://img.shields.io/badge/Python-%E2%89%A5%203.11-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python >= 3.11" />
+  <a href="https://github.com/KorenKrita/nokori/blob/main/LICENSE"><img src="https://img.shields.io/github/license/KorenKrita/nokori?style=for-the-badge&color=0f766e" alt="License" /></a>
+  <img src="https://img.shields.io/badge/Claude%20Code-native-4f46e5?style=for-the-badge" alt="Claude Code native" />
+  <img src="https://img.shields.io/badge/Cursor-native-2563eb?style=for-the-badge" alt="Cursor native" />
+  <img src="https://img.shields.io/badge/SQLite-local--first-0f766e?style=for-the-badge&logo=sqlite&logoColor=white" alt="SQLite local-first" />
+  <img src="https://img.shields.io/badge/Recall-BM25%20%2B%20vectors-7c3aed?style=for-the-badge" alt="BM25 plus vectors recall" />
+  <img src="https://img.shields.io/badge/Gate-tool%20guard-dc2626?style=for-the-badge" alt="Gate tool guard" />
 </p>
 
 <p align="center">
@@ -49,6 +42,12 @@ Every session ends, and every correction you made evaporates with it. In the nex
 Nokori refuses to let it forget. It settles every "don't do that" you ever said into recallable behavioral rules: when your words drift back toward that scene, the rule surfaces on its own inside the agent's context. New rules first live as candidates underwater, collecting evidence in the background. Only after the cold path and posthoc evidence trust them can the sharpest ones become Gate-eligible and block the first risky tool call before the agent touches your files.
 
 Your data stays on your machine, in SQLite, the whole way through. Retrieval during a chat never touches a model. Only the post-session extract calls an LLM, and even then it is fed nothing but compressed session fragments. Want it fully offline? Point the endpoint at a local Ollama.
+
+<p align="center">
+  <img src="docs/assets/readme-illustrations/01-corrections-become-rules.en.png" width="880" alt="Corrections become durable local rules" />
+  <br />
+  <sub>Corrections go in. Local behavioral rules come out.</sub>
+</p>
 
 ---
 
@@ -94,6 +93,12 @@ You correct Claude / Cursor
 ```
 
 During a chat Nokori only does retrieval and small file I/O, never making you wait on a model. The LLM is only called after the session closes, when it extracts new rules from the transcript at its own pace.
+
+<p align="center">
+  <img src="docs/assets/readme-illustrations/02-hot-path-recall.en.png" width="880" alt="Hot-path local recall without waiting on a model" />
+  <br />
+  <sub>During the chat, recall stays local and deterministic.</sub>
+</p>
 
 ---
 
@@ -159,6 +164,12 @@ nokori dismiss <short_id>
 ```
 
 Just open Claude Code or Cursor and work as usual. When a rule matches, the agent sees the injected reminder before it replies. For `trusted` + `gate_eligible` rules, the first sensitive tool call is blocked once.
+
+<p align="center">
+  <img src="docs/assets/readme-illustrations/03-gate-stops-risk.en.png" width="880" alt="Gate blocks a risky tool call before files are touched" />
+  <br />
+  <sub>Trusted rules can stop the first risky tool call before it reaches your files.</sub>
+</p>
 
 ---
 
