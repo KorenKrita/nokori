@@ -25,9 +25,8 @@ from ..policy import (
     WARM_HARD_MAX,
 )
 from ..runtime.applicability import evaluate_applicability, meets_min_evidence
-from . import bm25, ranker
-from . import embedding as embedding_search
 from .idf_stats import build_idf_stats, compute_trigger_idf_sum, store_idf_stats
+from .scorer import SearchScorer
 from .tokenizer import tokenize
 
 InteractionKind = Literal["hook", "cli"]
@@ -53,6 +52,7 @@ class RetrievalEngine:
     def __init__(self, cfg: Config, db: Db) -> None:
         self._cfg = cfg
         self._db = db
+        self._scorer = SearchScorer(cfg, db)
         self._last_stored_pool_version: str | None = None
 
     @property
@@ -118,32 +118,9 @@ class RetrievalEngine:
         if not rules:
             return _TierResult([], [], 0, "off")
 
-        bm25_results = bm25.search(prompt, rules, top_k=top_k)
-        embed_results: list[ScoredResult] = []
-        embed_mode = "off"
-
-        if pool_size is None:
-            pool_size = len(rules)
-        if embedding_search.auto_enabled(self._cfg, pool_size):
-            if embedding_search.use_local(self._cfg):
-                timeout = float(
-                    self._cfg.embed_hook_timeout_seconds if interaction == "hook" else 30
-                )
-                embed_results, embed_mode = embedding_search.search_local_shared(
-                    prompt, rules, self._db, self._cfg,
-                    top_k=top_k, timeout=timeout, interaction=interaction,
-                )
-            else:
-                timeout = (
-                    self._cfg.embed_hook_timeout_seconds if interaction == "hook" else 10
-                )
-                client = embedding_search.EmbeddingClient(self._cfg)
-                embed_results = embedding_search.search(
-                    prompt, rules, self._db, client, top_k=top_k, timeout=timeout
-                )
-                embed_mode = "remote"
-
-        fused = ranker.rrf_fuse(bm25_results, embed_results)
+        fused = self._scorer.score(
+            prompt, rules, top_k=top_k, interaction=interaction, pool_size=pool_size,
+        )
 
         idf_pool = background_idf_rules if background_idf_rules is not None else rules
         idf_stats = build_idf_stats(r for r in idf_pool if r.status in ("active", "trusted"))
@@ -164,8 +141,10 @@ class RetrievalEngine:
             pool_size=idf_stats.rule_pool_size,
         )
 
-        bm25_ids = frozenset(r.rule.id for r in bm25_results)
-        return _TierResult(selection.hot, selection.warm, len(bm25_results), embed_mode, bm25_ids)
+        bm25_ids = frozenset(r.rule.id for r in fused if r.bm25_score > 0)
+        bm25_count = len(bm25_ids)
+        embed_mode = self._scorer.last_embed_mode
+        return _TierResult(selection.hot, selection.warm, bm25_count, embed_mode, bm25_ids)
 
     def _apply_runtime_applicability(
         self,
