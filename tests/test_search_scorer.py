@@ -36,9 +36,11 @@ def scorer(tmp_path, monkeypatch):
     monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
     cfg = Config.from_env()
     db = open_db(cfg.db_path)
-    from nokori.search.scorer import SearchScorer
-    yield SearchScorer(cfg, db)
-    db.close()
+    try:
+        from nokori.search.scorer import SearchScorer
+        yield SearchScorer(cfg, db)
+    finally:
+        db.close()
 
 
 class TestSearchScorer:

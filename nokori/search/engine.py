@@ -12,7 +12,7 @@ from dataclasses import dataclass, replace
 from typing import Literal
 
 from ..config import Config
-from ..db import Db, SCHEMA_VERSION, loads_json
+from ..db import Db, SCHEMA_VERSION
 from ..matcher.compiler import CompilationError, compile_rule
 from ..matcher.runtime import evaluate_match
 from ..models import Rule, ScoredResult
@@ -160,8 +160,8 @@ class RetrievalEngine:
         )
         if (
             result.rule.schema_version < SCHEMA_VERSION
-            and not loads_json(result.rule.concepts, [])
-            and not loads_json(result.rule.required_concept_groups, [])
+            and not result.rule.concepts
+            and not result.rule.required_concept_groups
         ):
             if not meets_min_evidence(result):
                 return None
@@ -281,11 +281,7 @@ class _TierResult:
 
 def variant_dicts(rule: Rule, required_concepts: list[str]) -> list[dict]:
     variants: list[dict] = []
-    raw_variants = (
-        loads_json(rule.trigger_variants, [])
-        if isinstance(rule.trigger_variants, str)
-        else rule.trigger_variants
-    )
+    raw_variants = rule.trigger_variants or []
     for variant in raw_variants:
         if isinstance(variant, dict):
             variants.append(variant)
@@ -313,9 +309,9 @@ def variant_dicts(rule: Rule, required_concepts: list[str]) -> list[dict]:
 
 
 def trigger_data_for_rule(rule: Rule) -> dict | None:
-    concepts = loads_json(rule.concepts, [])
-    groups = loads_json(rule.required_concept_groups, [])
-    excluded_contexts = loads_json(rule.excluded_contexts, [])
+    concepts = rule.concepts or []
+    groups = rule.required_concept_groups or []
+    excluded_contexts = rule.excluded_contexts or []
 
     if rule.schema_version >= SCHEMA_VERSION and (not concepts or not groups):
         return None
@@ -413,17 +409,13 @@ _FORMAT_OVERHEAD: int = 25
 def _has_distinct_domain(candidate: ScoredResult, selected: list[ScoredResult]) -> bool:
     candidate_domains = set(candidate.rule.domain_tags) if candidate.rule.domain_tags else set()
     candidate_groups = frozenset(
-        g.get("id", "") for g in (loads_json(candidate.rule.required_concept_groups, [])
-                                   if isinstance(candidate.rule.required_concept_groups, str)
-                                   else (candidate.rule.required_concept_groups or []))
+        g.get("id", "") for g in (candidate.rule.required_concept_groups or [])
     )
 
     for s in selected:
         s_domains = set(s.rule.domain_tags) if s.rule.domain_tags else set()
         s_groups = frozenset(
-            g.get("id", "") for g in (loads_json(s.rule.required_concept_groups, [])
-                                       if isinstance(s.rule.required_concept_groups, str)
-                                       else (s.rule.required_concept_groups or []))
+            g.get("id", "") for g in (s.rule.required_concept_groups or [])
         )
         if candidate_domains == s_domains and candidate_groups == s_groups:
             if not candidate_domains and not candidate_groups:

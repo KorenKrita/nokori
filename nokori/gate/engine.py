@@ -10,7 +10,7 @@ from __future__ import annotations
 import functools
 import json
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from ..config import Config
 from ..db import Db, loads_json

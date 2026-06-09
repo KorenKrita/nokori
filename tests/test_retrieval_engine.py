@@ -4,7 +4,7 @@ import pytest
 
 from nokori.config import Config
 from nokori.db import open_db
-from nokori.models import Rule, ScoredResult
+from nokori.models import Rule
 from nokori.search.engine import RetrievalEngine, RetrievalResult
 
 
@@ -151,6 +151,6 @@ class TestSelectionBudget:
             ]
             result = engine.retrieve("deploy database migration now", rules, [])
             total_injected = len(result.hot) + len(result.warm)
-            assert total_injected < 5
+            assert 1 <= total_injected < 5
         finally:
             db.close()

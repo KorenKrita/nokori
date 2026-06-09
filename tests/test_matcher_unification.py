@@ -18,11 +18,17 @@ def _make_rule(
     rule_id: str = "match-1",
     *,
     trigger: str = "force push shared branch",
-    concepts: str = '[{"id":"force_push","label":"force push","aliases":[{"text":"force push","strength":"strong"},{"text":"git push --force","strength":"strong"}],"match_mode":"phrase","required":true}]',
-    groups: str = '[{"id":"primary","all_of":["force_push"]}]',
-    excluded_contexts: str = '[{"id":"revert_context","scope":"global","patterns":["revert.*force push"],"match_mode":"regex"}]',
+    concepts: list | None = None,
+    groups: list | None = None,
+    excluded_contexts: list | None = None,
     status: str = "trusted",
 ) -> Rule:
+    if concepts is None:
+        concepts = [{"id": "force_push", "label": "force push", "aliases": [{"text": "force push", "strength": "strong"}, {"text": "git push --force", "strength": "strong"}], "match_mode": "phrase", "required": True}]
+    if groups is None:
+        groups = [{"id": "primary", "all_of": ["force_push"]}]
+    if excluded_contexts is None:
+        excluded_contexts = [{"id": "revert_context", "scope": "global", "patterns": ["revert.*force push"], "match_mode": "regex"}]
     return Rule(
         id=rule_id,
         short_id=rule_id[:6],
@@ -38,7 +44,7 @@ def _make_rule(
         concepts=concepts,
         required_concept_groups=groups,
         excluded_contexts=excluded_contexts,
-        trigger_variants='[{"text":"force push","kind":"strong_anchor","requires_concepts":["force_push"]},{"text":"git push --force","kind":"strong_anchor","requires_concepts":["force_push"]}]',
+        trigger_variants=[{"text": "force push", "kind": "strong_anchor", "requires_concepts": ["force_push"]}, {"text": "git push --force", "kind": "strong_anchor", "requires_concepts": ["force_push"]}],
         search_terms={"en": ["force", "push", "git"], "zh": []},
         source_origin="transcript_extraction",
         project_scope="global",
