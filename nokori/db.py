@@ -425,12 +425,16 @@ def _migrate(conn: sqlite3.Connection) -> None:
         raise DbError(f"failed to initialize rules.db: {e}") from e
 
 
-def loads_json(value: str | None, default):
+def loads_json(value, default):
     if value is None or value == "":
         return _json_default_copy(default)
+    if isinstance(value, list):
+        return list(value)
+    if isinstance(value, dict):
+        return dict(value)
     try:
         return json.loads(value)
-    except json.JSONDecodeError:
+    except (json.JSONDecodeError, TypeError):
         return _json_default_copy(default)
 
 
@@ -461,13 +465,13 @@ def row_to_rule(row):
         severity=row["severity"],
         trigger_canonical=row["trigger_canonical"],
         trigger_canonical_zh=row["trigger_canonical_zh"],
-        concepts=row["concepts"],
-        concept_aliases=row["concept_aliases"],
-        required_concept_groups=row["required_concept_groups"],
-        excluded_contexts=row["excluded_contexts"],
-        non_generalization_boundaries=row["non_generalization_boundaries"],
+        concepts=loads_json(row["concepts"], []),
+        concept_aliases=loads_json(row["concept_aliases"], []),
+        required_concept_groups=loads_json(row["required_concept_groups"], []),
+        excluded_contexts=loads_json(row["excluded_contexts"], []),
+        non_generalization_boundaries=loads_json(row["non_generalization_boundaries"], []),
         near_miss_examples=loads_json(row["near_miss_examples"], []),
-        trigger_variants=row["trigger_variants"],
+        trigger_variants=loads_json(row["trigger_variants"], []),
         trigger_variants_zh=loads_json(row["trigger_variants_zh"], []),
         search_terms=loads_json(row["search_terms"], {}),
         action_instruction=row["action_instruction"],
@@ -477,7 +481,7 @@ def row_to_rule(row):
         domain_tags=loads_json(row["domain_tags"], []),
         tool_tags=loads_json(row["tool_tags"], []),
         path_patterns=loads_json(row["path_patterns"], []),
-        language_hints=row["language_hints"],
+        language_hints=loads_json(row["language_hints"], []),
         transcript_ref=row["transcript_ref"],
         evidence_quotes=loads_json(row["evidence_quotes"], []),
         quality_score=row["quality_score"],
