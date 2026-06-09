@@ -98,7 +98,7 @@ def test_no_gate_marker_when_injection_empty(monkeypatch, tmp_path):
     from nokori.hooks import prompt_inject as pinject
     from nokori.hooks.user_prompt_submit import handle
     from nokori.models import Rule, ScoredResult
-    from nokori.search.retrieve import RetrievalResult
+    from nokori.search.engine import RetrievalEngine, RetrievalResult
 
     cfg = Config.from_env()
     now = "2026-01-01T00:00:00Z"
@@ -120,14 +120,14 @@ def test_no_gate_marker_when_injection_empty(monkeypatch, tmp_path):
     )
     hot = ScoredResult(rule=rule, strong_variant_phrase_hit=True, required_concepts_match=True)
 
-    def fake_retrieve(*_a, **_k):
-        return RetrievalResult([hot], [], 1, "off"), [], []
+    def fake_retrieve(self, *_a, **_k):
+        return RetrievalResult([hot], [], [], [], 1, "off")
 
     def fake_fetch(_db, _cfg, _project_id):
         return ([rule], [])
 
     monkeypatch.setattr(pinject, "_fetch_formal_and_shadow", fake_fetch)
-    monkeypatch.setattr(pinject, "retrieve_formal_and_shadow", fake_retrieve)
+    monkeypatch.setattr(RetrievalEngine, "retrieve", fake_retrieve)
     monkeypatch.setattr(pinject, "format_injection", lambda *_a, **_k: ("", []))
 
     from nokori.utils.host import Host
@@ -295,18 +295,20 @@ def test_inject_for_prompt_records_only_rendered_entries(monkeypatch):
     hot_unrendered = make_result("rule-hot", "hot123")
     warm_rendered = make_result("rule-warm", "warm123")
 
+    from nokori.search.engine import RetrievalEngine, RetrievalResult as EngineResult
+
     monkeypatch.setattr(
         pinject,
         "_fetch_formal_and_shadow",
         lambda *_args, **_kwargs: ([hot_unrendered.rule, warm_rendered.rule], []),
     )
     monkeypatch.setattr(
-        pinject,
-        "retrieve_formal_and_shadow",
-        lambda *_args, **_kwargs: (
-            SimpleNamespace(hot=[hot_unrendered], warm=[warm_rendered]),
-            [],
-            [],
+        RetrievalEngine,
+        "retrieve",
+        lambda self, *_args, **_kwargs: EngineResult(
+            hot=[hot_unrendered], warm=[warm_rendered],
+            shadow_hot=[], shadow_warm=[],
+            bm25_matches=1, embed_mode="off",
         ),
     )
     monkeypatch.setattr(

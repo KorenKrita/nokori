@@ -40,13 +40,13 @@ class Rule:
     # Trigger
     trigger_canonical: str
     trigger_canonical_zh: str | None = None
-    concepts: str = "[]"  # JSON list[dict] — concept objects with aliases
-    concept_aliases: str = "[]"  # JSON list[str]
-    required_concept_groups: str = "[]"  # JSON list[dict] — objects with "id", "all_of"
-    excluded_contexts: str = "[]"  # JSON list[dict] — exclusion scope objects
-    non_generalization_boundaries: str = "[]"  # JSON list[str]
+    concepts: list[dict] = field(default_factory=list)
+    concept_aliases: list[str] = field(default_factory=list)
+    required_concept_groups: list[dict] = field(default_factory=list)
+    excluded_contexts: list[dict] = field(default_factory=list)
+    non_generalization_boundaries: list[str] = field(default_factory=list)
     near_miss_examples: list[str] = field(default_factory=list)
-    trigger_variants: str = "[]"  # JSON list of Variant objects
+    trigger_variants: list[dict] = field(default_factory=list)
     trigger_variants_zh: list[str] = field(default_factory=list)
     search_terms: dict[str, list[str]] = field(default_factory=dict)
 
@@ -60,7 +60,7 @@ class Rule:
     domain_tags: list[str] = field(default_factory=list)
     tool_tags: list[str] = field(default_factory=list)
     path_patterns: list[str] = field(default_factory=list)
-    language_hints: str = "[]"  # JSON list[str]
+    language_hints: list[str] = field(default_factory=list)
     transcript_ref: str | None = None
 
     # Evidence
