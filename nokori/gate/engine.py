@@ -93,6 +93,7 @@ class GateEngine:
             return GateDecision(blocked=False, reason="processing_error")
 
         if not gate_rules:
+            marker_io.delete(self._cfg, session_id, prompt_hash_value=prompt_hash)
             return GateDecision(blocked=False, reason="no_eligible_rules")
 
         marker_io.delete(self._cfg, session_id, prompt_hash_value=prompt_hash)

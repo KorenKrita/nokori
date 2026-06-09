@@ -317,10 +317,12 @@ def trigger_data_for_rule(rule: Rule) -> dict | None:
         return None
 
     if not concepts or not groups:
+        if not rule.trigger_canonical.strip():
+            return None
         concept_id = "legacy_trigger"
         concepts = [{
             "id": concept_id,
-            "label": rule.trigger_canonical[:80] or "legacy trigger",
+            "label": rule.trigger_canonical[:80],
             "aliases": [{"text": rule.trigger_canonical, "strength": "strong"}],
             "match_mode": "phrase",
             "required": True,

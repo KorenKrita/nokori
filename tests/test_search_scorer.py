@@ -5,6 +5,7 @@ import pytest
 from nokori.config import Config
 from nokori.db import open_db
 from nokori.models import Rule, ScoredResult
+from nokori.search.scorer import SearchScorer
 
 
 def _make_rule(rule_id: str = "scorer-1", trigger: str = "deploy database migration") -> Rule:
@@ -37,7 +38,6 @@ def scorer(tmp_path, monkeypatch):
     cfg = Config.from_env()
     db = open_db(cfg.db_path)
     try:
-        from nokori.search.scorer import SearchScorer
         yield SearchScorer(cfg, db)
     finally:
         db.close()

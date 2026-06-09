@@ -72,7 +72,7 @@ class TestMatcherAgreement:
         assert "match-1" in injected_ids
 
     def test_excluded_context_blocks_injection(self, engine):
-        """Excluded context hit → COLD (not injected) for any status."""
+        """Excluded context hit → COLD (not injected) for trusted rules."""
         rule = _make_rule(status="trusted")
         result = engine.retrieve("how to revert a force push safely", [rule], [])
         injected_ids = {r.rule.id for r in result.hot + result.warm}
