@@ -48,7 +48,8 @@ class TestSearchScorer:
         rules = [_make_rule()]
         results = scorer.score("deploy database migration now", rules)
         assert len(results) > 0
-        assert all(isinstance(r, ScoredResult) for r in results)
+        assert results[0].rule.id == "scorer-1"
+        assert results[0].bm25_score > 0
 
     def test_score_returns_empty_for_no_rules(self, scorer):
         results = scorer.score("deploy database", [])

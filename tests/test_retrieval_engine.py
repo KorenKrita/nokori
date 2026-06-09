@@ -75,12 +75,8 @@ class TestFormalPoolTiering:
         assert "active-1" in warm_ids
 
     def test_active_rule_with_observed_useful_and_strong_evidence_gets_hot(self, engine):
-        rule = Rule(
-            **{
-                **_make_rule("active-useful").__dict__,
-                "first_observed_useful_at": "2026-01-01T00:00:00Z",
-            }
-        )
+        from dataclasses import replace
+        rule = replace(_make_rule("active-useful"), first_observed_useful_at="2026-01-01T00:00:00Z")
         result = engine.retrieve("deploy database migration now", [rule], [])
         assert any(r.rule.id == "active-useful" for r in result.hot)
 
