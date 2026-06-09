@@ -15,8 +15,6 @@ def _make_rule(
     severity: str = "reminder",
     trigger: str = "deploy database migration",
     action: str = "run migration check first",
-    concepts: str = '[{"id":"deploy","label":"deploy","aliases":[{"text":"deploy","strength":"strong"}],"match_mode":"phrase","required":true}]',
-    groups: str = '[{"id":"primary","all_of":["deploy"]}]',
     schema_version: int = 6,
 ) -> Rule:
     return Rule(
@@ -31,9 +29,9 @@ def _make_rule(
         severity=severity,
         trigger_canonical=trigger,
         action_instruction=action,
-        concepts=concepts,
-        required_concept_groups=groups,
-        trigger_variants='[{"text":"deploy database","kind":"strong_anchor","requires_concepts":["deploy"]}]',
+        concepts=[{"id": "deploy", "label": "deploy", "aliases": [{"text": "deploy", "strength": "strong"}], "match_mode": "phrase", "required": True}],
+        required_concept_groups=[{"id": "primary", "all_of": ["deploy"]}],
+        trigger_variants=[{"text": "deploy database", "kind": "strong_anchor", "requires_concepts": ["deploy"]}],
         search_terms={"en": ["deploy", "migration"], "zh": []},
         source_origin="transcript_extraction",
         project_scope="global",
