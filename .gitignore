@@ -25,8 +25,14 @@ docs/*
 !docs/assets/
 docs/assets/*
 !docs/assets/logo.png
+!docs/assets/nokori-one-pager.png
+!docs/assets/nokori-one-pager.zh-TW.png
+!docs/assets/nokori-one-pager.en.png
+!docs/assets/nokori-one-pager.ja.png
 !docs/assets/readme-illustrations/
 !docs/assets/readme-illustrations/*.png
+!docs/assets/readme-illustrations/*.svg
+!docs/assets/readme-illustrations/*.svg
 .claude/
 .trellis/
 CLAUDE.md

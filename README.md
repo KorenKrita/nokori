@@ -14,9 +14,7 @@
   <a href="https://github.com/KorenKrita/nokori/blob/main/LICENSE"><img src="https://img.shields.io/github/license/KorenKrita/nokori?style=for-the-badge&color=0f766e" alt="License" /></a>
   <img src="https://img.shields.io/badge/Claude%20Code-native-4f46e5?style=for-the-badge" alt="Claude Code native" />
   <img src="https://img.shields.io/badge/Cursor-native-2563eb?style=for-the-badge" alt="Cursor native" />
-  <img src="https://img.shields.io/badge/SQLite-local--first-0f766e?style=for-the-badge&logo=sqlite&logoColor=white" alt="SQLite local-first" />
-  <img src="https://img.shields.io/badge/Recall-BM25%20%2B%20vectors-7c3aed?style=for-the-badge" alt="BM25 plus vectors recall" />
-  <img src="https://img.shields.io/badge/Gate-tool%20guard-dc2626?style=for-the-badge" alt="Gate tool guard" />
+  <img src="https://img.shields.io/badge/set%20%26%20forget-fully%20autonomous-f59e0b?style=for-the-badge" alt="Set and forget" />
 </p>
 
 <p align="center">
@@ -44,9 +42,7 @@ Nokori refuses to let it forget. It settles every "don't do that" you ever said 
 Your data stays on your machine, in SQLite, the whole way through. Retrieval during a chat never touches a model. Only the post-session extract calls an LLM, and even then it is fed nothing but compressed session fragments. Want it fully offline? Point the endpoint at a local Ollama.
 
 <p align="center">
-  <img src="docs/assets/readme-illustrations/01-corrections-become-rules.en.png" width="880" alt="Corrections become durable local rules" />
-  <br />
-  <sub>Corrections go in. Local behavioral rules come out.</sub>
+  <img src="docs/assets/nokori-one-pager.en.png" width="880" alt="Nokori project one-pager" />
 </p>
 
 ---
