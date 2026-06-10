@@ -8,7 +8,7 @@ HOT/WARM/COLD selection with budget and diversity — all internal.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import Literal
 
 from ..config import Config
@@ -114,9 +114,9 @@ class RetrievalEngine:
         interaction: InteractionKind = "cli",
         pool_size: int | None = None,
         background_idf_rules: Sequence[Rule] | None = None,
-    ) -> _TierResult:
+    ) -> TierResult:
         if not rules:
-            return _TierResult([], [], 0, "off")
+            return TierResult([], [], 0, "off")
 
         fused = self._scorer.score(
             prompt, rules, top_k=top_k, interaction=interaction, pool_size=pool_size,
@@ -149,7 +149,7 @@ class RetrievalEngine:
         bm25_ids = frozenset(r.rule.id for r in fused if r.bm25_score > 0)
         bm25_count = len(bm25_ids)
         embed_mode = self._scorer.last_embed_mode
-        return _TierResult(selection.hot, selection.warm, bm25_count, embed_mode, bm25_ids)
+        return TierResult(selection.hot, selection.warm, bm25_count, embed_mode, bm25_ids)
 
     def _apply_runtime_applicability(
         self,
@@ -271,7 +271,7 @@ class RetrievalEngine:
 
 
 @dataclass(frozen=True)
-class _TierResult:
+class TierResult:
     hot: list[ScoredResult]
     warm: list[ScoredResult]
     bm25_matches: int
@@ -350,9 +350,9 @@ def trigger_data_for_rule(rule: Rule) -> dict | None:
 
 @dataclass(frozen=True)
 class SelectionResult:
-    hot: list[ScoredResult]
-    warm: list[ScoredResult]
-    shadow_matches: list[ScoredResult]
+    hot: list[ScoredResult] = field(default_factory=list)
+    warm: list[ScoredResult] = field(default_factory=list)
+    shadow_matches: list[ScoredResult] = field(default_factory=list)
 
 
 _MMR_PENALTY_WEIGHT: float = 2.0

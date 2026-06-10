@@ -12,7 +12,7 @@ from pathlib import Path
 from nokori.config import Config
 from nokori.db import SCHEMA_VERSION, dumps_json, fetch_rules, open_db
 from nokori.policy import RUNTIME_POLICY_VERSION
-from nokori.search.retrieve import retrieve_and_tier
+from nokori.search.engine import RetrievalEngine
 from nokori.hooks.prompt_inject import inject_for_prompt
 
 
@@ -99,7 +99,8 @@ def test_required_concept_miss_blocks_retrieval(tmp_path, monkeypatch):
         )
         rules = fetch_rules(db, statuses=("active", "trusted"), global_only=True)
 
-        result = retrieve_and_tier("please danger deploy now", rules, db, cfg)
+        engine = RetrievalEngine(cfg, db)
+        result = engine.retrieve_and_tier("please danger deploy now", rules)
 
         assert result.hot == []
         assert result.warm == []

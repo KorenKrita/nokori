@@ -8,7 +8,7 @@ from ..db import fetch_rules, fetch_shadow_rules, open_db
 from ..events.fire import count_evaluated_fire_events
 from ..gate.blocker import select_gate_rules
 from ..runtime.applicability import evaluate_applicability
-from ..search.retrieve import retrieve_formal_and_shadow
+from ..search.engine import RetrievalEngine
 from ..utils.project import resolve_project_id
 
 
@@ -96,15 +96,15 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
             if project_id and cfg.promotion_enabled
             else []
         )
-        result, shadow_hot, _shadow_warm = retrieve_formal_and_shadow(
+        engine = RetrievalEngine(cfg, db)
+        result = engine.retrieve(
             args.prompt,
             formal_rules,
             shadow_rules,
-            db,
-            cfg,
             interaction="cli",
         )
         hot, warm = result.hot, result.warm
+        shadow_hot = result.shadow_hot
         pool_size = len(formal_rules)
 
         print(f"prompt        {args.prompt!r}")

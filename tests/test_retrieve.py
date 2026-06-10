@@ -5,7 +5,7 @@ from nokori.config import Config
 from nokori.db import open_db
 from nokori.db import fetch_rules, fetch_shadow_rules
 from nokori.search import embedding as embedding_search
-from nokori.search.retrieve import retrieve_and_tier, retrieve_formal_and_shadow
+from nokori.search.engine import RetrievalEngine
 
 
 def _utcnow_iso() -> str:
@@ -38,7 +38,8 @@ def test_retrieve_and_tier_empty(monkeypatch, tmp_path):
     cfg = Config.from_env()
     db = open_db(cfg.db_path)
     try:
-        r = retrieve_and_tier("query", [], db, cfg)
+        engine = RetrievalEngine(cfg, db)
+        r = engine.retrieve_and_tier("query", [])
         assert r.hot == [] and r.embed_mode == "off"
     finally:
         db.close()
@@ -68,17 +69,16 @@ def test_retrieve_formal_and_shadow_splits_pools(monkeypatch, tmp_path):
             db, statuses=("active",), project_id="my-proj"
         )
         shadow_rules = fetch_shadow_rules(db, project_id="my-proj")
-        result, shadow_hot, _shadow_warm = retrieve_formal_and_shadow(
+        engine = RetrievalEngine(cfg, db)
+        result = engine.retrieve(
             "git push --force to remote",
             formal_rules,
             shadow_rules,
-            db,
-            cfg,
         )
         formal_ids = {r.id for r in formal_rules}
         assert all(r.rule.id in formal_ids for r in result.hot + result.warm)
-        if shadow_hot:
-            assert shadow_hot[0].rule.id == "rule-shadow"
+        if result.shadow_hot:
+            assert result.shadow_hot[0].rule.id == "rule-shadow"
     finally:
         db.close()
 
@@ -103,7 +103,8 @@ def test_hook_uses_shared_local_embed(monkeypatch, tmp_path):
         monkeypatch.setattr(embedding_search, "use_local", lambda c: True)
         monkeypatch.setattr(embedding_search, "search_local_shared", fake_shared)
 
-        r = retrieve_and_tier("deploy db", [rule], db, cfg, interaction="hook")
+        engine = RetrievalEngine(cfg, db)
+        r = engine.retrieve_and_tier("deploy db", [rule], interaction="hook")
         assert shared_calls
         assert r.embed_mode == "local"
     finally:
@@ -160,7 +161,8 @@ def test_auto_enabled_uses_retrieval_pool_size(monkeypatch, tmp_path):
             return False
 
         monkeypatch.setattr(embedding_search, "auto_enabled", fake_auto)
-        retrieve_and_tier("global rule", pool, db, cfg, interaction="cli")
+        engine = RetrievalEngine(cfg, db)
+        engine.retrieve_and_tier("global rule", pool, interaction="cli")
         assert checked == [1]
     finally:
         db.close()
@@ -196,12 +198,11 @@ def test_formal_shadow_pool_size_for_embed(monkeypatch, tmp_path):
             return False
 
         monkeypatch.setattr(embedding_search, "auto_enabled", fake_auto)
-        retrieve_formal_and_shadow(
+        engine = RetrievalEngine(cfg, db)
+        engine.retrieve(
             "only local",
             formal,
             shadow,
-            db,
-            cfg,
             interaction="hook",
         )
         assert checked == [len(formal) + len(shadow)]

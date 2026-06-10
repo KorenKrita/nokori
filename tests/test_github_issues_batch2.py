@@ -8,7 +8,7 @@ from nokori.gate.blocker import format_injection
 from nokori.gate.marker import is_expired, strip_short_id_from_all_markers, Marker, MarkerRule
 from nokori.lifecycle.maintenance import _days_since_iso
 from nokori.models import Rule, ScoredResult
-from nokori.runtime.selection import select_injection
+from nokori.search.engine import select_injection
 
 
 def test_days_since_iso_clamps_negative():

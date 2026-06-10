@@ -5,7 +5,7 @@ from dataclasses import replace
 from fastapi import APIRouter
 
 from nokori.db import fetch_rules, fetch_shadow_rules, open_db
-from nokori.search.retrieve import retrieve_formal_and_shadow
+from nokori.search.engine import RetrievalEngine
 from nokori.web.deps import get_config
 from nokori.web.models import RetrieveRequest
 
@@ -110,9 +110,8 @@ def retrieve(body: RetrieveRequest):
             else []
         )
 
-        result, shadow_hot, shadow_warm = retrieve_formal_and_shadow(
-            body.prompt, formal, shadow, db, cfg, interaction="cli"
-        )
+        engine = RetrievalEngine(cfg, db)
+        result = engine.retrieve(body.prompt, formal, shadow, interaction="cli")
     finally:
         db.close()
 
@@ -120,8 +119,8 @@ def retrieve(body: RetrieveRequest):
         "data": {
             "hot": [_scored_to_dict(r) for r in result.hot],
             "warm": [_scored_to_dict(r) for r in result.warm],
-            "shadow_hot": [_scored_to_dict(r) for r in shadow_hot],
-            "shadow_warm": [_scored_to_dict(r) for r in shadow_warm],
+            "shadow_hot": [_scored_to_dict(r) for r in result.shadow_hot],
+            "shadow_warm": [_scored_to_dict(r) for r in result.shadow_warm],
             "embed_mode": result.embed_mode,
             "bm25_matches": result.bm25_matches,
         }

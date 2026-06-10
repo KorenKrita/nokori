@@ -209,6 +209,3 @@ def _generate_eval_cases(
     except (json.JSONDecodeError, ValueError):
         raise  # Propagate for retry (spec section 13)
 
-
-_MAX_SPLIT_DEPTH = 3
-

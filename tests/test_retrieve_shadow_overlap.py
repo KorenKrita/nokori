@@ -4,7 +4,7 @@ from unittest.mock import patch
 from nokori.config import Config
 from nokori.db import open_db
 from nokori.models import Rule, ScoredResult
-from nokori.search.retrieve import RetrievalResult, retrieve_formal_and_shadow
+from nokori.search.engine import RetrievalEngine, TierResult
 
 
 def _rule(rule_id: str, *, project_id: str = "proj-a") -> Rule:
@@ -52,39 +52,36 @@ def test_shadow_hot_excludes_formal_overlap(monkeypatch, tmp_path):
             bm25_score=1.0,
             matched_trigger_tokens=frozenset({"git"}),
         )
-        def fake_retrieve(_prompt, rules, _db, _cfg, **_kwargs):
+
+        def fake_retrieve(prompt, rules, **kwargs):
             rule_ids = {r.id for r in rules}
             if rule_ids == {"shared-rule-id"}:
-                return RetrievalResult(
+                return TierResult(
                     hot=[hot_shared],
                     warm=[],
                     bm25_matches=1,
                     embed_mode="off",
                 )
             if rule_ids == {"shadow-only"}:
-                return RetrievalResult(
+                return TierResult(
                     hot=[hot_shadow_only],
                     warm=[],
                     bm25_matches=1,
                     embed_mode="off",
                 )
-            return RetrievalResult(hot=[], warm=[], bm25_matches=0, embed_mode="off")
+            return TierResult(hot=[], warm=[], bm25_matches=0, embed_mode="off")
 
-        with patch(
-            "nokori.search.retrieve.retrieve_and_tier",
-            side_effect=fake_retrieve,
-        ):
-            formal_result, shadow_hot, _shadow_warm = retrieve_formal_and_shadow(
+        engine = RetrievalEngine(cfg, db)
+        with patch.object(engine, "retrieve_and_tier", side_effect=fake_retrieve):
+            result = engine.retrieve(
                 "git push --force",
                 formal_rules,
                 shadow_rules,
-                db,
-                cfg,
             )
 
-        assert [r.rule.id for r in formal_result.hot] == ["shared-rule-id"]
-        assert [r.rule.id for r in shadow_hot] == ["shadow-only"]
-        assert "shared-rule-id" not in {r.rule.id for r in shadow_hot}
+        assert [r.rule.id for r in result.hot] == ["shared-rule-id"]
+        assert [r.rule.id for r in result.shadow_hot] == ["shadow-only"]
+        assert "shared-rule-id" not in {r.rule.id for r in result.shadow_hot}
     finally:
         db.close()
 
@@ -110,24 +107,23 @@ def test_shadow_selection_does_not_consume_formal_hot_slot(monkeypatch, tmp_path
             matched_trigger_tokens=frozenset({"git", "force", "push"}),
         )
 
-        def fake_retrieve(_prompt, rules, _db, _cfg, **_kwargs):
+        def fake_retrieve(prompt, rules, **kwargs):
             rule_ids = {r.id for r in rules}
             if rule_ids == {"formal-rule"}:
-                return RetrievalResult(hot=[formal_hit], warm=[], bm25_matches=1, embed_mode="off")
+                return TierResult(hot=[formal_hit], warm=[], bm25_matches=1, embed_mode="off")
             if rule_ids == {"shadow-rule"}:
-                return RetrievalResult(hot=[shadow_hit], warm=[], bm25_matches=1, embed_mode="off")
-            return RetrievalResult(hot=[], warm=[], bm25_matches=0, embed_mode="off")
+                return TierResult(hot=[shadow_hit], warm=[], bm25_matches=1, embed_mode="off")
+            return TierResult(hot=[], warm=[], bm25_matches=0, embed_mode="off")
 
-        with patch("nokori.search.retrieve.retrieve_and_tier", side_effect=fake_retrieve):
-            formal_result, shadow_hot, _shadow_warm = retrieve_formal_and_shadow(
+        engine = RetrievalEngine(cfg, db)
+        with patch.object(engine, "retrieve_and_tier", side_effect=fake_retrieve):
+            result = engine.retrieve(
                 "git push --force",
                 [formal],
                 [shadow],
-                db,
-                cfg,
             )
 
-        assert [r.rule.id for r in formal_result.hot] == ["formal-rule"]
-        assert [r.rule.id for r in shadow_hot] == ["shadow-rule"]
+        assert [r.rule.id for r in result.hot] == ["formal-rule"]
+        assert [r.rule.id for r in result.shadow_hot] == ["shadow-rule"]
     finally:
         db.close()
