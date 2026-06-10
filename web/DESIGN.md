@@ -647,29 +647,3 @@ button:active {
 }
 ```
 
----
-
-## 改进路线图（从当前状态出发）
-
-### Phase 1: Token & Geometry（不改组件逻辑）
-- [x] CSS 变量体系 → 已有，保留
-- [x] `border-radius: rounded-2xl` → 全局改为 `rounded` (4px)
-- [x] 补充 `--accent-glow` 等新变量
-- [x] Section 标题样式统一为 uppercase + tracking-wider
-
-### Phase 2: Motion Upgrade（补齐 L2 缺失项）
-- [x] `whileInView` scroll reveal（非首屏元素）
-- [x] Sidebar `layoutId` active indicator
-- [x] PageSkeleton → shimmer 替代 pulse
-- [x] Dashboard 标题 SplitText 入场
-- [x] AnimatePresence 页面切换
-
-### Phase 3: Card Enhancement
-- [x] GlassCard 边框方向 glow
-- [x] AnimatedNumber 变化时语义色脉冲
-- [x] hover border-color 升格
-
-### Phase 4: Polish
-- [x] 空状态 SVG 图标 + 微动画
-- [x] Logs 终端增强（行号 gutter + level badge）
-- [x] MeshBackground opacity 提升至 8%-12%
