@@ -3,14 +3,17 @@
 Compiles trigger_data dicts (from schema_types or raw JSON) into frozen
 dataclass structures that the runtime can evaluate without LLM calls.
 
-No imports from other nokori modules. Uses only stdlib + re.
+No imports from other nokori modules. Uses only stdlib + re + logging.
 """
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass, field
 from typing import Any, Literal, Optional
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Version
@@ -589,11 +592,6 @@ def compile_rule(
     """
     # Compile concept groups
     groups_data = trigger_data.get("required_concept_groups", [])
-    if not groups_data:
-        raise CompilationError(
-            "At least one required concept group is required"
-        )
-
     concept_groups = tuple(_compile_concept_group(g) for g in groups_data)
 
     # Compile concepts
@@ -609,17 +607,22 @@ def compile_rule(
                     f"Concept group '{group.id}' references unknown concept '{cid}'"
                 )
 
-    # Validate that at least one group references only required concepts
+    # Validate that groups with required concepts are consistent
     required_concept_ids = {c.id for c in concepts if c.required}
-    has_valid_group = False
-    for group in concept_groups:
-        if all(cid in required_concept_ids for cid in group.all_of):
-            has_valid_group = True
-            break
-
-    if not has_valid_group:
-        raise CompilationError(
-            "At least one concept group must contain only required concepts"
+    if concept_groups:
+        has_valid_group = not required_concept_ids or any(
+            all(cid in required_concept_ids for cid in group.all_of)
+            for group in concept_groups
+        )
+        if not has_valid_group:
+            raise CompilationError(
+                "At least one concept group must contain only required concepts"
+            )
+    elif required_concept_ids:
+        logger.warning(
+            "Rule has required concepts %s but no concept groups; "
+            "required_concepts_match will always be False at runtime",
+            required_concept_ids,
         )
 
     # Compile variants

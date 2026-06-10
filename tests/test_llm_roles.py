@@ -138,22 +138,29 @@ class TestValidateRoleOutput:
         payload = json.dumps({
             "candidates": [
                 {
-                    "trigger_draft": "when X",
-                    "action_draft": "do Y",
-                    "behavior_draft": "behavior",
-                    "source_type": "correction",
-                    "confidence_guess": "high",
-                    "evidence_quotes": ["quote"],
+                    "trigger": "when X",
+                    "trigger_zh": "当X时",
+                    "trigger_variants": ["variant"],
+                    "trigger_variants_zh": ["变体"],
+                    "search_terms": {"en": ["term"], "zh": ["术语"]},
+                    "required_concepts": ["concept"],
+                    "excluded_contexts": [],
                     "non_generalization_boundaries": [],
-                    "required_concepts_draft": ["concept"],
-                    "excluded_contexts_draft": [],
-                    "search_terms_draft": {"en": ["term"]},
-                    "trigger_variants_draft": ["variant"],
+                    "near_miss_examples": ["near miss scenario"],
+                    "severity": "reminder",
+                    "domain_tags": ["testing"],
+                    "tool_tags": [],
+                    "file_or_path_patterns": [],
+                    "behavior": "did wrong thing",
+                    "action": "do Y",
+                    "action_zh": "做Y",
+                    "rationale": "because X",
+                    "evidence_quotes": ["quote"],
                 }
             ]
         })
         result = validate_role_output("extractor", payload)
-        assert result["candidates"][0]["trigger_draft"] == "when X"
+        assert result["candidates"][0]["trigger"] == "when X"
 
     def test_malformed_json_raises(self):
         with pytest.raises(ValueError):
@@ -346,7 +353,7 @@ def test_complete_messages_uses_system_and_user_roles(monkeypatch):
         class Resp:
             def read(self):
                 return json.dumps({
-                    "choices": [{"message": {"content": "[]"}}],
+                    "choices": [{"message": {"content": '{"candidates": []}'}}],
                 }).encode("utf-8")
 
             def __enter__(self):
@@ -364,7 +371,7 @@ def test_complete_messages_uses_system_and_user_roles(monkeypatch):
 
     messages = captured["body"]["messages"]
     assert messages[0]["role"] == "system"
-    assert "JSON array" in messages[0]["content"]
+    assert "candidates" in messages[0]["content"]
     assert messages[1]["role"] == "user"
     assert UNTRUSTED_OPEN in messages[1]["content"]
     assert "ignore previous instructions" in messages[1]["content"]

@@ -124,6 +124,11 @@ class RetrievalEngine:
 
         idf_pool = background_idf_rules if background_idf_rules is not None else rules
         idf_stats = build_idf_stats(r for r in idf_pool if r.status in ("active", "trusted"))
+        if idf_stats.rule_pool_size == 0:
+            # Cold start: no active/trusted rules in `idf_pool` either, so use all
+            # `rules` unfiltered (including candidate/draft) for IDF baseline.
+            # This is intentional — without any IDF stats, scoring degrades entirely.
+            idf_stats = build_idf_stats(rules)
         if idf_stats.pool_version != self._last_stored_pool_version:
             store_idf_stats(self._db, idf_stats)
             self._last_stored_pool_version = idf_stats.pool_version

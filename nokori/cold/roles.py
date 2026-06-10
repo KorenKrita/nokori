@@ -8,7 +8,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 # --- Role IDs ---
@@ -79,18 +82,29 @@ EXTRACTOR_SCHEMA: dict[str, Any] = {
             "items": {
                 "type": "object",
                 "properties": {
-                    "trigger_draft": {"type": "string"},
-                    "action_draft": {"type": "string"},
-                    "behavior_draft": {"type": "string"},
-                    "source_type": {
-                        "type": "string",
-                        "enum": ["correction", "preference", "solution", "anti_pattern"],
+                    "trigger": {"type": "string"},
+                    "trigger_zh": {"type": "string"},
+                    "trigger_variants": {
+                        "type": "array",
+                        "items": {"type": "string"},
                     },
-                    "confidence_guess": {
-                        "type": "string",
-                        "enum": ["high", "medium", "low"],
+                    "trigger_variants_zh": {
+                        "type": "array",
+                        "items": {"type": "string"},
                     },
-                    "evidence_quotes": {
+                    "search_terms": {
+                        "type": "object",
+                        "properties": {
+                            "en": {"type": "array", "items": {"type": "string"}},
+                            "zh": {"type": "array", "items": {"type": "string"}},
+                        },
+                        "required": ["en", "zh"],
+                    },
+                    "required_concepts": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                    },
+                    "excluded_contexts": {
                         "type": "array",
                         "items": {"type": "string"},
                     },
@@ -98,23 +112,53 @@ EXTRACTOR_SCHEMA: dict[str, Any] = {
                         "type": "array",
                         "items": {"type": "string"},
                     },
-                    "required_concepts_draft": {
+                    "near_miss_examples": {
                         "type": "array",
                         "items": {"type": "string"},
                     },
-                    "excluded_contexts_draft": {
+                    "severity": {
+                        "type": "string",
+                        "enum": ["reminder", "high_risk", "gate_eligible"],
+                    },
+                    "domain_tags": {
                         "type": "array",
                         "items": {"type": "string"},
                     },
-                    "search_terms_draft": {"type": "object"},
-                    "trigger_variants_draft": {
+                    "tool_tags": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                    },
+                    "file_or_path_patterns": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                    },
+                    "behavior": {"type": "string"},
+                    "action": {"type": "string"},
+                    "action_zh": {"type": "string"},
+                    "rationale": {"type": "string"},
+                    "evidence_quotes": {
                         "type": "array",
                         "items": {"type": "string"},
                     },
                 },
                 "required": [
-                    "trigger_draft",
-                    "action_draft",
+                    "trigger",
+                    "trigger_zh",
+                    "trigger_variants",
+                    "trigger_variants_zh",
+                    "search_terms",
+                    "required_concepts",
+                    "excluded_contexts",
+                    "non_generalization_boundaries",
+                    "near_miss_examples",
+                    "severity",
+                    "domain_tags",
+                    "tool_tags",
+                    "file_or_path_patterns",
+                    "behavior",
+                    "action",
+                    "action_zh",
+                    "rationale",
                     "evidence_quotes",
                 ],
             },
@@ -141,7 +185,9 @@ ADMISSION_JUDGE_SCHEMA: dict[str, Any] = {
                 "overall_quality",
                 "evidence_support",
                 "trigger_specificity",
+                "action_clarity",
                 "scope_control",
+                "generalization_safety",
                 "retrieval_readiness",
             ],
         },
@@ -151,27 +197,41 @@ ADMISSION_JUDGE_SCHEMA: dict[str, Any] = {
         },
         "reasoning": {"type": "string"},
     },
-    "required": ["scores", "decision"],
+    "required": ["scores", "decision", "reasoning"],
 }
 
 RULE_REWRITER_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
         "trigger_canonical": {"type": "string"},
+        "concepts": {"type": "array", "items": {"type": "object"}},
         "required_concept_groups": {"type": "array", "items": {"type": "object"}},
+        "variants": {"type": "array", "items": {"type": "object"}},
         "excluded_contexts": {"type": "array", "items": {"type": "object"}},
         "action_instruction": {"type": "string"},
         "severity": {"type": "string", "enum": ["reminder", "high_risk", "gate_eligible"]},
+        "search_terms": {
+            "type": "object",
+            "properties": {
+                "en": {"type": "array", "items": {"type": "string"}},
+                "zh": {"type": "array", "items": {"type": "string"}},
+            },
+            "required": ["en", "zh"],
+        },
         "scope": {"type": "object"},
         "rewrite_rationale": {"type": "string"},
     },
     "required": [
         "trigger_canonical",
+        "concepts",
         "required_concept_groups",
+        "variants",
         "excluded_contexts",
         "action_instruction",
         "severity",
+        "search_terms",
         "scope",
+        "rewrite_rationale",
     ],
 }
 
@@ -188,7 +248,7 @@ FINAL_JUDGE_SCHEMA: dict[str, Any] = {
             "items": {"type": "string"},
         },
     },
-    "required": ["decision"],
+    "required": ["decision", "reasoning"],
 }
 
 MERGE_PLANNER_SCHEMA: dict[str, Any] = {
@@ -301,6 +361,7 @@ POSTHOC_EVALUATOR_SCHEMA: dict[str, Any] = {
     "required": [
         "label",
         "reason_code",
+        "rule_application_evidence",
         "would_likely_have_happened_without_rule",
     ],
 }
@@ -433,12 +494,14 @@ def _normalize_role_output(role: str, data: dict[str, Any]) -> dict[str, Any]:
                         data["scores"][k] = float(v)
                     except ValueError:
                         pass
-        # Fix 3: normalize reasoning alias (optional CoT)
+        # Fix 3: normalize reasoning alias (required field)
         if "reasoning" not in data:
             for alias in ("rationale", "reason", "explanation"):
                 if alias in data:
                     data["reasoning"] = data.pop(alias)
                     break
+            else:
+                data["reasoning"] = ""
 
     elif role == "final_judge":
         # Normalize optional CoT fields if present
@@ -461,6 +524,8 @@ def _normalize_role_output(role: str, data: dict[str, Any]) -> dict[str, Any]:
                 if alias in data:
                     data["reasoning"] = data.pop(alias)
                     break
+            else:
+                data["reasoning"] = ""
 
     elif role == "merge_planner":
         # Fix: target_rule_ids missing or as single string
@@ -485,22 +550,58 @@ def _normalize_role_output(role: str, data: dict[str, Any]) -> dict[str, Any]:
         if "action_instruction" not in data:
             data["action_instruction"] = _pop_first(data, "action", "instruction", default="")
         # Fix: missing arrays
+        # `concepts` = flat concept definitions; `required_concept_groups` = group gates.
+        # These are semantically separate in v6 schema — do not conflate.
         if "required_concept_groups" not in data:
-            data["required_concept_groups"] = _pop_first(data, "concepts", "concept_groups", default=[])
+            data["required_concept_groups"] = _pop_first(data, "concept_groups", default=[])
         if "excluded_contexts" not in data:
             data["excluded_contexts"] = _pop_first(data, "exclusions", default=[])
+        # Fix: missing newly-required array fields
+        if "concepts" not in data:
+            data["concepts"] = []
+        if "variants" not in data:
+            data["variants"] = []
+        if "search_terms" not in data:
+            data["search_terms"] = _pop_first(data, "terms", default={})
+        st = data.get("search_terms")
+        if isinstance(st, dict):
+            st.setdefault("en", [])
+            st.setdefault("zh", [])
+        else:
+            # LLM returned [{"en": [...], "zh": [...]}] (single-element wrapper)
+            if isinstance(st, list) and len(st) == 1 and isinstance(st[0], dict):
+                inner = st[0]
+                data["search_terms"] = {"en": inner.get("en", []), "zh": inner.get("zh", [])}
+            elif isinstance(st, list):
+                # LLM returned multiple dicts: merge them
+                if st and all(isinstance(item, dict) for item in st):
+                    en_merged, zh_merged = [], []
+                    for item in st:
+                        en_val = item.get("en", [])
+                        zh_val = item.get("zh", [])
+                        en_merged.extend(en_val if isinstance(en_val, list) else [en_val] if isinstance(en_val, str) else [])
+                        zh_merged.extend(zh_val if isinstance(zh_val, list) else [zh_val] if isinstance(zh_val, str) else [])
+                    data["search_terms"] = {"en": en_merged, "zh": zh_merged}
+                else:
+                    # LLM returned flat list of strings
+                    logger.warning("search_terms has unexpected list format: %r", st)
+                    terms = [str(t) for t in st if isinstance(t, (str, int, float)) and str(t).strip()]
+                    data["search_terms"] = {"en": terms, "zh": []}
+            elif isinstance(st, str) and st.strip():
+                data["search_terms"] = {"en": [st], "zh": []}
+            else:
+                data["search_terms"] = {"en": [], "zh": []}
         # Fix: missing scope
         if "scope" not in data:
             scope = {}
-            for k in ("domain_tags", "path_patterns", "tool_tags"):
+            for k in ("domain_tags", "file_or_path_patterns", "tool_tags"):
                 if k in data:
                     scope[k] = data.pop(k)
-            data["scope"] = scope if scope else {"domain_tags": [], "path_patterns": [], "tool_tags": []}
-        # Fix: rewrite_rationale alias (optional CoT)
+            data["scope"] = scope if scope else {"domain_tags": [], "file_or_path_patterns": [], "tool_tags": []}
+        # Fix: rewrite_rationale alias (required field)
         if "rewrite_rationale" not in data:
             r = _pop_first(data, "rationale", "reasoning", "reason")
-            if r is not None:
-                data["rewrite_rationale"] = r
+            data["rewrite_rationale"] = r if r is not None else ""
         # Fix: severity alias
         if "severity" not in data:
             data["severity"] = "reminder"
@@ -513,8 +614,7 @@ def _normalize_role_output(role: str, data: dict[str, Any]) -> dict[str, Any]:
         # Fix: field aliases
         if "rule_application_evidence" not in data:
             ev = _pop_first(data, "evidence", "application_evidence")
-            if ev is not None:
-                data["rule_application_evidence"] = ev
+            data["rule_application_evidence"] = ev if ev is not None else ""
         if "would_likely_have_happened_without_rule" not in data:
             data["would_likely_have_happened_without_rule"] = _pop_first(
                 data, "without_rule", "counterfactual", default="unclear"

@@ -24,59 +24,118 @@ class FakeLLM:
         return self.response
 
 
-def test_extractor_parses_array(tmp_path):
-    response = json.dumps([
-        {
-            "trigger": "Force push to a shared branch",
-            "trigger_variants": ["git push --force"],
-            "search_terms": {"en": ["force", "push"], "zh": ["强推"]},
-            "behavior": "git push --force",
-            "action": "use --force-with-lease",
-            "rationale": "force push overwrites peers' work",
-            "source_type": "correction",
-            "confidence": "high",
-        }
-    ])
+def _valid_candidate(**overrides):
+    base = {
+        "trigger": "Force push to a shared branch",
+        "trigger_zh": "强推到共享分支",
+        "trigger_variants": ["git push --force"],
+        "trigger_variants_zh": ["强推"],
+        "search_terms": {"en": ["force", "push"], "zh": []},
+        "required_concepts": ["force push"],
+        "excluded_contexts": [],
+        "non_generalization_boundaries": [],
+        "near_miss_examples": ["push to personal branch"],
+        "severity": "reminder",
+        "domain_tags": ["git"],
+        "tool_tags": ["Bash"],
+        "file_or_path_patterns": [],
+        "behavior": "used git push --force",
+        "action": "use --force-with-lease",
+        "action_zh": "使用 --force-with-lease",
+        "rationale": "force push overwrites peers work",
+        "evidence_quotes": ["user said: use --force-with-lease"],
+    }
+    base.update(overrides)
+    return base
+
+
+def test_extractor_parses_candidates():
+    response = json.dumps({"candidates": [
+        _valid_candidate(
+            search_terms={"en": ["force", "push"], "zh": ["强推"]},
+        )
+    ]})
     cands, ok = extract("[User] dummy transcript\n", FakeLLM(response))
     assert ok and len(cands) == 1
     c = cands[0]
     assert "git push --force" in c.trigger_variants
     assert c.search_terms["zh"] == ["强推"]
+    assert c.required_concepts == ["force push"]
+    assert c.excluded_contexts == []
+    assert c.severity == "reminder"
+    assert c.domain_tags == ["git"]
+    assert c.tool_tags == ["Bash"]
+    assert c.near_miss_examples == ["push to personal branch"]
+    assert c.evidence_quotes == ["user said: use --force-with-lease"]
 
 
-def test_extractor_parses_single_object():
-    response = json.dumps({
-        "trigger": "x", "action": "y",
-        "source_type": "correction", "confidence": "high",
-    })
+def test_extractor_parses_optional_fields_empty_string():
+    """Empty string _zh fields are treated as None by _opt_str."""
+    response = json.dumps({"candidates": [
+        _valid_candidate(trigger_zh="", action_zh="", trigger_variants_zh=[])
+    ]})
     cands, ok = extract("nonempty", FakeLLM(response))
     assert ok and len(cands) == 1
+    c = cands[0]
+    assert c.trigger_text_zh is None
+    assert c.action_zh is None
+    assert c.trigger_variants_zh == []
+
+
+def test_coerce_missing_zh_keys_returns_none():
+    """_coerce handles missing _zh keys gracefully via _opt_str."""
+    from nokori.extract.extractor import _coerce
+
+    item = {
+        "trigger": "Force push to a shared branch",
+        "trigger_variants": ["git push --force"],
+        "search_terms": {"en": ["force", "push"], "zh": []},
+        "required_concepts": ["force push"],
+        "excluded_contexts": [],
+        "non_generalization_boundaries": [],
+        "near_miss_examples": [],
+        "severity": "reminder",
+        "domain_tags": ["git"],
+        "tool_tags": ["Bash"],
+        "file_or_path_patterns": [],
+        "behavior": "used git push --force",
+        "action": "use --force-with-lease",
+        "rationale": "force push overwrites peers work",
+        "evidence_quotes": [],
+    }
+    c = _coerce(item)
+    assert c.trigger_text_zh is None
+    assert c.action_zh is None
+    assert c.trigger_variants_zh == []
 
 
 def test_extractor_skips_cjk_trigger():
-    response = json.dumps([
-        {
-            "trigger": "在学城文档中创建锚点",
-            "action": "use block anchors",
-            "source_type": "correction",
-            "confidence": "high",
-        },
-        {
-            "trigger": "Creating anchor links in wiki documents",
-            "action": "use block-level anchors",
-            "source_type": "correction",
-            "confidence": "high",
-        },
-    ])
+    response = json.dumps({"candidates": [
+        _valid_candidate(trigger="在学城文档中创建锚点"),
+        _valid_candidate(trigger="Creating anchor links in wiki documents"),
+    ]})
     cands, ok = extract("nonempty", FakeLLM(response))
     assert ok and len(cands) == 1
     assert cands[0].trigger.startswith("Creating")
 
 
-def test_extractor_handles_fenced_json():
-    response = "```json\n[]\n```"
+def test_extractor_handles_empty_candidates():
+    response = json.dumps({"candidates": []})
     cands, ok = extract("nonempty", FakeLLM(response))
     assert ok and cands == []
+
+
+def test_extractor_handles_fenced_json():
+    inner = json.dumps({"candidates": [_valid_candidate()]})
+    response = f"```json\n{inner}\n```"
+    cands, ok = extract("nonempty", FakeLLM(response))
+    assert ok and len(cands) == 1
+
+
+def test_extractor_missing_candidates_key_is_failure():
+    response = json.dumps({"other_key": "value"})
+    cands, ok = extract("nonempty", FakeLLM(response))
+    assert cands == [] and ok is False
 
 
 def test_extractor_non_json_is_llm_failure():
@@ -97,7 +156,7 @@ def test_extractor_llm_failure_not_ok():
 
 
 def test_extractor_returns_empty_on_empty_transcript():
-    cands, ok = extract("", FakeLLM(json.dumps([{"trigger": "x", "action": "y"}])))
+    cands, ok = extract("", FakeLLM(json.dumps({"candidates": [_valid_candidate()]})))
     assert ok and cands == []
 
 
@@ -270,12 +329,14 @@ def test_process_path_passes_transcript_evidence_and_role_limits(
 
     class FakeExtractLLM:
         def complete_messages(self, *_args, **_kwargs):
-            return json.dumps([{
-                "trigger": "deploy fails",
-                "action": "use migrate deploy",
-                "source_type": "solution",
-                "confidence": "medium",
-            }])
+            return json.dumps({"candidates": [
+                _valid_candidate(
+                    trigger="deploy fails",
+                    action="use migrate deploy",
+                    evidence_quotes=["When deploy fails, use migrate deploy."],
+                    required_concepts=["deploy fails"],
+                )
+            ]})
 
     captured: dict = {}
 
@@ -311,12 +372,14 @@ def test_batch_extract_consumes_job_on_cold_pipeline_failure(monkeypatch, tmp_pa
 
     job_io.write_job(cfg, path, "proj", path.stat().st_mtime)
 
-    extract_response = json.dumps([{
-        "trigger": "brand new trigger xyz",
-        "action": "do the new thing",
-        "source_type": "solution",
-        "confidence": "medium",
-    }])
+    extract_response = json.dumps({"candidates": [
+        _valid_candidate(
+            trigger="brand new trigger xyz",
+            action="do the new thing",
+            evidence_quotes=["fix bug"],
+            required_concepts=["trigger xyz"],
+        )
+    ]})
     from nokori.commands import extract as extract_cmd
     from nokori.db import open_db
     from nokori.utils.time import now_iso
@@ -435,11 +498,19 @@ def test_extract_refreshes_job_when_transcript_mtime_changes(monkeypatch, tmp_pa
     new_mtime = path.stat().st_mtime
     assert new_mtime != mtime_old
 
-    from nokori.commands.extract import run
+    from nokori.commands import extract as extract_cmd
     import argparse
 
+    class NoOpLLM:
+        def complete(self, *a, **k):
+            return '{"candidates": []}'
+
+        def complete_messages(self, *a, **k):
+            return '{"candidates": []}'
+
+    monkeypatch.setattr(extract_cmd, "LLMAdapter", lambda cfg: NoOpLLM())
     args = argparse.Namespace(session=None, dry_run=True)
-    assert run(args, cfg) == 0
+    assert extract_cmd.run(args, cfg) == 0
     pending = job_io.list_jobs(cfg)
     assert len(pending) == 1
     job = job_io.read_job(pending[0])
@@ -460,45 +531,16 @@ def test_extract_lock_exclusive(monkeypatch, tmp_path):
 
 def test_extractor_parses_zh_fields():
     """_zh fields are extracted from LLM JSON when present."""
-    response = json.dumps([
-        {
-            "trigger": "Force push to a shared branch",
-            "trigger_zh": "强制推送到共享分支",
-            "trigger_variants": ["git push --force"],
-            "search_terms": {"en": ["force", "push"], "zh": ["强推"]},
-            "behavior": "git push --force",
-            "behavior_zh": "使用 git push --force",
-            "action": "use --force-with-lease",
-            "action_zh": "使用 --force-with-lease",
-            "rationale": "force push overwrites peers' work",
-            "rationale_zh": "强推会覆盖同事的工作",
-            "source_type": "correction",
-            "confidence": "high",
-        }
-    ])
+    response = json.dumps({"candidates": [
+        _valid_candidate(
+            trigger_zh="强制推送到共享分支",
+            action_zh="使用 --force-with-lease",
+            trigger_variants_zh=["强推到共享分支"],
+        )
+    ]})
     cands, ok = extract("[User] dummy transcript\n", FakeLLM(response))
     assert ok and len(cands) == 1
     c = cands[0]
     assert c.trigger_text_zh == "强制推送到共享分支"
     assert c.action_zh == "使用 --force-with-lease"
-
-
-def test_extractor_zh_fields_none_when_missing():
-    """_zh fields default to None when absent from LLM JSON."""
-    response = json.dumps([
-        {
-            "trigger": "Force push to a shared branch",
-            "trigger_variants": ["git push --force"],
-            "search_terms": {"en": ["force", "push"]},
-            "behavior": "git push --force",
-            "action": "use --force-with-lease",
-            "rationale": "force push overwrites peers' work",
-            "source_type": "correction",
-            "confidence": "high",
-        }
-    ])
-    cands, ok = extract("[User] dummy transcript\n", FakeLLM(response))
-    assert ok and len(cands) == 1
-    c = cands[0]
-    assert c.trigger_text_zh is None
-    assert c.action_zh is None
+    assert c.trigger_variants_zh == ["强推到共享分支"]

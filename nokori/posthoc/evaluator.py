@@ -99,19 +99,40 @@ possible influence among many.
 - Look for concrete behavioral evidence: did the assistant do something it \
 otherwise would not have, avoid an error, follow an unusual preference?
 - If evidence is ambiguous, prefer "unclear" over speculation.
-- "irrelevant_unused" means the reminder was visible and possibly applicable \
-but the assistant's behavior did not reflect it and no outcome supported it.
-- "plausible_useful" means the outcome is consistent with the reminder helping \
-but you cannot confirm the assistant actually used it.
+
+Label guidance:
+- "observed_useful": The transcript shows the assistant explicitly following \
+the reminder's advice in a way it would not have done otherwise. \
+Example: reminder says "use --force-with-lease", assistant uses --force-with-lease \
+and the transcript shows it considered --force first.
+- "plausible_useful": The outcome is consistent with the reminder helping \
+but you cannot confirm the assistant actually used it. \
+Example: reminder says "check disk space", assistant checks disk space, \
+but it might have done so anyway.
+- "irrelevant": The reminder's topic has nothing to do with what happened.
+- "harmful": The reminder actively misled or distracted the assistant. \
+Use reason_code harmful_* to specify how.
+- "unclear": Cannot determine from available information.
+
+The "would_likely_have_happened_without_rule" field is an independent counterfactual \
+judgment. If you label "observed_useful" but also answer "yes" (it would have \
+happened anyway), that means the assistant's behavior coincidentally aligned with \
+the reminder but wasn't caused by it — which is actually "plausible_useful" or \
+"irrelevant", not "observed_useful". Use "observed_useful" only when the answer is \
+"no" (the reminder made the difference).
 
 Return a single JSON object (no markdown fences, no extra text):
-{
-  "label": "observed_useful|plausible_useful|irrelevant|harmful|unclear",
-  "reason_code": "<one of the defined reason codes>",
+{{
+  "label": "{label_options}",
+  "reason_code": "{reason_code_options}",
   "rule_application_evidence": "<specific evidence from the transcript>",
-  "would_likely_have_happened_without_rule": "yes|no|unclear"
-}
-"""
+  "would_likely_have_happened_without_rule": "{attribution_options}"
+}}
+""".format(
+    label_options="|".join(POSTHOC_LABELS),
+    reason_code_options="|".join(POSTHOC_REASON_CODES),
+    attribution_options="|".join(ATTRIBUTION_ANSWERS),
+)
 
 # ---------------------------------------------------------------------------
 # Prompt builder

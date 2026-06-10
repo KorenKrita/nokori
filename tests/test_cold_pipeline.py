@@ -135,29 +135,35 @@ def _rewriter_json() -> str:
                 "required": True,
             }
         ],
+        "variants": [
+            {"text": "When using pytest parametrize with fixtures", "kind": "strong_anchor", "requires_concepts": ["concept_0"]},
+        ],
         "excluded_contexts": [
             {"id": "exc_0", "label": "unittest", "patterns": ["unittest framework"]}
         ],
         "action_instruction": "Use indirect=True for fixture params",
         "severity": "reminder",
+        "search_terms": {"en": ["pytest", "parametrize", "indirect", "fixtures"], "zh": []},
         "scope": {"domain_tags": ["python", "testing"]},
         "rewrite_rationale": "Narrowed trigger to pytest-specific context.",
     })
 
 
-def _extractor_candidate(
-    evidence_support: float = 0.93,
-) -> dict:
+def _extractor_candidate() -> dict:
     """A minimal extractor candidate dict suitable for pipeline input."""
     return {
-        "trigger_draft": "When using pytest parametrize with fixtures",
-        "action_draft": "Use indirect=True for fixture params",
+        "trigger": "When using pytest parametrize with fixtures",
+        "action": "Use indirect=True for fixture params",
         "evidence_quotes": ["User said: use indirect=True when parametrizing fixtures"],
-        "confidence": 0.9,
         "domain_tags": ["python", "testing"],
-        "required_concepts_draft": ["pytest_parametrize"],
-        "trigger_variants_draft": ["parametrize with fixtures"],
-        "search_terms_draft": {"en": ["pytest", "parametrize", "indirect"]},
+        "tool_tags": [],
+        "required_concepts": ["pytest_parametrize"],
+        "excluded_contexts": [],
+        "trigger_variants": ["parametrize with fixtures"],
+        "search_terms": {"en": ["pytest", "parametrize", "indirect"]},
+        "near_miss_examples": [],
+        "non_generalization_boundaries": [],
+        "severity": "reminder",
     }
 
 
@@ -537,10 +543,10 @@ class TestEvidenceSupportThreshold:
         assert variants
         assert variants[0]["text"] == row["trigger_canonical"]
 
-    def test_missing_draft_variants_persists_canonical_v6_variant(self, db: Db):
+    def test_missing_variants_persists_canonical_v6_variant(self, db: Db):
         """Durable cold-path rows keep a compileable v6 variant even without LLM variants."""
         candidate = _extractor_candidate()
-        candidate.pop("trigger_variants_draft")
+        candidate.pop("trigger_variants")
         llm = _make_llm_mock({
             "admission judge": _admission_json(
                 "accept",

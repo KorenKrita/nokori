@@ -94,24 +94,23 @@ def _trigger_data(
 
 
 # ---------------------------------------------------------------------------
-# 1. compile_rule raises CompilationError without required concept groups
+# 1. compile_rule accepts empty/missing concept groups (no concept gate)
 # ---------------------------------------------------------------------------
 
 
-class TestCompilationRequiresGroups:
-    def test_empty_groups_raises(self):
+class TestCompilationConceptGroups:
+    def test_empty_groups_compiles_without_gate(self):
         data = _trigger_data(
-            concepts=[_concept("c1", [_alias("sql injection")])],
+            concepts=[_concept("c1", [_alias("sql injection")], required=False)],
             groups=[],
         )
-        with pytest.raises(CompilationError, match="At least one required concept group"):
-            compile_rule(data)
+        matcher = compile_rule(data)
+        assert matcher.concept_groups == ()
 
-    def test_missing_groups_key_raises(self):
-        data = _trigger_data(concepts=[_concept("c1", [_alias("sql injection")])])
-        # No groups key at all
-        with pytest.raises(CompilationError, match="At least one required concept group"):
-            compile_rule(data)
+    def test_missing_groups_key_compiles_without_gate(self):
+        data = _trigger_data(concepts=[_concept("c1", [_alias("sql injection")], required=False)])
+        matcher = compile_rule(data)
+        assert matcher.concept_groups == ()
 
     def test_group_referencing_unknown_concept_raises(self):
         data = _trigger_data(
@@ -120,6 +119,19 @@ class TestCompilationRequiresGroups:
         )
         with pytest.raises(CompilationError, match="references unknown concept"):
             compile_rule(data)
+
+    def test_empty_groups_with_required_concepts_compiles_no_gate(self):
+        """Empty concept_groups with required=True concepts: no gate enforced at runtime."""
+        data = _trigger_data(
+            concepts=[_concept("c1", [_alias("sql injection")], required=True)],
+            groups=[],
+            variants=[_variant("sql injection")],
+        )
+        matcher = compile_rule(data)
+        assert matcher.concept_groups == ()
+        result = evaluate_match(matcher, "sql injection attack")
+        assert "c1" in result.matched_concept_ids
+        assert result.required_concepts_match is False
 
 
 # ---------------------------------------------------------------------------

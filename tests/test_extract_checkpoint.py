@@ -23,20 +23,34 @@ def test_partial_extract_retry_deduplicates_via_segment_hash(monkeypatch, tmp_pa
     path = tmp_path / "partial.jsonl"
     path.write_text('{"type":"user","message":"fix deploy"}\n', encoding="utf-8")
 
-    extract_payload = json.dumps([
-        {
-            "trigger": "deploy prisma schema",
-            "action": "use migrate deploy",
-            "source_type": "correction",
-            "confidence": "medium",
-        },
-        {
-            "trigger": "totally unrelated new topic",
-            "action": "do something else",
-            "source_type": "solution",
-            "confidence": "medium",
-        },
-    ])
+    def _cand(trigger, action):
+        return {
+            "trigger": trigger,
+            "trigger_zh": "",
+            "trigger_variants": [],
+            "trigger_variants_zh": [],
+            "search_terms": {"en": [], "zh": []},
+            "required_concepts": [],
+            "excluded_contexts": [],
+            "non_generalization_boundaries": [],
+            "near_miss_examples": [],
+            "severity": "reminder",
+            "domain_tags": [],
+            "tool_tags": [],
+            "file_or_path_patterns": [],
+            "behavior": "",
+            "action": action,
+            "action_zh": "",
+            "rationale": "",
+            "evidence_quotes": ["fix deploy"],
+        }
+
+    extract_payload = json.dumps({
+        "candidates": [
+            _cand("deploy prisma schema", "use migrate deploy"),
+            _cand("totally unrelated new topic", "do something else"),
+        ]
+    })
 
     cold_call_count = [0]
 

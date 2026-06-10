@@ -286,6 +286,7 @@ def _run_cold_pipeline_inner(
         rule_data["action_instruction_zh"] = candidate.get("action_zh")
         rule_data["trigger_variants_zh"] = candidate.get("trigger_variants_zh", [])
         rule_data["non_generalization_boundaries"] = candidate.get("non_generalization_boundaries", [])
+        rule_data["near_miss_examples"] = candidate.get("near_miss_examples", [])
         rule_data["_rewritten"] = True
     else:
         # Build structured rule_data from extractor candidate for accepted path
@@ -771,18 +772,40 @@ def _run_admission_judge(
         "verbatim transcript excerpts. Verify that these quotes actually support "
         "the trigger and action claimed. If the quotes are unrelated to the rule's "
         "topic, score evidence_support near 0 regardless of how plausible the rule sounds.\n\n"
+        "Score calibration (0.0-1.0):\n"
+        "- overall_quality: your composite assessment. 0.85+ = high-quality rule ready for use; "
+        "0.6-0.85 = has potential but needs revision; below 0.6 = not worth keeping.\n"
+        "- evidence_support: 0.9+ = quotes directly prove the correction happened; "
+        "0.7-0.9 = quotes are related but don't perfectly match trigger/action; "
+        "below 0.7 = quotes are tangential or fabricated.\n"
+        "- trigger_specificity: 0.9+ = trigger describes one narrow scenario; "
+        "0.7-0.9 = somewhat broad but still actionable; "
+        "below 0.7 = too vague to reliably match.\n"
+        "- action_clarity: 0.9+ = action is a clear imperative the assistant can follow directly; "
+        "0.7-0.9 = understandable but slightly ambiguous; "
+        "below 0.7 = vague or confusing, assistant wouldn't know what to do.\n"
+        "- scope_control: 0.9+ = clear boundaries, won't fire on unrelated prompts; "
+        "0.7-0.9 = mostly bounded but some edge cases; "
+        "below 0.7 = could fire on many unrelated contexts.\n"
+        "- generalization_safety: 0.9+ = rule is specific to the evidenced scenario; "
+        "0.7-0.9 = slightly broader than evidence but still reasonable; "
+        "0.65-0.7 = borderline, rule may stretch beyond evidence in edge cases; "
+        "below 0.65 = rule generalizes well beyond what evidence supports.\n"
+        "- retrieval_readiness: 0.9+ = trigger has distinctive terms for BM25 match; "
+        "0.7-0.9 = usable but some terms are generic; "
+        "below 0.7 = mostly common words, hard to retrieve.\n\n"
         "Output a single JSON object with these fields:\n\n"
         "REQUIRED fields:\n"
         "- \"scores\" (object): quality scores, each a number from 0.0 to 1.0\n"
         "  - \"overall_quality\" (number, REQUIRED): composite quality assessment, 0.0-1.0\n"
         "  - \"evidence_support\" (number, REQUIRED): how well evidence_quotes support the rule, 0.0-1.0\n"
         "  - \"trigger_specificity\" (number, REQUIRED): how specific/narrow the trigger is, 0.0-1.0\n"
-        "  - \"action_clarity\" (number, optional): how clear the action instruction is, 0.0-1.0\n"
+        "  - \"action_clarity\" (number, REQUIRED): how clear and actionable the instruction is, 0.0-1.0\n"
         "  - \"scope_control\" (number, REQUIRED): how well-bounded the scope is, 0.0-1.0\n"
-        "  - \"generalization_safety\" (number, optional): risk of over-generalizing, 0.0-1.0\n"
+        "  - \"generalization_safety\" (number, REQUIRED): how safe from over-generalization, 0.0-1.0\n"
         "  - \"retrieval_readiness\" (number, REQUIRED): whether trigger has enough retrievable terms, 0.0-1.0\n"
         "- \"decision\" (string, REQUIRED): one of \"accept\", \"revise\", \"reject\"\n"
-        "- \"reasoning\" (string, optional): brief explanation of your decision\n\n"
+        "- \"reasoning\" (string, REQUIRED): brief explanation of your decision\n\n"
         "Example output:\n"
         "```json\n"
         "{\n"
@@ -827,10 +850,11 @@ def _run_admission_judge(
         # Enforce deterministic policy over LLM decision (spec section 6.2/6.7)
         decision = _enforce_admission_policy(llm_decision, scores)
         log.info(
-            "admission_judge: llm_decision=%s policy_decision=%s scores={overall=%.2f evidence=%.2f specificity=%.2f scope=%.2f}",
+            "admission_judge: llm_decision=%s policy_decision=%s scores={overall=%.2f evidence=%.2f specificity=%.2f action=%.2f scope=%.2f generalization=%.2f}",
             llm_decision, decision,
             scores.get("overall_quality", 0), scores.get("evidence_support", 0),
-            scores.get("trigger_specificity", 0), scores.get("scope_control", 0),
+            scores.get("trigger_specificity", 0), scores.get("action_clarity", 0),
+            scores.get("scope_control", 0), scores.get("generalization_safety", 0),
         )
         return decision, scores
     except CircuitBreakerOpenError:
@@ -846,17 +870,28 @@ def _enforce_admission_policy(decision: str, scores: dict) -> str:
     deterministic policy over LLM outputs (section 6.7). Policy is
     bidirectional — can upgrade revise->accept or downgrade accept->revise.
 
-    accept requires: overall >= 0.82, evidence >= 0.85, specificity >= 0.75, scope >= 0.75
+    accept requires: overall >= 0.82, evidence >= 0.85, specificity >= 0.75,
+                     scope >= 0.75, action_clarity >= 0.70, generalization_safety >= 0.65
     revise requires: overall >= 0.55, evidence >= 0.70
     otherwise: reject
     """
+    # Default 0.0 for missing fields is intentional: absent scores fail thresholds conservatively
     overall = scores.get("overall_quality", 0.0)
     evidence = scores.get("evidence_support", 0.0)
     specificity = scores.get("trigger_specificity", 0.0)
     scope = scores.get("scope_control", 0.0)
+    action_clarity = scores.get("action_clarity", 0.0)
+    generalization_safety = scores.get("generalization_safety", 0.0)
 
     # Deterministic policy is authoritative regardless of LLM decision
-    if overall >= 0.82 and evidence >= 0.85 and specificity >= 0.75 and scope >= 0.75:
+    if (
+        overall >= 0.82
+        and evidence >= 0.85
+        and specificity >= 0.75
+        and scope >= 0.75
+        and action_clarity >= 0.70
+        and generalization_safety >= 0.65
+    ):
         return "accept"
     if overall >= 0.55 and evidence >= 0.70:
         return "revise"
@@ -880,40 +915,64 @@ def _run_rewriter(
     system_prompt = (
         "You are a rule rewriter for an autonomous memory system. "
         "Narrow and structure the candidate without inventing facts or broadening beyond evidence. "
-        "Separate trigger, action, variants, search_terms, required_concepts, and excluded_contexts.\n\n"
+        "Separate trigger, action, concepts, variants, search_terms, and excluded_contexts.\n\n"
         "Output a single JSON object with these fields:\n\n"
         "REQUIRED fields:\n"
         "- \"trigger_canonical\" (string, REQUIRED): the canonical trigger text, concise and specific\n"
+        "- \"concepts\" (array of objects, REQUIRED): concept definitions used for matching. Each object:\n"
+        "  - \"id\" (string): short identifier (e.g. \"force_push\", \"shared_branch\")\n"
+        "  - \"label\" (string): human-readable label\n"
+        "  - \"aliases\" (array of objects): each has \"text\" (distinctive keyword or short phrase) and \"strength\" (\"strong\" or \"weak\")\n"
+        "  - \"match_mode\" (string): \"all_terms\" (all words in alias must appear) or \"any_alias\" (exact phrase substring)\n"
+        "  - \"required\" (boolean): true if this concept MUST match for the rule to fire\n"
         "- \"required_concept_groups\" (array of objects, REQUIRED): each object has:\n"
         "  - \"id\" (string): group identifier\n"
         "  - \"all_of\" (array of strings): concept IDs that must all be present\n"
-        "  - \"match\" (string): \"all\" or \"any\"\n"
-        "- \"excluded_contexts\" (array of objects, REQUIRED): situations where the rule should NOT fire\n"
-        "  - \"pattern\" (string): text pattern to match\n"
-        "  - \"scope\" (string): \"trigger\" or \"action\" or \"global\"\n"
+        "- \"variants\" (array of objects, REQUIRED): trigger phrasing variants. Each object:\n"
+        "  - \"text\" (string): a short phrase (2-5 words) a developer would type\n"
+        "  - \"kind\" (string): \"strong_anchor\" (text must appear as exact substring in prompt — high precision) or \"weak_recall\" (only helps BM25 retrieval — no substring requirement)\n"
+        "  - \"requires_concepts\" (array of strings): concept IDs required alongside this variant (for strong_anchor; use [] for weak_recall)\n"
+        "- \"excluded_contexts\" (array of objects, REQUIRED): situations where the rule should NOT fire. Each:\n"
+        "  - \"id\" (string): unique identifier (e.g. \"exc_personal\")\n"
+        "  - \"label\" (string): human-readable description\n"
+        "  - \"patterns\" (array of strings): text patterns to match\n"
+        "  - \"match_mode\" (string): \"phrase\" (substring) or \"all_terms\" (all words present)\n"
+        "  - \"scope\" (string): \"global\", \"trigger\", or \"tool_input_only\"\n"
         "- \"action_instruction\" (string, REQUIRED): what the agent should do\n"
         "- \"severity\" (string, REQUIRED): one of \"reminder\", \"high_risk\", \"gate_eligible\"\n"
+        "- \"search_terms\" (object, REQUIRED): BM25 retrieval keywords — terms a developer would type when this scenario arises.\n"
+        "  - \"en\" (array of strings): Latin-script terms (commands, identifiers, tool names, flags)\n"
+        "  - \"zh\" (array of strings): CJK terms (if applicable, else empty [])\n"
         "- \"scope\" (object, REQUIRED): matching scope constraints\n"
         "  - \"domain_tags\" (array of strings): e.g. [\"git\", \"testing\"]\n"
-        "  - \"path_patterns\" (array of strings): e.g. [\"*.py\", \"tests/\"]\n"
+        "  - \"file_or_path_patterns\" (array of strings): e.g. [\"*.py\", \"tests/\"]\n"
         "  - \"tool_tags\" (array of strings): e.g. [\"Bash\", \"Write\"]\n\n"
-        "OPTIONAL fields:\n"
-        "- \"rewrite_rationale\" (string): explanation of what was changed and why\n\n"
+        "REQUIRED continued:\n"
+        "- \"rewrite_rationale\" (string, REQUIRED): explanation of what was changed and why\n\n"
         "Example output:\n"
         "```json\n"
         "{\n"
         "  \"trigger_canonical\": \"When force-pushing to a shared branch without --force-with-lease\",\n"
+        "  \"concepts\": [\n"
+        "    {\"id\": \"force_push\", \"label\": \"force push\", \"aliases\": [{\"text\": \"force push\", \"strength\": \"strong\"}, {\"text\": \"push --force\", \"strength\": \"strong\"}], \"match_mode\": \"all_terms\", \"required\": true},\n"
+        "    {\"id\": \"shared_branch\", \"label\": \"shared branch\", \"aliases\": [{\"text\": \"shared branch\", \"strength\": \"strong\"}, {\"text\": \"main branch\", \"strength\": \"weak\"}], \"match_mode\": \"all_terms\", \"required\": true}\n"
+        "  ],\n"
         "  \"required_concept_groups\": [\n"
-        "    {\"id\": \"grp1\", \"all_of\": [\"git_push\", \"force\"], \"match\": \"all\"}\n"
+        "    {\"id\": \"grp1\", \"all_of\": [\"force_push\", \"shared_branch\"]}\n"
+        "  ],\n"
+        "  \"variants\": [\n"
+        "    {\"text\": \"Force-pushing to a shared branch\", \"kind\": \"strong_anchor\", \"requires_concepts\": [\"force_push\", \"shared_branch\"]},\n"
+        "    {\"text\": \"Using git push --force on main\", \"kind\": \"strong_anchor\", \"requires_concepts\": [\"force_push\"]}\n"
         "  ],\n"
         "  \"excluded_contexts\": [\n"
-        "    {\"pattern\": \"personal branch\", \"scope\": \"trigger\"}\n"
+        "    {\"id\": \"exc_personal\", \"label\": \"personal branch\", \"patterns\": [\"personal branch\", \"feature branch\"], \"match_mode\": \"phrase\", \"scope\": \"global\"}\n"
         "  ],\n"
         "  \"action_instruction\": \"Use --force-with-lease instead of --force to prevent overwriting others' work.\",\n"
         "  \"severity\": \"high_risk\",\n"
+        "  \"search_terms\": {\"en\": [\"force-with-lease\", \"git push\", \"--force\"], \"zh\": []},\n"
         "  \"scope\": {\n"
         "    \"domain_tags\": [\"git\"],\n"
-        "    \"path_patterns\": [],\n"
+        "    \"file_or_path_patterns\": [],\n"
         "    \"tool_tags\": [\"Bash\"]\n"
         "  },\n"
         "  \"rewrite_rationale\": \"Narrowed from generic 'git push' to specifically force-push on shared branches.\"\n"
@@ -974,8 +1033,9 @@ def _run_final_judge(
         "  - \"accept_active\": narrow, evidence-rich, low-near-miss rule ready for active use\n"
         "  - \"accept_candidate\": good rule but needs shadow proof before active\n"
         "  - \"reject\": insufficient evidence or too broad\n\n"
+        "REQUIRED continued:\n"
+        "- \"reasoning\" (string, REQUIRED): explanation of your decision\n\n"
         "OPTIONAL fields:\n"
-        "- \"reasoning\" (string): explanation of your decision\n"
         "- \"evidence_citations\" (array of strings): verbatim quotes from the evidence that support your decision\n\n"
         "Example output:\n"
         "```json\n"
@@ -1170,6 +1230,9 @@ def _check_cold_fast_lane(
 
     Returns True only if ALL thresholds pass for direct active insertion.
     external_source_material CANNOT use cold fast lane (spec acceptance criteria).
+
+    Note: these thresholds (from ColdFastLaneThresholds) are intentionally
+    stricter than the normal admission accept thresholds in _enforce_admission_policy.
     """
     if final_judge_decision != "accept_active":
         return False
@@ -1190,6 +1253,10 @@ def _check_cold_fast_lane(
     if scores.get("trigger_specificity", 0) < thresholds.trigger_specificity_min:
         return False
     if scores.get("scope_control", 0) < thresholds.scope_control_min:
+        return False
+    if scores.get("action_clarity", 0) < thresholds.action_clarity_min:
+        return False
+    if scores.get("generalization_safety", 0) < thresholds.generalization_safety_min:
         return False
 
     # Synthetic eval
@@ -1434,22 +1501,22 @@ def _rewriter_broadened_scope(original: dict[str, Any], rewritten: dict[str, Any
 def _candidate_to_rule_data(candidate: dict[str, Any]) -> dict[str, Any]:
     """Convert raw extractor candidate output to structured rule_data format."""
     return {
-        "trigger_canonical": candidate.get("trigger_draft", candidate.get("trigger", "")),
+        "trigger_canonical": candidate.get("trigger", ""),
         "trigger_canonical_zh": candidate.get("trigger_zh"),
-        "action_instruction": candidate.get("action_draft", candidate.get("action", "")),
+        "action_instruction": candidate.get("action", ""),
         "action_instruction_zh": candidate.get("action_zh"),
-        "severity": "reminder",
+        "severity": candidate.get("severity", "reminder"),
         "required_concept_groups": _draft_concept_groups(candidate),
         "concepts": _draft_concepts(candidate),
         "excluded_contexts": _draft_excluded_contexts(candidate),
         "variants": _draft_variants(candidate),
         "trigger_variants_zh": candidate.get("trigger_variants_zh", []),
         "near_miss_examples": candidate.get("near_miss_examples", []),
-        "search_terms": candidate.get("search_terms_draft", candidate.get("search_terms", {})),
+        "search_terms": candidate.get("search_terms", {}),
         "scope": {
             "domain_tags": candidate.get("domain_tags", []),
             "tool_tags": candidate.get("tool_tags", []),
-            "file_or_path_patterns": candidate.get("path_patterns", []),
+            "file_or_path_patterns": candidate.get("file_or_path_patterns", []),
         },
         "evidence_quotes": candidate.get("evidence_quotes", []),
         "non_generalization_boundaries": candidate.get("non_generalization_boundaries", []),
@@ -1484,27 +1551,43 @@ def _ensure_rule_data_variants(rule_data: dict[str, Any]) -> dict[str, Any]:
 
 
 def _draft_concept_groups(candidate: dict[str, Any]) -> list[dict[str, Any]]:
-    """Build minimal concept groups from draft concepts."""
-    concepts_draft = candidate.get("required_concepts_draft", [])
+    """Build minimal concept groups from draft concepts.
+
+    When no explicit concepts are provided, derives a fallback concept from the
+    trigger text so that the rule has at least one concept group and can match.
+    """
+    concepts_draft = candidate.get("required_concepts", [])
     if not concepts_draft:
-        # Fallback: single group from trigger text
-        return [{"id": "primary", "all_of": ["primary_concept"]}]
+        trigger = str(candidate.get("trigger") or "").strip()
+        if not trigger:
+            return []
+        return [{"id": "primary_group", "all_of": ["concept_0"]}]
 
     concept_ids = [f"concept_{i}" for i in range(len(concepts_draft))]
     return [{"id": "primary_group", "all_of": concept_ids}]
 
 
 def _draft_concepts(candidate: dict[str, Any]) -> list[dict[str, Any]]:
-    """Build concept entries from draft concepts."""
-    concepts_draft = candidate.get("required_concepts_draft", [])
+    """Build concept entries from draft concepts.
+
+    When no explicit concepts are provided, derives a fallback concept from the
+    trigger text with match_mode=all_terms so substring matching isn't required.
+    """
+    concepts_draft = candidate.get("required_concepts", [])
     if not concepts_draft:
-        trigger = candidate.get("trigger_draft", candidate.get("trigger", ""))
+        trigger = str(candidate.get("trigger") or "").strip()
+        if not trigger:
+            return []
+        # Intentionally conservative: all tokens must appear to avoid false matches.
+        # required=False: aliases won't contribute to trigger_coverage anchors, but
+        # the concept group still requires this concept to match for
+        # required_concepts_match. Rule can fire via other evidence paths.
         return [{
-            "id": "primary_concept",
+            "id": "concept_0",
             "label": trigger[:80],
-            "aliases": [{"text": trigger[:80], "strength": "strong"}],
-            "match_mode": "any_alias",
-            "required": True,
+            "aliases": [{"text": trigger[:120], "strength": "strong"}],
+            "match_mode": "all_terms",
+            "required": False,
         }]
 
     result = []
@@ -1521,7 +1604,7 @@ def _draft_concepts(candidate: dict[str, Any]) -> list[dict[str, Any]]:
 
 def _draft_excluded_contexts(candidate: dict[str, Any]) -> list[dict[str, Any]]:
     """Build excluded context entries from draft."""
-    excluded_draft = candidate.get("excluded_contexts_draft", [])
+    excluded_draft = candidate.get("excluded_contexts", [])
     result = []
     for i, ctx_text in enumerate(excluded_draft):
         result.append({
@@ -1539,8 +1622,8 @@ def _draft_excluded_contexts(candidate: dict[str, Any]) -> list[dict[str, Any]]:
 
 def _draft_variants(candidate: dict[str, Any]) -> list[dict[str, Any]]:
     """Build variant entries from draft trigger variants."""
-    variants_draft = candidate.get("trigger_variants_draft", candidate.get("trigger_variants", []))
-    trigger = candidate.get("trigger_draft", candidate.get("trigger", ""))
+    variants_draft = candidate.get("trigger_variants", [])
+    trigger = candidate.get("trigger", "")
     required_concepts = [
         concept_id
         for group in _draft_concept_groups(candidate)
@@ -1695,12 +1778,11 @@ def _generate_eval_cases(
         "Output a single JSON object with a \"cases\" array. Each case object has:\n\n"
         "REQUIRED fields per case:\n"
         "- \"prompt\" (string, REQUIRED): a realistic developer prompt/context\n"
-        "- \"case_type\" (string, REQUIRED): one of \"positive\", \"medium_positive\", \"near_miss\", \"negative\"\n\n"
-        "CONDITIONAL fields (depending on case_type):\n"
-        "- \"expected_min_decision\" (string): for positive cases, the minimum expected decision: \"warm\" or \"hot\"\n"
-        "- \"expected_max_decision\" (string): for near_miss/negative cases, the maximum allowed: \"cold\"\n"
-        "  For medium_positive: \"warm\" (may match but should not be hot)\n\n"
-        "REQUIRED per case:\n"
+        "- \"case_type\" (string, REQUIRED): one of \"positive\", \"medium_positive\", \"near_miss\", \"negative\"\n"
+        "- \"expected_min_decision\" (string, REQUIRED): the minimum expected decision level.\n"
+        "  For positive: \"warm\" or \"hot\". For medium_positive: \"cold\". For near_miss/negative: \"cold\".\n"
+        "- \"expected_max_decision\" (string, REQUIRED): the maximum allowed decision level.\n"
+        "  For positive: \"hot\". For medium_positive: \"warm\". For near_miss/negative: \"cold\".\n"
         "- \"rationale\" (string, REQUIRED): brief explanation of why this case should produce the expected decision\n\n"
         "Example output:\n"
         "```json\n"
@@ -1710,17 +1792,27 @@ def _generate_eval_cases(
         "      \"prompt\": \"I need to force push to the main branch to fix a rebase issue\",\n"
         "      \"case_type\": \"positive\",\n"
         "      \"expected_min_decision\": \"warm\",\n"
+        "      \"expected_max_decision\": \"hot\",\n"
         "      \"rationale\": \"Contains force push + shared branch context, rule should fire\"\n"
+        "    },\n"
+        "    {\n"
+        "      \"prompt\": \"I want to push my changes to the release branch\",\n"
+        "      \"case_type\": \"medium_positive\",\n"
+        "      \"expected_min_decision\": \"cold\",\n"
+        "      \"expected_max_decision\": \"warm\",\n"
+        "      \"rationale\": \"Mentions pushing to shared branch but no force flag — partial match\"\n"
         "    },\n"
         "    {\n"
         "      \"prompt\": \"Let me push my changes to my personal feature branch\",\n"
         "      \"case_type\": \"near_miss\",\n"
+        "      \"expected_min_decision\": \"cold\",\n"
         "      \"expected_max_decision\": \"cold\",\n"
         "      \"rationale\": \"Push without force, personal branch — rule should not fire\"\n"
         "    },\n"
         "    {\n"
         "      \"prompt\": \"How do I set up ESLint in my React project?\",\n"
         "      \"case_type\": \"negative\",\n"
+        "      \"expected_min_decision\": \"cold\",\n"
         "      \"expected_max_decision\": \"cold\",\n"
         "      \"rationale\": \"Completely unrelated to git push\"\n"
         "    }\n"
@@ -1847,17 +1939,21 @@ def _handle_split_required(
     results: list[ColdPipelineResult] = []
     for sub_rule in sub_rules[:3]:
         sub_extractor = {
-            "trigger_draft": sub_rule.get("trigger_canonical", ""),
-            "action_draft": sub_rule.get("action_instruction", ""),
-            "behavior_draft": "",
-            "source_type": "solution",
-            "confidence_guess": "medium",
+            "trigger": sub_rule.get("trigger_canonical", ""),
+            "action": sub_rule.get("action_instruction", ""),
+            "behavior": "",
             "evidence_quotes": rule_data.get("evidence_quotes", ["split from parent"]),
             "non_generalization_boundaries": [],
-            "required_concepts_draft": [],
-            "excluded_contexts_draft": [],
-            "search_terms_draft": {},
-            "trigger_variants_draft": [],
+            "required_concepts": [],
+            "excluded_contexts": [],
+            "search_terms": {},
+            "trigger_variants": [],
+            "trigger_variants_zh": [],
+            "near_miss_examples": [],
+            "severity": sub_rule.get("severity", "reminder"),
+            "domain_tags": sub_rule.get("scope", {}).get("domain_tags", []),
+            "tool_tags": sub_rule.get("scope", {}).get("tool_tags", []),
+            "file_or_path_patterns": sub_rule.get("scope", {}).get("file_or_path_patterns", []),
         }
         result = run_cold_pipeline(
             db, llm, transcript_ref, sub_extractor,

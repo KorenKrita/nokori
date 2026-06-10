@@ -106,3 +106,13 @@ class TestMatcherAgreement:
         result = engine.retrieve(prompt, [rule], [])
         injected_ids = {r.rule.id for r in result.hot + result.warm}
         assert rule.id not in injected_ids
+
+
+class TestIdfColdStart:
+    """IDF cold-start fallback uses unfiltered rules when no active/trusted exist."""
+
+    def test_candidate_only_pool_uses_cold_start_fallback(self, engine):
+        """When all rules are candidates (no active/trusted), IDF still computes via shadow path."""
+        rule = _make_rule(status="candidate")
+        result = engine.retrieve("force push shared branch", [], [rule])
+        assert rule.id in {r.rule.id for r in result.shadow_hot + result.shadow_warm}

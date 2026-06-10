@@ -15,25 +15,37 @@ Let me analyze this transcript for behavioral rules.
 The user said 没bug的你说什么 — do not invent bugs in review.
 </think>
 ```json
-[
-  {
-    "trigger": "Code review of a clean PR where there are no real bugs",
-    "trigger_variants": ["Reviewing a PR with no functional issues"],
-    "search_terms": {"en": ["code review", "clean PR"], "zh": ["没bug", "代码审查"]},
-    "behavior": "Listing minor nits as BUG-1 in the review summary",
-    "action": "Say the PR is clean when there are no real bugs; reserve BUG for real defects",
-    "rationale": "User said 没bug的你说什么 after false bug labels",
-    "source_type": "correction",
-    "confidence": "high"
-  }
-]
+{
+  "candidates": [
+    {
+      "trigger": "Code review of a clean PR where there are no real bugs",
+      "trigger_zh": "审查没有真正bug的PR",
+      "trigger_variants": ["Reviewing a PR with no functional issues"],
+      "trigger_variants_zh": ["审查没有功能问题的PR"],
+      "search_terms": {"en": ["code review", "clean PR"], "zh": ["没bug", "代码审查"]},
+      "required_concepts": ["code review", "clean PR"],
+      "excluded_contexts": [],
+      "non_generalization_boundaries": [],
+      "near_miss_examples": ["PR with actual bugs"],
+      "severity": "reminder",
+      "domain_tags": ["code-review"],
+      "tool_tags": [],
+      "file_or_path_patterns": [],
+      "behavior": "Listing minor nits as BUG-1 in the review summary",
+      "action": "Say the PR is clean when there are no real bugs; reserve BUG for real defects",
+      "action_zh": "没有真正bug时直接说PR没问题",
+      "rationale": "User said 没bug的你说什么 after false bug labels",
+      "evidence_quotes": ["没bug的你说什么"]
+    }
+  ]
+}
 ```"""
 
 
 def test_parse_json_payload_strips_redacted_thinking_and_fence():
     data = parse_json_payload(MINIMAX_STYLE)
-    assert isinstance(data, list)
-    assert data[0]["trigger"].startswith("Code review")
+    assert isinstance(data, dict)
+    assert data["candidates"][0]["trigger"].startswith("Code review")
 
 
 def test_parse_candidates_minimax_style():

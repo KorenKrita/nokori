@@ -130,6 +130,8 @@ class ColdFastLaneThresholds:
     evidence_support_min: float = 0.90
     trigger_specificity_min: float = 0.85
     scope_control_min: float = 0.85
+    action_clarity_min: float = 0.80
+    generalization_safety_min: float = 0.75
     synthetic_eval_passed: bool = True
     global_adversarial_failures_max: int = 0
     archived_fingerprint_conflict: bool = False

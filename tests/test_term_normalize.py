@@ -48,17 +48,29 @@ def test_normalize_trigger_variants_drop_actor_phrasing():
 
 
 def test_extractor_applies_search_terms_normalization():
-    response = json.dumps([{
+    response = json.dumps({"candidates": [{
         "trigger": "Connecting to a remote server via SSH",
+        "trigger_zh": "通过SSH连接远程服务器",
         "trigger_variants": [
             "SSH to a remote server",
             "User asks to access a server",
         ],
-        "search_terms": {"zh": ["为什么不用skill", "不对"]},
+        "trigger_variants_zh": ["SSH到远程服务器"],
+        "search_terms": {"en": [], "zh": ["为什么不用skill", "不对"]},
+        "required_concepts": ["SSH", "remote server"],
+        "excluded_contexts": [],
+        "non_generalization_boundaries": [],
+        "near_miss_examples": [],
+        "severity": "reminder",
+        "domain_tags": [],
+        "tool_tags": [],
+        "file_or_path_patterns": [],
+        "behavior": "did not check credentials",
         "action": "Check memory for credentials before SSH",
-        "source_type": "correction",
-        "confidence": "high",
-    }])
+        "action_zh": "SSH前先检查凭证",
+        "rationale": "user corrected",
+        "evidence_quotes": ["why no skill"],
+    }]})
     cands, ok = extract("[User] why no skill\n", _FakeLLM(response))
     assert ok and len(cands) == 1
     c = cands[0]
