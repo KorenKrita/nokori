@@ -57,7 +57,6 @@ from .qualify import (
     _enforce_admission_policy,
     _run_rewriter,
     _run_final_judge,
-    _rewriter_broadened_scope,
     _candidate_to_rule_data,
     _ensure_rule_data_variants,
     _draft_concept_groups,
@@ -278,15 +277,6 @@ def _run_cold_pipeline_inner(
                 status="rejected",
                 rule_id=None,
                 rejection_reason="rewriter_failed",
-                scores=scores,
-            )
-        # Deterministic scope check: reject if rewriter broadened scope
-        original_rule_data = _candidate_to_rule_data(candidate)
-        if _rewriter_broadened_scope(original_rule_data, rewritten):
-            return ColdPipelineResult(
-                status="rejected",
-                rule_id=None,
-                rejection_reason="rewriter_broadened_scope",
                 scores=scores,
             )
         rule_data = rewritten

@@ -472,6 +472,8 @@ def _draft_concept_groups(candidate: dict[str, Any]) -> list[dict[str, Any]]:
     When no explicit concepts are provided, derives a fallback concept from the
     trigger text so that the rule has at least one concept group and can match.
     """
+    from ..matcher.compiler import _is_single_generic_token as _is_generic
+
     concepts_draft = candidate.get("required_concepts", [])
     if not concepts_draft:
         trigger = str(candidate.get("trigger") or "").strip()
@@ -479,8 +481,18 @@ def _draft_concept_groups(candidate: dict[str, Any]) -> list[dict[str, Any]]:
             return []
         return [{"id": "primary_group", "all_of": ["concept_0"]}]
 
-    concept_ids = [f"concept_{i}" for i in range(len(concepts_draft))]
-    return [{"id": "primary_group", "all_of": concept_ids}]
+    # Must match the same filtering logic as _draft_concepts
+    valid_ids = []
+    for i, concept_text in enumerate(concepts_draft):
+        parts = [p.strip() for p in concept_text.split(" / ") if p.strip()]
+        if not parts:
+            parts = [concept_text]
+        parts = [p for p in parts if not _is_generic(p)]
+        if parts:
+            valid_ids.append(f"concept_{i}")
+    if not valid_ids:
+        return []
+    return [{"id": "primary_group", "all_of": valid_ids}]
 
 
 def _draft_concepts(candidate: dict[str, Any]) -> list[dict[str, Any]]:
@@ -506,12 +518,18 @@ def _draft_concepts(candidate: dict[str, Any]) -> list[dict[str, Any]]:
             "required": False,
         }]
 
+    from ..matcher.compiler import _is_single_generic_token
+
     result = []
     for i, concept_text in enumerate(concepts_draft):
         # Parse " / " separated aliases (e.g. "force push / git push --force / 强推")
         parts = [p.strip() for p in concept_text.split(" / ") if p.strip()]
         if not parts:
             parts = [concept_text]
+        # Filter out single generic tokens that compiler would reject as strong aliases
+        parts = [p for p in parts if not _is_single_generic_token(p)]
+        if not parts:
+            continue
         aliases = [{"text": p, "strength": "strong"} for p in parts]
         result.append({
             "id": f"concept_{i}",
