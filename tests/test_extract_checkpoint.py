@@ -61,6 +61,9 @@ def test_partial_extract_retry_deduplicates_via_segment_hash(monkeypatch, tmp_pa
         return _FakeColdResult(status="candidate", rule_id="rule-new-1")
 
     class FakeExtractLLM:
+        def complete_role(self, role, system, user, *, max_tokens=3000, timeout=60):
+            return extract_payload
+
         def complete_messages(self, system, user, *, max_tokens=3000, timeout=60):
             return extract_payload
 

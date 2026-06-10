@@ -9,6 +9,9 @@ class FakeLLM:
     def complete_messages(self, system, user, *, max_tokens=2000, timeout=30):
         return self.response
 
+    def complete_role(self, role, system, user, *, max_tokens=2000, timeout=30):
+        return self.response
+
 
 MINIMAX_STYLE = """<think>
 Let me analyze this transcript for behavioral rules.

@@ -56,8 +56,8 @@ def extract(transcript: str, llm: LLMAdapter) -> tuple[list[Candidate], bool]:
     last_error: str | None = None
     for attempt in range(_EXTRACT_MAX_RETRIES + 1):
         try:
-            raw = llm.complete_messages(
-                EXTRACT_SYSTEM, user_content, max_tokens=3000, timeout=60,
+            raw = llm.complete_role(
+                "extractor", EXTRACT_SYSTEM, user_content, max_tokens=3000, timeout=60,
             )
         except Exception as e:
             log.warning("extract LLM call failed (attempt %d): %s", attempt + 1, type(e).__name__)

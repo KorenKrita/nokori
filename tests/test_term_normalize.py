@@ -11,6 +11,9 @@ class _FakeLLM:
     def complete_messages(self, system, user, *, max_tokens=2000, timeout=30):
         return self.response
 
+    def complete_role(self, role, system, user, *, max_tokens=2000, timeout=30):
+        return self.response
+
 
 def test_normalize_splits_mixed_zh_term():
     out = normalize_search_terms({"zh": ["为什么不用skill"]})

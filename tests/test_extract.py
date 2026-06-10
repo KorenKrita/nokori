@@ -23,6 +23,10 @@ class FakeLLM:
         self.calls += 1
         return self.response
 
+    def complete_role(self, role, system, user, *, max_tokens=2000, timeout=30):
+        self.calls += 1
+        return self.response
+
 
 def _valid_candidate(**overrides):
     base = {
@@ -328,7 +332,7 @@ def test_process_path_passes_transcript_evidence_and_role_limits(
     from nokori.commands import extract as extract_cmd
 
     class FakeExtractLLM:
-        def complete_messages(self, *_args, **_kwargs):
+        def complete_role(self, *_args, **_kwargs):
             return json.dumps({"candidates": [
                 _valid_candidate(
                     trigger="deploy fails",
@@ -337,6 +341,9 @@ def test_process_path_passes_transcript_evidence_and_role_limits(
                     required_concepts=["deploy fails"],
                 )
             ]})
+
+        def complete_messages(self, *_args, **_kwargs):
+            return self.complete_role(*_args, **_kwargs)
 
     captured: dict = {}
 
@@ -399,6 +406,9 @@ def test_batch_extract_consumes_job_on_cold_pipeline_failure(monkeypatch, tmp_pa
             raise RuntimeError("merge down")
 
         def complete_messages(self, system, user, *, max_tokens=2000, timeout=30):
+            return self.complete(user, max_tokens=max_tokens, timeout=timeout)
+
+        def complete_role(self, role, system, user, *, max_tokens=2000, timeout=30):
             return self.complete(user, max_tokens=max_tokens, timeout=timeout)
 
         def _fallback_claude_cli(self, system, user, timeout):
