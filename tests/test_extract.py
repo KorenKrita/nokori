@@ -188,6 +188,118 @@ def test_compressor_marks_tool_error():
     assert "permission denied" in out
 
 
+def test_compressor_skips_empty_assistant():
+    turns = [
+        Turn(role="human", content="hi"),
+        Turn(role="assistant", content=""),
+        Turn(role="assistant", content="  "),
+        Turn(role="assistant", content="real content"),
+    ]
+    out = compress(turns)
+    assert "[Assistant] real content" in out
+    assert out.count("[Assistant]") == 1
+
+
+def test_compressor_phase1_collapses_same_tool():
+    from nokori.extract.compressor import _collapse_consecutive_tools
+    sections = [
+        "[Tool: Read] a", "[Result: OK]",
+        "[Tool: Read] b", "[Result: OK]",
+        "[Tool: Read] c", "[Result: OK]",
+        "[Tool: Read] d", "[Result: OK]",
+        "[Assistant] done",
+    ]
+    out = _collapse_consecutive_tools(sections)
+    assert "[Tool: Read] x4 OK" in out
+    assert "done" in out
+
+
+def test_compressor_phase2_preserves_bash():
+    from nokori.extract.compressor import _collapse_tool_runs
+    sections = [
+        "[Tool: Bash] git status", "[Result: OK]",
+        "[Tool: Read] a", "[Result: OK]",
+        "[Tool: Read] b", "[Result: OK]",
+    ]
+    out = _collapse_tool_runs(sections)
+    assert "[Tool: Bash] git status" in out
+    assert "[Result: OK]" in out
+    assert "[Tools OK] Read x2" in out
+
+
+def test_compressor_phase2_preserves_errors():
+    from nokori.extract.compressor import _collapse_tool_runs
+    sections = [
+        "[Tool: Read] a", "[Result: OK]",
+        "[Tool: Read] b", "[Result: OK]",
+        "[Tool: Bash] bad cmd", "[Result: ERROR] exit 1",
+    ]
+    out = _collapse_tool_runs(sections)
+    assert "[Tools OK] Read x2" in out
+    assert "[Tool: Bash] bad cmd" in out
+    assert "[Result: ERROR] exit 1" in out
+
+
+def test_compressor_pairs_batched_format():
+    from nokori.extract.compressor import _collapse_tool_runs
+    sections = [
+        "[Tool: Bash] cmd1",
+        "[Tool: Bash] cmd2",
+        "[Result: OK]",
+        "[Result: OK]",
+    ]
+    out = _collapse_tool_runs(sections)
+    assert "[Tool: Bash] cmd1" in out
+    assert "[Tool: Bash] cmd2" in out
+    assert out.count("[Result: OK]") == 2
+
+
+def test_compressor_pairs_mixed_format():
+    from nokori.extract.compressor import _collapse_tool_runs
+    sections = [
+        "[Tool: Read] a",
+        "[Tool: Read] b",
+        "[Result: OK]",
+        "[Result: OK]",
+        "[Tool: Edit] c",
+        "[Tool: Edit] d",
+        "[Tool: Edit] e",
+        "[Result: OK]",
+        "[Result: OK]",
+        "[Result: OK]",
+    ]
+    out = _collapse_tool_runs(sections)
+    assert "[Tools OK] Read x2, Edit x3" in out
+
+
+def test_compressor_orphan_result():
+    from nokori.extract.compressor import _pair_tools_and_results
+    sections = [
+        "[Result: OK]",
+        "[Tool: Bash] ls",
+        "[Result: OK]",
+    ]
+    paired = _pair_tools_and_results(sections)
+    assert paired[0] == "[Result: OK]"
+    assert isinstance(paired[1], list)
+    assert paired[1][0][0] == "[Tool: Bash] ls"
+
+
+def test_compressor_flush_pending_tools_without_result():
+    from nokori.extract.compressor import _pair_tools_and_results
+    sections = [
+        "[Tool: Bash] cmd1",
+        "[Tool: Bash] cmd2",
+        "[Assistant] interrupted",
+    ]
+    paired = _pair_tools_and_results(sections)
+    assert isinstance(paired[0], list)
+    assert len(paired[0]) == 2
+    assert paired[0][0] == ("[Tool: Bash] cmd1", "[no result]", False)
+    assert paired[0][1] == ("[Tool: Bash] cmd2", "[no result]", False)
+    assert paired[1] == "[Assistant] interrupted"
+
+
 def test_reader_parses_jsonl(tmp_path):
     path = tmp_path / "session.jsonl"
     path.write_text("\n".join([

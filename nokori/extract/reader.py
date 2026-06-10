@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -27,11 +28,18 @@ def stat(path: Path) -> TranscriptMeta:
     return TranscriptMeta(path=path, mtime=s.st_mtime, size=s.st_size)
 
 
+_LINE_SIZE_CAP = 5000
+
+
 def _parse_jsonl_text(text: str, path: Path, label: str = "line") -> list[Turn]:
     out: list[Turn] = []
     for lineno, line in enumerate(text.splitlines(), 1):
         line = line.strip()
         if not line:
+            continue
+        if len(line) > _LINE_SIZE_CAP:
+            # Huge lines (e.g. Write with full file content) — extract minimal info
+            out.extend(_parse_large_line(line))
             continue
         try:
             entry = json.loads(line)
@@ -40,6 +48,43 @@ def _parse_jsonl_text(text: str, path: Path, label: str = "line") -> list[Turn]:
             continue
         out.extend(_parse_multi(entry))
     return out
+
+
+_KNOWN_TYPES = frozenset(("user", "human", "assistant", "text", "tool_use", "tool_result"))
+
+
+def _parse_large_line(line: str) -> list[Turn]:
+    """Fast-path for oversized JSONL lines. Extract type and tool name without full parse."""
+    type_match = re.search(r'"type"\s*:\s*"([^"]+)"', line[:2000])
+    if not type_match or type_match.group(1) not in _KNOWN_TYPES:
+        # Fallback: attempt full parse for lines where regex can't find type
+        try:
+            entry = json.loads(line)
+            return _parse_multi(entry)
+        except Exception:
+            log.debug("Skipping unparseable large line (len=%d)", len(line))
+            return []
+    t = type_match.group(1)
+    if t == "tool_use":
+        name_match = re.search(r'"name"\s*:\s*"([^"]+)"', line[:2000])
+        name = name_match.group(1) if name_match else "tool"
+        return [Turn(role="tool_use", content="", tool_name=name, input_summary="[large input truncated]")]
+    if t == "tool_result":
+        is_err = bool(re.search(r'"is_error"\s*:\s*true', line[:2000]) or re.search(r'"error"\s*:\s*true', line[:2000]))
+        if is_err:
+            err_match = re.search(r'"(?:error_line|content)"\s*:\s*"([^"]{0,300})', line[:3000])
+            err = err_match.group(1) if err_match else "error"
+            return [Turn(role="tool_result", content="", is_error=True, error_line=err)]
+        return [Turn(role="tool_result", content="", is_error=False)]
+    if t in ("assistant", "text"):
+        content_match = re.search(r'"(?:content|message)"\s*:\s*"([^"]{0,500})', line[:2000])
+        content = content_match.group(1) if content_match else ""
+        return [Turn(role="assistant", content=content)]
+    if t in ("user", "human"):
+        content_match = re.search(r'"(?:content|message)"\s*:\s*"([^"]{0,500})', line[:2000])
+        content = content_match.group(1) if content_match else ""
+        return [Turn(role="human", content=content)]
+    return []
 
 
 def read(path: Path) -> list[Turn]:
@@ -177,13 +222,14 @@ def _content_blocks_to_turns(role: str | None, blocks: list) -> list[Turn]:
                 texts.append(piece)
         elif kind == "tool_use":
             flush_text()
+            tool_name = block.get("name") or block.get("tool_name") or "tool"
             inp = block.get("input") or {}
             turns.append(
                 Turn(
                     role="tool_use",
                     content="",
-                    tool_name=block.get("name") or block.get("tool_name") or "tool",
-                    input_summary=_coerce_text(inp)[:200],
+                    tool_name=tool_name,
+                    input_summary=_summarize_tool_input(tool_name, inp),
                 )
             )
         elif kind == "tool_result":
@@ -229,7 +275,7 @@ def _parse_legacy(entry: dict) -> Turn | None:
             role="tool_use",
             content="",
             tool_name=name,
-            input_summary=_coerce_text(inp)[:200],
+            input_summary=_summarize_tool_input(name, inp),
         )
     if t == "tool_result":
         content = _coerce_text(entry.get("content") or entry.get("output") or "")
@@ -244,6 +290,60 @@ def _parse_legacy(entry: dict) -> Turn | None:
             error_line=first_err_line,
         )
     return None
+
+
+_TOOL_LIMITS: tuple[tuple[re.Pattern, int], ...] = (
+    (re.compile(r'(?:^|[_:\-])bash(?:$|[_:\-])', re.I), 0),
+    (re.compile(r'(?:^|[_:\-])read(?:$|[_:\-])', re.I), 0),
+    (re.compile(r'(?:^|[_:\-])edit(?:$|[_:\-])', re.I), 100),
+    (re.compile(r'(?:^|[_:\-])write(?:$|[_:\-])', re.I), 100),
+    (re.compile(r'(?:^|[_:\-])grep(?:$|[_:\-])', re.I), 50),
+)
+_DEFAULT_HEAD = 200
+_DEFAULT_TAIL = 100
+
+
+_VALUE_CAP = 800
+_RAW_INPUT_MAX = 2000
+
+
+def _summarize_tool_input(tool_name: str, inp) -> str:
+    """Produce tool input summary.
+
+    bash/read: no secondary truncation (values capped at 800 chars, strings at 2000)
+    edit/write: head 100
+    grep: head 50
+    others: head 200 + tail 100
+    """
+    if not inp:
+        return ""
+    if isinstance(inp, str):
+        raw = inp[:_RAW_INPUT_MAX] if len(inp) > _RAW_INPUT_MAX else inp
+    elif isinstance(inp, dict):
+        capped = {}
+        for k, v in inp.items():
+            if isinstance(v, str):
+                capped[k] = v[:_VALUE_CAP] + "..." if len(v) > _VALUE_CAP else v
+            else:
+                s = json.dumps(v, ensure_ascii=False) if isinstance(v, (list, dict)) else str(v)
+                capped[k] = s[:_VALUE_CAP] + "..." if len(s) > _VALUE_CAP else s
+        raw = json.dumps(capped, ensure_ascii=False)
+    else:
+        raw = str(inp)[:_RAW_INPUT_MAX]
+
+    lower = tool_name.lower()
+    for pattern, limit in _TOOL_LIMITS:
+        if pattern.search(lower):
+            if limit == 0:
+                return raw[:_RAW_INPUT_MAX] if len(raw) > _RAW_INPUT_MAX else raw
+            if len(raw) <= limit:
+                return raw
+            return raw[:limit]
+
+    cap = _DEFAULT_HEAD + _DEFAULT_TAIL
+    if len(raw) <= cap:
+        return raw
+    return raw[:_DEFAULT_HEAD] + "\n...\n" + raw[-_DEFAULT_TAIL:]
 
 
 def _coerce_text(value) -> str:
