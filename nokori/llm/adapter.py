@@ -36,8 +36,8 @@ class LLMAdapter:
             log.warning("recursion guard tripped; skipping LLM call for role=%s", role)
             return None
         model_id = self.cfg.role_models.get(role) or self.cfg.llm_model
-        effective_max = max_tokens or self.cfg.role_max_tokens.get(role, 2000)
-        effective_timeout = timeout or self.cfg.role_timeouts.get(role, 30)
+        effective_max = self.cfg.role_max_tokens.get(role) or max_tokens or 2000
+        effective_timeout = self.cfg.role_timeouts.get(role) or timeout or 30
         log.info("LLM role call: role=%s model=%s", role, model_id or "claude-cli")
         if model_id and self.cfg.llm_base_url:
             return self._call_openai_compatible(system, user, effective_max, effective_timeout, model_id=model_id)

@@ -334,8 +334,9 @@ class TestRoleSpecificLimits:
         adapter = LLMAdapter(cfg, http_open=fake_open)
         adapter.complete_role("extractor", "sys", "user", max_tokens=500, timeout=10)
 
-        assert captured["body"]["max_tokens"] == 500
-        assert captured["timeout"] == 10
+        # Config takes priority over caller kwargs (user intent > code default)
+        assert captured["body"]["max_tokens"] == 8000
+        assert captured["timeout"] == 120
 
 
 # --- Original test preserved ---
