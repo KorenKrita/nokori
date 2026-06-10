@@ -252,7 +252,7 @@ export function RuleDetail() {
                     <div className="flex items-center gap-2">
                       <span className="font-mono text-xs text-accent-sky">{c.id}</span>
                       <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${c.required ? 'bg-accent-rose/15 text-accent-rose' : 'bg-[var(--color-bg-elevated)] text-text-tertiary'}`}>
-                        {c.required ? 'required' : 'optional'}
+                        {c.required ? t('rules.concept.required') : t('rules.concept.optional')}
                       </span>
                       <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--color-bg-elevated)] text-text-tertiary font-mono">
                         {c.match_mode}
@@ -279,7 +279,7 @@ export function RuleDetail() {
                   {conceptGroups.map((g) => (
                     <div key={g.id} className="text-xs">
                       <span className="font-mono text-accent-sky">{g.id}</span>
-                      <span className="text-text-tertiary"> all_of: </span>
+                      <span className="text-text-tertiary"> {t('rules.concept.all_of')}: </span>
                       <span className="font-mono text-text-secondary">[{g.all_of.join(', ')}]</span>
                     </div>
                   ))}
@@ -319,13 +319,13 @@ export function RuleDetail() {
             <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary mb-3">{t('rules.quality_scores')}</h3>
             <dl className="space-y-2 text-xs">
               {([
-                ['quality', rule.quality_score],
-                ['evidence_support', rule.evidence_support_score],
-                ['specificity', rule.specificity_score],
-                ['retrieval_readiness', rule.retrieval_readiness_score],
-              ] as const).filter(([, v]) => v != null).map(([label, value]) => (
-                <div key={label} className="flex justify-between gap-3">
-                  <dt className="text-text-tertiary">{label}</dt>
+                ['quality', 'rules.score.quality', rule.quality_score],
+                ['evidence_support', 'rules.score.evidence_support', rule.evidence_support_score],
+                ['specificity', 'rules.score.specificity', rule.specificity_score],
+                ['retrieval_readiness', 'rules.score.retrieval_readiness', rule.retrieval_readiness_score],
+              ] as const).filter(([, , v]) => v != null).map(([key, i18nKey, value]) => (
+                <div key={key} className="flex justify-between gap-3">
+                  <dt className="text-text-tertiary">{t(i18nKey)}</dt>
                   <dd className="font-mono text-text-secondary">{(value as number).toFixed(2)}</dd>
                 </div>
               ))}
@@ -336,13 +336,13 @@ export function RuleDetail() {
             <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary mb-3">{t('rules.lifecycle_scores')}</h3>
             <dl className="space-y-2 text-xs">
               {([
-                ['observed_useful', rule.observed_usefulness_score],
-                ['plausible_useful', rule.plausible_usefulness_score],
-                ['false_positive', rule.false_positive_score],
-                ['harmful', rule.harmful_score],
-              ] as const).filter(([, v]) => v != null).map(([label, value]) => (
-                <div key={label} className="flex justify-between gap-3">
-                  <dt className="text-text-tertiary">{label}</dt>
+                ['observed_useful', 'rules.score.observed_useful', rule.observed_usefulness_score],
+                ['plausible_useful', 'rules.score.plausible_useful', rule.plausible_usefulness_score],
+                ['false_positive', 'rules.score.false_positive', rule.false_positive_score],
+                ['harmful', 'rules.score.harmful', rule.harmful_score],
+              ] as const).filter(([, , v]) => v != null).map(([key, i18nKey, value]) => (
+                <div key={key} className="flex justify-between gap-3">
+                  <dt className="text-text-tertiary">{t(i18nKey)}</dt>
                   <dd className="font-mono text-text-secondary">{(value as number).toFixed(2)}</dd>
                 </div>
               ))}
