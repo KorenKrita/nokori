@@ -25,7 +25,7 @@ from ..utils.project import resolve_project_id
 log = get_logger("nokori.commands.extract")
 
 
-_CONTEXT_TURNS = 2
+_CONTEXT_TURNS = 3
 _EVIDENCE_QUOTE_MAX = 500
 
 

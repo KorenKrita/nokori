@@ -164,7 +164,7 @@ def test_extractor_returns_empty_on_empty_transcript():
     assert ok and cands == []
 
 
-def test_compressor_truncates_long_assistant():
+def test_compressor_preserves_full_assistant():
     long = "X" * 1000
     turns = [
         Turn(role="human", content="hi"),
@@ -172,8 +172,7 @@ def test_compressor_truncates_long_assistant():
     ]
     out = compress(turns)
     assert "[User] hi" in out
-    assert "..." in out
-    assert len(out) < len(long)
+    assert long in out
 
 
 def test_compressor_marks_tool_error():
