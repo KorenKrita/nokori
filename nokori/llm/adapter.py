@@ -105,8 +105,11 @@ class LLMAdapter:
             raise LlmTimeoutError(str(e)) from e
         try:
             data = json.loads(body)
-            return data["choices"][0]["message"]["content"].strip()
-        except (KeyError, IndexError, ValueError, json.JSONDecodeError) as e:
+            content = data["choices"][0]["message"]["content"]
+            if content is None:
+                raise LlmError("LLM returned null content")
+            return content.strip()
+        except (KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError) as e:
             log.warning("LLM response unparseable: %s", type(e).__name__)
             raise LlmError(f"bad response shape: {e}") from e
 
