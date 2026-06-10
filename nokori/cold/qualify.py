@@ -158,7 +158,7 @@ def _enforce_admission_policy(decision: str, scores: dict) -> str:
 
     accept requires: overall >= 0.82, evidence >= 0.85, specificity >= 0.75,
                      scope >= 0.75, action_clarity >= 0.70, generalization_safety >= 0.65,
-                     retrieval_readiness >= 0.75
+                     retrieval_readiness >= 0.80
     revise requires: overall >= 0.55, evidence >= 0.70
     otherwise: reject
     """
@@ -179,7 +179,7 @@ def _enforce_admission_policy(decision: str, scores: dict) -> str:
         and scope >= 0.75
         and action_clarity >= 0.70
         and generalization_safety >= 0.65
-        and retrieval_readiness >= 0.75
+        and retrieval_readiness >= 0.80
     ):
         return "accept"
     if overall >= 0.55 and evidence >= 0.70:
@@ -496,10 +496,15 @@ def _draft_concepts(candidate: dict[str, Any]) -> list[dict[str, Any]]:
 
     result = []
     for i, concept_text in enumerate(concepts_draft):
+        # Parse " / " separated aliases (e.g. "force push / git push --force / 强推")
+        parts = [p.strip() for p in concept_text.split(" / ") if p.strip()]
+        if not parts:
+            parts = [concept_text]
+        aliases = [{"text": p, "strength": "strong"} for p in parts]
         result.append({
             "id": f"concept_{i}",
-            "label": concept_text[:80],
-            "aliases": [{"text": concept_text, "strength": "strong"}],
+            "label": parts[0][:80],
+            "aliases": aliases,
             "match_mode": "any_alias",
             "required": True,
         })
@@ -511,10 +516,14 @@ def _draft_excluded_contexts(candidate: dict[str, Any]) -> list[dict[str, Any]]:
     excluded_draft = candidate.get("excluded_contexts", [])
     result = []
     for i, ctx_text in enumerate(excluded_draft):
+        # Parse " / " separated patterns (e.g. "personal branch / 个人分支")
+        patterns = [p.strip() for p in ctx_text.split(" / ") if p.strip()]
+        if not patterns:
+            patterns = [ctx_text]
         result.append({
             "id": f"excluded_{i}",
-            "label": ctx_text[:80],
-            "patterns": [ctx_text],
+            "label": patterns[0][:80],
+            "patterns": patterns,
             "match_mode": "phrase",
             "scope": "global",
             "window_tokens": 12,
