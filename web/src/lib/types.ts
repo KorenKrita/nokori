@@ -4,6 +4,33 @@ export type TriggerVariant = string | {
   requires_concepts?: string[]
 }
 
+export interface ConceptAlias {
+  text: string
+  strength: string
+  requires_neighbor?: string[]
+}
+
+export interface Concept {
+  id: string
+  label: string
+  aliases: ConceptAlias[]
+  match_mode: string
+  required: boolean
+}
+
+export interface ConceptGroup {
+  id: string
+  all_of: string[]
+}
+
+export interface ExcludedContext {
+  id: string
+  label?: string
+  patterns: string[]
+  scope?: string
+  match_mode?: string
+}
+
 export interface Rule {
   id: string
   short_id: string
@@ -14,6 +41,10 @@ export interface Rule {
   trigger_variants?: TriggerVariant[]
   trigger_variants_zh?: string[]
   search_terms?: Record<string, string[]>
+  concepts?: Concept[]
+  required_concept_groups?: ConceptGroup[]
+  excluded_contexts?: ExcludedContext[]
+  near_miss_examples?: string[]
   action_instruction?: string
   action_instruction_zh?: string | null
   allowed_behavior?: string[]

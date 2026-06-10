@@ -21,5 +21,8 @@ export function ruleSource(rule: Rule): string {
 }
 
 export function triggerVariantText(variant: TriggerVariant): string {
-  return typeof variant === 'string' ? variant : variant.text ?? ''
+  if (typeof variant === 'string') return variant
+  const kind = variant.kind ? `[${variant.kind}]` : ''
+  const concepts = variant.requires_concepts?.length ? ` → ${variant.requires_concepts.join(',')}` : ''
+  return `${kind} ${variant.text ?? ''}${concepts}`.trim()
 }
