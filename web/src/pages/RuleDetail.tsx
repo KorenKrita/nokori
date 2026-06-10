@@ -8,9 +8,11 @@ import { mutateApi } from '@/lib/api'
 import { formatDateTime } from '@/lib/formatDateTime'
 import { t } from '@/lib/i18n'
 import {
+  localizeLevel,
+  localizePosthocLabel,
+  localizeSource,
   ruleAction,
   ruleActionZh,
-  ruleSource,
   ruleTrigger,
   ruleTriggerZh,
   triggerVariantText,
@@ -141,7 +143,7 @@ export function RuleDetail() {
             <dl className="space-y-2 text-xs">
               {(
                 [
-                  ['source_origin', t('rules.source_type'), ruleSource(rule)],
+                  ['source_origin', t('rules.source_type'), localizeSource(rule.source_origin ?? '-')],
                   ['severity', t('rules.severity'), rule.severity ?? '-'],
                   ['schema_version', t('rules.schema_version'), String(rule.schema_version ?? '-')],
                   ['rule_version', t('rules.rule_version'), String(rule.rule_version ?? '-')],
@@ -203,7 +205,7 @@ export function RuleDetail() {
                           FIRE_LEVEL_CLASSES[level] ?? DEFAULT_FIRE_LEVEL_CLASS
                         }`}
                       >
-                        {level} {count}
+                        {localizeLevel(level)} {count}
                       </span>
                     ))}
                   </dd>
@@ -229,7 +231,7 @@ export function RuleDetail() {
                         POSTHOC_LABEL_CLASSES[label] ?? DEFAULT_POSTHOC_CLASS
                       }`}
                     >
-                      {label}
+                      {localizePosthocLabel(label)}
                     </span>
                     <span className="font-mono text-xs text-text-secondary">{count}</span>
                   </div>
@@ -240,76 +242,79 @@ export function RuleDetail() {
         </div>
       </div>
 
-      {/* Concepts & Matching Structure */}
-      {(concepts.length > 0 || conceptGroups.length > 0 || excludedContexts.length > 0) && (
-        <div className="grid grid-cols-12 gap-4">
+      {/* Matching Structure */}
+      {(concepts.length > 0 || excludedContexts.length > 0) && (
+        <GlassCard>
+          <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary mb-4">{t('rules.match_conditions')}</h3>
+
           {concepts.length > 0 && (
-            <GlassCard className="col-span-8">
-              <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary mb-3">{t('rules.concepts')}</h3>
-              <div className="space-y-3">
-                {concepts.map((c) => (
-                  <div key={c.id} className="border-b border-[var(--color-border-subtle)] pb-2 last:border-0 last:pb-0">
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-xs text-accent-sky">{c.id}</span>
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${c.required ? 'bg-accent-rose/15 text-accent-rose' : 'bg-[var(--color-bg-elevated)] text-text-tertiary'}`}>
+            <div className="space-y-4">
+              {concepts.map((c, ci) => {
+                const enAliases = c.aliases.filter(a => !/[一-鿿]/.test(a.text))
+                const zhAliases = c.aliases.filter(a => /[一-鿿]/.test(a.text))
+                return (
+                  <div key={c.id} className="border-b border-[var(--color-border-subtle)] pb-3 last:border-0 last:pb-0">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-xs text-text-secondary">{t('rules.match_keyword_group')} {concepts.length > 1 ? ci + 1 : ''}</span>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded ${c.required ? 'bg-accent-rose/15 text-accent-rose' : 'bg-[var(--color-bg-elevated)] text-text-tertiary'}`}>
                         {c.required ? t('rules.concept.required') : t('rules.concept.optional')}
                       </span>
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--color-bg-elevated)] text-text-tertiary font-mono">
-                        {c.match_mode}
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--color-bg-elevated)] text-text-tertiary">
+                        {t(`rules.match_mode.${c.match_mode}`)}
                       </span>
                     </div>
-                    <div className="flex flex-wrap gap-1 mt-1.5">
-                      {c.aliases.map((a, i) => (
-                        <span key={i} className={`px-2 py-0.5 rounded text-xs font-mono ${a.strength === 'strong' ? 'bg-accent-emerald/10 text-accent-emerald' : 'bg-[var(--color-bg-elevated)] text-text-tertiary'}`}>
-                          {a.text}
-                        </span>
-                      ))}
-                    </div>
+                    {enAliases.length > 0 && (
+                      <div className="flex flex-wrap items-center gap-1 mb-1">
+                        <span className="text-[10px] text-text-tertiary w-6 shrink-0">EN</span>
+                        {enAliases.map((a, i) => (
+                          <span key={i} className={`px-2 py-0.5 rounded text-xs font-mono ${a.strength === 'strong' ? 'bg-accent-emerald/10 text-accent-emerald' : 'bg-[var(--color-bg-elevated)] text-text-tertiary'}`}>
+                            {a.text}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {zhAliases.length > 0 && (
+                      <div className="flex flex-wrap items-center gap-1">
+                        <span className="text-[10px] text-text-tertiary w-6 shrink-0">ZH</span>
+                        {zhAliases.map((a, i) => (
+                          <span key={i} className={`px-2 py-0.5 rounded text-xs font-mono ${a.strength === 'strong' ? 'bg-accent-emerald/10 text-accent-emerald' : 'bg-[var(--color-bg-elevated)] text-text-tertiary'}`}>
+                            {a.text}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+
+              {conceptGroups.length > 0 && concepts.length > 1 && (
+                <div className="mt-2 pt-2 border-t border-[var(--color-border-subtle)]">
+                  <span className="text-xs text-text-tertiary">{t('rules.match_gate')}: </span>
+                  {conceptGroups.map((g) => (
+                    <span key={g.id} className="text-xs text-text-secondary">
+                      {t('rules.match_gate_all')}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {excludedContexts.length > 0 && (
+            <div className={concepts.length > 0 ? "mt-4 pt-4 border-t border-[var(--color-border-subtle)]" : ""}>
+              <p className="text-xs text-text-tertiary mb-2">{t('rules.match_suppress')}</p>
+              <div className="space-y-2">
+                {excludedContexts.map((ec) => (
+                  <div key={ec.id} className="flex flex-wrap items-center gap-1">
+                    {ec.patterns.map((p, i) => (
+                      <span key={i} className="px-2 py-0.5 rounded bg-accent-rose/10 text-xs font-mono text-accent-rose/80">{p}</span>
+                    ))}
                   </div>
                 ))}
               </div>
-            </GlassCard>
+            </div>
           )}
-
-          <div className="col-span-4 space-y-4">
-            {conceptGroups.length > 0 && (
-              <GlassCard>
-                <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary mb-3">{t('rules.concept_groups')}</h3>
-                <div className="space-y-2">
-                  {conceptGroups.map((g) => (
-                    <div key={g.id} className="text-xs">
-                      <span className="font-mono text-accent-sky">{g.id}</span>
-                      <span className="text-text-tertiary"> {t('rules.concept.all_of')}: </span>
-                      <span className="font-mono text-text-secondary">[{g.all_of.join(', ')}]</span>
-                    </div>
-                  ))}
-                </div>
-              </GlassCard>
-            )}
-
-            {excludedContexts.length > 0 && (
-              <GlassCard>
-                <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary mb-3">{t('rules.excluded_contexts')}</h3>
-                <div className="space-y-2">
-                  {excludedContexts.map((ec) => (
-                    <div key={ec.id} className="text-xs">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-accent-rose">{ec.id}</span>
-                        {ec.scope && <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--color-bg-elevated)] text-text-tertiary">{ec.scope}</span>}
-                        {ec.match_mode && <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--color-bg-elevated)] text-text-tertiary">{ec.match_mode}</span>}
-                      </div>
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        {ec.patterns.map((p, i) => (
-                          <span key={i} className="px-2 py-0.5 rounded bg-accent-rose/10 text-xs font-mono text-accent-rose/80">{p}</span>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </GlassCard>
-            )}
-          </div>
-        </div>
+        </GlassCard>
       )}
 
       {/* Quality & Lifecycle Scores */}
