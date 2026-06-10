@@ -3,14 +3,14 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 
 from ..config import Config
 from ..db import Db
 from ..utils.fs import atomic_write_json
 from ..utils.logging import get_logger
-from ..utils.time import now_iso, parse_iso
+from ..utils.time import local_now, now_iso, parse_iso
 
 log = get_logger("nokori.gate.marker")
 
@@ -293,5 +293,5 @@ def is_expired(marker: Marker, ttl_seconds: int) -> bool:
     created = parse_iso(marker.created_at)
     if created is None:
         return True
-    age = (datetime.now(timezone.utc) - created).total_seconds()
+    age = (local_now() - created).total_seconds()
     return age > ttl_seconds

@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from typing import Any
 
 from ..matcher.compiler import COMPILER_VERSION as MATCHER_COMPILER_VERSION
@@ -22,6 +21,7 @@ from ..matcher.runtime import MatchResult, evaluate_match
 from ..policy import RUNTIME_POLICY_VERSION
 from ..runtime.applicability import ApplicabilityDecision, evaluate_applicability
 from ..search.idf_stats import IdfPoolStats, TOKENIZER_VERSION, compute_trigger_idf_sum
+from ..utils.time import now_iso
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -410,6 +410,6 @@ def store_eval_result(db: Any, result: SyntheticEvalResult) -> None:
                     ensure_ascii=False,
                 ),
                 1 if result.passed else 0,
-                datetime.now(timezone.utc).isoformat(),
+                now_iso(),
             ),
         )

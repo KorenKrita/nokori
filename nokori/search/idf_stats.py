@@ -10,7 +10,7 @@ import hashlib
 import math
 from collections import Counter
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
 
 from ..db import loads_json
 from ..policy import (
@@ -19,6 +19,7 @@ from ..policy import (
     SMALL_POOL_THRESHOLD,
 )
 from .tokenizer import tokenize
+from ..utils.time import now_iso
 
 # ---------------------------------------------------------------------------
 # Version strings
@@ -295,7 +296,7 @@ def build_idf_stats(
         concept_compiler_version=concept_compiler_version,
         df_by_token=dict(df),
         dynamic_threshold=trigger_info_min,
-        built_at=datetime.now(timezone.utc).isoformat(),
+        built_at=now_iso(),
     )
 
 

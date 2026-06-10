@@ -12,7 +12,7 @@ from ..gate.marker import prompt_hash
 from ..utils.host import effective_session_id
 from ..utils.logging import get_logger
 from ..utils.prompt_text import normalize_prompt_for_hash
-from ..utils.time import now_iso, parse_iso
+from ..utils.time import local_now, now_iso, parse_iso
 from ..utils.transcript import resolve_transcript_path, transcript_key
 
 log = get_logger("nokori.hooks.coalesce")
@@ -90,7 +90,7 @@ def prune_stale_claims(cfg: Config, max_age_hours: int = _DEFAULT_CLAIM_MAX_AGE_
     root = cfg.data_dir / "hook_coalesce"
     if not root.is_dir():
         return 0
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=max_age_hours)
+    cutoff = local_now() - timedelta(hours=max_age_hours)
     removed = 0
     for path in root.glob("*.json"):
         try:

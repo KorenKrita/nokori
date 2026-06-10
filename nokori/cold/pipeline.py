@@ -43,6 +43,7 @@ from .roles import (
 )
 from ..events.observability import write_error, write_event
 from ..utils.logging import get_logger
+from ..utils.time import now_iso
 
 from ._constants import DESTRUCTIVE_MERGE_OPS, PIPELINE_VERSION, _MAX_SPLIT_DEPTH
 from ._llm_call import (
@@ -569,7 +570,7 @@ def _run_cold_pipeline_inner(
                         _revert_version = _merged_row["rule_version"]
                         _revert_status = _merged_row["status"]
                         _revert_rpv = _merged_row["runtime_policy_version"]
-                        _now_revert = datetime.now(timezone.utc).isoformat(timespec="seconds")
+                        _now_revert = now_iso()
                         _revert_sets = []
                         _revert_params: list = []
                         if _merge_changed_variants:

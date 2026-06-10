@@ -318,9 +318,10 @@ def record_lineage(
     reason: str,
 ) -> None:
     """Insert a record into rule_lineage table."""
-    from datetime import datetime, timezone
+    from datetime import datetime
 
-    now = datetime.now(timezone.utc).isoformat()
+    from nokori.utils.time import now_iso
+    now = now_iso()
     with db.transaction() as tx:
         tx.execute(
             "INSERT INTO rule_lineage (old_rule_id, new_rule_id, operation, reason, created_at) "
@@ -721,7 +722,8 @@ def _existing_usefulness_weak_or_stale(existing_rule: dict) -> bool:
         first_dt = datetime.fromisoformat(ts)
         if first_dt.tzinfo is None:
             first_dt = first_dt.replace(tzinfo=timezone.utc)
-        if datetime.now(timezone.utc) - first_dt > timedelta(days=90):
+        from nokori.utils.time import local_now
+        if local_now() - first_dt > timedelta(days=90):
             return True
     except (TypeError, ValueError):
         return True

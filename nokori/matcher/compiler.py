@@ -313,8 +313,17 @@ def _tokenize(text: str) -> list[str]:
     return [t for t in _TOKEN_SPLIT_RE.split(text.lower()) if t]
 
 
+def _has_cjk(text: str) -> bool:
+    return any("一" <= ch <= "鿿" for ch in text)
+
+
 def _is_multi_token(text: str) -> bool:
-    """Check whether text contains more than one token."""
+    """Check whether text contains more than one token.
+
+    For CJK text (no spaces between words), 2+ characters counts as multi-token.
+    """
+    if _has_cjk(text):
+        return len(text.strip()) >= 2
     tokens = _tokenize(text)
     return len(tokens) > 1
 

@@ -8,18 +8,16 @@ from __future__ import annotations
 import argparse
 import json
 import time
-from datetime import datetime, timedelta, timezone
-
 from ..config import Config
 from ..db import open_db
 from ..events.observability import query_events
-from ..utils.time import iso_of
+from ..utils.time import local_hours_ago
 
 
 def run(args: argparse.Namespace, cfg: Config) -> int:
     since = args.since
     if since is None:
-        since = iso_of(datetime.now(timezone.utc) - timedelta(hours=1))
+        since = local_hours_ago(1)
 
     session_id = args.session or None
     source = args.type or None

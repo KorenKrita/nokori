@@ -7,16 +7,15 @@ from __future__ import annotations
 
 import argparse
 import json
-from datetime import datetime, timedelta, timezone
 
 from ..config import Config
 from ..db import open_db
 from ..events.observability import query_errors
-from ..utils.time import iso_of, now_iso
+from ..utils.time import local_days_ago, now_iso
 
 
 def _default_since() -> str:
-    return iso_of(datetime.now(timezone.utc) - timedelta(days=7))
+    return local_days_ago(7)
 
 
 def run(args: argparse.Namespace, cfg: Config) -> int:

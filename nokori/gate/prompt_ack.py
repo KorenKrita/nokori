@@ -7,7 +7,7 @@ from pathlib import Path
 
 from ..config import Config
 from ..utils.fs import atomic_write_json
-from ..utils.time import now_iso, parse_iso
+from ..utils.time import local_now, now_iso, parse_iso
 
 _DEFAULT_STALE_HOURS = 24
 
@@ -163,7 +163,7 @@ def cleanup_session(cfg: Config, session_id: str) -> int:
 
 def prune_stale(cfg: Config, max_age_hours: int = _DEFAULT_STALE_HOURS) -> int:
     """Drop ack/deferred files older than max_age_hours (orphaned sessions)."""
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=max_age_hours)
+    cutoff = local_now() - timedelta(hours=max_age_hours)
     removed = 0
     for name in ("prompt_submit_ack", "cursor_deferred"):
         removed += _prune_json_tree(cfg.data_dir / name, cutoff)

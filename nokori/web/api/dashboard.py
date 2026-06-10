@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
-
 from fastapi import APIRouter
 
 from nokori.db import open_db
 from nokori.extract import jobs as job_io
 from nokori.search import embed_ipc
-from nokori.utils.time import iso_of
+from nokori.utils.time import local_hours_ago
 from nokori.web.deps import get_config
 
 router = APIRouter()
@@ -21,7 +19,7 @@ def dashboard():
         rules_by_status = db.fetchall(
             "SELECT status, COUNT(*) AS n FROM rules GROUP BY status"
         )
-        cutoff = iso_of(datetime.now(timezone.utc) - timedelta(hours=24))
+        cutoff = local_hours_ago(24)
         fire_row = db.fetchone(
             "SELECT COUNT(*) AS n FROM rule_fire_events WHERE created_at >= ?",
             (cutoff,),

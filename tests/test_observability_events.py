@@ -47,7 +47,8 @@ class TestWriteEvent:
         detail = json.loads(row["details"])
         assert detail["embed_mode"] == "local"
         assert detail["rule_count"] == 42
-        assert row["created_at"].endswith("Z")
+        from datetime import datetime as _dt
+        _dt.strptime(row["created_at"], "%Y-%m-%d %H:%M:%S")
 
     def test_null_session_id(self, db):
         write_event(db, source="cli_extract", outcome="extracted_3")

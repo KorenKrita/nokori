@@ -460,5 +460,5 @@ def run_shadow_counterfactual_evaluation(
 
 
 def _days_ago_iso(days: int) -> str:
-    dt = datetime.now(timezone.utc) - timedelta(days=days)
-    return dt.isoformat(timespec="seconds").replace("+00:00", "Z")
+    from ..utils.time import local_days_ago
+    return local_days_ago(days)

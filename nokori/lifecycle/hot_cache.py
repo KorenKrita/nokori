@@ -7,7 +7,7 @@ from ..config import Config
 from ..constants import TRANSCRIPT_MTIME_EPSILON_SEC
 from ..db import Db
 from ..extract.reader import read_tail_user_turns
-from ..utils.time import now_iso, parse_iso
+from ..utils.time import local_days_ago, now_iso, parse_iso
 from ..utils.transcript import is_path_allowed, resolve_transcript_path, transcript_key
 
 HOT_CACHE_BUDGET_CHARS = 500
@@ -107,9 +107,7 @@ def _was_extracted(db: Db, path: Path) -> bool:
 
 def _recent_trusted_rules_summary(db: Db) -> str | None:
     """Build a summary of recently fired active/trusted rules from rule_fire_events."""
-    cutoff = (
-        datetime.now(timezone.utc) - timedelta(days=TRUSTED_RECENT_WINDOW_DAYS)
-    ).isoformat(timespec="seconds").replace("+00:00", "Z")
+    cutoff = local_days_ago(TRUSTED_RECENT_WINDOW_DAYS)
 
     rows = db.fetchall(
         "SELECT r.id, r.trigger_canonical, r.action_instruction, "

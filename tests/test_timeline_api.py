@@ -59,9 +59,11 @@ class TestTimelineAPI:
         resp = client.get("/api/timeline?session_id=s1")
         assert resp.status_code == 200
         data = resp.json()
-        assert data["count"] == 4
-        for event in data["events"]:
-            assert event["session_id"] == "s1"
+        assert data["count"] == 5
+        session_events = [e for e in data["events"] if e["session_id"] == "s1"]
+        assert len(session_events) == 4
+        pipeline_events = [e for e in data["events"] if e.get("source") == "cold_pipeline"]
+        assert len(pipeline_events) == 1
 
     def test_get_timeline_source_filter(self, client, seeded_db):
         resp = client.get("/api/timeline?source=pre_tool_use")

@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import argparse
-from datetime import datetime, timedelta, timezone
 
 from ..config import Config
 from ..cold.jobs import is_circuit_breaker_open
 from ..db import open_db, fetch_rules
-from ..utils.time import iso_of
+from ..utils.time import local_hours_ago
 from ..extract import jobs as job_io
 from ..search import embed_ipc
 from ..search.idf_stats import build_idf_stats
@@ -54,7 +53,7 @@ def run(_args: argparse.Namespace, cfg: Config) -> int:
     try:
         db = open_db(cfg.db_path)
         rules = db.fetchall("SELECT status, COUNT(*) AS n FROM rules GROUP BY status")
-        cutoff = iso_of(datetime.now(timezone.utc) - timedelta(hours=24))
+        cutoff = local_hours_ago(24)
         injected_24h = db.fetchone(
             "SELECT COUNT(*) AS n FROM rule_fire_events WHERE created_at >= ?",
             (cutoff,),

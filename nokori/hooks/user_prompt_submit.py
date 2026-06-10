@@ -12,6 +12,7 @@ from ..db import (
     open_db,
 )
 from ..events.observability import write_event
+from ..utils.time import local_now
 from ..gate import marker as marker_io
 from ..gate import prompt_ack
 from ..gate.blocker import select_gate_rules
@@ -41,7 +42,7 @@ def _run_dismiss(db: Db, prompt: str, session_id: str, cfg: Config) -> int:
     count = 0
     seen_sids: set[str] = set()
     now = now_iso()
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+    cutoff = local_now() - timedelta(hours=24)
     cutoff_iso = iso_of(cutoff)
     for m in pattern.finditer(prompt or ""):
         sid = m.group("sid").lower()

@@ -310,6 +310,5 @@ def _content_tokens(text: str) -> set[str]:
 
 
 def _now_iso() -> str:
-    from datetime import datetime, timezone
-
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    from nokori.utils.time import now_iso
+    return now_iso()

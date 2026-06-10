@@ -8,10 +8,10 @@ input_hash for deduplication and caching.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from nokori.db import Db
-from nokori.utils.time import now_iso as _shared_now_iso
+from nokori.utils.time import iso_of as _iso_of, local_now, now_iso as _shared_now_iso, parse_iso
 
 # --- Constants ---
 
@@ -119,10 +119,7 @@ def mark_job_failed(db: Db, job_id: str, error_info: str | None = None) -> None:
             )
             return
         backoff = _retry_backoff_seconds(new_retries)
-        next_retry_at = datetime.now(timezone.utc).timestamp() + backoff
-        next_retry_iso = datetime.fromtimestamp(
-            next_retry_at, tz=timezone.utc
-        ).strftime("%Y-%m-%dT%H:%M:%SZ")
+        next_retry_iso = _iso_of(local_now() + timedelta(seconds=backoff))
         tx.execute(
             "UPDATE llm_jobs SET status = 'failed', retries = ?, "
             "next_retry_at = ?, output_json = ?, updated_at = ? WHERE id = ?",
@@ -153,12 +150,11 @@ def is_circuit_breaker_open(db: Db, role: str, model_id: str | None = None) -> b
                 (r["updated_at"] for r in rows if r["status"] == "failed"), None
             )
             if last_failure:
-                try:
-                    recent_dt = datetime.fromisoformat(last_failure.replace("Z", "+00:00"))
-                    elapsed = (datetime.now(timezone.utc) - recent_dt).total_seconds()
-                    if elapsed < CIRCUIT_BREAKER_COOLDOWN_SECONDS:
-                        return True
-                except (ValueError, TypeError):
+                recent_dt = parse_iso(last_failure)
+                if recent_dt is None:
+                    return True
+                elapsed = (local_now() - recent_dt).total_seconds()
+                if elapsed < CIRCUIT_BREAKER_COOLDOWN_SECONDS:
                     return True
 
     # Type 2: provider auth/rate-limit (check by model_id if available)
@@ -180,12 +176,11 @@ def is_circuit_breaker_open(db: Db, role: str, model_id: str | None = None) -> b
                 None,
             )
             if most_recent_auth:
-                try:
-                    recent_dt = datetime.fromisoformat(most_recent_auth.replace("Z", "+00:00"))
-                    elapsed = (datetime.now(timezone.utc) - recent_dt).total_seconds()
-                    if elapsed < CIRCUIT_BREAKER_COOLDOWN_SECONDS:
-                        return True
-                except (ValueError, TypeError):
+                recent_dt = parse_iso(most_recent_auth)
+                if recent_dt is None:
+                    return True
+                elapsed = (local_now() - recent_dt).total_seconds()
+                if elapsed < CIRCUIT_BREAKER_COOLDOWN_SECONDS:
                     return True
 
     # Type 3: consecutive schema parse failures for this role+prompt_version
@@ -238,11 +233,9 @@ def enqueue_transcript_ingest(
     """
     job_id = str(uuid.uuid4())
     now = _now_iso()
-    ttl_expires_at = datetime.fromtimestamp(
-        datetime.now(timezone.utc).timestamp()
-        + TRANSCRIPT_INGEST_TTL_HOURS * 3600,
-        tz=timezone.utc,
-    ).strftime("%Y-%m-%dT%H:%M:%SZ")
+    ttl_expires_at = _iso_of(
+        local_now() + timedelta(hours=TRANSCRIPT_INGEST_TTL_HOURS)
+    )
 
     with db.transaction() as tx:
         existing = tx.execute(

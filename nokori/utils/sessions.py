@@ -8,13 +8,13 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 
 from ..config import Config
 from .fs import atomic_write_json
 from .ids import safe_session_id
-from .time import now_iso, parse_iso
+from .time import local_now, now_iso, parse_iso
 
 
 def _path_for(cfg: Config, session_id: str) -> Path:
@@ -133,12 +133,12 @@ def is_active_record(
     """Session is open and had activity within idle window (status display / stale cleanup)."""
     if data.get("ended_at"):
         return False
-    now = now or datetime.now(timezone.utc)
+    now = now or local_now()
     last = parse_iso(data.get("last_activity")) or parse_iso(data.get("started_at"))
     if last is None:
         return True
     if last.tzinfo is None:
-        last = last.replace(tzinfo=timezone.utc)
+        last = last.astimezone()  # assume local tz for legacy naive timestamps
     return (now - last).total_seconds() <= idle_seconds
 
 
@@ -163,7 +163,7 @@ def list_active_sessions(
     records: list[dict] | None = None,
 ) -> list[dict]:
     idle = idle_seconds if idle_seconds is not None else cfg.session_idle_seconds
-    now = datetime.now(timezone.utc)
+    now = local_now()
     rows = records if records is not None else list_session_records(cfg)
     active = [
         d
@@ -179,7 +179,7 @@ SESSION_FILE_RETENTION_DAYS = 60
 
 def prune_ended_session_files(cfg: Config, max_age_days: int = SESSION_FILE_RETENTION_DAYS) -> int:
     """Remove session registry files ended longer than max_age_days ago."""
-    now = datetime.now(timezone.utc)
+    now = local_now()
     removed = 0
     for data in list_session_records(cfg):
         ended = data.get("ended_at")

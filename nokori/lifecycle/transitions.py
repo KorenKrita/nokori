@@ -32,7 +32,7 @@ from ..policy import (
     Status,
 )
 from ..utils.logging import get_logger
-from ..utils.time import now_iso, parse_iso
+from ..utils.time import iso_of, local_now, now_iso, parse_iso
 
 log = get_logger("nokori.lifecycle.transitions")
 
@@ -747,7 +747,7 @@ def _evaluate_suppressed(db: Db, row, rule_version: int) -> TransitionResult:
     ttl_expired = False
     if suppressed_at is not None:
         ttl_deadline = suppressed_at + timedelta(days=SUPPRESSION_TTL_DAYS)
-        ttl_expired = datetime.now(timezone.utc) > ttl_deadline
+        ttl_expired = local_now() > ttl_deadline
     else:
         log.warning(
             "suppressed_at unparseable for rule=%s value=%r",
@@ -823,5 +823,4 @@ def _evaluate_suppressed(db: Db, row, rule_version: int) -> TransitionResult:
 
 
 def _days_ago_iso(days: int) -> str:
-    dt = datetime.now(timezone.utc) - timedelta(days=days)
-    return dt.isoformat(timespec="seconds").replace("+00:00", "Z")
+    return iso_of(local_now() - timedelta(days=days))

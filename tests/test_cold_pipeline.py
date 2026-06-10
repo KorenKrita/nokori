@@ -463,8 +463,8 @@ class TestTranscriptIngestTTL:
         )
 
         # Manually set ttl_expires_at to the past
-        past = (datetime.now(timezone.utc) - timedelta(hours=1)).strftime(
-            "%Y-%m-%dT%H:%M:%SZ"
+        past = (datetime.now().astimezone() - timedelta(hours=1)).strftime(
+            "%Y-%m-%d %H:%M:%S"
         )
         with db.transaction() as tx:
             tx.execute(

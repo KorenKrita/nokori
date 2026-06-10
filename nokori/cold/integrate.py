@@ -18,6 +18,7 @@ from ..merge.policy import (
 )
 from ..policy import RUNTIME_POLICY_VERSION, SourceOrigin, ActivationOrigin
 from ..utils.logging import get_logger
+from ..utils.time import now_iso
 from ._constants import DESTRUCTIVE_MERGE_OPS, PIPELINE_VERSION
 from ._llm_call import (
     CircuitBreakerOpenError,
@@ -203,7 +204,7 @@ def insert_rule_from_pipeline(
     """
     rule_id = str(uuid.uuid4())
     short_id = rule_id[:8]
-    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    now = now_iso()
     scores = scores or {}
 
     # Extract structured fields
@@ -384,7 +385,7 @@ def _apply_merge_side_effects(
     if existing_version is None or existing_status is None:
         return
 
-    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    now = now_iso()
     reason = merge_info.get("merge_rationale", merge_op)
     # CAS over all 4 fields: rule_id, rule_version, status, runtime_policy_version (spec section 13)
     rpv_where = "AND runtime_policy_version = ?" if existing_rpv else "AND runtime_policy_version IS NULL"
@@ -513,7 +514,7 @@ def _apply_non_destructive_merge(
     current_status = rule_row["status"]
     current_rpv = rule_row["runtime_policy_version"]
 
-    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    now = now_iso()
     updates: list[str] = []
     params: list = []
 

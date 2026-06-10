@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from ..db import Db, _delete_rule_cascade_tx
 from ..events.observability import write_event
 from ..utils.logging import get_logger
-from ..utils.time import iso_of, now_iso, parse_iso
+from ..utils.time import iso_of, local_now, now_iso, parse_iso
 
 log = get_logger("nokori.lifecycle.maintenance")
 
@@ -22,7 +22,7 @@ TRANSITION_EVAL_INTERVAL_DAYS = 1
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return local_now()
 
 
 def _days_since_iso(iso: str | None) -> int | None:

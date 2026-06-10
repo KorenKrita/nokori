@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 from ..db import Db, dumps_json, loads_json
 from ..policy import RUNTIME_POLICY_VERSION
-from ..utils.time import now_iso
+from ..utils.time import local_days_ago, now_iso
 
 if TYPE_CHECKING:
     from ..models import Rule
@@ -140,9 +140,7 @@ def count_evaluated_fire_events(
 
     Returns counts keyed by label plus total_evaluated.
     """
-    cutoff = (
-        datetime.now(timezone.utc) - timedelta(days=window_days)
-    ).isoformat(timespec="seconds").replace("+00:00", "Z")
+    cutoff = local_days_ago(window_days)
 
     rows = db.fetchall(
         "SELECT posthoc_label, COUNT(*) AS n FROM rule_fire_events "
