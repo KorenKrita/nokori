@@ -716,12 +716,12 @@ def _existing_usefulness_weak_or_stale(existing_rule: dict) -> bool:
     if not first_useful:
         return True
     try:
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timedelta
 
         ts = str(first_useful).replace("Z", "+00:00")
         first_dt = datetime.fromisoformat(ts)
         if first_dt.tzinfo is None:
-            first_dt = first_dt.replace(tzinfo=timezone.utc)
+            first_dt = first_dt.astimezone()
         from nokori.utils.time import local_now
         if local_now() - first_dt > timedelta(days=90):
             return True

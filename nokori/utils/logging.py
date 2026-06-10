@@ -15,7 +15,7 @@ _LEVELS = {
 }
 
 _FORMAT = "%(asctime)s %(levelname)-7s %(name)s [%(session_id)s] %(message)s"
-_DATEFMT = "%Y-%m-%dT%H:%M:%SZ"
+_DATEFMT = "%Y-%m-%d %H:%M:%S"
 
 _configured = False
 _lock = Lock()
@@ -41,7 +41,7 @@ def configure(logs_dir: Path, level: str = "warn") -> None:
             root.removeHandler(h)
 
         formatter = logging.Formatter(_FORMAT, datefmt=_DATEFMT)
-        formatter.converter = time.gmtime
+        formatter.converter = time.localtime
         sess_filter = _SessionFilter()
 
         hook_handler = logging.handlers.RotatingFileHandler(
