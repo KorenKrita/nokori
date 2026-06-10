@@ -39,6 +39,7 @@ CLAUDE.md
 AGENTS.md
 CONTEXT.md
 .ace-tool/
+.archlet/
 web/node_modules
 .codegraph/
 .lean-ctx/

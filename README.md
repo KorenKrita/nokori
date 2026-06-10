@@ -75,6 +75,12 @@ Your data stays on your machine, in SQLite, the whole way through. Retrieval dur
 | Preferences vanish with the chat window | Rules stay local and follow you across projects |
 | Retrieval means waiting on a model | Hot-path recall is deterministic file I/O + scoring |
 
+<p align="center">
+  <img src="docs/assets/readme-illustrations/01-corrections-become-rules.en.png" width="880" alt="Corrections are distilled into durable local rules" />
+  <br />
+  <sub>Every correction is distilled into a durable local rule.</sub>
+</p>
+
 ---
 
 ## One minute overview
