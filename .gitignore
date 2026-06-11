@@ -22,6 +22,8 @@ docs/*
 !docs/zh-TW/
 !docs/en/
 !docs/ja/
+!docs/adr/
+!docs/agents/
 !docs/assets/
 docs/assets/*
 !docs/assets/logo.png
