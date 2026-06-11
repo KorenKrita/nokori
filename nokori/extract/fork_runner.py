@@ -239,17 +239,23 @@ def run(session_id: str, transcript_path: str | None = None, job_path: str | Non
         # --- Process candidates through shared pipeline ---
         project_id = find_project_id_for_transcript(cfg, t_path) if t_path else None
 
-        rules_created, all_ok = process_candidates(
-            candidates, t_path or Path(f"fork:{session_id}"), project_id, cfg,
-        )
+        try:
+            rules_created, all_ok = process_candidates(
+                candidates, t_path or Path(f"fork:{session_id}"), project_id, cfg,
+            )
+        except Exception as exc:
+            log.error("process_candidates crashed: %s", exc)
+            _write_event_safe(cfg, session_id, "fork_extract_pipeline_error", {"error": str(exc)})
+            return 1
 
         # --- Post-extraction: mark offset & cleanup job ---
-        if t_path and t_path.exists():
-            _mark_extracted_safe(cfg, t_path)
-        if j_path:
-            delete_job(j_path)
-        if not all_ok:
-            log.warning("fork extract partial: session=%s", session_id)
+        if all_ok:
+            if t_path and t_path.exists():
+                _mark_extracted_safe(cfg, t_path)
+            if j_path:
+                delete_job(j_path)
+        else:
+            log.warning("fork extract partial, offset not advanced: session=%s", session_id)
 
         _write_event_safe(cfg, session_id, "fork_extract_ok", {
             "candidates": len(candidates),

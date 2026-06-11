@@ -14,10 +14,8 @@ from ..cold.jobs import enqueue_transcript_ingest, expire_stale_ingest_jobs, mar
 from ..cold.pipeline import run_cold_pipeline
 from ..cold.roles import PROMPT_VERSIONS
 from ..config import Config
-from ..db import Db, open_db
-from ..events.observability import write_event
+from ..db import open_db
 from ..extract.extractor import Candidate
-from ..lifecycle.hot_cache import mark_extracted
 from ..llm.adapter import LLMAdapter
 from ..utils.logging import get_logger
 
@@ -115,13 +113,12 @@ def process_candidates(
         (rules_created, all_ok)
     """
     db = open_db(cfg.db_path)
-    llm = LLMAdapter(cfg)
-    cold_llm = _ColdLLMAdapter(llm)
-    rules_created = 0
-    all_ok = True
-    transcript_ref = str(transcript_path)
-
     try:
+        llm = LLMAdapter(cfg)
+        cold_llm = _ColdLLMAdapter(llm)
+        rules_created = 0
+        all_ok = True
+        transcript_ref = str(transcript_path)
         try:
             expire_stale_ingest_jobs(db)
         except Exception as exc:
