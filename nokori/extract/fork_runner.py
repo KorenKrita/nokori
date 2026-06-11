@@ -181,6 +181,9 @@ def run(session_id: str, transcript_path: str | None = None) -> int:
     if cfg.disabled:
         return 0
 
+    from ..utils.logging import configure
+    configure(cfg.logs_dir, level=cfg.log_level)
+
     with extract_lock(cfg) as locked:
         if not locked:
             log.info("extract lock held, fork extract deferred")
