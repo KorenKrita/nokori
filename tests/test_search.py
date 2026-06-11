@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from nokori.models import Rule
 from nokori.models import ScoredResult
 from nokori.runtime.applicability import meets_min_evidence
-from nokori.search.engine import select_injection
+from nokori.search.selector import select_injection
 from nokori.search import bm25, ranker
 
 

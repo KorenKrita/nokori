@@ -11,7 +11,8 @@ from nokori.db import open_db
 from nokori.matcher.compiler import compile_rule
 from nokori.matcher.runtime import evaluate_match
 from nokori.models import Rule
-from nokori.search.engine import RetrievalEngine, trigger_data_for_rule
+from nokori.search.engine import RetrievalEngine
+from nokori.search.evidence import trigger_data_for_rule
 
 
 def _make_rule(

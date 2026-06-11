@@ -6,7 +6,7 @@ import pytest
 
 from nokori.models import Rule, ScoredResult
 from nokori.policy import HOT_MAX_DEFAULT, WARM_HARD_MAX
-from nokori.search.engine import (
+from nokori.search.selector import (
     SelectionResult,
     compute_utility,
     mmr_penalty,

@@ -1,4 +1,9 @@
-"""Shared retrieve + injection path for UserPromptSubmit and Cursor deferred preToolUse."""
+"""Shared retrieve + injection path for UserPromptSubmit and Cursor deferred preToolUse.
+
+Split into two independently testable layers:
+  - retrieve_and_format(): pure pipeline (fetch → retrieve → format → return outcome)
+  - record_injection_events(): side-effect layer (fire + shadow event persistence)
+"""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -35,6 +40,11 @@ class PromptInjectOutcome:
     ph: str
 
 
+# ---------------------------------------------------------------------------
+# Pure pipeline: fetch → retrieve → format
+# ---------------------------------------------------------------------------
+
+
 def _fetch_formal_and_shadow(
     db: Db, cfg: Config, project_id: str | None
 ) -> tuple[list, list]:
@@ -53,6 +63,61 @@ def _fetch_formal_and_shadow(
     else:
         shadow_rules = []
     return formal_rules, shadow_rules
+
+
+def retrieve_and_format(
+    db: Db,
+    cfg: Config,
+    *,
+    prompt: str,
+    project_id: str | None,
+    engine: RetrievalEngine | None = None,
+) -> PromptInjectOutcome | None:
+    """Retrieve rules and build injection text. No side effects.
+
+    Returns None if there are no rules to search.
+    """
+    formal_rules, shadow_rules = _fetch_formal_and_shadow(db, cfg, project_id)
+    if not formal_rules and not shadow_rules:
+        return None
+
+    if engine is None:
+        engine = RetrievalEngine(cfg, db)
+
+    try:
+        result = engine.retrieve(
+            prompt,
+            formal_rules,
+            shadow_rules,
+            interaction="hook",
+        )
+    except OSError as e:
+        raise RetrieveFailed(str(e)) from e
+
+    hot, warm = result.hot, result.warm
+    shadow_hot, shadow_warm = result.shadow_hot, result.shadow_warm
+
+    normalized = normalize_prompt_for_hash(prompt)
+    ph = prompt_hash(normalized or prompt)
+
+    text, rendered_entries = format_injection(
+        hot, warm, max_chars=cfg.max_injection_chars, dismiss_phrase=cfg.dismiss_phrase
+    )
+
+    return PromptInjectOutcome(
+        hot=hot,
+        warm=warm,
+        shadow_hot=shadow_hot,
+        shadow_warm=shadow_warm,
+        text=text,
+        rendered_entries=rendered_entries,
+        ph=ph,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Side-effect layer: event persistence
+# ---------------------------------------------------------------------------
 
 
 def build_decision_features(r) -> dict:
@@ -89,8 +154,6 @@ def _record_fire_events(
     prompt_text: str | None = None,
 ) -> None:
     """Create fire events for injected WARM/HOT rules."""
-    # Store actual prompt text (truncated to 4000 chars) for posthoc evaluator access,
-    # instead of just a hash reference.
     if prompt_text and len(prompt_text) > 64:
         bounded_ref = prompt_text[:4000]
     else:
@@ -178,6 +241,50 @@ def _record_shadow_events(
             log.info("shadow event creation failed rule=%s: %s", r.rule.id, e)
 
 
+def record_injection_events(
+    db: Db,
+    outcome: PromptInjectOutcome,
+    *,
+    session_id: str,
+    turn_index: int | None = None,
+    prompt_text: str | None = None,
+    record_injections: bool = True,
+    record_shadow_hits: bool = True,
+) -> None:
+    """Persist fire and shadow events for a completed injection outcome.
+
+    This is the side-effect counterpart to retrieve_and_format().
+
+    Args:
+        prompt_text: The original prompt text (strongly recommended). When provided,
+            fire events store a truncated copy (up to 4000 chars) for posthoc
+            evaluation access. Without it, events only contain a hash reference
+            and posthoc evaluator cannot access the original prompt.
+    """
+    if record_injections:
+        _record_rendered_fire_events(
+            db,
+            session_id,
+            outcome.ph,
+            outcome.hot,
+            outcome.warm,
+            outcome.rendered_entries,
+            turn_index=turn_index,
+            prompt_text=prompt_text,
+        )
+
+    if record_shadow_hits:
+        _record_shadow_events(
+            db, session_id, outcome.ph, outcome.shadow_hot + outcome.shadow_warm,
+            turn_index=turn_index,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Combined entry point (backward-compatible)
+# ---------------------------------------------------------------------------
+
+
 def inject_for_prompt(
     db: Db,
     cfg: Config,
@@ -190,61 +297,24 @@ def inject_for_prompt(
     record_shadow_hits: bool = True,
     engine: RetrievalEngine | None = None,
 ) -> PromptInjectOutcome | None:
-    """Retrieve rules and build injection text. None if there are no rules to search."""
-    formal_rules, shadow_rules = _fetch_formal_and_shadow(db, cfg, project_id)
-    if not formal_rules and not shadow_rules:
+    """Retrieve rules and build injection text. None if there are no rules to search.
+
+    Combines retrieve_and_format() + record_injection_events() for backward compatibility.
+    """
+    outcome = retrieve_and_format(
+        db, cfg, prompt=prompt, project_id=project_id, engine=engine,
+    )
+    if outcome is None:
         return None
 
-    if engine is None:
-        engine = RetrievalEngine(cfg, db)
-
-    try:
-        result = engine.retrieve(
-            prompt,
-            formal_rules,
-            shadow_rules,
-            interaction="hook",
-        )
-    except OSError as e:
-        raise RetrieveFailed(str(e)) from e
-
-    hot, warm = result.hot, result.warm
-    shadow_hot, shadow_warm = result.shadow_hot, result.shadow_warm
-
-    normalized = normalize_prompt_for_hash(prompt)
-    ph = prompt_hash(normalized or prompt)
-
-    text, rendered_entries = format_injection(
-        hot, warm, max_chars=cfg.max_injection_chars, dismiss_phrase=cfg.dismiss_phrase
+    record_injection_events(
+        db,
+        outcome,
+        session_id=session_id,
+        turn_index=turn_index,
+        prompt_text=prompt,
+        record_injections=record_injections,
+        record_shadow_hits=record_shadow_hits,
     )
 
-    # Record only rules that were actually rendered into the prompt. HOT rules
-    # may spill into WARM when the injection budget is tight.
-    if record_injections:
-        _record_rendered_fire_events(
-            db,
-            session_id,
-            ph,
-            hot,
-            warm,
-            rendered_entries,
-            turn_index=turn_index,
-            prompt_text=prompt,
-        )
-
-    # Record shadow events for candidate/suppressed matches (fingerprint dedup)
-    if record_shadow_hits:
-        _record_shadow_events(
-            db, session_id, ph, shadow_hot + shadow_warm,
-            turn_index=turn_index,
-        )
-
-    return PromptInjectOutcome(
-        hot=hot,
-        warm=warm,
-        shadow_hot=shadow_hot,
-        shadow_warm=shadow_warm,
-        text=text,
-        rendered_entries=rendered_entries,
-        ph=ph,
-    )
+    return outcome
