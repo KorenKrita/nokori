@@ -10,7 +10,7 @@ import pytest
 
 from nokori.config import Config
 from nokori.extract.fork import (
-    _ROLE_OVERRIDE_PREAMBLE,
+    _FORK_TASK_PREAMBLE,
     _build_env,
     _claude_cli_available,
     _valid_session_id,
@@ -104,8 +104,8 @@ class TestForkExtract:
             assert fork_extract("-r malicious", "prompt", cfg) is None
             assert fork_extract("", "prompt", cfg) is None
 
-    def test_prompt_includes_role_override(self, cfg):
-        """The prompt passed to claude includes the role override preamble."""
+    def test_prompt_includes_task_preamble(self, cfg):
+        """The prompt passed to claude includes the task preamble."""
         mock_run = MagicMock(return_value=subprocess.CompletedProcess(
             args=[], returncode=0, stdout='{"candidates": []}', stderr=""
         ))
@@ -116,8 +116,25 @@ class TestForkExtract:
         cmd = mock_run.call_args[0][0]
         prompt_arg_idx = cmd.index("-p") + 1
         prompt = cmd[prompt_arg_idx]
-        assert prompt.startswith(_ROLE_OVERRIDE_PREAMBLE)
+        assert prompt.startswith(_FORK_TASK_PREAMBLE)
         assert "the real prompt" in prompt
+
+    def test_cmd_disables_tools(self, cfg):
+        """The command disables all tools to prevent agent behavior."""
+        mock_run = MagicMock(return_value=subprocess.CompletedProcess(
+            args=[], returncode=0, stdout='{"candidates": []}', stderr=""
+        ))
+        with patch("nokori.extract.fork.subprocess.run", mock_run), \
+             patch("nokori.extract.fork._claude_cli_available", return_value=True):
+            fork_extract("session-123", "prompt", cfg)
+
+        cmd = mock_run.call_args[0][0]
+        assert "--tools" in cmd
+        tools_idx = cmd.index("--tools") + 1
+        assert cmd[tools_idx] == ""
+        assert "--max-turns" in cmd
+        turns_idx = cmd.index("--max-turns") + 1
+        assert cmd[turns_idx] == "1"
 
 
 class TestValidSessionId:
