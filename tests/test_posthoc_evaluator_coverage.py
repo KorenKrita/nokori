@@ -141,7 +141,10 @@ class TestParsePosthocOutputAliases:
 
 
 class TestRunPosthocEvaluation:
-    def setup_method(self):
+    @pytest.fixture(autouse=True)
+    def _clear_cache(self):
+        _POSTHOC_RESULT_CACHE.clear()
+        yield
         _POSTHOC_RESULT_CACHE.clear()
 
     def test_successful_evaluation(self):

@@ -83,6 +83,7 @@ class TestExtractJobEnqueue:
             cfg,
         )
         assert result is True
+        assert list(cfg.jobs_dir.glob("extract-*.json"))
 
 
 class TestExtractSessionTurns:
