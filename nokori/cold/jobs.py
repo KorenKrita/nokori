@@ -264,6 +264,17 @@ def enqueue_transcript_ingest(
     return job_id
 
 
+def mark_ingest_done(db: Db, segment_hash: str, extractor_prompt_version: str) -> None:
+    """Mark a transcript ingest job as done after cold pipeline succeeds."""
+    now = _now_iso()
+    with db.transaction() as tx:
+        tx.execute(
+            "UPDATE transcript_ingest_jobs SET status = 'done', updated_at = ? "
+            "WHERE segment_hash = ? AND extractor_prompt_version = ? AND status = 'pending'",
+            (now, segment_hash, extractor_prompt_version),
+        )
+
+
 def expire_stale_ingest_jobs(db: Db) -> int:
     """Mark expired transcript ingest jobs as 'expired'. Return count."""
     now = _now_iso()

@@ -1,0 +1,203 @@
+"""Shared candidate processing pipeline.
+
+Both the normal extract path (commands/extract.py) and the fork path
+(extract/fork_runner.py) produce a list of Candidate objects via different
+means. This module provides the single shared function that takes those
+candidates and routes them through the cold pipeline.
+"""
+from __future__ import annotations
+
+import hashlib
+from pathlib import Path
+
+from ..cold.jobs import enqueue_transcript_ingest, expire_stale_ingest_jobs, mark_ingest_done
+from ..cold.pipeline import run_cold_pipeline
+from ..cold.roles import PROMPT_VERSIONS
+from ..config import Config
+from ..db import Db, open_db
+from ..events.observability import write_event
+from ..extract.extractor import Candidate
+from ..lifecycle.hot_cache import mark_extracted
+from ..llm.adapter import LLMAdapter
+from ..utils.logging import get_logger
+
+log = get_logger("nokori.extract.process")
+
+_EVIDENCE_QUOTE_MAX = 500
+
+
+class _ColdLLMAdapter:
+    """Adapts LLMAdapter to the cold pipeline's llm.call() interface."""
+
+    def __init__(self, llm: LLMAdapter):
+        self._llm = llm
+
+    def call(
+        self,
+        model: str,
+        system: str,
+        user: str,
+        max_tokens: int = 2000,
+        timeout: int = 30,
+    ) -> str:
+        if self._llm.configured():
+            result = self._llm._call_openai_compatible(
+                system, user, max_tokens, timeout, model_id=model
+            )
+        else:
+            result = self._llm._fallback_claude_cli(system, user, timeout)
+        if result is None:
+            raise RuntimeError("LLM call returned None")
+        return result
+
+
+def _segment_hash(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
+
+
+def _candidate_evidence_quotes(cand: Candidate, transcript_text: str | None) -> list[str]:
+    """Return transcript evidence — prefer extractor-returned verbatim quotes."""
+    if not transcript_text or not transcript_text.strip():
+        return cand.evidence_quotes or []
+
+    haystack = transcript_text.strip()
+    if cand.evidence_quotes:
+        lower = haystack.lower()
+        verified = []
+        for q in cand.evidence_quotes:
+            if q in haystack:
+                verified.append(q[:_EVIDENCE_QUOTE_MAX])
+            elif q.lower() in lower:
+                idx = lower.find(q.lower())
+                verified.append(haystack[idx:idx + len(q)][:_EVIDENCE_QUOTE_MAX])
+        if verified:
+            return verified
+
+    needles = [
+        cand.trigger,
+        cand.action,
+        cand.behavior,
+        cand.rationale,
+        *cand.trigger_variants,
+    ]
+    lower = haystack.lower()
+    for needle in needles:
+        if not needle:
+            continue
+        idx = lower.find(str(needle).strip().lower())
+        if idx < 0:
+            continue
+        start = max(0, idx - 160)
+        end = min(len(haystack), idx + len(str(needle)) + 240)
+        return [haystack[start:end].strip()[:_EVIDENCE_QUOTE_MAX]]
+    return [haystack[:_EVIDENCE_QUOTE_MAX]]
+
+
+def process_candidates(
+    candidates: list[Candidate],
+    transcript_path: Path,
+    project_id: str | None,
+    cfg: Config,
+    *,
+    transcript_text: str | None = None,
+) -> tuple[int, bool]:
+    """Route extracted candidates through the cold pipeline.
+
+    Args:
+        candidates: Parsed extraction candidates.
+        transcript_path: Path to the transcript (used for seg_hash and transcript_ref).
+        project_id: Optional project scope.
+        cfg: Config instance.
+        transcript_text: If available, used to verify evidence_quotes against
+            actual transcript content. Fork path does not have this.
+
+    Returns:
+        (rules_created, all_ok)
+    """
+    db = open_db(cfg.db_path)
+    llm = LLMAdapter(cfg)
+    cold_llm = _ColdLLMAdapter(llm)
+    rules_created = 0
+    all_ok = True
+    transcript_ref = str(transcript_path)
+
+    try:
+        try:
+            expire_stale_ingest_jobs(db)
+        except Exception as exc:
+            log.debug("expire_stale_ingest_jobs failed (non-fatal): %s", exc)
+
+        for cand in candidates:
+            extractor_output = {
+                "trigger": cand.trigger or "",
+                "trigger_zh": cand.trigger_text_zh or "",
+                "trigger_variants": cand.trigger_variants or [],
+                "trigger_variants_zh": cand.trigger_variants_zh or [],
+                "search_terms": cand.search_terms or {},
+                "required_concepts": cand.required_concepts or [],
+                "excluded_contexts": cand.excluded_contexts or [],
+                "non_generalization_boundaries": cand.non_generalization_boundaries or [],
+                "near_miss_examples": cand.near_miss_examples or [],
+                "severity": cand.severity or "reminder",
+                "domain_tags": cand.domain_tags or [],
+                "tool_tags": cand.tool_tags or [],
+                "file_or_path_patterns": cand.file_or_path_patterns or [],
+                "behavior": cand.behavior or "",
+                "action": cand.action or "",
+                "action_zh": cand.action_zh or "",
+                "evidence_quotes": _candidate_evidence_quotes(cand, transcript_text),
+            }
+
+            segment_text = f"{transcript_ref}::{extractor_output['trigger']}::{extractor_output['action']}"
+            seg_hash = _segment_hash(segment_text)
+
+            try:
+                existing_job = db.fetchone(
+                    "SELECT id FROM transcript_ingest_jobs "
+                    "WHERE segment_hash = ? AND extractor_prompt_version = ? "
+                    "AND status = 'done'",
+                    (seg_hash, PROMPT_VERSIONS["extractor"]),
+                )
+                if existing_job:
+                    continue
+            except Exception as exc:
+                log.warning("dedup check failed segment=%s: %s", seg_hash[:8], exc)
+                all_ok = False
+                continue
+
+            try:
+                enqueue_transcript_ingest(
+                    db,
+                    transcript_ref=transcript_ref,
+                    segment_hash=seg_hash,
+                    extractor_prompt_version=PROMPT_VERSIONS["extractor"],
+                )
+            except Exception as exc:
+                log.warning("enqueue_transcript_ingest failed: %s", exc)
+                all_ok = False
+                continue
+
+            try:
+                result = run_cold_pipeline(
+                    db,
+                    cold_llm,
+                    transcript_ref=transcript_ref,
+                    extractor_output=extractor_output,
+                    role_models=cfg.role_models,
+                    default_model=cfg.llm_model,
+                    project_id=project_id,
+                    role_max_tokens=cfg.role_max_tokens,
+                    role_timeouts=cfg.role_timeouts,
+                )
+                if not result.status.startswith("pending"):
+                    mark_ingest_done(db, seg_hash, PROMPT_VERSIONS["extractor"])
+                if result.rule_id is not None:
+                    rules_created += 1
+            except Exception as exc:
+                log.warning("cold pipeline failed for candidate: %s (%s)",
+                            (cand.trigger or "")[:60], exc)
+                all_ok = False
+    finally:
+        db.close()
+
+    return (rules_created, all_ok)

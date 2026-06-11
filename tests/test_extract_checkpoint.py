@@ -76,7 +76,7 @@ def test_partial_extract_retry_deduplicates_via_segment_hash(monkeypatch, tmp_pa
     monkeypatch.setattr(extract_cmd, "LLMAdapter", lambda cfg: FakeExtractLLM())
 
     # First run: first candidate succeeds, second fails -> all_ok = False
-    with patch("nokori.commands.extract.run_cold_pipeline", side_effect=fake_cold_pipeline):
+    with patch("nokori.extract.process.run_cold_pipeline", side_effect=fake_cold_pipeline):
         cands, rules, finished = extract_cmd._process_path(path, "proj", cfg, dry_run=False)
 
     assert cands == 2
@@ -90,22 +90,23 @@ def test_partial_extract_retry_deduplicates_via_segment_hash(monkeypatch, tmp_pa
             "SELECT segment_hash, status FROM transcript_ingest_jobs"
         )
         assert len(jobs) == 2  # both candidates enqueued
+        statuses = {row["status"] for row in jobs}
+        # First candidate succeeded → done; second failed → still pending
+        assert statuses == {"done", "pending"}
     finally:
         db.close()
 
-    # Second run (retry): enqueue_transcript_ingest will dedup existing jobs
+    # Second run (retry): successful candidate skipped (status=done), only failed one retried
     cold_call_count[0] = 0
-    with patch("nokori.commands.extract.run_cold_pipeline", side_effect=fake_cold_pipeline):
+    with patch("nokori.extract.process.run_cold_pipeline", side_effect=fake_cold_pipeline):
         cands2, rules2, finished2 = extract_cmd._process_path(path, "proj", cfg, dry_run=False)
 
     # Same candidates extracted again (transcript not marked)
     assert cands2 == 2
     # Retry still partially fails (the "unrelated" candidate still raises)
     assert finished2 is False
-    # Cold pipeline called for both candidates on retry
-    assert cold_call_count[0] == 2
-    # Cold pipeline is still called for both (segment_hash dedup is at job level)
-    # but the enqueue_transcript_ingest idempotently returns existing job ids
+    # Only the failed candidate is retried; successful one is skipped via done dedup
+    assert cold_call_count[0] == 1
     db = open_db(cfg.db_path)
     try:
         jobs = db.fetchall(

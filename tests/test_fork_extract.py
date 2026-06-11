@@ -188,7 +188,7 @@ class TestSessionEndForkIntegration:
         payload = {"session_id": "s-fork-1", "cwd": str(tmp_path)}
 
         with patch("nokori.hooks.session_end.enqueue_posthoc_for_session"), \
-             patch("nokori.hooks.session_end._enqueue_extract_job_from_path", return_value=True), \
+             patch("nokori.hooks.session_end._enqueue_extract_job_from_path", return_value=Path("/fake/job.json")), \
              patch("nokori.hooks.session_end.resolve_transcript_path", return_value=None), \
              patch("nokori.hooks.session_end._try_fork_extract", return_value=True) as mock_fork, \
              patch("nokori.hooks.session_end._spawn_async_extract") as mock_async:
@@ -196,7 +196,7 @@ class TestSessionEndForkIntegration:
             result = handle(payload, cfg, host=Host.CLAUDE)
 
         assert result == {"continue": True}
-        mock_fork.assert_called_once_with("s-fork-1", cfg, None)
+        mock_fork.assert_called_once_with("s-fork-1", cfg, None, Path("/fake/job.json"))
         mock_async.assert_not_called()
 
     def test_fork_not_spawned_for_cursor(self, monkeypatch, tmp_path):
@@ -209,7 +209,7 @@ class TestSessionEndForkIntegration:
         payload = {"session_id": "s-cursor-1", "cwd": str(tmp_path)}
 
         with patch("nokori.hooks.session_end.enqueue_posthoc_for_session"), \
-             patch("nokori.hooks.session_end._enqueue_extract_job_from_path", return_value=True), \
+             patch("nokori.hooks.session_end._enqueue_extract_job_from_path", return_value=Path("/fake/job.json")), \
              patch("nokori.hooks.session_end.resolve_transcript_path", return_value=None), \
              patch("nokori.hooks.session_end._try_fork_extract") as mock_fork, \
              patch("nokori.hooks.session_end._spawn_async_extract"):
@@ -229,7 +229,7 @@ class TestSessionEndForkIntegration:
 
         with patch("nokori.hooks.session_end.enqueue_posthoc_for_session"), \
              patch("nokori.hooks.session_end.resolve_transcript_path", return_value=None), \
-             patch("nokori.hooks.session_end._enqueue_extract_job_from_path", return_value=True), \
+             patch("nokori.hooks.session_end._enqueue_extract_job_from_path", return_value=Path("/fake/job.json")), \
              patch("nokori.hooks.session_end._try_fork_extract") as mock_fork, \
              patch("nokori.hooks.session_end._spawn_async_extract") as mock_async, \
              patch("nokori.extract.lock.is_locked", return_value=False):
@@ -250,7 +250,7 @@ class TestSessionEndForkIntegration:
 
         with patch("nokori.hooks.session_end.enqueue_posthoc_for_session"), \
              patch("nokori.hooks.session_end.resolve_transcript_path", return_value=None), \
-             patch("nokori.hooks.session_end._enqueue_extract_job_from_path", return_value=True), \
+             patch("nokori.hooks.session_end._enqueue_extract_job_from_path", return_value=Path("/fake/job.json")), \
              patch("nokori.hooks.session_end._try_fork_extract", return_value=False) as mock_fork, \
              patch("nokori.hooks.session_end._spawn_async_extract") as mock_async, \
              patch("nokori.extract.lock.is_locked", return_value=False):

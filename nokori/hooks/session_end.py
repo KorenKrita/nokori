@@ -58,23 +58,23 @@ def handle(payload: dict, cfg: Config, *, host: Host) -> dict:
 
     # Write extract job so the cold pipeline can process this session's transcript
     transcript_path = resolve_transcript_path(payload)
-    job_enqueued = _enqueue_extract_job_from_path(transcript_path, payload, cfg)
+    job_path = _enqueue_extract_job_from_path(transcript_path, payload, cfg)
 
     # Fork-based extraction: for Claude Code sessions, fork the ended session
     # to reuse prompt cache (must happen before async spawn to avoid double work)
     fork_spawned = False
     if (
-        job_enqueued
+        job_path
         and cfg.extract_fork_cache
         and host == Host.CLAUDE
         and cfg.extract_mode == "async"
     ):
-        fork_spawned = _try_fork_extract(session_id, cfg, transcript_path)
+        fork_spawned = _try_fork_extract(session_id, cfg, transcript_path, job_path)
 
     # Spawn async extract immediately — detached subprocess won't block hook return
     # (start_new_session=True ensures child survives parent exit)
     async_spawned = False
-    if job_enqueued and cfg.extract_mode == "async" and not fork_spawned:
+    if job_path and cfg.extract_mode == "async" and not fork_spawned:
         from ..extract.lock import is_locked
         if not is_locked(cfg):
             _spawn_async_extract(cfg)
@@ -92,7 +92,7 @@ def handle(payload: dict, cfg: Config, *, host: Host) -> dict:
                 outcome="ok" if not posthoc_failed else "posthoc_failed",
                 details={
                     "posthoc_enqueued": posthoc_enqueued,
-                    "extract_job_written": job_enqueued,
+                    "extract_job_written": job_path is not None,
                     "fork_extract_spawned": fork_spawned,
                     "async_extract_spawned": async_spawned,
                 },
@@ -105,24 +105,24 @@ def handle(payload: dict, cfg: Config, *, host: Host) -> dict:
 
 def _enqueue_extract_job_from_path(
     transcript_path: "Path | None", payload: dict, cfg: Config
-) -> bool:
+) -> "Path | None":
     """Write an extract job file for the session's transcript (spec cold-path trigger).
 
-    Returns True if job was successfully enqueued, False otherwise.
+    Returns the job file path if successfully enqueued, None otherwise.
     """
     if transcript_path is None or not transcript_path.exists():
-        return False
+        return None
     try:
         mtime = transcript_path.stat().st_mtime
         project_id = payload.get("project_id") or resolve_project_id(
             payload.get("cwd") or ""
         )
-        write_extract_job(cfg, transcript_path, project_id, mtime)
+        job_path = write_extract_job(cfg, transcript_path, project_id, mtime)
         log.info("wrote extract job for %s", transcript_path.name)
-        return True
+        return job_path
     except Exception as e:
         log.warning("extract job write failed: %s", e)
-        return False
+        return None
 
 
 def _extract_session_turns(payload: dict) -> list[dict]:
@@ -205,7 +205,8 @@ def _populate_transcript_windows(
                 )
 
 
-def _try_fork_extract(session_id: str, cfg: Config, transcript_path: "Path | None" = None) -> bool:
+def _try_fork_extract(session_id: str, cfg: Config, transcript_path: "Path | None" = None,
+                      job_path: "Path | None" = None) -> bool:
     """Attempt fork-based extraction. Returns True if successfully spawned."""
     import os
     import subprocess
@@ -231,6 +232,8 @@ def _try_fork_extract(session_id: str, cfg: Config, transcript_path: "Path | Non
     ]
     if transcript_path is not None:
         cmd.extend(["--transcript-path", str(transcript_path)])
+    if job_path is not None:
+        cmd.extend(["--job-path", str(job_path)])
 
     cfg.ensure_dirs()
     err_log = cfg.logs_dir / "fork-extract.log"

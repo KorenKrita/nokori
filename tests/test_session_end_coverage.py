@@ -64,13 +64,13 @@ class TestSessionEndHandle:
 
 
 class TestExtractJobEnqueue:
-    def test_no_transcript_path_returns_false(self, session_env):
+    def test_no_transcript_path_returns_none(self, session_env):
         cfg, _ = session_env
-        assert _enqueue_extract_job_from_path(None, {}, cfg) is False
+        assert _enqueue_extract_job_from_path(None, {}, cfg) is None
 
-    def test_nonexistent_path_returns_false(self, session_env):
+    def test_nonexistent_path_returns_none(self, session_env):
         cfg, tmp_path = session_env
-        assert _enqueue_extract_job_from_path(tmp_path / "ghost.jsonl", {}, cfg) is False
+        assert _enqueue_extract_job_from_path(tmp_path / "ghost.jsonl", {}, cfg) is None
 
     def test_valid_transcript_creates_job(self, session_env):
         cfg, tmp_path = session_env
@@ -82,7 +82,8 @@ class TestExtractJobEnqueue:
             {"cwd": str(tmp_path)},
             cfg,
         )
-        assert result is True
+        assert result is not None
+        assert result.exists()
         assert list(cfg.jobs_dir.glob("extract-*.json"))
 
 

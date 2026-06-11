@@ -463,8 +463,9 @@ def test_process_path_passes_transcript_evidence_and_role_limits(
         captured["kwargs"] = kwargs
         return SimpleNamespace(status="candidate", rule_id="rule-1")
 
+    import nokori.extract.process as extract_process
     monkeypatch.setattr(extract_cmd, "LLMAdapter", lambda cfg: FakeExtractLLM())
-    monkeypatch.setattr(extract_cmd, "run_cold_pipeline", fake_cold_pipeline)
+    monkeypatch.setattr(extract_process, "run_cold_pipeline", fake_cold_pipeline)
 
     cands, applied, finished = extract_cmd._process_path(
         path, "proj", cfg, dry_run=False
