@@ -203,6 +203,18 @@ FIELDS: tuple[FieldDef, ...] = (
         desc_ja="他セッションが開いている間は extract を起動しない",
     ),
     _f(
+        "extract.fork_cache",
+        ("extract", "fork_cache"),
+        "bool",
+        False,
+        label_zh="Fork 缓存提取（Claude Code）",
+        label_en="Fork cache extract (Claude Code)",
+        label_ja="Fork キャッシュ抽出（Claude Code）",
+        desc_zh="Claude Code 会话结束时 fork 原 session 做提取，复用 prompt cache 降低成本",
+        desc_en="Fork ended Claude Code sessions for extraction, reusing prompt cache to reduce cost",
+        desc_ja="Claude Code セッション終了時に fork して抽出し、prompt cache でコスト削減",
+    ),
+    _f(
         "llm.base_url",
         ("llm", "base_url"),
         "string",
@@ -684,7 +696,7 @@ FIELDS: tuple[FieldDef, ...] = (
 SECTIONS: tuple[dict[str, Any], ...] = (
     {"id": "general", "field_ids": ("data_dir", "log_level", "max_injection_chars", "disabled", "strict", "dismiss_phrase")},
     {"id": "gate", "field_ids": ("gate.enabled", "gate.ttl_seconds", "gate.matcher")},
-    {"id": "extract", "field_ids": ("extract.mode", "extract.defer_when_active")},
+    {"id": "extract", "field_ids": ("extract.mode", "extract.defer_when_active", "extract.fork_cache")},
     {"id": "llm", "field_ids": ("llm.base_url", "llm.model", "llm.api_key")},
     {
         "id": "embed",

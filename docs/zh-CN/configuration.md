@@ -17,7 +17,7 @@
 | 配后台提取 / 兜底用的 LLM | `[llm]` | `base_url` `model` `api_key` |
 | 接远程或本地的语义检索 | `[embed]` | `base_url` `model` `enabled` |
 | 调 Gate 拦哪些工具、拦多久 | `[gate]` | `matcher` `ttl_seconds` `enabled` |
-| 选关会话后自动提取的时机 | `[extract]` | `mode` `defer_when_active` |
+| 选关会话后自动提取的时机 | `[extract]` | `mode` `defer_when_active` `fork_cache` |
 | 开关 SessionStart 热缓存 | `[hot_cache]` | `enabled` |
 | 开关 shadow pool 生命周期证据 | `[promotion]` | `enabled` |
 | 调 per-role LLM、max tokens、timeouts | `[models]`、`[models.limits]`、`[models.timeouts]` | 见模板 |
@@ -55,6 +55,7 @@ matcher = "Edit|Write|MultiEdit|Bash|NotebookEdit"
 [extract]
 mode = "manual"
 # defer_when_active = false
+# fork_cache = false
 
 [hot_cache]
 enabled = true
@@ -106,6 +107,7 @@ enabled = true
 | `NOKORI_GATE_MATCHER` | `Edit\|Write\|MultiEdit\|Bash\|NotebookEdit` | hook 内 block 的 `tool_name` 正则 |
 | `NOKORI_EXTRACT_MODE` | `manual` | `manual` / `async` |
 | `NOKORI_EXTRACT_DEFER_ACTIVE` | `0` | `1` 时 async 模式有活跃 session 则推迟 |
+| `NOKORI_EXTRACT_FORK_CACHE` | `0` | `1` 时 Claude Code session 结束 fork 复用 prompt cache 提取 |
 | `NOKORI_SESSION_IDLE_SECONDS` | `1800` | 无心跳超过此秒数视为非活跃 |
 | `NOKORI_HOT_CACHE` | `1` | SessionStart 热缓存 |
 | `NOKORI_PROMOTION_ENABLED` | `1` | 影子池生命周期证据 |
@@ -155,6 +157,7 @@ enabled = true
 │   ├── hook.log
 │   ├── pipeline.log
 │   ├── async-extract.log
+│   ├── fork-extract.log
 │   └── embed-server.log
 ├── models/               # 本地 embed 权重
 ├── embed.sock            # 本地 embed IPC（Unix）

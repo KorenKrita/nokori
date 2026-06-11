@@ -79,3 +79,33 @@ Edge cases:
 - Transcript mtime changed: refreshes job mtime, keeps it pending
 - Corrupt job file: moved to `jobs/bad/`
 - `NOKORI_EXTRACT_DEFER_ACTIVE=1`: defers extract fork while other open sessions exist
+
+---
+
+## Fork cache extraction (Claude Code only)
+
+```bash
+export NOKORI_EXTRACT_FORK_CACHE=1
+```
+
+When enabled alongside `async` mode, Nokori forks the ended Claude Code session using `claude -r <session-id> --fork-session` instead of reading the transcript file. This reuses the model's prompt cache (5-minute TTL), reducing input token cost by ~90% for long conversations.
+
+**How it works:**
+
+1. Session ends → `session_end` hook detects `Host.CLAUDE`
+2. Spawns `fork_runner` as a background process
+3. Checks byte offset: if this session was partially extracted before, reads the 3rd-to-last user message as an anchor and tells the model to only extract new content
+4. Checks for compression: if `compact_boundary` exists after the last extracted offset, skips fork (compressed context loses detail) and falls back to normal transcript-reading extract
+5. Forks session with a role-override prompt that forces extraction behavior
+6. Parses JSON output → cold pipeline (admission → rewrite → merge → insert)
+
+**Requirements:**
+
+- `claude` CLI on `$PATH`
+- `extract.mode = "async"`
+- `extract.fork_cache = true`
+- Only fires for Claude Code sessions (Cursor sessions always use normal path)
+
+**Fallback:** If the CLI is missing, session ID is invalid, fork times out (300s), or output is not valid JSON, the normal `nokori extract` async path runs instead.
+
+Logs: `~/.nokori/logs/fork-extract.log`

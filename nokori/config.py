@@ -33,6 +33,7 @@ _TOML_TO_ENV = {
     ("gate", "matcher"): "NOKORI_GATE_MATCHER",
     ("extract", "mode"): "NOKORI_EXTRACT_MODE",
     ("extract", "defer_when_active"): "NOKORI_EXTRACT_DEFER_ACTIVE",
+    ("extract", "fork_cache"): "NOKORI_EXTRACT_FORK_CACHE",
     ("llm", "base_url"): "NOKORI_LLM_BASE_URL",
     ("llm", "model"): "NOKORI_LLM_MODEL",
     ("llm", "api_key"): "NOKORI_LLM_API_KEY",
@@ -273,6 +274,7 @@ class Config:
     gate_matcher: str
     extract_mode: str
     extract_defer_when_active: bool
+    extract_fork_cache: bool
     llm_base_url: str | None
     llm_model: str | None
     llm_api_key: str | None
@@ -317,6 +319,9 @@ class Config:
             extract_mode=_enum_val("NOKORI_EXTRACT_MODE", "manual", ("manual", "async"), file_values),
             extract_defer_when_active=_bool_val(
                 "NOKORI_EXTRACT_DEFER_ACTIVE", False, file_values
+            ),
+            extract_fork_cache=_bool_val(
+                "NOKORI_EXTRACT_FORK_CACHE", False, file_values
             ),
             llm_base_url=_str_or_none_val("NOKORI_LLM_BASE_URL", file_values),
             llm_model=_str_or_none_val("NOKORI_LLM_MODEL", file_values),

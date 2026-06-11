@@ -17,7 +17,7 @@ Beyond environment variables, Nokori also reads a TOML config file at `~/.nokori
 | Configure the LLM for background extract / fallback | `[llm]` | `base_url` `model` `api_key` |
 | Hook up remote or local semantic retrieval | `[embed]` | `base_url` `model` `enabled` |
 | Tune which tools Gate blocks, and for how long | `[gate]` | `matcher` `ttl_seconds` `enabled` |
-| Choose when auto-extract runs after a session | `[extract]` | `mode` `defer_when_active` |
+| Choose when auto-extract runs after a session | `[extract]` | `mode` `defer_when_active` `fork_cache` |
 | Toggle the SessionStart hot cache | `[hot_cache]` | `enabled` |
 | Toggle shadow lifecycle evidence | `[promotion]` | `enabled` |
 | Tune per-role LLM models, max tokens, and timeouts | `[models]`, `[models.limits]`, `[models.timeouts]` | see template |
@@ -55,6 +55,7 @@ matcher = "Edit|Write|MultiEdit|Bash|NotebookEdit"
 [extract]
 mode = "manual"
 # defer_when_active = false
+# fork_cache = false
 
 [hot_cache]
 enabled = true
@@ -106,6 +107,7 @@ enabled = true
 | `NOKORI_GATE_MATCHER` | `Edit\|Write\|MultiEdit\|Bash\|NotebookEdit` | Layer 2 regex for `tool_name` blocked inside the hook |
 | `NOKORI_EXTRACT_MODE` | `manual` | `manual` / `async` |
 | `NOKORI_EXTRACT_DEFER_ACTIVE` | `0` | `1` = in async mode, defer extract when sessions are active |
+| `NOKORI_EXTRACT_FORK_CACHE` | `0` | `1` = fork Claude Code sessions for extraction using prompt cache |
 | `NOKORI_SESSION_IDLE_SECONDS` | `1800` | No heartbeat beyond this many seconds = inactive |
 | `NOKORI_HOT_CACHE` | `1` | SessionStart hot cache |
 | `NOKORI_PROMOTION_ENABLED` | `1` | Shadow pool lifecycle evidence |
@@ -155,6 +157,7 @@ All LLM/embedding endpoints are compatible with: Ollama, LMStudio, vLLM, OpenRou
 │   ├── hook.log          # Hook process logs
 │   ├── pipeline.log      # Extract / merge logs
 │   ├── async-extract.log # async mode child stderr
+│   ├── fork-extract.log  # fork cache extract stderr
 │   └── embed-server.log  # Local embed server (if enabled)
 ├── models/               # Local embed weights
 ├── embed.sock            # Local embed IPC (Unix)

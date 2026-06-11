@@ -79,3 +79,33 @@ export NOKORI_EXTRACT_MODE=async
 - Transcript の mtime が変化：job の mtime を更新、pending を維持
 - 破損した job ファイル：`jobs/bad/` へ移動
 - `NOKORI_EXTRACT_DEFER_ACTIVE=1`：未終了のセッションがある間は fork しない
+
+---
+
+## Fork キャッシュ抽出（Claude Code のみ）
+
+```bash
+export NOKORI_EXTRACT_FORK_CACHE=1
+```
+
+`async` モードと併用すると、Claude Code セッション終了時に元のセッションを fork（`claude -r <session-id> --fork-session`）し、prompt cache を再利用して抽出を行う。長い会話では input token コストが約 90% 削減される。
+
+**ワークフロー：**
+
+1. セッション終了 → `session_end` hook が `Host.CLAUDE` を検出
+2. バックグラウンドで `fork_runner` を起動
+3. byte offset を確認：過去に部分抽出済みの場合、offset 前の 3 番目のユーザーメッセージをアンカーとして読み取り、それ以降のみ抽出するようモデルに指示
+4. 圧縮検出：offset 以降に `compact_boundary` が存在する場合（コンテキストが圧縮済み）、fork をスキップし通常のトランスクリプト読み取りパスにフォールバック
+5. セッションを fork し、抽出動作を強制するロールオーバーライドプロンプトを使用
+6. JSON 出力を解析 → コールドパイプライン（admission → rewrite → merge → insert）
+
+**前提条件：**
+
+- `claude` CLI が `$PATH` にある
+- `extract.mode = "async"`
+- `extract.fork_cache = true`
+- Claude Code セッションのみ有効（Cursor セッションは常に通常パス）
+
+**フォールバック：** CLI が見つからない、セッション ID が無効、fork タイムアウト（300s）、出力が無効な JSON の場合、通常の `nokori extract` async パスに自動フォールバック。
+
+ログ：`~/.nokori/logs/fork-extract.log`

@@ -105,6 +105,7 @@ def _effective_values(cfg: Config) -> dict[str, Any]:
         "gate.matcher": cfg.gate_matcher,
         "extract.mode": cfg.extract_mode,
         "extract.defer_when_active": cfg.extract_defer_when_active,
+        "extract.fork_cache": cfg.extract_fork_cache,
         "llm.base_url": cfg.llm_base_url or "",
         "llm.model": cfg.llm_model or "",
         "llm.api_key": "***" if cfg.llm_api_key else "",

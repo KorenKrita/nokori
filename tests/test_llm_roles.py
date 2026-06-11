@@ -35,6 +35,7 @@ def _make_cfg(
         gate_matcher="",
         extract_mode="manual",
         extract_defer_when_active=False,
+        extract_fork_cache=False,
         llm_base_url=base_url,
         llm_model=model,
         llm_api_key=api_key,

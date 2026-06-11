@@ -200,6 +200,7 @@ def _make_config(tmp_path: Path, *, hot_cache_enabled: bool = True):
         gate_matcher="nokori:",
         extract_mode="manual",
         extract_defer_when_active=False,
+        extract_fork_cache=False,
         llm_base_url=None,
         llm_model=None,
         llm_api_key=None,

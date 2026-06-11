@@ -17,7 +17,7 @@
 | バックグラウンド抽出 / フォールバック LLM を設定 | `[llm]` | `base_url` `model` `api_key` |
 | リモートまたはローカルの意味検索に接続 | `[embed]` | `base_url` `model` `enabled` |
 | Gate がどのツールを、どの期間 block するか調整 | `[gate]` | `matcher` `ttl_seconds` `enabled` |
-| セッション終了後の自動抽出タイミングを選択 | `[extract]` | `mode` `defer_when_active` |
+| セッション終了後の自動抽出タイミングを選択 | `[extract]` | `mode` `defer_when_active` `fork_cache` |
 | SessionStart ホットキャッシュの有効/無効 | `[hot_cache]` | `enabled` |
 | Shadow pool ライフサイクルエビデンスの有効/無効 | `[promotion]` | `enabled` |
 | Per-role LLM、max tokens、timeouts を調整 | `[models]`、`[models.limits]`、`[models.timeouts]` | テンプレート参照 |
@@ -55,6 +55,7 @@ matcher = "Edit|Write|MultiEdit|Bash|NotebookEdit"
 [extract]
 mode = "manual"
 # defer_when_active = false
+# fork_cache = false
 
 [hot_cache]
 enabled = true
@@ -106,6 +107,7 @@ enabled = true
 | `NOKORI_GATE_MATCHER` | `Edit\|Write\|MultiEdit\|Bash\|NotebookEdit` | hook 内で block する `tool_name` の正規表現 |
 | `NOKORI_EXTRACT_MODE` | `manual` | `manual` / `async` |
 | `NOKORI_EXTRACT_DEFER_ACTIVE` | `0` | `1` で async モード時に未終了セッションがあれば延期 |
+| `NOKORI_EXTRACT_FORK_CACHE` | `0` | `1` で Claude Code セッション終了時に fork して prompt cache 再利用 |
 | `NOKORI_SESSION_IDLE_SECONDS` | `1800` | この秒数ハートビートなしで非アクティブ扱い |
 | `NOKORI_HOT_CACHE` | `1` | SessionStart ホットキャッシュ |
 | `NOKORI_PROMOTION_ENABLED` | `1` | シャドウプールのライフサイクルエビデンス |
@@ -155,6 +157,7 @@ enabled = true
 │   ├── hook.log
 │   ├── pipeline.log
 │   ├── async-extract.log
+│   ├── fork-extract.log
 │   └── embed-server.log
 ├── models/               # ローカル embed ウェイト
 ├── embed.sock            # ローカル embed IPC（Unix）

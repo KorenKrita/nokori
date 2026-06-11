@@ -79,3 +79,33 @@ export NOKORI_EXTRACT_MODE=async
 - Transcript mtime 变了：刷新 job mtime，继续保留 pending
 - 损坏的 job 文件：挪到 `jobs/bad/`
 - `NOKORI_EXTRACT_DEFER_ACTIVE=1`：有其它 open session 时只写 job 不 fork
+
+---
+
+## Fork 缓存提取（仅 Claude Code）
+
+```bash
+export NOKORI_EXTRACT_FORK_CACHE=1
+```
+
+在 `async` 模式下启用后，Claude Code session 结束时会 fork 原 session（`claude -r <session-id> --fork-session`）复用 prompt cache 做提取，长对话 input token 成本降低约 90%。
+
+**工作流程：**
+
+1. Session 结束 → `session_end` hook 检测到 `Host.CLAUDE`
+2. 后台启动 `fork_runner`
+3. 检查 byte offset：如果之前已部分提取，读取 offset 前第 3 条 user message 作为锚点，告诉模型只提取锚点之后的新内容
+4. 压缩检测：如果 offset 之后存在 `compact_boundary`（上下文已被压缩），跳过 fork 回退到正常读 transcript 原文的路径
+5. Fork session，prompt 带角色覆盖指令强制执行提取行为
+6. 解析 JSON 输出 → 冷管道（admission → rewrite → merge → insert）
+
+**前置条件：**
+
+- `claude` CLI 在 `$PATH` 中
+- `extract.mode = "async"`
+- `extract.fork_cache = true`
+- 仅 Claude Code session 生效（Cursor session 始终走正常路径）
+
+**回退：** CLI 不可用、session ID 无效、fork 超时（300s）、输出非法 JSON 时，自动回退到正常的 `nokori extract` async 路径。
+
+日志：`~/.nokori/logs/fork-extract.log`

@@ -143,6 +143,18 @@ mode = "manual"
 # 环境变量：NOKORI_EXTRACT_DEFER_ACTIVE
 # defer_when_active = false
 
+# Fork 缓存提取（仅 Claude Code）
+# async 模式下，Claude Code session 结束时 fork 原 session 复用 prompt cache 做提取，
+# 降低长对话的 input token 成本（cache hit 时 -90%）。
+# 仅对 Claude Code session 生效，Cursor 走正常路径。
+# 需要 `claude` CLI 在 PATH 中可用。
+# 自动检测压缩：如果 session 在上次提取 offset 之后发生过 context compaction，
+# 跳过 fork 回退到读 transcript 原文的正常路径。
+# 类型：布尔
+# 默认：false
+# 环境变量：NOKORI_EXTRACT_FORK_CACHE
+# fork_cache = false
+
 # -----------------------------------------------------------------------------
 # LLM（提取 transcript、合并规则；冷路径）
 # -----------------------------------------------------------------------------
@@ -317,6 +329,7 @@ dimensions = 0
 # | NOKORI_EMBED_SERVER_AUTO_START | 1 | hook 自动拉起 embed server |
 # | NOKORI_SESSION_IDLE_SECONDS | 1800 | session 活跃判定窗口（秒） |
 # | NOKORI_EXTRACT_DEFER_ACTIVE | 0 | async 时有活跃 session 则推迟 fork extract |
+# | NOKORI_EXTRACT_FORK_CACHE | 0 | Claude Code session 结束时 fork 复用 prompt cache 提取 |
 # | NOKORI_PROMOTION_ENABLED | 1 | 影子池生命周期证据；0=关闭 candidate/suppressed shadow matching |
 # | NOKORI_GATE_ENABLED | 1 | 启用 Gate |
 # | NOKORI_GATE_TTL_SECONDS | 600 | Marker TTL（秒）；0=永不过期 |

@@ -57,12 +57,24 @@ def handle(payload: dict, cfg: Config, *, host: Host) -> dict:
         db.close()
 
     # Write extract job so the cold pipeline can process this session's transcript
-    job_enqueued = _enqueue_extract_job(payload, cfg)
+    transcript_path = resolve_transcript_path(payload)
+    job_enqueued = _enqueue_extract_job_from_path(transcript_path, payload, cfg)
+
+    # Fork-based extraction: for Claude Code sessions, fork the ended session
+    # to reuse prompt cache (must happen before async spawn to avoid double work)
+    fork_spawned = False
+    if (
+        job_enqueued
+        and cfg.extract_fork_cache
+        and host == Host.CLAUDE
+        and cfg.extract_mode == "async"
+    ):
+        fork_spawned = _try_fork_extract(session_id, cfg, transcript_path)
 
     # Spawn async extract immediately — detached subprocess won't block hook return
     # (start_new_session=True ensures child survives parent exit)
     async_spawned = False
-    if job_enqueued and cfg.extract_mode == "async":
+    if job_enqueued and cfg.extract_mode == "async" and not fork_spawned:
         from ..extract.lock import is_locked
         if not is_locked(cfg):
             _spawn_async_extract(cfg)
@@ -81,6 +93,7 @@ def handle(payload: dict, cfg: Config, *, host: Host) -> dict:
                 details={
                     "posthoc_enqueued": posthoc_enqueued,
                     "extract_job_written": job_enqueued,
+                    "fork_extract_spawned": fork_spawned,
                     "async_extract_spawned": async_spawned,
                 },
             )
@@ -90,12 +103,13 @@ def handle(payload: dict, cfg: Config, *, host: Host) -> dict:
     return {"continue": True}
 
 
-def _enqueue_extract_job(payload: dict, cfg: Config) -> bool:
+def _enqueue_extract_job_from_path(
+    transcript_path: "Path | None", payload: dict, cfg: Config
+) -> bool:
     """Write an extract job file for the session's transcript (spec cold-path trigger).
 
     Returns True if job was successfully enqueued, False otherwise.
     """
-    transcript_path = resolve_transcript_path(payload)
     if transcript_path is None or not transcript_path.exists():
         return False
     try:
@@ -189,6 +203,62 @@ def _populate_transcript_windows(
                     "UPDATE posthoc_jobs SET redacted_window_json = ? WHERE id = ?",
                     (window_content, row["job_id"]),
                 )
+
+
+def _try_fork_extract(session_id: str, cfg: Config, transcript_path: "Path | None" = None) -> bool:
+    """Attempt fork-based extraction. Returns True if successfully spawned."""
+    import os
+    import subprocess
+    import sys
+
+    from ..extract.fork import _claude_cli_available, _valid_session_id
+
+    if not _claude_cli_available():
+        log.info("fork extract: claude CLI not available, skipping")
+        return False
+
+    if not _valid_session_id(session_id):
+        log.warning("fork extract: invalid session_id, skipping")
+        return False
+
+    env = os.environ.copy()
+    env.pop("NOKORI_EXTRACTING", None)
+    env["NOKORI_DATA_DIR"] = str(cfg.data_dir)
+
+    cmd = [
+        sys.executable, "-m", "nokori.extract.fork_runner",
+        "--session-id", session_id,
+    ]
+    if transcript_path is not None:
+        cmd.extend(["--transcript-path", str(transcript_path)])
+
+    cfg.ensure_dirs()
+    err_log = cfg.logs_dir / "fork-extract.log"
+    err_fh = subprocess.DEVNULL
+    try:
+        err_fh = open(err_log, "a", encoding="utf-8")
+    except OSError:
+        pass
+
+    try:
+        subprocess.Popen(
+            cmd,
+            env=env,
+            stdout=subprocess.DEVNULL,
+            stderr=err_fh,
+            start_new_session=True,
+        )
+        log.info("fork extract spawned for session=%s", session_id)
+        return True
+    except Exception as e:
+        log.warning("fork extract spawn failed: %s", e)
+        return False
+    finally:
+        if err_fh is not subprocess.DEVNULL:
+            try:
+                err_fh.close()
+            except OSError:
+                pass
 
 
 def _spawn_async_extract(cfg: Config) -> None:
