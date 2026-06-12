@@ -240,10 +240,12 @@ class TestCheckpointResume:
 
 
 class TestStageTiming:
-    def test_stage_logs_timing(self, db: Db, caplog):
+    def test_stage_logs_timing(self, db: Db):
         """Orchestrator logs stage name and duration."""
-        import logging
-        caplog.set_level(logging.INFO, logger="nokori.cold.pipeline")
+        logged_messages: list[str] = []
+
+        def capture_info(msg, *args):
+            logged_messages.append(msg % args if args else msg)
 
         llm = _make_llm_mock({
             "admission judge": _admission_json("accept"),
@@ -251,7 +253,8 @@ class TestStageTiming:
             "merge planner": _merge_planner_json("keep_both"),
         })
 
-        with patch("nokori.cold.pipeline.check_fingerprint_block", return_value=None):
+        with patch("nokori.cold.pipeline.check_fingerprint_block", return_value=None), \
+             patch("nokori.cold.pipeline.log.info", side_effect=capture_info):
             run_cold_pipeline(
                 db, llm,
                 transcript_ref="timing_test",
@@ -259,6 +262,6 @@ class TestStageTiming:
                 default_model="test-model",
             )
 
-        stage_logs = [r for r in caplog.records if "stage=" in r.message and "duration_ms=" in r.message]
+        stage_logs = [m for m in logged_messages if "stage=" in m and "duration_ms=" in m]
         assert len(stage_logs) >= 5
-        assert "stage=admission" in stage_logs[0].message
+        assert "stage=admission" in stage_logs[0]
