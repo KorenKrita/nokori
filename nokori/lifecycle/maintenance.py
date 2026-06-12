@@ -83,14 +83,20 @@ def run_candidate_cleanup(db: Db) -> int:
     _set_last_run(db, "candidate_cleanup")
     if deleted:
         log.info("candidate_cleanup deleted=%d", deleted)
-        restored = _unmerge_orphan_replaced(db)
+        restored = restore_orphaned_archived(db)
         if restored:
             log.info("candidate_cleanup unmerge_orphans restored=%d", restored)
     return deleted
 
 
-def _unmerge_orphan_replaced(db: Db) -> int:
-    """Restore archived rules whose replacement_id target no longer exists."""
+def restore_orphaned_archived(db: Db, *, include_inactive_targets: bool = False) -> int:
+    """Restore archived rules whose replacement target is missing or inactive.
+
+    Args:
+        include_inactive_targets: If True, also restore when target exists but
+            has status 'suppressed' or 'archived' (used by unmerge_check).
+            If False, only restore when target is completely missing from DB.
+    """
     rows = db.fetchall(
         "SELECT id, replacement_id FROM rules WHERE status = 'archived' "
         "AND replacement_id IS NOT NULL"
@@ -101,18 +107,23 @@ def _unmerge_orphan_replaced(db: Db) -> int:
         target = db.fetchone(
             "SELECT status FROM rules WHERE id = ?", (r["replacement_id"],)
         )
-        if target is None:
-            with db.transaction() as tx:
-                cur = tx.execute(
-                    "UPDATE rules SET status = 'candidate', replacement_id = NULL, "
-                    "archived_reason = NULL, updated_at = ?, "
-                    "rule_version = rule_version + 1 "
-                    "WHERE id = ? AND status = 'archived'",
-                    (ts, r["id"]),
-                )
-                if cur.rowcount == 0:
-                    continue
-            restored += 1
+        should_restore = (
+            target is None
+            or (include_inactive_targets and target["status"] in ("suppressed", "archived"))
+        )
+        if not should_restore:
+            continue
+        with db.transaction() as tx:
+            cur = tx.execute(
+                "UPDATE rules SET status = 'candidate', replacement_id = NULL, "
+                "archived_reason = NULL, updated_at = ?, "
+                "rule_version = rule_version + 1 "
+                "WHERE id = ? AND status = 'archived'",
+                (ts, r["id"]),
+            )
+            if cur.rowcount == 0:
+                continue
+        restored += 1
     return restored
 
 
@@ -143,41 +154,7 @@ def run_injection_cleanup(db: Db) -> int:
 def run_unmerge_check(db: Db) -> int:
     if not _due(db, "unmerge_check", UNMERGE_INTERVAL_DAYS):
         return 0
-    rows = db.fetchall(
-        "SELECT id, replacement_id FROM rules WHERE status = 'archived' "
-        "AND replacement_id IS NOT NULL"
-    )
-    restored = 0
-    ts = now_iso()
-    for r in rows:
-        target = db.fetchone(
-            "SELECT status FROM rules WHERE id = ?", (r["replacement_id"],)
-        )
-        if target is None:
-            with db.transaction() as tx:
-                cur = tx.execute(
-                    "UPDATE rules SET status = 'candidate', replacement_id = NULL, "
-                    "archived_reason = NULL, updated_at = ?, "
-                    "rule_version = rule_version + 1 "
-                    "WHERE id = ? AND status = 'archived'",
-                    (ts, r["id"]),
-                )
-                if cur.rowcount == 0:
-                    continue
-            restored += 1
-            continue
-        if target["status"] in ("suppressed", "archived"):
-            with db.transaction() as tx:
-                cur = tx.execute(
-                    "UPDATE rules SET status = 'candidate', replacement_id = NULL, "
-                    "archived_reason = NULL, updated_at = ?, "
-                    "rule_version = rule_version + 1 "
-                    "WHERE id = ? AND status = 'archived'",
-                    (ts, r["id"]),
-                )
-                if cur.rowcount == 0:
-                    continue
-            restored += 1
+    restored = restore_orphaned_archived(db, include_inactive_targets=True)
     _set_last_run(db, "unmerge_check")
     if restored:
         log.info("unmerge_check restored=%d", restored)

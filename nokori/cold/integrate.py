@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
@@ -161,6 +162,175 @@ def _operation_to_relation_shape(operation: str) -> str:
     if operation == "split":
         return "split_required"
     return "unrelated"
+
+
+# ---------------------------------------------------------------------------
+# Merge-with-reeval
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class MergeRevalOutcome:
+    """Result of a non-destructive merge with optional synthetic re-evaluation."""
+
+    success: bool
+    rule_id: str | None = None
+
+
+def apply_merge_with_reeval(
+    db: Db,
+    *,
+    target_id: str,
+    rule_data: dict[str, Any],
+    merge_op: str,
+    merge_info: dict[str, Any],
+    eval_cases: list,
+    global_adversarial_cases: list[dict[str, Any]] | None,
+    idf_stats,
+) -> MergeRevalOutcome:
+    """Apply a non-destructive merge and re-evaluate if variants/excluded_contexts changed.
+
+    Reverts via CAS if re-evaluation fails. Returns outcome indicating success/failure.
+    """
+    from ..eval.synthetic import run_synthetic_eval
+
+    existing_rule = merge_info.get("existing_rule") or {}
+    _pre_variants = existing_rule.get("trigger_variants")
+    _pre_excluded = existing_rule.get("excluded_contexts")
+
+    _apply_non_destructive_merge(db, target_id, rule_data, merge_op, merge_info)
+
+    _merge_changed_variants = bool(rule_data.get("variants"))
+    _merge_changed_excluded = bool(rule_data.get("excluded_contexts"))
+
+    if not (_merge_changed_variants or _merge_changed_excluded):
+        return MergeRevalOutcome(success=True, rule_id=target_id)
+
+    _merged_row = db.fetchone(
+        "SELECT trigger_canonical, trigger_variants, excluded_contexts, "
+        "concepts, required_concept_groups, near_miss_examples, "
+        "action_instruction, rule_version, status, severity, "
+        "runtime_policy_version, first_observed_useful_at "
+        "FROM rules WHERE id = ?",
+        (target_id,),
+    )
+    if _merged_row is None:
+        log.warning("merge_reeval target rule disappeared after merge rule=%s", target_id)
+        return MergeRevalOutcome(success=True, rule_id=target_id)
+
+    _raw_variants = json.loads(_merged_row["trigger_variants"] or "[]")
+    _variants = [
+        v if isinstance(v, dict) else {
+            "text": str(v),
+            "kind": "weak_recall",
+            "requires_concepts": [],
+        }
+        for v in _raw_variants
+    ]
+    _recompile_data = {
+        "trigger_canonical": _merged_row["trigger_canonical"],
+        "variants": _variants,
+        "excluded_contexts": json.loads(_merged_row["excluded_contexts"] or "[]"),
+        "concepts": json.loads(_merged_row["concepts"] or "[]"),
+        "required_concept_groups": json.loads(_merged_row["required_concept_groups"] or "[]"),
+        "near_miss_examples": json.loads(_merged_row["near_miss_examples"] or "[]"),
+        "action_instruction": _merged_row["action_instruction"],
+    }
+    try:
+        _recompiled = compile_rule(_recompile_data)
+    except CompilationError:
+        _recompiled = None
+
+    _synth_ok = False
+    try:
+        if _recompiled is None:
+            _synth_ok = False
+        elif eval_cases or global_adversarial_cases:
+            _reeval_rule_data = {
+                "id": target_id,
+                "version": _merged_row["rule_version"],
+                "status": _merged_row["status"],
+                "severity": _merged_row["severity"],
+                "first_observed_useful_at": _merged_row["first_observed_useful_at"],
+            }
+            _synth_result = run_synthetic_eval(
+                _reeval_rule_data,
+                _recompiled,
+                idf_stats,
+                eval_cases,
+                global_adversarial_cases,
+            )
+            _synth_ok = _synth_result is not None and _synth_result.passed
+        else:
+            _synth_ok = True
+    except Exception:
+        log.warning("merge_reeval synthetic eval error rule=%s", target_id, exc_info=True)
+        _synth_ok = False
+
+    if not _synth_ok:
+        _revert_merge(
+            db, target_id, _merged_row,
+            _merge_changed_variants, _merge_changed_excluded,
+            _pre_variants, _pre_excluded,
+        )
+        return MergeRevalOutcome(success=False, rule_id=None)
+
+    return MergeRevalOutcome(success=True, rule_id=target_id)
+
+
+def _revert_merge(
+    db: Db,
+    target_id: str,
+    merged_row,
+    changed_variants: bool,
+    changed_excluded: bool,
+    pre_variants,
+    pre_excluded,
+) -> None:
+    """Revert merged fields via CAS (restore pre-merge values)."""
+    from ..policy import RUNTIME_POLICY_VERSION
+
+    _revert_version = merged_row["rule_version"]
+    _revert_status = merged_row["status"]
+    _revert_rpv = merged_row["runtime_policy_version"]
+    _now_revert = now_iso()
+    _revert_sets = []
+    _revert_params: list = []
+    if changed_variants:
+        _revert_sets.append("trigger_variants = ?")
+        _revert_params.append(
+            pre_variants if isinstance(pre_variants, str)
+            else dumps_json(pre_variants) if pre_variants is not None
+            else None
+        )
+    if changed_excluded:
+        _revert_sets.append("excluded_contexts = ?")
+        _revert_params.append(
+            pre_excluded if isinstance(pre_excluded, str)
+            else dumps_json(pre_excluded) if pre_excluded is not None
+            else None
+        )
+    if _revert_sets:
+        _revert_sets.append("rule_version = rule_version + 1")
+        # Intentionally advances policy version (project convention: CAS updates always push forward)
+        _revert_sets.append("runtime_policy_version = ?")
+        _revert_params.append(RUNTIME_POLICY_VERSION)
+        _revert_sets.append("updated_at = ?")
+        _revert_params.append(_now_revert)
+        _revert_params.extend([target_id, _revert_version, _revert_status])
+        _rpv_where = "AND runtime_policy_version = ?" if _revert_rpv else "AND runtime_policy_version IS NULL"
+        _rpv_params = (_revert_rpv,) if _revert_rpv else ()
+        with db.transaction() as tx:
+            cur = tx.execute(
+                f"UPDATE rules SET {', '.join(_revert_sets)} "
+                f"WHERE id = ? AND rule_version = ? AND status = ? {_rpv_where}",
+                tuple(_revert_params) + _rpv_params,
+            )
+            if cur.rowcount == 0:
+                log.warning(
+                    "merge_reeval revert CAS failed rule=%s version=%s",
+                    target_id, _revert_version,
+                )
 
 
 # ---------------------------------------------------------------------------

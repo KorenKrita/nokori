@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+from dataclasses import dataclass
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -374,6 +375,30 @@ ROLE_SCHEMAS: dict[str, dict[str, Any]] = {
     "merge_planner": MERGE_PLANNER_SCHEMA,
     "synthetic_eval_generator": SYNTHETIC_EVAL_GENERATOR_SCHEMA,
     "posthoc_evaluator": POSTHOC_EVALUATOR_SCHEMA,
+}
+
+
+# --- Unified Role Registry ---
+
+
+@dataclass(frozen=True)
+class RoleSpec:
+    """All configuration for a single cold-path LLM role in one place."""
+
+    prompt_version: str
+    max_tokens: int
+    timeout: int
+    schema: dict[str, Any]
+
+
+ROLE_SPECS: dict[str, RoleSpec] = {
+    role_id: RoleSpec(
+        prompt_version=PROMPT_VERSIONS[role_id],
+        max_tokens=DEFAULT_MAX_TOKENS[role_id],
+        timeout=DEFAULT_TIMEOUTS[role_id],
+        schema=ROLE_SCHEMAS[role_id],
+    )
+    for role_id in ROLE_IDS
 }
 
 
