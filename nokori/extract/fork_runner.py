@@ -194,17 +194,17 @@ def _drain_pending_jobs(cfg: Config, *, exclude_job: Path | None = None) -> None
         return
 
     log.info("draining %d pending extract jobs", len(other_jobs))
-    for jp in other_jobs:
-        job = job_io.read_job(jp)
-        if not job:
-            job_io.quarantine_corrupt_job(jp, cfg)
-            continue
-        t_path = Path(job["transcript_path"])
-        if not t_path.exists():
-            delete_job(jp)
-            continue
-        try:
-            db = open_db(cfg.db_path)
+    db = open_db(cfg.db_path)
+    try:
+        for jp in other_jobs:
+            job = job_io.read_job(jp)
+            if not job:
+                job_io.quarantine_corrupt_job(jp, cfg)
+                continue
+            t_path = Path(job["transcript_path"])
+            if not t_path.exists():
+                delete_job(jp)
+                continue
             try:
                 prev_offset = load_last_byte_offset(db, t_path)
                 turns, new_offset = read_after(t_path, prev_offset)
@@ -216,29 +216,30 @@ def _drain_pending_jobs(cfg: Config, *, exclude_job: Path | None = None) -> None
                     mark_extracted(db, t_path, t_path.stat().st_mtime, new_offset)
                     delete_job(jp)
                     continue
-            finally:
-                db.close()
 
-            llm = LLMAdapter(cfg)
-            candidates, llm_ok = extract_candidates(text, llm)
-            if not llm_ok:
-                log.warning("drain: LLM unavailable, stopping drain early")
-                return
-            if not candidates:
-                _mark_extracted_safe(cfg, t_path)
-                delete_job(jp)
-                continue
+                llm = LLMAdapter(cfg)
+                candidates, llm_ok = extract_candidates(text, llm)
+                if not llm_ok:
+                    log.warning("drain: LLM unavailable, stopping drain early")
+                    return
+                if not candidates:
+                    _mark_extracted_safe(cfg, t_path)
+                    delete_job(jp)
+                    continue
 
-            project_id = find_project_id_for_transcript(cfg, t_path)
-            rules_created, all_ok = process_candidates(
-                candidates, t_path, project_id, cfg, transcript_text=text,
-            )
-            if all_ok:
-                _mark_extracted_safe(cfg, t_path)
-                delete_job(jp)
-            log.info("drain job done: %s candidates=%d rules=%d", jp.name, len(candidates), rules_created)
-        except Exception as exc:
-            log.warning("drain job failed: %s %s", jp.name, exc)
+                project_id = find_project_id_for_transcript(cfg, t_path)
+                rules_created, all_ok = process_candidates(
+                    candidates, t_path, project_id, cfg, transcript_text=text,
+                )
+                if all_ok:
+                    _mark_extracted_safe(cfg, t_path)
+                    delete_job(jp)
+                log.info("drain job done: %s candidates=%d rules=%d", jp.name, len(candidates), rules_created)
+            except Exception as exc:
+                log.warning("drain job failed: %s %s", jp.name, exc)
+                job_io.quarantine_corrupt_job(jp, cfg)
+    finally:
+        db.close()
 
 
 def run(session_id: str, transcript_path: str | None = None, job_path: str | None = None) -> int:
