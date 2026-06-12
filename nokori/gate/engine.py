@@ -54,7 +54,7 @@ class GateEngine:
         if not self._cfg.gate_enabled:
             return GateDecision(blocked=False, reason="gate_disabled")
 
-        if not _tool_matches_gate(tool_name, self._cfg.gate_matcher):
+        if not tool_matches_gate(tool_name, self._cfg.gate_matcher):
             return GateDecision(blocked=False, reason="tool_not_matched")
 
         if not prompt_hash:
@@ -79,12 +79,12 @@ class GateEngine:
         try:
             gate_rules = []
             for r in marker.rules:
-                eligible, excluded_contexts = _is_gate_eligible_rule(r, self._db)
+                eligible, excluded_contexts = is_gate_eligible_rule(r, self._db)
                 if not eligible:
                     continue
-                if not _has_tool_evidence(r, payload):
+                if not has_tool_evidence(r, payload):
                     continue
-                if _tool_input_exclusion_fires(r, payload, excluded_contexts):
+                if tool_input_exclusion_fires(r, payload, excluded_contexts):
                     continue
                 gate_rules.append(r)
         except Exception:
@@ -101,24 +101,24 @@ class GateEngine:
 
 
 @functools.lru_cache(maxsize=8)
-def _compiled_gate_matcher(matcher: str) -> re.Pattern[str] | None:
+def compiled_gate_matcher(matcher: str) -> re.Pattern[str] | None:
     try:
         return re.compile(matcher)
     except re.error:
         return None
 
 
-def _tool_matches_gate(tool_name: str | None, matcher: str) -> bool:
+def tool_matches_gate(tool_name: str | None, matcher: str) -> bool:
     if not tool_name or not matcher:
         return False
-    pattern = _compiled_gate_matcher(matcher)
+    pattern = compiled_gate_matcher(matcher)
     if pattern is None:
         log.warning("invalid gate matcher %r; skipping gate for this tool", matcher)
         return False
     return bool(pattern.fullmatch(tool_name))
 
 
-def _is_gate_eligible_rule(rule: MarkerRule, db: Db) -> tuple[bool, list | None]:
+def is_gate_eligible_rule(rule: MarkerRule, db: Db) -> tuple[bool, list | None]:
     row = None
     if getattr(rule, "rule_id", None):
         row = db.fetchone(
@@ -147,7 +147,7 @@ def _is_gate_eligible_rule(rule: MarkerRule, db: Db) -> tuple[bool, list | None]
     return False, None
 
 
-def _has_tool_evidence(rule: MarkerRule, payload: dict) -> bool:
+def has_tool_evidence(rule: MarkerRule, payload: dict) -> bool:
     tool_input = payload.get("tool_input") or payload.get("input")
     if not tool_input:
         return True
@@ -177,7 +177,7 @@ def _has_tool_evidence(rule: MarkerRule, payload: dict) -> bool:
     return len(hits) >= max(1, len(tokens) // 2)
 
 
-def _tool_input_exclusion_fires(rule: MarkerRule, payload: dict, excluded_contexts: list | None) -> bool:
+def tool_input_exclusion_fires(rule: MarkerRule, payload: dict, excluded_contexts: list | None) -> bool:
     tool_input = payload.get("tool_input") or payload.get("input")
     if not tool_input:
         return False

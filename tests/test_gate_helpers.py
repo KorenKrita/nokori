@@ -1,4 +1,4 @@
-"""Unit tests for gate helper functions in nokori/hooks/pre_tool_use.py."""
+"""Unit tests for gate helper functions in nokori/gate/engine.py."""
 
 from __future__ import annotations
 
@@ -7,12 +7,12 @@ from datetime import datetime, timezone
 import pytest
 
 from nokori.db import open_db
-from nokori.gate.marker import MarkerRule
-from nokori.hooks.pre_tool_use import (
-    _has_tool_evidence,
-    _is_gate_eligible_rule,
-    _tool_input_exclusion_fires,
+from nokori.gate.engine import (
+    has_tool_evidence,
+    is_gate_eligible_rule,
+    tool_input_exclusion_fires,
 )
+from nokori.gate.marker import MarkerRule
 from nokori.policy import RUNTIME_POLICY_VERSION
 
 
@@ -58,7 +58,7 @@ def db(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# _is_gate_eligible_rule
+# is_gate_eligible_rule
 # ---------------------------------------------------------------------------
 
 
@@ -73,7 +73,7 @@ class TestIsGateEligibleRule:
             rule_version=1,
             runtime_policy_version=RUNTIME_POLICY_VERSION,
         )
-        eligible, contexts = _is_gate_eligible_rule(rule, db)
+        eligible, contexts = is_gate_eligible_rule(rule, db)
         assert eligible is True
         assert contexts == [{"id": "ex1", "scope": "tool_input_only", "patterns": ["foo"]}]
 
@@ -87,7 +87,7 @@ class TestIsGateEligibleRule:
             rule_version=1,
             runtime_policy_version=RUNTIME_POLICY_VERSION,
         )
-        eligible, contexts = _is_gate_eligible_rule(rule, db)
+        eligible, contexts = is_gate_eligible_rule(rule, db)
         assert eligible is False
         assert contexts is None
 
@@ -101,7 +101,7 @@ class TestIsGateEligibleRule:
             rule_version=1,
             runtime_policy_version=RUNTIME_POLICY_VERSION,
         )
-        eligible, contexts = _is_gate_eligible_rule(rule, db)
+        eligible, contexts = is_gate_eligible_rule(rule, db)
         assert eligible is False
         assert contexts is None
 
@@ -112,7 +112,7 @@ class TestIsGateEligibleRule:
             action="test action",
             trigger="test trigger",
         )
-        eligible, contexts = _is_gate_eligible_rule(rule, db)
+        eligible, contexts = is_gate_eligible_rule(rule, db)
         assert eligible is False
         assert contexts is None
 
@@ -127,13 +127,13 @@ class TestIsGateEligibleRule:
             rule_version=1,
             runtime_policy_version=RUNTIME_POLICY_VERSION,
         )
-        eligible, contexts = _is_gate_eligible_rule(rule, db)
+        eligible, contexts = is_gate_eligible_rule(rule, db)
         assert eligible is True
         assert contexts == []
 
 
 # ---------------------------------------------------------------------------
-# _has_tool_evidence
+# has_tool_evidence
 # ---------------------------------------------------------------------------
 
 
@@ -145,7 +145,7 @@ class TestHasToolEvidence:
             trigger="force push to shared branch",
         )
         payload = {"tool_input": "git push --force to the shared branch now"}
-        assert _has_tool_evidence(rule, payload) is True
+        assert has_tool_evidence(rule, payload) is True
 
     def test_action_tokens_in_tool_input(self):
         rule = MarkerRule(
@@ -154,7 +154,7 @@ class TestHasToolEvidence:
             trigger="never force push",
         )
         payload = {"tool_input": "git push --force-with-lease origin main"}
-        assert _has_tool_evidence(rule, payload) is True
+        assert has_tool_evidence(rule, payload) is True
 
     def test_no_overlap_returns_false(self):
         rule = MarkerRule(
@@ -163,7 +163,7 @@ class TestHasToolEvidence:
             trigger="force push to shared branch",
         )
         payload = {"tool_input": "echo hello world"}
-        assert _has_tool_evidence(rule, payload) is False
+        assert has_tool_evidence(rule, payload) is False
 
     def test_empty_tokens_returns_true(self):
         """When trigger and action are too short to produce tokens, returns True."""
@@ -173,7 +173,7 @@ class TestHasToolEvidence:
             trigger="cd",
         )
         payload = {"tool_input": "anything at all unrelated content"}
-        assert _has_tool_evidence(rule, payload) is True
+        assert has_tool_evidence(rule, payload) is True
 
     def test_large_tool_input_truncated(self):
         """Token matching uses truncated haystack; tokens only in tail don't match."""
@@ -187,7 +187,7 @@ class TestHasToolEvidence:
         # Filler that doesn't contain any of the tokens
         filler = "x" * 8100
         payload = {"tool_input": filler + " canary_release rollback_strategy production_health monitoring_dashboard"}
-        assert _has_tool_evidence(rule, payload) is False
+        assert has_tool_evidence(rule, payload) is False
 
     def test_no_tool_input_returns_true(self):
         """No tool_input field means prompt-only gate is valid."""
@@ -197,11 +197,11 @@ class TestHasToolEvidence:
             trigger="force push",
         )
         payload = {"tool_name": "Bash"}
-        assert _has_tool_evidence(rule, payload) is True
+        assert has_tool_evidence(rule, payload) is True
 
 
 # ---------------------------------------------------------------------------
-# _tool_input_exclusion_fires
+# tool_input_exclusion_fires
 # ---------------------------------------------------------------------------
 
 
@@ -218,7 +218,7 @@ class TestToolInputExclusionFires:
             }
         ]
         payload = {"tool_input": "this is a safe operation for deployment"}
-        assert _tool_input_exclusion_fires(rule, payload, excluded_contexts) is True
+        assert tool_input_exclusion_fires(rule, payload, excluded_contexts) is True
 
     def test_no_pattern_matches(self):
         rule = MarkerRule(short_id="e2", action="act", trigger="trig")
@@ -232,12 +232,12 @@ class TestToolInputExclusionFires:
             }
         ]
         payload = {"tool_input": "git push --force origin main"}
-        assert _tool_input_exclusion_fires(rule, payload, excluded_contexts) is False
+        assert tool_input_exclusion_fires(rule, payload, excluded_contexts) is False
 
     def test_empty_excluded_contexts(self):
         rule = MarkerRule(short_id="e3", action="act", trigger="trig")
         payload = {"tool_input": "anything"}
-        assert _tool_input_exclusion_fires(rule, payload, []) is False
+        assert tool_input_exclusion_fires(rule, payload, []) is False
 
     def test_invalid_excluded_context_gracefully_skipped(self):
         """Invalid context entries (missing id/patterns) are skipped, not raised."""
@@ -250,7 +250,7 @@ class TestToolInputExclusionFires:
         ]
         payload = {"tool_input": "something"}
         # Should not raise; returns False since no valid context matched
-        assert _tool_input_exclusion_fires(rule, payload, excluded_contexts) is False
+        assert tool_input_exclusion_fires(rule, payload, excluded_contexts) is False
 
     def test_non_tool_input_only_scope_ignored(self):
         """Only scope=tool_input_only contexts are evaluated."""
@@ -265,7 +265,7 @@ class TestToolInputExclusionFires:
             }
         ]
         payload = {"tool_input": "this is a safe operation"}
-        assert _tool_input_exclusion_fires(rule, payload, excluded_contexts) is False
+        assert tool_input_exclusion_fires(rule, payload, excluded_contexts) is False
 
     def test_no_tool_input_returns_false(self):
         rule = MarkerRule(short_id="e6", action="act", trigger="trig")
@@ -279,4 +279,4 @@ class TestToolInputExclusionFires:
             }
         ]
         payload = {"tool_name": "Bash"}
-        assert _tool_input_exclusion_fires(rule, payload, excluded_contexts) is False
+        assert tool_input_exclusion_fires(rule, payload, excluded_contexts) is False

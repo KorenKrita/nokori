@@ -6,7 +6,7 @@ from pathlib import Path
 from nokori.config import Config
 from nokori.constants import CURSOR_GATE_MATCHER, DEFAULT_GATE_MATCHER
 from nokori.extract.reader import read
-from nokori.hooks.pre_tool_use import _tool_matches_gate
+from nokori.gate.engine import tool_matches_gate
 from nokori.gate import prompt_ack
 from nokori.utils.hook_response import (
     pre_tool_deny_response,
@@ -234,5 +234,5 @@ def test_gate_shell_matches_when_cursor_transcript_in_payload():
         }
     )
     matcher = effective_gate_matcher(DEFAULT_GATE_MATCHER, host)
-    assert _tool_matches_gate("Shell", matcher)
-    assert not _tool_matches_gate("Shell", DEFAULT_GATE_MATCHER)
+    assert tool_matches_gate("Shell", matcher)
+    assert not tool_matches_gate("Shell", DEFAULT_GATE_MATCHER)
