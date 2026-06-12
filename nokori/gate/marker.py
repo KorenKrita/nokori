@@ -3,7 +3,6 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import asdict, dataclass
-from datetime import datetime
 from pathlib import Path
 
 from ..config import Config
@@ -232,6 +231,66 @@ def injection_exists(db: Db, session_id: str, ph: str) -> bool:
     return row is not None
 
 
+class PromptHashResolver:
+    """Three-layer prompt hash resolution with per-layer observability."""
+
+    def __init__(self, cfg: Config, session_id: str, db: Db) -> None:
+        self._cfg = cfg
+        self._session_id = session_id
+        self._db = db
+
+    def resolve(self, payload: dict, on_disk_marker: "Marker | None") -> tuple[str | None, str]:
+        """Returns (prompt_hash, source_layer).
+
+        source_layer: "payload" | "disk_marker" | "fire_events" | "none"
+
+        Side-effect: deletes on-disk marker when injection_exists returns False
+        (stale marker cleanup, preserves original _run_gate behavior).
+        """
+        from ..utils.prompt_text import normalize_prompt_for_hash
+
+        # Layer 1: payload prompt field
+        text = payload.get("prompt")
+        if isinstance(text, str) and text.strip():
+            ph = prompt_hash(normalize_prompt_for_hash(text))
+            log.debug("prompt_hash resolved from payload session=%s", self._session_id)
+            return ph, "payload"
+
+        # Layer 2: on-disk marker with injection_exists check
+        if on_disk_marker and on_disk_marker.rules:
+            disk_ph = on_disk_marker.prompt_hash
+            if disk_ph and injection_exists(self._db, self._session_id, disk_ph):
+                log.debug(
+                    "prompt_hash resolved from disk_marker session=%s ph=%s",
+                    self._session_id, disk_ph[:8],
+                )
+                return disk_ph, "disk_marker"
+            else:
+                log.debug(
+                    "disk_marker present but no injection_exists session=%s ph=%s",
+                    self._session_id, disk_ph[:8] if disk_ph else "-",
+                )
+                if disk_ph:
+                    delete(self._cfg, self._session_id, prompt_hash_value=disk_ph)
+
+        # Layer 3: latest rule_fire_events row
+        row = self._db.fetchone(
+            "SELECT prompt_hash FROM rule_fire_events WHERE session_id = ? "
+            "ORDER BY created_at DESC LIMIT 1",
+            (self._session_id,),
+        )
+        if row and row["prompt_hash"]:
+            ph = str(row["prompt_hash"])
+            log.debug(
+                "prompt_hash resolved from fire_events session=%s ph=%s",
+                self._session_id, ph[:8],
+            )
+            return ph, "fire_events"
+
+        log.debug("prompt_hash unresolved session=%s", self._session_id)
+        return None, "none"
+
+
 def resolve_current_prompt_hash(
     payload: dict,
     cfg: Config,
@@ -239,25 +298,22 @@ def resolve_current_prompt_hash(
     *,
     db: Db | None = None,
 ) -> str | None:
-    """Best-effort hash for the active user turn (PreToolUse has no prompt field)."""
-    from ..utils.prompt_text import normalize_prompt_for_hash
+    """Best-effort hash for the active user turn (PreToolUse has no prompt field).
 
-    text = payload.get("prompt")
-    if isinstance(text, str) and text.strip():
-        return prompt_hash(normalize_prompt_for_hash(text))
-    ph = latest_marker_prompt_hash(cfg, session_id)
-    if ph and db is not None and injection_exists(db, session_id, ph):
-        return ph
+    Backward-compat wrapper around PromptHashResolver.
+    """
     if db is None:
+        from ..utils.prompt_text import normalize_prompt_for_hash
+
+        text = payload.get("prompt")
+        if isinstance(text, str) and text.strip():
+            return prompt_hash(normalize_prompt_for_hash(text))
         return None
-    row = db.fetchone(
-        "SELECT prompt_hash FROM rule_fire_events WHERE session_id = ? "
-        "ORDER BY created_at DESC LIMIT 1",
-        (session_id,),
-    )
-    if row and row["prompt_hash"]:
-        return str(row["prompt_hash"])
-    return None
+
+    on_disk = read_latest_marker(cfg, session_id)
+    resolver = PromptHashResolver(cfg, session_id, db)
+    ph, _source = resolver.resolve(payload, on_disk)
+    return ph
 
 
 def prompt_hash_matches(

@@ -224,7 +224,7 @@ class TestGateProcessingError:
         write_marker(cfg, "sess-err", "force push", [_marker_rule()], ph=ph)
 
         engine = GateEngine(cfg, db)
-        with patch("nokori.gate.engine.is_gate_eligible_rule", side_effect=RuntimeError("db error")):
+        with patch("nokori.gate.engine._batch_check_eligibility", side_effect=RuntimeError("db error")):
             decision = engine.should_block(
                 tool_name="Bash",
                 prompt_hash=ph,
