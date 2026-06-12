@@ -161,6 +161,16 @@ def run_unmerge_check(db: Db) -> int:
     return restored
 
 
+def cold_eval_due(db: Db, interval_days: int = 1) -> bool:
+    """Check if cold evaluation (shadow/posthoc LLM labeling) is due to run."""
+    return _due(db, "cold_eval_spawn", interval_days)
+
+
+def mark_cold_eval_run(db: Db) -> None:
+    """Record that cold evaluation was spawned."""
+    _set_last_run(db, "cold_eval_spawn")
+
+
 def run_maintenance(db: Db, cfg=None) -> dict:
     """Run all due maintenance tasks, delegating transitions to lifecycle.transitions."""
     from .transitions import run_all_pending_transitions
