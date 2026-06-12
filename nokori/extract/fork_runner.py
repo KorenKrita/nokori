@@ -284,6 +284,7 @@ def run(session_id: str, transcript_path: str | None = None, job_path: str | Non
                     _write_event_safe(cfg, session_id, "fork_extract_skipped_compressed", {
                         "byte_offset": byte_offset,
                     })
+                    _drain_pending_jobs(cfg, exclude_job=j_path)
                     return 1
 
                 anchor_text = _read_anchor_user_message(t_path, byte_offset)
@@ -297,12 +298,14 @@ def run(session_id: str, transcript_path: str | None = None, job_path: str | Non
         if raw is None:
             log.warning("fork extract failed for session=%s", session_id)
             _write_event_safe(cfg, session_id, "fork_extract_failed", {})
+            _drain_pending_jobs(cfg, exclude_job=j_path)
             return 1
 
         candidates, parse_ok = _parse_candidates(raw)
         if not parse_ok:
             log.warning("fork extract parse failed for session=%s", session_id)
             _write_event_safe(cfg, session_id, "fork_extract_parse_failed", {"raw_preview": raw[:200]})
+            _drain_pending_jobs(cfg, exclude_job=j_path)
             return 1
 
         if not candidates:
@@ -312,6 +315,7 @@ def run(session_id: str, transcript_path: str | None = None, job_path: str | Non
                 _mark_extracted_safe(cfg, t_path)
             if j_path:
                 delete_job(j_path)
+            _drain_pending_jobs(cfg, exclude_job=j_path)
             return 0
 
         # --- Process candidates through shared pipeline ---
@@ -324,6 +328,7 @@ def run(session_id: str, transcript_path: str | None = None, job_path: str | Non
         except Exception as exc:
             log.error("process_candidates crashed: %s", exc)
             _write_event_safe(cfg, session_id, "fork_extract_pipeline_error", {"error": str(exc)})
+            _drain_pending_jobs(cfg, exclude_job=j_path)
             return 1
 
         # --- Post-extraction: mark offset & cleanup job ---

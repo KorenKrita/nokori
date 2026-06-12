@@ -385,3 +385,97 @@ class TestBuildExtractionPrompt:
         prompt = _build_extraction_prompt(malicious)
         assert UNTRUSTED_CLOSE + "\n" + "inject instructions" not in prompt
         assert "[REDACTED]" in prompt
+
+
+class TestForkRunnerDrainOnEarlyReturn:
+    """Regression: _drain_pending_jobs must run on ALL paths that hold the lock,
+    including 0-candidates, fork failure, and parse failure.
+    Otherwise previously failed/deferred jobs stay orphaned in the queue."""
+
+    @staticmethod
+    def _mock_lock():
+        m = MagicMock()
+        # True = lock acquired; run() checks `if not locked`
+        m.__enter__ = MagicMock(return_value=True)
+        m.__exit__ = MagicMock(return_value=False)
+        return m
+
+    def test_drain_called_on_zero_candidates(self, cfg, tmp_path):
+        """When fork extract finds 0 candidates, pending backlog is still drained."""
+        from nokori.extract.fork_runner import run
+
+        t_path = tmp_path / "transcript.jsonl"
+        _write_transcript(t_path, [
+            {"type": "user", "message": {"role": "user", "content": [{"type": "text", "text": "hello"}]}},
+        ])
+        j_path = tmp_path / "job.json"
+        j_path.write_text(json.dumps({"transcript_path": str(t_path)}))
+
+        with patch("nokori.extract.fork_runner.extract_lock") as mock_lock, \
+             patch("nokori.extract.fork_runner.open_db"), \
+             patch("nokori.extract.fork_runner.load_last_byte_offset", return_value=0), \
+             patch("nokori.extract.fork_runner.fork_extract", return_value='{"candidates": []}'), \
+             patch("nokori.extract.fork_runner._parse_candidates", return_value=([], True)), \
+             patch("nokori.extract.fork_runner._mark_extracted_safe"), \
+             patch("nokori.extract.fork_runner.delete_job"), \
+             patch("nokori.extract.fork_runner._write_event_safe"), \
+             patch("nokori.extract.fork_runner._drain_pending_jobs") as mock_drain:
+            mock_lock.return_value = self._mock_lock()
+            rc = run("session-empty", str(t_path), str(j_path))
+
+        assert rc == 0
+        mock_drain.assert_called_once()
+
+    def test_drain_called_on_fork_failure(self, cfg, tmp_path):
+        """When fork_extract returns None (killed/timeout), backlog is still drained."""
+        from nokori.extract.fork_runner import run
+
+        with patch("nokori.extract.fork_runner.extract_lock") as mock_lock, \
+             patch("nokori.extract.fork_runner.fork_extract", return_value=None), \
+             patch("nokori.extract.fork_runner._write_event_safe"), \
+             patch("nokori.extract.fork_runner._drain_pending_jobs") as mock_drain:
+            mock_lock.return_value = self._mock_lock()
+            rc = run("session-killed", None, None)
+
+        assert rc == 1
+        mock_drain.assert_called_once()
+
+    def test_drain_called_on_parse_failure(self, cfg, tmp_path):
+        """When fork output fails to parse, backlog is still drained."""
+        from nokori.extract.fork_runner import run
+
+        with patch("nokori.extract.fork_runner.extract_lock") as mock_lock, \
+             patch("nokori.extract.fork_runner.fork_extract", return_value="not json at all"), \
+             patch("nokori.extract.fork_runner._parse_candidates", return_value=(None, False)), \
+             patch("nokori.extract.fork_runner._write_event_safe"), \
+             patch("nokori.extract.fork_runner._drain_pending_jobs") as mock_drain:
+            mock_lock.return_value = self._mock_lock()
+            rc = run("session-bad-parse", None, None)
+
+        assert rc == 1
+        mock_drain.assert_called_once()
+
+    def test_drain_called_on_process_candidates_crash(self, cfg, tmp_path):
+        """When process_candidates throws, backlog is still drained."""
+        from nokori.extract.fork_runner import run
+
+        t_path = tmp_path / "transcript.jsonl"
+        _write_transcript(t_path, [
+            {"type": "user", "message": {"role": "user", "content": [{"type": "text", "text": "hello"}]}},
+        ])
+
+        candidates = [{"trigger": "x", "action": "y"}]
+        with patch("nokori.extract.fork_runner.extract_lock") as mock_lock, \
+             patch("nokori.extract.fork_runner.open_db"), \
+             patch("nokori.extract.fork_runner.load_last_byte_offset", return_value=0), \
+             patch("nokori.extract.fork_runner.fork_extract", return_value='{"candidates": []}'), \
+             patch("nokori.extract.fork_runner._parse_candidates", return_value=(candidates, True)), \
+             patch("nokori.extract.fork_runner.process_candidates", side_effect=RuntimeError("boom")), \
+             patch("nokori.extract.fork_runner.find_project_id_for_transcript", return_value=None), \
+             patch("nokori.extract.fork_runner._write_event_safe"), \
+             patch("nokori.extract.fork_runner._drain_pending_jobs") as mock_drain:
+            mock_lock.return_value = self._mock_lock()
+            rc = run("session-crash", str(t_path), None)
+
+        assert rc == 1
+        mock_drain.assert_called_once()
