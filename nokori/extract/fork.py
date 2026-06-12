@@ -74,13 +74,23 @@ def fork_extract(session_id: str, extract_prompt: str, cfg: Config) -> str | Non
         log.warning("fork extract returned empty output")
         return None
 
+    from ..llm.json_payload import parse_json_payload
+
     try:
         json.loads(output)
+        return output
     except (json.JSONDecodeError, ValueError):
-        log.warning("fork extract output is not valid JSON: %s", output[:200])
-        return None
+        pass
 
-    return output
+    parsed = parse_json_payload(output)
+    if isinstance(parsed, dict) and "candidates" in parsed:
+        return json.dumps(parsed, ensure_ascii=False)
+
+    if parsed is not None:
+        log.warning("fork extract parsed JSON but missing 'candidates' key: %s", str(parsed)[:200])
+    else:
+        log.warning("fork extract output is not valid JSON: %s", output[:200])
+    return None
 
 
 _SESSION_ID_RE = re.compile(r"^[a-zA-Z0-9_\-]{1,128}$")

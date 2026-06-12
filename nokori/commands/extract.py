@@ -8,6 +8,7 @@ from ..config import Config
 from ..constants import TRANSCRIPT_MTIME_EPSILON_SEC
 from ..db import open_db
 from ..events.observability import write_event
+from ..cold.jobs import expire_stale_ingest_jobs
 from ..extract import jobs as job_io
 from ..extract.compressor import compress
 from ..extract.extractor import extract as extract_candidates

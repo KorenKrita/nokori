@@ -6,6 +6,7 @@ from ..config import Config
 from ..db import open_db, total_rule_count
 from ..events.observability import write_event
 from ..lifecycle import hot_cache, maintenance
+from ..lifecycle.maintenance import _due
 from ..search import embedding as embedding_search
 from ..search import embed_ipc
 from ..utils import sessions
@@ -15,6 +16,8 @@ from ..utils.logging import get_logger
 from ..utils.project import resolve_project_id_detailed
 
 log = get_logger("nokori.hooks.session_start")
+
+COLD_EVAL_INTERVAL_DAYS = 1
 
 
 def _maybe_kickstart_embed(cfg: Config, db) -> str:
