@@ -194,9 +194,14 @@ def _drain_pending_jobs(cfg: Config, *, exclude_job: Path | None = None) -> None
         return
 
     log.info("draining %d pending extract jobs", len(other_jobs))
+    consecutive_failures = 0
     db = open_db(cfg.db_path)
     try:
         for jp in other_jobs:
+            if consecutive_failures >= 3:
+                log.warning("drain: %d consecutive failures, stopping early", consecutive_failures)
+                break
+
             job = job_io.read_job(jp)
             if not job:
                 job_io.quarantine_corrupt_job(jp, cfg)
@@ -234,10 +239,14 @@ def _drain_pending_jobs(cfg: Config, *, exclude_job: Path | None = None) -> None
                 if all_ok:
                     _mark_extracted_safe(cfg, t_path)
                     delete_job(jp)
+                consecutive_failures = 0
                 log.info("drain job done: %s candidates=%d rules=%d", jp.name, len(candidates), rules_created)
-            except Exception as exc:
-                log.warning("drain job failed: %s %s", jp.name, exc)
+            except (json.JSONDecodeError, KeyError) as exc:
+                log.warning("drain job corrupt, quarantining: %s %s", jp.name, exc)
                 job_io.quarantine_corrupt_job(jp, cfg)
+            except Exception as exc:
+                consecutive_failures += 1
+                log.warning("drain job failed (will retry): %s %s", jp.name, exc)
     finally:
         db.close()
 
