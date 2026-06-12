@@ -448,6 +448,7 @@ def _merge_planner_json(operation: str = "keep_both", target_ids: list | None = 
 
 class TestMergePlannerStage:
     def test_keep_both_returns_context(self, db: Db):
+        """Empty DB short-circuits to keep_both without LLM call (tests fallback path)."""
         from nokori.cold.stages import CandidateContext, PipelineConfig, run_merge_planner
 
         llm = _make_llm_mock({"merge planner": _merge_planner_json("keep_both")})

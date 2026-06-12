@@ -221,7 +221,7 @@ def run_merge_planner(
     )
 
     if merge_op == "reject_new":
-        rationale = merge_info.get("merge_rationale", "") if merge_info else ""
+        rationale = merge_info.get("merge_rationale", "")
         return ColdPipelineResult(
             status="rejected",
             rule_id=None,
