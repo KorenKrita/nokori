@@ -167,7 +167,8 @@ def run_final_judge(
         )
     rule_data = ctx.rule_data
     rule_data_for_judge = {
-        k: v for k, v in rule_data.items() if k not in ("evidence_quotes", "_rewritten")
+        k: v for k, v in rule_data.items()
+        if k != "evidence_quotes" and not k.startswith("_")
     }
     evidence_quotes = ctx.extractor_output.get("evidence_quotes", [])
 

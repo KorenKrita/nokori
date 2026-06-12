@@ -1,5 +1,6 @@
 """Tests for the shared restore_orphaned_archived utility."""
 
+import hashlib
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -20,7 +21,6 @@ def _utcnow_iso(delta_days: int = 0) -> str:
 
 
 def _insert_rule(db: Db, id_: str, status: str, replacement_id: str | None = None):
-    import hashlib
     short = hashlib.sha256(id_.encode()).hexdigest()[:6]
     now = _utcnow_iso()
     with db.transaction() as tx:

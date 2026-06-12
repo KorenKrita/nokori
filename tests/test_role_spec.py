@@ -39,5 +39,8 @@ class TestRoleSpec:
         model = resolve_model_id("admission_judge", {"admission_judge": "custom-model"}, None)
         assert model == "custom-model"
 
+        model_with_default = resolve_model_id("admission_judge", None, "fallback-model")
+        assert model_with_default == "fallback-model"
+
         model_default = resolve_model_id("admission_judge", None, None)
         assert model_default == PROVIDER_DEFAULT_MODEL

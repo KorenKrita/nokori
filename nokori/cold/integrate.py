@@ -215,6 +215,7 @@ def apply_merge_with_reeval(
         (target_id,),
     )
     if _merged_row is None:
+        log.warning("merge_reeval target rule disappeared after merge rule=%s", target_id)
         return MergeRevalOutcome(success=True, rule_id=target_id)
 
     _raw_variants = json.loads(_merged_row["trigger_variants"] or "[]")
@@ -263,6 +264,7 @@ def apply_merge_with_reeval(
         else:
             _synth_ok = True
     except Exception:
+        log.warning("merge_reeval synthetic eval error rule=%s", target_id, exc_info=True)
         _synth_ok = False
 
     if not _synth_ok:
@@ -310,6 +312,7 @@ def _revert_merge(
         )
     if _revert_sets:
         _revert_sets.append("rule_version = rule_version + 1")
+        # Intentionally advances policy version (project convention: CAS updates always push forward)
         _revert_sets.append("runtime_policy_version = ?")
         _revert_params.append(RUNTIME_POLICY_VERSION)
         _revert_sets.append("updated_at = ?")
