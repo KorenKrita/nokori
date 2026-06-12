@@ -298,7 +298,7 @@ class TestObservabilityCleanup:
         assert len(db.fetchall("SELECT * FROM error_events")) == 1
 
 
-class TestSchemaV7Migration:
+class TestSchemaMigration:
     def test_fresh_db_has_observability_tables(self, tmp_path):
         db_path = tmp_path / "fresh.db"
         d = open_db(db_path)
@@ -315,7 +315,7 @@ class TestSchemaV7Migration:
         finally:
             d.close()
 
-    def test_v6_db_migrates_to_v7(self, tmp_path):
+    def test_v6_db_migrates_to_v8(self, tmp_path):
         import sqlite3
 
         db_path = tmp_path / "v6.db"
@@ -329,7 +329,7 @@ class TestSchemaV7Migration:
 
         d = open_db(db_path)
         try:
-            assert d.schema_version() == 7
+            assert d.schema_version() == 8
             tables = {
                 r["name"]
                 for r in d.fetchall(

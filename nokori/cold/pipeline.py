@@ -14,9 +14,11 @@ Pipeline invariants:
 
 from __future__ import annotations
 
+import hashlib
 import json
+import time
 import uuid
-from dataclasses import dataclass
+from dataclasses import replace
 from datetime import datetime, timezone
 from typing import Any
 
@@ -79,28 +81,175 @@ from .verify import (
     _generate_eval_cases,
     _check_cold_fast_lane,
 )
+from .stages import (
+    CandidateContext,
+    PipelineConfig,
+    run_admission,
+    run_build_rule_data,
+    run_compile_matcher,
+    run_fast_lane_check,
+    run_final_judge,
+    run_fingerprint_check,
+    run_insert_or_merge,
+    run_merge_planner,
+    run_synthetic_eval as run_synthetic_eval_stage,
+)
 
 log = get_logger("nokori.cold.pipeline")
 
 
 # ---------------------------------------------------------------------------
-# Pipeline orchestration
+# Pipeline orchestration — stage-based
 # ---------------------------------------------------------------------------
 
+STAGE_CHAIN: list[tuple[str, Any, bool]] = [
+    ("admission", run_admission, True),
+    ("build_rule_data", run_build_rule_data, True),
+    ("final_judge", run_final_judge, True),
+    ("merge_planner", run_merge_planner, True),
+    ("fingerprint_check", run_fingerprint_check, False),
+    ("compile_matcher", run_compile_matcher, False),
+    ("synthetic_eval", run_synthetic_eval_stage, True),
+    ("fast_lane_check", run_fast_lane_check, False),
+    ("insert_or_merge", run_insert_or_merge, False),
+]
+
+_CHECKPOINT_PIPELINE_VERSION = "1.0.0"
+
+
+def _stage_index(stage_name: str) -> int:
+    for i, (name, _, _cp) in enumerate(STAGE_CHAIN):
+        if name == stage_name:
+            return i
+    return -1
+
+
+def _write_checkpoint(
+    db: Db,
+    transcript_ref: str,
+    segment_hash: str | None,
+    stage_name: str,
+    ctx: CandidateContext,
+) -> None:
+    """Persist checkpoint after a successful stage."""
+    serializable_fields = {
+        "extractor_output": ctx.extractor_output,
+        "transcript_ref": ctx.transcript_ref,
+        "source_origin": ctx.source_origin,
+        "project_id": ctx.project_id,
+        "admission_decision": ctx.admission_decision,
+        "admission_scores": ctx.admission_scores,
+        "rule_data": ctx.rule_data,
+        "final_decision": ctx.final_decision,
+        "target_status": ctx.target_status,
+        "merge_op": ctx.merge_op,
+        "merge_info": ctx.merge_info,
+        "fingerprint_block": ctx.fingerprint_block,
+        "synthetic_passed": ctx.synthetic_passed,
+        "adversarial_failures": ctx.adversarial_failures,
+        "synthetic_eval_skipped": ctx.synthetic_eval_skipped,
+        "fast_lane_passed": ctx.fast_lane_passed,
+    }
+    checkpoint = dumps_json({
+        "pipeline_version": _CHECKPOINT_PIPELINE_VERSION,
+        "stage": stage_name,
+        "context": serializable_fields,
+    })
+    if segment_hash:
+        with db.transaction() as tx:
+            tx.execute(
+                "UPDATE transcript_ingest_jobs SET pipeline_checkpoint = ?, updated_at = ? "
+                "WHERE segment_hash = ? AND status = 'pending'",
+                (checkpoint, now_iso(), segment_hash),
+            )
+
+
+def _load_checkpoint(
+    db: Db,
+    segment_hash: str | None,
+) -> tuple[str, dict] | None:
+    """Load checkpoint for a pending ingest job. Returns (stage_name, context_fields) or None."""
+    if not segment_hash:
+        return None
+    row = db.fetchone(
+        "SELECT pipeline_checkpoint FROM transcript_ingest_jobs "
+        "WHERE segment_hash = ? AND status = 'pending' AND pipeline_checkpoint IS NOT NULL",
+        (segment_hash,),
+    )
+    if row is None or row["pipeline_checkpoint"] is None:
+        return None
+    try:
+        data = json.loads(row["pipeline_checkpoint"])
+        if data.get("pipeline_version") != _CHECKPOINT_PIPELINE_VERSION:
+            return None
+        return data["stage"], data["context"]
+    except (json.JSONDecodeError, KeyError, TypeError):
+        return None
+
+
+def _run_pipeline_staged(
+    db: Db,
+    llm,
+    ctx: CandidateContext,
+    segment_hash: str | None = None,
+) -> ColdPipelineResult:
+    """Execute the cold pipeline as a chain of typed stages with checkpoint persistence."""
+    checkpoint = _load_checkpoint(db, segment_hash)
+    start_idx = 0
+    if checkpoint is not None:
+        checkpoint_stage, checkpoint_fields = checkpoint
+        idx = _stage_index(checkpoint_stage)
+        if idx >= 0:
+            start_idx = idx + 1
+            ctx = replace(
+                ctx,
+                admission_decision=checkpoint_fields.get("admission_decision"),
+                admission_scores=checkpoint_fields.get("admission_scores"),
+                rule_data=checkpoint_fields.get("rule_data"),
+                final_decision=checkpoint_fields.get("final_decision"),
+                target_status=checkpoint_fields.get("target_status"),
+                merge_op=checkpoint_fields.get("merge_op"),
+                merge_info=checkpoint_fields.get("merge_info"),
+                fingerprint_block=checkpoint_fields.get("fingerprint_block"),
+                synthetic_passed=checkpoint_fields.get("synthetic_passed", False),
+                adversarial_failures=checkpoint_fields.get("adversarial_failures", 0),
+                synthetic_eval_skipped=checkpoint_fields.get("synthetic_eval_skipped", False),
+                fast_lane_passed=checkpoint_fields.get("fast_lane_passed", False),
+            )
+            log.info("checkpoint resume: stage=%s start_idx=%d", checkpoint_stage, start_idx)
+
+    for i, (name, stage_fn, should_checkpoint) in enumerate(STAGE_CHAIN[start_idx:], start=start_idx):
+        t0 = time.monotonic()
+        result = stage_fn(ctx, db, llm)
+        elapsed_ms = int((time.monotonic() - t0) * 1000)
+        log.info("stage=%s duration_ms=%d", name, elapsed_ms)
+
+        if isinstance(result, ColdPipelineResult):
+            return result
+
+        ctx = result
+
+        # Handle split_required after merge_planner (before fingerprint check)
+        if name == "merge_planner" and ctx.merge_op == "split_required":
+            _write_checkpoint(db, ctx.transcript_ref, segment_hash, name, ctx)
+            return ColdPipelineResult(
+                status="pending_split",
+                rule_id=None,
+                rejection_reason=None,
+                scores=ctx.admission_scores,
+            )
+
+        if should_checkpoint:
+            _write_checkpoint(db, ctx.transcript_ref, segment_hash, name, ctx)
+
+    raise RuntimeError("pipeline exhausted stages without terminal result")
+
 
 # ---------------------------------------------------------------------------
-# Result dataclass
+# Result dataclass (re-exported from _result to avoid circular imports)
 # ---------------------------------------------------------------------------
 
-
-@dataclass(frozen=True)
-class ColdPipelineResult:
-    """Outcome of a cold pipeline run for one candidate."""
-
-    status: str  # "candidate", "active", "rejected", "pending_rewrite", "pending_split"
-    rule_id: str | None
-    rejection_reason: str | None
-    scores: dict | None
+from ._result import ColdPipelineResult  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -239,98 +388,39 @@ def _run_cold_pipeline_inner(
     source_origin: SourceOrigin = "transcript_extraction",
     project_id: str | None = None,
 ) -> ColdPipelineResult:
-    candidate = extractor_output
-
-    # --- Pre-check: evidence_quotes must be non-empty (section 6.1) ---
-    evidence_quotes = candidate.get("evidence_quotes", [])
-    if not evidence_quotes:
-        return ColdPipelineResult(
-            status="rejected",
-            rule_id=None,
-            rejection_reason="no_transcript_evidence",
-            scores=None,
-        )
-
-    # --- Stage a: Admission Judge ---
-    admission_model = resolve_model_id("admission_judge", role_models, default_model)
-    decision, scores = _run_admission_judge(
-        db, llm, candidate, admission_model, role_max_tokens, role_timeouts
+    config = PipelineConfig(
+        role_models=role_models,
+        default_model=default_model,
+        role_max_tokens=role_max_tokens,
+        role_timeouts=role_timeouts,
     )
-
-    if decision == "reject":
-        return ColdPipelineResult(
-            status="rejected",
-            rule_id=None,
-            rejection_reason="admission_judge_rejected",
-            scores=scores,
-        )
-
-    # --- Stage b: Rewriter (if revise) ---
-    rule_data: dict[str, Any]
-    if decision == "revise":
-        rewriter_model = resolve_model_id("rule_rewriter", role_models, default_model)
-        rewritten = _run_rewriter(
-            db, llm, candidate, scores, rewriter_model,
-            role_max_tokens, role_timeouts,
-        )
-        if rewritten is None:
-            return ColdPipelineResult(
-                status="rejected",
-                rule_id=None,
-                rejection_reason="rewriter_failed",
-                scores=scores,
-            )
-        rule_data = rewritten
-        # Preserve fields from candidate that rewriter doesn't output
-        rule_data["evidence_quotes"] = candidate.get("evidence_quotes", [])
-        rule_data["trigger_canonical_zh"] = candidate.get("trigger_zh")
-        rule_data["action_instruction_zh"] = candidate.get("action_zh")
-        rule_data["trigger_variants_zh"] = candidate.get("trigger_variants_zh", [])
-        rule_data["non_generalization_boundaries"] = candidate.get("non_generalization_boundaries", [])
-        rule_data["near_miss_examples"] = candidate.get("near_miss_examples", [])
-        rule_data["_rewritten"] = True
-    else:
-        # Build structured rule_data from extractor candidate for accepted path
-        rule_data = _candidate_to_rule_data(candidate)
-    rule_data = _ensure_rule_data_variants(rule_data)
-
-    # --- Stage c: Final Judge ---
-    # Strip evidence from rule_data so final_judge sees rule and evidence separately
-    rule_data_for_judge = {k: v for k, v in rule_data.items() if k not in ("evidence_quotes", "_rewritten")}
-    final_judge_model = resolve_model_id("final_judge", role_models, default_model)
-    final_decision = _run_final_judge(
-        db, llm, rule_data_for_judge, candidate.get("evidence_quotes", []), final_judge_model,
-        role_max_tokens, role_timeouts,
-    )
-
-    if final_decision == "reject":
-        return ColdPipelineResult(
-            status="rejected",
-            rule_id=None,
-            rejection_reason="final_judge_rejected",
-            scores=scores,
-        )
-
-    # Target status from final judge
-    target_status = "active" if final_decision == "accept_active" else "candidate"
-
-    # --- Stage d: Merge Planner ---
-    merge_planner_model = resolve_model_id("merge_planner", role_models, default_model)
-    merge_op, merge_info = _run_merge_planner(
-        db, llm, rule_data, merge_planner_model, role_max_tokens, role_timeouts,
+    ctx = CandidateContext(
+        extractor_output=extractor_output,
+        transcript_ref=transcript_ref,
+        source_origin=source_origin,
         project_id=project_id,
+        config=config,
+        idf_stats=idf_stats,
+        global_adversarial_cases=global_adversarial_cases,
     )
 
-    if merge_op == "reject_new":
-        return ColdPipelineResult(
-            status="rejected",
-            rule_id=None,
-            rejection_reason=f"merge_planner_reject_new: {merge_info.get('merge_rationale', '')}",
-            scores=scores,
-        )
+    segment_text = f"{transcript_ref}::{extractor_output.get('trigger', '')}::{extractor_output.get('action', '')}"
+    segment_hash = hashlib.sha256(segment_text.encode("utf-8")).hexdigest()[:16]
 
-    if merge_op == "split_required":
-        # Spec section 6.7: return to rewrite/split, then re-process each part
+    result = _run_pipeline_staged(db, llm, ctx, segment_hash=segment_hash)
+
+    # Handle split_required: delegate to split handler
+    if result.status == "pending_split":
+        checkpoint = _load_checkpoint(db, segment_hash)
+        rule_data = None
+        scores = None
+        if checkpoint is not None:
+            _, cp_fields = checkpoint
+            rule_data = cp_fields.get("rule_data")
+            scores = cp_fields.get("admission_scores")
+        if rule_data is None:
+            return result
+
         split_results = _handle_split_required(
             db, llm, rule_data, role_models, default_model,
             transcript_ref, source_origin, idf_stats, global_adversarial_cases,
@@ -345,305 +435,11 @@ def _run_cold_pipeline_inner(
             scores=scores,
         )
 
-    # --- Stage e: Archived fingerprint check ---
-    trigger_canonical = rule_data.get("trigger_canonical", "")
-    action_instruction = rule_data.get("action_instruction", "")
-    domain_tags = rule_data.get("scope", {}).get("domain_tags", [])
-
-    # Pass admission judge acceptance so narrower-scope override path is reachable.
-    # admission_judge_cited=True when the admission judge accepted the candidate
-    # (overall_quality >= accept threshold 0.82), meaning it evaluated and endorsed
-    # the scope difference — functionally equivalent to "citing the difference".
-    scope_evidence = rule_data.get("non_generalization_boundaries") or rule_data.get("evidence_quotes")
-    admission_cited = (
-        scores is not None
-        and scores.get("overall_quality", 0) >= 0.82
-        and bool(scope_evidence)
-    )
-
-    fingerprint_block = check_fingerprint_block(
-        db, trigger_canonical, action_instruction, domain_tags,
-        stronger_evidence=str(scope_evidence[0]) if scope_evidence else None,
-        admission_judge_cited=admission_cited,
-    )
-    fingerprint_conflict = fingerprint_block is not None
-
-    # Spec section 6.7: "reject if archived fingerprint blocks the rule" (unconditional)
-    if fingerprint_conflict:
-        return ColdPipelineResult(
-            status="rejected",
-            rule_id=None,
-            rejection_reason=f"fingerprint_blocked_{fingerprint_block.get('archive_strength', 'unknown')}",
-            scores=scores,
-        )
-
-    # --- Stage f: Compile matcher ---
-    trigger_data = _build_trigger_data(rule_data)
-    try:
-        compiled_matcher = compile_rule(
-            trigger_data,
-            action_data={"instruction": action_instruction, "severity": rule_data.get("severity", "reminder")},
-            search_terms=rule_data.get("search_terms"),
-        )
-    except CompilationError as e:
-        return ColdPipelineResult(
-            status="rejected",
-            rule_id=None,
-            rejection_reason=f"compilation_failed: {e}",
-            scores=scores,
-        )
-
-    # --- Stage g: Synthetic eval (active fast-lane + merge reeval) ---
-    synthetic_passed = False
-    adversarial_failures = 0
-    synthetic_result: SyntheticEvalResult | None = None
-
-    if idf_stats is None:
-        idf_stats = _build_idf_stats_from_db(db)
-
-    # Skip eval generation for candidates that don't merge into existing rules
-    # (no active rule to protect). Merge reeval needs cases to validate changes.
-    _needs_eval_cases = (
-        target_status == "active"
-        or merge_op in ("merge_into_existing", "update_existing_fields")
-    )
-    synthetic_eval_skipped = False
-    if not _needs_eval_cases:
-        eval_cases: list = []
-        synthetic_eval_skipped = True
-    else:
-        try:
-            eval_cases = _generate_eval_cases(
-                db, llm, rule_data, role_models, default_model,
-                role_max_tokens, role_timeouts,
-            )
-        except (CircuitBreakerOpenError, ValueError) as exc:
-            log.warning("synthetic eval generation failed, passing through: %s", exc)
-            eval_cases = []
-            synthetic_eval_skipped = True
-            synthetic_passed = True
-    if eval_cases:
-        eval_rule_data = {
-            "id": "",
-            "version": 0,
-            "status": target_status,
-            "severity": rule_data.get("severity", "reminder"),
-            "first_observed_useful_at": None,
-        }
-        synthetic_result = run_synthetic_eval(
-            eval_rule_data,
-            compiled_matcher,
-            idf_stats,
-            eval_cases,
-            global_adversarial_cases,
-        )
-        synthetic_passed = synthetic_result.passed
-        # Count adversarial failures
-        if synthetic_result.results:
-            adversarial_failures = sum(
-                1 for r in synthetic_result.results
-                if r.get("case_type") == "global_adversarial" and not r.get("case_passed", True)
-            )
-
-    # --- Stage h: Final admission policy (section 6.7) ---
-    fast_lane_passed = _check_cold_fast_lane(
-        scores=scores,
-        synthetic_passed=synthetic_passed,
-        adversarial_failures=adversarial_failures,
-        fingerprint_conflict=fingerprint_conflict,
-        merge_op=merge_op,
-        source_origin=source_origin,
-        final_judge_decision=final_decision,
-    )
-
-    # Determine final status
-    existing_rule = merge_info.get("existing_rule")
-    if merge_op in DESTRUCTIVE_MERGE_OPS and not existing_rule:
-        return ColdPipelineResult(
-            status="rejected",
-            rule_id=None,
-            rejection_reason="merge_transaction_invalid: no existing rule for destructive merge",
-            scores=scores,
-        )
-    if merge_op in DESTRUCTIVE_MERGE_OPS:
-        merge_decision = MergeDecision(
-            operation=merge_op,  # type: ignore[arg-type]
-            target_rule_id=(existing_rule or {}).get("id"),
-            reason=merge_info.get("merge_rationale", ""),
-            requires_synthetic_reeval=bool(merge_info.get("requires_synthetic_reeval")),
-            lineage_record=merge_info.get("lineage_record"),
-        )
-        if not validate_merge_transaction(
-            existing_rule,
-            rule_data,
-            merge_decision,
-            synthetic_passed=synthetic_passed,
-            fingerprint_clear=not fingerprint_conflict,
-            matcher_compiled=True,
-            final_admission_passed=fast_lane_passed,
-        ):
-            return ColdPipelineResult(
-                status="rejected",
-                rule_id=None,
-                rejection_reason="merge_transaction_invalid",
-                scores=scores,
-            )
-
-    # --- Handle non-destructive merge ops that update existing rules ---
-    if merge_op in ("merge_into_existing", "update_existing_fields"):
-        existing_rule = merge_info.get("existing_rule") or {}
-        target_id = existing_rule.get("id")
-        if target_id:
-            # Snapshot fields that require synthetic re-eval if changed (spec 6.5)
-            _pre_variants = existing_rule.get("trigger_variants")
-            _pre_excluded = existing_rule.get("excluded_contexts")
-
-            _apply_non_destructive_merge(db, target_id, rule_data, merge_op, merge_info)
-
-            # Spec 6.5: re-run synthetic eval if variants or excluded_contexts changed
-            _merge_changed_variants = bool(
-                rule_data.get("variants") or rule_data.get("trigger_variants")
-            )
-            _merge_changed_excluded = bool(rule_data.get("excluded_contexts"))
-            if _merge_changed_variants or _merge_changed_excluded:
-                # Reload merged rule for re-compilation
-                _merged_row = db.fetchone(
-                    "SELECT trigger_canonical, trigger_variants, excluded_contexts, "
-                    "concepts, required_concept_groups, near_miss_examples, "
-                    "action_instruction, rule_version, status, severity, "
-                    "runtime_policy_version, first_observed_useful_at "
-                    "FROM rules WHERE id = ?",
-                    (target_id,),
-                )
-                if _merged_row is not None:
-                    _raw_variants = json.loads(_merged_row["trigger_variants"] or "[]")
-                    _variants = [
-                        v if isinstance(v, dict) else {
-                            "text": str(v),
-                            "kind": "weak_recall",
-                            "requires_concepts": [],
-                        }
-                        for v in _raw_variants
-                    ]
-                    _recompile_data = {
-                        "trigger_canonical": _merged_row["trigger_canonical"],
-                        "variants": _variants,
-                        "excluded_contexts": json.loads(_merged_row["excluded_contexts"] or "[]"),
-                        "concepts": json.loads(_merged_row["concepts"] or "[]"),
-                        "required_concept_groups": json.loads(_merged_row["required_concept_groups"] or "[]"),
-                        "near_miss_examples": json.loads(_merged_row["near_miss_examples"] or "[]"),
-                        "action_instruction": _merged_row["action_instruction"],
-                    }
-                    try:
-                        _recompiled = compile_rule(_recompile_data)
-                    except CompilationError:
-                        _recompiled = None
-
-                    _synth_ok = False
-                    if _recompiled is None:
-                        _synth_ok = False
-                    elif eval_cases or global_adversarial_cases:
-                        _reeval_rule_data = {
-                            "id": target_id,
-                            "version": _merged_row["rule_version"],
-                            "status": _merged_row["status"],
-                            "severity": _merged_row["severity"],
-                            "first_observed_useful_at": _merged_row[
-                                "first_observed_useful_at"
-                            ],
-                        }
-                        _synth_result = run_synthetic_eval(
-                            _reeval_rule_data,
-                            _recompiled,
-                            idf_stats,
-                            eval_cases,
-                            global_adversarial_cases,
-                        )
-                        _synth_ok = _synth_result is not None and _synth_result.passed
-                    else:
-                        # No eval cases available but compilation succeeded —
-                        # allow non-destructive merge (compilation validates structure).
-                        _synth_ok = True
-
-                    if not _synth_ok:
-                        # Revert merged fields via CAS (restore pre-merge values)
-                        _revert_version = _merged_row["rule_version"]
-                        _revert_status = _merged_row["status"]
-                        _revert_rpv = _merged_row["runtime_policy_version"]
-                        _now_revert = now_iso()
-                        _revert_sets = []
-                        _revert_params: list = []
-                        if _merge_changed_variants:
-                            _revert_sets.append("trigger_variants = ?")
-                            _revert_params.append(_pre_variants if isinstance(_pre_variants, str) else dumps_json(_pre_variants) if _pre_variants is not None else None)
-                        if _merge_changed_excluded:
-                            _revert_sets.append("excluded_contexts = ?")
-                            _revert_params.append(_pre_excluded if isinstance(_pre_excluded, str) else dumps_json(_pre_excluded) if _pre_excluded is not None else None)
-                        if _revert_sets:
-                            _revert_sets.append("rule_version = rule_version + 1")
-                            _revert_sets.append("runtime_policy_version = ?")
-                            _revert_params.append(RUNTIME_POLICY_VERSION)
-                            _revert_sets.append("updated_at = ?")
-                            _revert_params.append(_now_revert)
-                            _revert_params.extend([target_id, _revert_version, _revert_status])
-                            _rpv_where = "AND runtime_policy_version = ?" if _revert_rpv else "AND runtime_policy_version IS NULL"
-                            _rpv_params = (_revert_rpv,) if _revert_rpv else ()
-                            with db.transaction() as tx:
-                                tx.execute(
-                                    f"UPDATE rules SET {', '.join(_revert_sets)} "
-                                    f"WHERE id = ? AND rule_version = ? AND status = ? {_rpv_where}",
-                                    tuple(_revert_params) + _rpv_params,
-                                )
-                        return ColdPipelineResult(
-                            status="rejected",
-                            rule_id=None,
-                            rejection_reason="post_merge_synthetic_eval_failed",
-                            scores=scores,
-                        )
-
-            record_lineage(db, target_id, None, merge_op, merge_info.get("merge_rationale", ""))
-            return ColdPipelineResult(
-                status="merged",
-                rule_id=target_id,
-                rejection_reason=None,
-                scores=scores,
-            )
-
-    if target_status == "active" and fast_lane_passed:
-        final_status = "active"
-        activation_origin: ActivationOrigin = "cold_fast_lane"
-    else:
-        final_status = "candidate"
-        activation_origin = None
-
-    # --- Insert rule ---
-    rule_id = insert_rule_from_pipeline(
-        db,
-        rule_data,
-        status=final_status,
-        compiled_matcher=compiled_matcher,
-        synthetic_result=synthetic_result,
-        activation_origin=activation_origin,
-        source_origin=source_origin,
-        transcript_ref=transcript_ref,
-        scores=scores,
-        synthetic_eval_skipped=synthetic_eval_skipped,
-        project_id=project_id,
-        admission_model_id=admission_model,
-    )
-
-    _apply_merge_side_effects(db, rule_id, merge_op, merge_info)
-
-    return ColdPipelineResult(
-        status=final_status,
-        rule_id=rule_id,
-        rejection_reason=None,
-        scores=scores,
-    )
+    return result
 
 
 # ---------------------------------------------------------------------------
-# Stage implementations
+# Stage implementations (legacy — kept for split handler)
 # ---------------------------------------------------------------------------
 
 

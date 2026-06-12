@@ -9,7 +9,7 @@ from pathlib import Path
 
 from .errors import DbError
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 _SCHEMA_DDL = """
 CREATE TABLE IF NOT EXISTS rules (
@@ -210,6 +210,7 @@ CREATE TABLE IF NOT EXISTS transcript_ingest_jobs (
     status TEXT NOT NULL DEFAULT 'pending',
     ttl_expires_at TEXT,
     extractor_prompt_version TEXT,
+    pipeline_checkpoint TEXT,
     retries INTEGER DEFAULT 0,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
@@ -366,6 +367,18 @@ def open_db(path: Path) -> Db:
     raise DbError(f"failed to open db at {path}: {last_err}")
 
 
+def _add_column_if_missing(conn: sqlite3.Connection, table: str, column: str, col_type: str) -> None:
+    """Add a column if it doesn't already exist (idempotent ALTER)."""
+    cur = conn.execute(f"PRAGMA table_info({table})")
+    existing = {row[1] for row in cur.fetchall()}
+    if column not in existing:
+        try:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}")
+        except sqlite3.OperationalError as e:
+            if "duplicate column" not in str(e).lower():
+                raise
+
+
 def _migrate(conn: sqlite3.Connection) -> None:
     current = _read_version(conn)
     if current > SCHEMA_VERSION:
@@ -414,6 +427,24 @@ def _migrate(conn: sqlite3.Connection) -> None:
             f"PRAGMA user_version = {int(SCHEMA_VERSION)};\n"
             "COMMIT;\n"
         )
+        try:
+            conn.executescript(script)
+        except Exception as e:
+            raise DbError(f"failed to initialize rules.db: {e}") from e
+        _add_column_if_missing(conn, "transcript_ingest_jobs", "pipeline_checkpoint", "TEXT")
+        return
+    elif current == 7:
+        script = (
+            "BEGIN;\n"
+            f"PRAGMA user_version = {int(SCHEMA_VERSION)};\n"
+            "COMMIT;\n"
+        )
+        try:
+            conn.executescript(script)
+        except Exception as e:
+            raise DbError(f"failed to migrate rules.db from v7 to v8: {e}") from e
+        _add_column_if_missing(conn, "transcript_ingest_jobs", "pipeline_checkpoint", "TEXT")
+        return
     else:
         raise DbError(
             "rules.db schema version is incompatible with this nokori. "
