@@ -11,7 +11,7 @@ import pytest
 
 from nokori.config import Config
 from nokori.db import open_db
-from nokori.gate.engine import GateEngine, _has_tool_evidence, _tool_input_exclusion_fires
+from nokori.gate.engine import GateEngine, has_tool_evidence, tool_input_exclusion_fires
 from nokori.gate.marker import MarkerRule, write as write_marker
 from nokori.policy import RUNTIME_POLICY_VERSION
 
@@ -149,7 +149,7 @@ class TestToolInputExclusion:
     def test_exclusion_fires_when_tool_input_matches_pattern(self):
         rule = _marker_rule()
         excluded = [{"id": "exc-deploy", "label": "deploy", "patterns": ["deploy pipeline"], "scope": "tool_input_only"}]
-        result = _tool_input_exclusion_fires(
+        result = tool_input_exclusion_fires(
             rule,
             {"tool_input": "run deploy pipeline for staging"},
             excluded,
@@ -159,7 +159,7 @@ class TestToolInputExclusion:
     def test_exclusion_does_not_fire_without_match(self):
         rule = _marker_rule()
         excluded = [{"id": "exc-deploy", "label": "deploy", "patterns": ["deploy pipeline"], "scope": "tool_input_only"}]
-        result = _tool_input_exclusion_fires(
+        result = tool_input_exclusion_fires(
             rule,
             {"tool_input": "git push --force origin main"},
             excluded,
@@ -169,7 +169,7 @@ class TestToolInputExclusion:
     def test_exclusion_ignores_non_tool_input_scope(self):
         rule = _marker_rule()
         excluded = [{"id": "exc-prompt", "label": "prompt scope", "patterns": ["deploy"], "scope": "prompt_only"}]
-        result = _tool_input_exclusion_fires(
+        result = tool_input_exclusion_fires(
             rule,
             {"tool_input": "deploy pipeline for staging"},
             excluded,
@@ -179,12 +179,12 @@ class TestToolInputExclusion:
     def test_exclusion_no_tool_input_returns_false(self):
         rule = _marker_rule()
         excluded = [{"id": "exc-deploy", "label": "deploy", "patterns": ["deploy"], "scope": "tool_input_only"}]
-        result = _tool_input_exclusion_fires(rule, {}, excluded)
+        result = tool_input_exclusion_fires(rule, {}, excluded)
         assert result is False
 
     def test_exclusion_empty_excluded_contexts_returns_false(self):
         rule = _marker_rule()
-        result = _tool_input_exclusion_fires(
+        result = tool_input_exclusion_fires(
             rule,
             {"tool_input": "deploy pipeline"},
             [],
@@ -195,23 +195,23 @@ class TestToolInputExclusion:
 class TestToolEvidence:
     def test_no_tool_input_always_passes(self):
         rule = _marker_rule()
-        assert _has_tool_evidence(rule, {}) is True
+        assert has_tool_evidence(rule, {}) is True
 
     def test_matching_trigger_in_tool_input(self):
         rule = _marker_rule()
-        assert _has_tool_evidence(rule, {"tool_input": "force push shared branch"}) is True
+        assert has_tool_evidence(rule, {"tool_input": "force push shared branch"}) is True
 
     def test_partial_token_match_passes(self):
         rule = _marker_rule()
-        assert _has_tool_evidence(rule, {"tool_input": "git push --force to shared branch"}) is True
+        assert has_tool_evidence(rule, {"tool_input": "git push --force to shared branch"}) is True
 
     def test_completely_unrelated_input_fails(self):
         rule = _marker_rule(trigger="deploy kubernetes cluster", action="use rolling update")
-        assert _has_tool_evidence(rule, {"tool_input": "cat README.md"}) is False
+        assert has_tool_evidence(rule, {"tool_input": "cat README.md"}) is False
 
     def test_dict_tool_input_serialized(self):
         rule = _marker_rule()
-        assert _has_tool_evidence(
+        assert has_tool_evidence(
             rule,
             {"tool_input": {"command": "git push --force shared branch"}},
         ) is True
@@ -224,7 +224,7 @@ class TestGateProcessingError:
         write_marker(cfg, "sess-err", "force push", [_marker_rule()], ph=ph)
 
         engine = GateEngine(cfg, db)
-        with patch("nokori.gate.engine._is_gate_eligible_rule", side_effect=RuntimeError("db error")):
+        with patch("nokori.gate.engine.is_gate_eligible_rule", side_effect=RuntimeError("db error")):
             decision = engine.should_block(
                 tool_name="Bash",
                 prompt_hash=ph,

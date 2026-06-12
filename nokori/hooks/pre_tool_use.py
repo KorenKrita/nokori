@@ -1,15 +1,17 @@
 from __future__ import annotations
 
-import json
-import re
-
 from ..config import Config
 from ..db import open_db
 from ..errors import DbError
 from ..events.observability import write_event
 from ..gate import marker as marker_io
 from ..gate.blocker import format_block_reason, format_cursor_user_notice
-from ..policy import RUNTIME_POLICY_VERSION
+from ..gate.engine import (
+    is_gate_eligible_rule,
+    has_tool_evidence,
+    tool_input_exclusion_fires,
+    tool_matches_gate,
+)
 from .cursor_deferred import maybe_deferred_pre_tool_use
 from ..utils.hook_diag import log_diag
 from ..utils.hook_response import pre_tool_deny_response
@@ -19,144 +21,6 @@ from ..utils.logging import get_logger
 from ..utils.prompt_text import normalize_prompt_for_hash
 
 log = get_logger("nokori.hooks.pre_tool_use")
-
-
-def _compiled_gate_matcher(matcher: str) -> re.Pattern[str] | None:
-    try:
-        return re.compile(matcher)
-    except re.error:
-        return None
-
-
-def _tool_matches_gate(tool_name: str | None, matcher: str) -> bool:
-    if not tool_name or not matcher:
-        return False
-    pattern = _compiled_gate_matcher(matcher)
-    if pattern is None:
-        log.warning("invalid gate matcher %r; skipping gate for this tool", matcher)
-        return False
-    return bool(pattern.fullmatch(tool_name))
-
-
-def _is_gate_eligible_rule(rule, db=None) -> tuple[bool, list | None]:
-    """Gate eligibility for marker rules, revalidated against current DB state.
-
-    Returns (eligible, excluded_contexts) so callers can reuse excluded_contexts
-    without a separate DB query.
-    """
-    row = None
-    if db is not None:
-        if getattr(rule, "rule_id", None):
-            row = db.fetchone(
-                "SELECT id, short_id, status, severity, rule_version, "
-                "runtime_policy_version, excluded_contexts FROM rules WHERE id = ?",
-                (rule.rule_id,),
-            )
-        if row is None and getattr(rule, "short_id", None):
-            row = db.fetchone(
-                "SELECT id, short_id, status, severity, rule_version, "
-                "runtime_policy_version, excluded_contexts FROM rules WHERE short_id = ?",
-                (rule.short_id,),
-            )
-    if row is not None:
-        if row["status"] != "trusted" or row["severity"] != "gate_eligible":
-            return False, None
-        marker_version = getattr(rule, "rule_version", None)
-        if marker_version is not None and int(row["rule_version"]) != marker_version:
-            return False, None
-        marker_policy = getattr(rule, "runtime_policy_version", None)
-        if marker_policy and marker_policy != row["runtime_policy_version"]:
-            return False, None
-        from ..db import loads_json
-        excluded_contexts = loads_json(row["excluded_contexts"], []) if row["excluded_contexts"] else []
-        eligible = row["runtime_policy_version"] == RUNTIME_POLICY_VERSION
-        return eligible, excluded_contexts if eligible else None
-    # DB available but rule not found → rule was deleted/archived after marker creation
-    if db is not None:
-        return False, None
-    # Degraded no-DB mode: trust marker attributes as last resort
-    eligible = (
-        getattr(rule, "status", None) == "trusted"
-        and getattr(rule, "severity", None) == "gate_eligible"
-        and getattr(rule, "runtime_policy_version", None) == RUNTIME_POLICY_VERSION
-    )
-    return eligible, None
-
-
-def _has_tool_evidence(rule, payload: dict) -> bool:
-    """Require tool evidence when tool input is inspectable.
-
-    If the tool input is not inspectable (no input field), we allow
-    the gate to proceed without tool evidence (prompt-only gate).
-    """
-    tool_input = payload.get("tool_input") or payload.get("input")
-    if not tool_input:
-        # No inspectable tool input -- prompt-only gate is valid
-        return True
-    if isinstance(tool_input, str):
-        haystack = tool_input.lower()
-    else:
-        haystack = json.dumps(tool_input, ensure_ascii=False, sort_keys=True).lower()
-
-    trigger = getattr(rule, "trigger", "") or ""
-    action = getattr(rule, "action", "") or ""
-    for phrase in (trigger, action):
-        phrase = phrase.strip().lower()
-        if phrase and phrase in haystack:
-            return True
-
-    tokens = {
-        t
-        for t in re.findall(r"[a-z0-9_+-]{4,}", f"{trigger} {action}".lower())
-        if t not in {"the", "and", "for", "with", "before", "after", "rule",
-                     "when", "that", "this", "from", "into", "also", "have",
-                     "been", "will", "should", "must", "always", "never"}
-    }
-    if not tokens:
-        return True
-    # Truncate haystack to prevent O(tokens × haystack) on very large tool inputs
-    haystack = haystack[:8000]
-    # Simple containment check — precision loss acceptable for fuzzy relevance
-    hits = {t for t in tokens if t in haystack}
-    return len(hits) >= max(1, len(tokens) // 2)
-
-
-def _tool_input_exclusion_fires(rule, payload: dict, excluded_contexts: list | None) -> bool:
-    """Check if any tool_input_only excluded_context fires against tool input.
-
-    At gate-marker creation time, tool_input_only exclusions cannot fire (no tool_input yet).
-    Re-evaluate them now that tool_input is available.
-
-    excluded_contexts is pre-fetched by _is_gate_eligible_rule to avoid N+1 queries.
-    """
-    tool_input = payload.get("tool_input") or payload.get("input")
-    if not tool_input:
-        return False
-
-    if not excluded_contexts:
-        return False
-
-    rule_id = getattr(rule, "rule_id", None) or getattr(rule, "short_id", None)
-
-    if isinstance(tool_input, str):
-        haystack = tool_input.lower()
-    else:
-        haystack = json.dumps(tool_input, ensure_ascii=False).lower()
-
-    from ..matcher.compiler import CompilationError, _compile_excluded_context
-    from ..matcher.runtime import _excluded_context_matches
-
-    for ctx in excluded_contexts:
-        if ctx.get("scope") != "tool_input_only":
-            continue
-        try:
-            compiled = _compile_excluded_context(ctx)
-        except (CompilationError, TypeError, AttributeError) as exc:
-            log.warning("invalid tool_input_only exclusion for gate rule %s: %s", rule_id, exc)
-            continue
-        if _excluded_context_matches(compiled, haystack):
-            return True
-    return False
 
 
 def _run_gate(payload: dict, cfg: Config, session_id: str, host) -> tuple[dict, str, list[str]]:
@@ -173,7 +37,7 @@ def _run_gate(payload: dict, cfg: Config, session_id: str, host) -> tuple[dict, 
         )
         return {}, "passed_gate_disabled", []
 
-    matched = _tool_matches_gate(tool_name, gate_matcher)
+    matched = tool_matches_gate(tool_name, gate_matcher)
     log_diag(
         log,
         "[diag] pre_tool_use gate_check tool=%s host=%s matcher=%s matched=%s "
@@ -239,12 +103,12 @@ def _run_gate(payload: dict, cfg: Config, session_id: str, host) -> tuple[dict, 
         # inspectable tool input AND whose tool_input_only exclusions don't fire.
         gate_rules = []
         for r in marker.rules:
-            eligible, excluded_contexts = _is_gate_eligible_rule(r, db)
+            eligible, excluded_contexts = is_gate_eligible_rule(r, db)
             if not eligible:
                 continue
-            if not _has_tool_evidence(r, payload):
+            if not has_tool_evidence(r, payload):
                 continue
-            if _tool_input_exclusion_fires(r, payload, excluded_contexts):
+            if tool_input_exclusion_fires(r, payload, excluded_contexts):
                 continue
             gate_rules.append(r)
         if not gate_rules:

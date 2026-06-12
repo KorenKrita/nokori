@@ -16,6 +16,7 @@ from ..policy import (
     SMALL_POOL_THRESHOLD,
     WARM_HARD_MAX,
 )
+from .evidence import compute_base_utility
 
 
 @dataclass(frozen=True)
@@ -55,30 +56,25 @@ def compute_utility(
     scored_result: ScoredResult,
     selected_tokens_list: list[frozenset[str]] | None = None,
 ) -> float:
-    trigger_idf_sum = scored_result.trigger_idf_sum
-    variant_phrase_bonus = 1.0 if scored_result.strong_variant_phrase_hit else 0.0
-
-    rule = scored_result.rule
-    if rule.status == "trusted":
-        trusted_or_usefulness_bonus = 1.5
-    elif rule.observed_usefulness_score > 0:
-        trusted_or_usefulness_bonus = 0.5
+    # All eligible results have trigger_evidence_passed=True (guaranteed by
+    # applicability.py). Fallback handles unevaluated results (e.g. web API).
+    if scored_result.trigger_evidence_passed:
+        base = scored_result.ranking_utility
     else:
-        trusted_or_usefulness_bonus = 0.0
+        base = compute_base_utility(
+            trigger_idf_sum=scored_result.trigger_idf_sum,
+            strong_variant_phrase_hit=scored_result.strong_variant_phrase_hit,
+            rule_status=scored_result.rule.status,
+            observed_usefulness_score=scored_result.rule.observed_usefulness_score,
+            false_positive_score=scored_result.rule.false_positive_score,
+            eligible=True,
+        )
 
     near_duplicate_penalty = mmr_penalty(
         scored_result.matched_trigger_tokens,
         selected_tokens_list or [],
     )
-    recent_false_positive_penalty = rule.false_positive_score * 2.0
-
-    return (
-        trigger_idf_sum
-        + variant_phrase_bonus
-        + trusted_or_usefulness_bonus
-        - near_duplicate_penalty
-        - recent_false_positive_penalty
-    )
+    return base - near_duplicate_penalty
 
 
 def _has_distinct_domain(candidate: ScoredResult, selected: list[ScoredResult]) -> bool:

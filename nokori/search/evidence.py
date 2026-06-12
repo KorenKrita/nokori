@@ -19,12 +19,48 @@ from .idf_stats import IdfPoolStats, compute_trigger_idf_sum
 from .tokenizer import tokenize
 
 
+def compute_base_utility(
+    *,
+    trigger_idf_sum: float,
+    strong_variant_phrase_hit: bool,
+    rule_status: str,
+    observed_usefulness_score: float,
+    false_positive_score: float,
+    eligible: bool,
+) -> float:
+    """Per-rule utility without cross-result MMR penalty.
+
+    May return negative values when false_positive_score outweighs other terms.
+    """
+    if not eligible:
+        return 0.0
+    variant_phrase_bonus = 1.0 if strong_variant_phrase_hit else 0.0
+    if rule_status == "trusted":
+        trust_bonus = 1.5
+    elif observed_usefulness_score > 0:
+        trust_bonus = 0.5
+    else:
+        trust_bonus = 0.0
+    fp_penalty = false_positive_score * 2.0
+    return trigger_idf_sum + variant_phrase_bonus + trust_bonus - fp_penalty
+
+
 def _legacy_pass_result(
     result: ScoredResult,
     idf_stats: IdfPoolStats,
     embedding_profile_version: str | None,
 ) -> ScoredResult:
     level = "hot" if result.rule.status == "trusted" else "warm"
+    # trigger_idf_sum is 0.0 for legacy rules (no IDF computation); intentional —
+    # encourages migration to schema_version >= 7 where IDF contributes to ranking.
+    ranking_utility = compute_base_utility(
+        trigger_idf_sum=result.trigger_idf_sum,
+        strong_variant_phrase_hit=result.strong_variant_phrase_hit,
+        rule_status=result.rule.status,
+        observed_usefulness_score=result.rule.observed_usefulness_score,
+        false_positive_score=result.rule.false_positive_score,
+        eligible=True,
+    )
     return replace(
         result,
         trigger_idf_pool_version=idf_stats.pool_version,
@@ -34,6 +70,7 @@ def _legacy_pass_result(
         decision_penalties=(),
         level=level,
         decision_reason="legacy unstructured rule: fielded minimum evidence passed",
+        ranking_utility=ranking_utility,
     )
 
 
@@ -116,6 +153,15 @@ def evaluate_evidence(
 
     level = applicability.decision if applicability.decision != "cold" else None
 
+    ranking_utility = compute_base_utility(
+        trigger_idf_sum=trigger_idf_sum,
+        strong_variant_phrase_hit=bool(match.strong_variant_hits),
+        rule_status=result.rule.status,
+        observed_usefulness_score=result.rule.observed_usefulness_score,
+        false_positive_score=result.rule.false_positive_score,
+        eligible=applicability.eligible,
+    )
+
     return replace(
         result,
         trigger_idf_sum=trigger_idf_sum,
@@ -136,6 +182,7 @@ def evaluate_evidence(
         trigger_evidence_passed=applicability.trigger_evidence_passed,
         decision_penalties=tuple(applicability.penalties),
         level=level,
+        ranking_utility=ranking_utility,
     )
 
 
