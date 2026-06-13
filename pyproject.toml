@@ -38,7 +38,7 @@ classifiers = [
 dependencies = ["fastapi>=0.104", "pydantic>=2.0", "uvicorn[standard]>=0.24", "websockets>=12.0", "json-repair>=0.30"]
 
 [project.optional-dependencies]
-dev = ["pytest>=7.0", "pytest-xdist>=3.0", "httpx2>=2.0", "setuptools>=68.0"]
+dev = ["pytest>=7.0", "pytest-xdist>=3.0", "httpx>=0.27", "setuptools>=68.0"]
 # >=3.0 required: Granite uses encode_query / encode_document (ST 2.x lacks these).
 local-embed = ["sentence-transformers>=3.0"]
 web = ["fastapi>=0.104", "uvicorn[standard]>=0.24", "websockets>=12.0"]

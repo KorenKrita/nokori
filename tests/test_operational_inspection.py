@@ -20,7 +20,7 @@ from dataclasses import replace
 
 import pytest
 
-pytest.importorskip("httpx2")
+pytest.importorskip("httpx")
 
 from fastapi.testclient import TestClient
 
