@@ -53,14 +53,20 @@ class TestSessionEndHandle:
             result = handle(payload, cfg, host=Host.CLAUDE)
         assert result == {"continue": True}
 
-    def test_session_end_posthoc_db_open_fails(self, session_env, monkeypatch):
+    def test_session_end_posthoc_db_open_fails(self, session_env):
         from nokori.errors import DbError
 
         cfg, tmp_path = session_env
+        transcript = tmp_path / "transcript.jsonl"
+        transcript.write_text('{"role":"user","content":"test"}\n')
         payload = {"session_id": "sess-end-3", "cwd": str(tmp_path)}
-        with patch("nokori.hooks.session_end.open_db", side_effect=DbError("db locked")):
+        with (
+            patch("nokori.hooks.context.open_db", side_effect=DbError("db locked")),
+            patch("nokori.hooks.session_end.resolve_transcript_path", return_value=transcript) as mock_rtp,
+        ):
             result = handle(payload, cfg, host=Host.CLAUDE)
-        assert result == {"continue": True}
+            assert result == {"continue": True}
+            mock_rtp.assert_called_once()
 
 
 class TestExtractJobEnqueue:

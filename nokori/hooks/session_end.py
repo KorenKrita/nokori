@@ -3,9 +3,6 @@ from __future__ import annotations
 import json
 
 from ..config import Config
-from ..db import open_db
-from ..errors import DbError
-from ..events.observability import write_event
 from ..extract.jobs import write_job as write_extract_job
 from ..gate import prompt_ack
 from ..posthoc import enqueue_posthoc_for_session
@@ -15,6 +12,7 @@ from ..utils.host import Host, effective_session_id
 from ..utils.logging import get_logger
 from ..utils.project import resolve_project_id
 from ..utils.transcript import resolve_transcript_path
+from .context import ErrorCategory, HotPathContext
 
 log = get_logger("nokori.hooks.session_end")
 
@@ -31,74 +29,59 @@ def handle(payload: dict, cfg: Config, *, host: Host) -> dict:
 
     posthoc_enqueued = False
     posthoc_failed = False
-    # Enqueue posthoc evaluation jobs with transcript window content (spec section 10.1)
-    try:
-        db = open_db(cfg.db_path)
-    except DbError as e:
-        log.warning("posthoc enqueue db open failed session=%s: %s", session_id, e)
-        return {"continue": True}
-    try:
-        # Extract transcript turns from payload for windowing
-        session_turns = _extract_session_turns(payload)
 
-        # Enqueue posthoc jobs
-        enqueue_posthoc_for_session(db, session_id)
-        posthoc_enqueued = True
+    with HotPathContext(payload, cfg, host=host, session_id=session_id) as ctx:
+        # Posthoc requires DB; skip if unavailable
+        if ctx.db is not None:
+            try:
+                session_turns = _extract_session_turns(payload)
+                enqueue_posthoc_for_session(ctx.db, session_id)
+                posthoc_enqueued = True
+                if session_turns:
+                    _populate_transcript_windows(ctx.db, session_id, session_turns, cfg)
+                log.info("enqueued posthoc jobs session=%s", session_id)
+            except Exception as e:
+                log.warning("posthoc enqueue failed session=%s: %s", session_id, e)
+                posthoc_failed = True
+                ctx.add_error("posthoc", ErrorCategory.DEGRADED, str(e), e)
 
-        # Store bounded transcript windows in posthoc_jobs.redacted_window_json
-        if session_turns:
-            _populate_transcript_windows(db, session_id, session_turns, cfg)
+        # Extract job logic does not require DB — always runs
+        transcript_path = resolve_transcript_path(payload)
+        job_path = _enqueue_extract_job_from_path(transcript_path, payload, cfg)
 
-        log.info("enqueued posthoc jobs session=%s", session_id)
-    except Exception as e:
-        log.warning("posthoc enqueue failed session=%s: %s", session_id, e)
-        posthoc_failed = True
-    finally:
-        db.close()
+        fork_spawned = False
+        if (
+            job_path
+            and cfg.extract_fork_cache
+            and host == Host.CLAUDE
+            and cfg.extract_mode == "async"
+        ):
+            fork_spawned = _try_fork_extract(session_id, cfg, transcript_path, job_path)
 
-    # Write extract job so the cold pipeline can process this session's transcript
-    transcript_path = resolve_transcript_path(payload)
-    job_path = _enqueue_extract_job_from_path(transcript_path, payload, cfg)
+        async_spawned = False
+        if job_path and cfg.extract_mode == "async" and not fork_spawned:
+            from ..extract.lock import is_locked
+            try:
+                locked = is_locked(cfg)
+            except Exception as e:
+                locked = True
+                log.warning("is_locked check failed session=%s: %s", session_id, e)
+                ctx.add_error("extract_lock", ErrorCategory.DEGRADED, str(e), e)
+            if not locked:
+                _spawn_async_extract(cfg)
+                async_spawned = True
+                log.info("spawned async extract after session end")
 
-    # Fork-based extraction: for Claude Code sessions, fork the ended session
-    # to reuse prompt cache (must happen before async spawn to avoid double work)
-    fork_spawned = False
-    if (
-        job_path
-        and cfg.extract_fork_cache
-        and host == Host.CLAUDE
-        and cfg.extract_mode == "async"
-    ):
-        fork_spawned = _try_fork_extract(session_id, cfg, transcript_path, job_path)
-
-    # Spawn async extract immediately — detached subprocess won't block hook return
-    # (start_new_session=True ensures child survives parent exit)
-    async_spawned = False
-    if job_path and cfg.extract_mode == "async" and not fork_spawned:
-        from ..extract.lock import is_locked
-        if not is_locked(cfg):
-            _spawn_async_extract(cfg)
-            async_spawned = True
-            log.info("spawned async extract after session end")
-
-    try:
-        obs_db = open_db(cfg.db_path)
-    except Exception:
-        obs_db = None
-    if obs_db is not None:
-        try:
-            write_event(
-                obs_db, source="session_end", session_id=session_id,
-                outcome="ok" if not posthoc_failed else "posthoc_failed",
-                details={
-                    "posthoc_enqueued": posthoc_enqueued,
-                    "extract_job_written": job_path is not None,
-                    "fork_extract_spawned": fork_spawned,
-                    "async_extract_spawned": async_spawned,
-                },
-            )
-        finally:
-            obs_db.close()
+        ctx.record_event(
+            "session_end",
+            "ok" if not posthoc_failed else "posthoc_failed",
+            details={
+                "posthoc_enqueued": posthoc_enqueued,
+                "extract_job_written": job_path is not None,
+                "fork_extract_spawned": fork_spawned,
+                "async_extract_spawned": async_spawned,
+            },
+        )
 
     return {"continue": True}
 

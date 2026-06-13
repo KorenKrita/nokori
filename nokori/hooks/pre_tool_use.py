@@ -1,13 +1,11 @@
 from __future__ import annotations
 
 from ..config import Config
-from ..db import open_db
-from ..errors import DbError
-from ..events.observability import write_event
 from ..gate import marker as marker_io
 from ..gate.blocker import format_block_reason, format_cursor_user_notice
 from ..gate.engine import GateEngine, tool_matches_gate
 from ..gate.marker import PromptHashResolver
+from .context import HotPathContext
 from .cursor_deferred import maybe_deferred_pre_tool_use
 from ..utils.hook_diag import log_diag
 from ..utils.hook_response import pre_tool_deny_response
@@ -17,8 +15,12 @@ from ..utils.logging import get_logger
 log = get_logger("nokori.hooks.pre_tool_use")
 
 
-def _run_gate(payload: dict, cfg: Config, session_id: str, host) -> tuple[dict, str, list[str]]:
+def _run_gate(ctx: HotPathContext) -> tuple[dict, str, list[str]]:
     """Run gate logic. Returns (response_dict, outcome_reason, blocked_short_ids) for observability."""
+    payload = ctx.payload
+    cfg = ctx.cfg
+    host = ctx.host
+    session_id = ctx.session_id
     tool_name = payload.get("tool_name") or payload.get("tool")
     gate_matcher = effective_gate_matcher(cfg.gate_matcher, host)
 
@@ -45,52 +47,44 @@ def _run_gate(payload: dict, cfg: Config, session_id: str, host) -> tuple[dict, 
     if not matched:
         return {}, "passed_tool_not_matched", []
 
-    try:
-        db = open_db(cfg.db_path)
-    except DbError as e:
-        log.warning("gate db open failed, fail-open session=%s: %s", session_id, e)
+    if ctx.db is None:
         return {}, "passed_db_open_failed", []
-    try:
-        prompt_raw = payload.get("prompt")
-        has_prompt_text = isinstance(prompt_raw, str) and prompt_raw.strip()
-        on_disk = None if has_prompt_text else marker_io.read_latest_marker(cfg, session_id)
-        resolver = PromptHashResolver(cfg, session_id, db)
-        current_ph, ph_source = resolver.resolve(payload, on_disk)
 
-        if not current_ph:
-            marker_io.delete_session(cfg, session_id)
-            return {}, "passed_no_prompt_hash", []
+    prompt_raw = payload.get("prompt")
+    has_prompt_text = isinstance(prompt_raw, str) and prompt_raw.strip()
+    on_disk = None if has_prompt_text else marker_io.read_latest_marker(cfg, session_id)
+    resolver = PromptHashResolver(cfg, session_id, ctx.db)
+    current_ph, ph_source = resolver.resolve(payload, on_disk)
 
-        engine = GateEngine(cfg, db)
-        decision = engine.should_block(
-            tool_name=tool_name,
-            prompt_hash=current_ph,
-            session_id=session_id,
-            payload=payload,
-            gate_matcher=gate_matcher,
+    if not current_ph:
+        marker_io.delete_session(cfg, session_id)
+        return {}, "passed_no_prompt_hash", []
+
+    engine = GateEngine(cfg, ctx.db)
+    decision = engine.should_block(
+        tool_name=tool_name,
+        prompt_hash=current_ph,
+        session_id=session_id,
+        payload=payload,
+        gate_matcher=gate_matcher,
+    )
+
+    if decision.state is not None:
+        ctx.record_event(
+            "gate_marker_resolved",
+            decision.state.value,
+            details={
+                "tool_name": tool_name,
+                "prompt_hash": current_ph,
+                "prompt_hash_source": ph_source,
+                "rules_checked": decision.rules_checked,
+                "rules_blocked": decision.rules_blocked,
+                "elapsed_ms": decision.elapsed_ms,
+                "deferred": decision.deferred,
+            },
         )
 
-        # Write gate_marker_resolved event if a marker was found and resolved
-        if decision.state is not None:
-            write_event(
-                db, source="gate_marker_resolved",
-                session_id=session_id,
-                outcome=decision.state.value,
-                details={
-                    "tool_name": tool_name,
-                    "prompt_hash": current_ph,
-                    "prompt_hash_source": ph_source,
-                    "rules_checked": decision.rules_checked,
-                    "rules_blocked": decision.rules_blocked,
-                    "elapsed_ms": decision.elapsed_ms,
-                    "deferred": decision.deferred,
-                },
-            )
-    finally:
-        db.close()
-
     if not decision.blocked:
-        # Prune stale markers when no marker found for current hash
         if decision.reason == "no_marker":
             marker_io.prune_stale_markers(cfg, session_id, current_ph)
         return {}, f"passed_{decision.reason}", []
@@ -115,37 +109,26 @@ def _run_gate(payload: dict, cfg: Config, session_id: str, host) -> tuple[dict, 
     return pre_tool_deny_response(host, reason), "blocked", short_ids
 
 
-def _write_pre_tool_event(cfg: Config, session_id: str, payload: dict, outcome: str, blocked_by: list[str] | None = None) -> None:
-    """Write pre_tool_use observability event. Opens its own DB connection (fail-open)."""
-    try:
-        tool_name = payload.get("tool_name") or payload.get("tool")
-        details: dict = {"tool_name": tool_name}
-        if blocked_by:
-            details["blocked_by"] = blocked_by
-        db = open_db(cfg.db_path)
-        try:
-            write_event(
-                db, source="pre_tool_use", session_id=session_id,
-                outcome=outcome,
-                details=details,
-            )
-        finally:
-            db.close()
-    except Exception as e:
-        log.warning("pre_tool_use observability failed: %s", e)
-
-
 def handle(payload: dict, cfg: Config, *, host: Host) -> dict:
     session_id = effective_session_id(payload)
     tool_name = payload.get("tool_name") or payload.get("tool")
 
-    deferred = maybe_deferred_pre_tool_use(
-        payload, cfg, session_id, tool_name, host
-    )
-    if deferred is not None:
-        _write_pre_tool_event(cfg, session_id, payload, "deferred")
-        return deferred
+    with HotPathContext(payload, cfg, host=host, session_id=session_id) as ctx:
+        deferred = maybe_deferred_pre_tool_use(
+            payload, cfg, session_id, tool_name, host, db=ctx.db,
+        )
+        if deferred is not None:
+            ctx.record_event(
+                "pre_tool_use", "deferred",
+                details={"tool_name": tool_name},
+            )
+            return deferred
 
-    response, outcome, blocked_ids = _run_gate(payload, cfg, session_id, host)
-    _write_pre_tool_event(cfg, session_id, payload, outcome, blocked_by=blocked_ids or None)
-    return response
+        response, outcome, blocked_ids = _run_gate(ctx)
+
+        details: dict = {"tool_name": tool_name}
+        if blocked_ids:
+            details["blocked_by"] = blocked_ids
+        ctx.record_event("pre_tool_use", outcome, details=details)
+
+        return response

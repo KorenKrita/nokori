@@ -3,8 +3,7 @@ from __future__ import annotations
 import uuid
 
 from ..config import Config
-from ..db import open_db, total_rule_count
-from ..events.observability import write_event
+from ..db import total_rule_count
 from ..lifecycle import hot_cache, maintenance
 from ..lifecycle.maintenance import cold_eval_due, mark_cold_eval_run
 from ..search import embedding as embedding_search
@@ -14,6 +13,7 @@ from ..utils.hook_response import session_start_response
 from ..utils.host import Host, effective_session_id
 from ..utils.logging import get_logger
 from ..utils.project import resolve_project_id_detailed
+from .context import ErrorCategory, HotPathContext
 
 log = get_logger("nokori.hooks.session_start")
 
@@ -120,41 +120,50 @@ def handle(payload: dict, cfg: Config, *, host: Host) -> dict:
     maintenance_ok = True
     hot_cache_ok = True
     cold_eval_spawned = False
-    db = open_db(cfg.db_path)
-    try:
+
+    with HotPathContext(payload, cfg, host=host, session_id=session_id) as ctx:
+        db = ctx.db
+        if db is None:
+            log.warning("session_start: db unavailable, fail-open session=%s", session_id)
+            return session_start_response(host, None)
+
         try:
             maintenance.run_maintenance(db, cfg)
-        except Exception:
+        except Exception as e:
             log.exception("session_start maintenance failed")
             maintenance_ok = False
+            ctx.add_error("maintenance", ErrorCategory.DEGRADED, str(e), e)
 
         try:
             cold_eval_spawned = _maybe_spawn_cold_eval(db, cfg)
-        except Exception:
+        except Exception as e:
             log.exception("session_start cold_eval spawn failed")
+            ctx.add_error("cold_eval", ErrorCategory.DEGRADED, str(e), e)
 
         try:
             embed_status = _maybe_kickstart_embed(cfg, db)
-        except Exception:
+        except Exception as e:
             log.exception("session_start embed kickstart failed")
             embed_status = "failed"
+            ctx.add_error("embed", ErrorCategory.DEGRADED, str(e), e)
+
         try:
             cache_text = hot_cache.maybe_inject(payload, cfg, db)
-        except Exception:
+        except Exception as e:
             log.exception("session_start hot_cache failed")
             hot_cache_ok = False
+            ctx.add_error("hot_cache", ErrorCategory.DEGRADED, str(e), e)
 
         rule_count = 0
         try:
             rule_count = total_rule_count(db)
-        except Exception:
-            pass
+        except Exception as e:
+            ctx.add_error("rule_count", ErrorCategory.DEGRADED, str(e), e)
+
         all_ok = maintenance_ok and hot_cache_ok and embed_status != "failed"
-        write_event(
-            db,
-            source="session_start",
-            session_id=session_id,
-            outcome="ok" if all_ok else "partial_failure",
+        ctx.record_event(
+            "session_start",
+            "ok" if all_ok else "partial_failure",
             details={
                 "embed_status": embed_status,
                 "hot_cache_injected": cache_text is not None,
@@ -164,7 +173,5 @@ def handle(payload: dict, cfg: Config, *, host: Host) -> dict:
                 "rule_count": rule_count,
             },
         )
-    finally:
-        db.close()
 
     return session_start_response(host, cache_text)

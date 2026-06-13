@@ -2,7 +2,8 @@
 from __future__ import annotations
 
 from ..config import Config
-from ..db import open_db
+from ..db import Db, open_db
+from ..errors import DbError
 from ..extract.reader import read_tail_user_turns
 from ..gate import prompt_ack
 from ..gate.blocker import (
@@ -51,12 +52,16 @@ def _generation_id_from_payload(payload: dict) -> str:
 
 
 def maybe_deferred_pre_tool_use(
-    payload: dict, cfg: Config, session_id: str, tool_name: str | None, host: Host
+    payload: dict, cfg: Config, session_id: str, tool_name: str | None, host: Host,
+    *, db: Db | None = None,
 ) -> dict | None:
     """Deliver rules via deny+agent_message when the latest user turn skipped submit hook.
 
     Returns a hook response dict when this path handled the event; None to continue
     with standard gate-only handling.
+
+    If *db* is provided it will be used instead of opening a new connection (caller
+    is responsible for closing it).
     """
     if host != Host.CURSOR:
         return None
@@ -79,7 +84,16 @@ def maybe_deferred_pre_tool_use(
         cfg, session_id, payload.get("cwd"),
     )
 
-    db = open_db(cfg.db_path)
+    owns_db = db is None
+    if owns_db:
+        try:
+            db = open_db(cfg.db_path)
+        except DbError as e:
+            log.warning(
+                "cursor deferred db open failed (claimed but abandoned) session=%s: %s",
+                session_id, e,
+            )
+            return None
     try:
         try:
             outcome = inject_for_prompt(
@@ -149,4 +163,5 @@ def maybe_deferred_pre_tool_use(
             agent_message=agent_body,
         )
     finally:
-        db.close()
+        if owns_db:
+            db.close()

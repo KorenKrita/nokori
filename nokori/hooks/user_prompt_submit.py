@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 
 from ..config import Config
 from ..db import (
@@ -9,9 +9,7 @@ from ..db import (
     archive_rule,
     find_rule_id_by_recent_injection,
     find_rule_id_injected_since,
-    open_db,
 )
-from ..events.observability import write_event
 from ..utils.time import local_now
 from ..gate import marker as marker_io
 from ..gate import prompt_ack
@@ -23,6 +21,7 @@ from ..utils.hook_response import user_prompt_submit_response
 from ..utils.host import Host, effective_session_id
 from ..utils.logging import get_logger
 from ..utils.time import iso_of, now_iso
+from .context import ErrorCategory, HotPathContext
 from .prompt_inject import RetrieveFailed, build_decision_features, inject_for_prompt
 
 log = get_logger("nokori.hooks.user_prompt_submit")
@@ -109,8 +108,14 @@ def handle(payload: dict, cfg: Config, *, host: Host) -> dict:
 
     sessions.touch(cfg, session_id)
 
-    db = open_db(cfg.db_path)
-    try:
+    with HotPathContext(payload, cfg, host=host, session_id=session_id) as ctx:
+        db = ctx.db
+        if db is None:
+            log.warning("db unavailable, skip injection session=%s", session_id)
+            if cfg.gate_enabled:
+                marker_io.delete_session(cfg, session_id)
+            return {"continue": True}
+
         dismissed = _run_dismiss(db, prompt, session_id, cfg)
 
         try:
@@ -124,11 +129,11 @@ def handle(payload: dict, cfg: Config, *, host: Host) -> dict:
             )
         except RetrieveFailed as e:
             log.warning("retrieve failed (%s); continuing without rules", e)
+            ctx.add_error("retrieval", ErrorCategory.DEGRADED, str(e), e)
             if cfg.gate_enabled:
                 marker_io.delete_session(cfg, session_id)
-            write_event(
-                db, source="user_prompt_submit", session_id=session_id,
-                outcome="retrieve_failed",
+            ctx.record_event(
+                "user_prompt_submit", "retrieve_failed",
                 prompt_snippet=prompt[:200] if prompt else None,
                 details={"error": str(e), "dismissed_count": dismissed},
             )
@@ -137,9 +142,8 @@ def handle(payload: dict, cfg: Config, *, host: Host) -> dict:
         if outcome is None:
             if cfg.gate_enabled:
                 marker_io.delete_session(cfg, session_id)
-            write_event(
-                db, source="user_prompt_submit", session_id=session_id,
-                outcome="no_rules",
+            ctx.record_event(
+                "user_prompt_submit", "no_rules",
                 prompt_snippet=prompt[:200] if prompt else None,
                 details={"dismissed_count": dismissed},
             )
@@ -154,9 +158,8 @@ def handle(payload: dict, cfg: Config, *, host: Host) -> dict:
         if not hot and not warm:
             if cfg.gate_enabled:
                 marker_io.delete_session(cfg, session_id)
-            write_event(
-                db, source="user_prompt_submit", session_id=session_id,
-                outcome="no_matches",
+            ctx.record_event(
+                "user_prompt_submit", "no_matches",
                 prompt_snippet=prompt[:200] if prompt else None,
                 details={"dismissed_count": dismissed},
             )
@@ -185,9 +188,8 @@ def handle(payload: dict, cfg: Config, *, host: Host) -> dict:
 
         hot_count = len(hot)
         warm_count = len(warm)
-        write_event(
-            db, source="user_prompt_submit", session_id=session_id,
-            outcome="injected",
+        ctx.record_event(
+            "user_prompt_submit", "injected",
             prompt_snippet=prompt[:200] if prompt else None,
             details={
                 "hot_count": hot_count,
@@ -219,5 +221,3 @@ def handle(payload: dict, cfg: Config, *, host: Host) -> dict:
                 session_id,
             )
         return user_prompt_submit_response(host, text or None)
-    finally:
-        db.close()
