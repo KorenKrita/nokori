@@ -116,8 +116,8 @@ class GateEngine:
                 gate_rules.append(rule)
         except Exception:
             log.exception("gate rule processing failed; consuming marker")
-            marker_io.delete(self._cfg, session_id, prompt_hash_value=prompt_hash)
             elapsed = (time.monotonic() - t0) * 1000
+            marker_io.delete(self._cfg, session_id, prompt_hash_value=prompt_hash)
             return GateDecision(
                 blocked=False, state=MarkerState.error, reason="processing_error",
                 rules_checked=len(marker.rules),

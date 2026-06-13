@@ -45,15 +45,15 @@ def _run_gate(payload: dict, cfg: Config, session_id: str, host) -> tuple[dict, 
     if not matched:
         return {}, "passed_tool_not_matched", []
 
-    # Resolve prompt hash via PromptHashResolver
-    on_disk = marker_io.read_latest_marker(cfg, session_id)
-
     try:
         db = open_db(cfg.db_path)
     except DbError as e:
         log.warning("gate db open failed, fail-open session=%s: %s", session_id, e)
         return {}, "passed_db_open_failed", []
     try:
+        prompt_raw = payload.get("prompt")
+        has_prompt_text = isinstance(prompt_raw, str) and prompt_raw.strip()
+        on_disk = None if has_prompt_text else marker_io.read_latest_marker(cfg, session_id)
         resolver = PromptHashResolver(cfg, session_id, db)
         current_ph, ph_source = resolver.resolve(payload, on_disk)
 

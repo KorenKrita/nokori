@@ -13,14 +13,17 @@ import pytest
 from nokori.config import Config
 from nokori.db import open_db
 from nokori.events.observability import query_events
+from nokori.gate import marker as marker_io
 from nokori.gate.engine import GateEngine, _batch_check_eligibility, is_gate_eligible_rule
 from nokori.gate.marker import (
     MarkerRule,
     PromptHashResolver,
     prompt_hash,
+    read_latest_marker,
     write as write_marker,
 )
 from nokori.gate.state import MarkerState
+from nokori.hooks.pre_tool_use import handle
 from nokori.policy import RUNTIME_POLICY_VERSION
 from nokori.utils.host import Host
 
@@ -106,7 +109,6 @@ class TestMarkerStateConsumed:
                 ("fe-ev", "gate-rule-1", "sess-ev", ph, "hot", _utcnow_iso()),
             )
 
-        from nokori.hooks.pre_tool_use import handle
         out = handle(
             {"session_id": "sess-ev", "tool_name": "Bash", "prompt": "force push shared branch"},
             cfg, host=Host.CLAUDE,
@@ -119,7 +121,6 @@ class TestMarkerStateConsumed:
         assert events[0]["outcome"] == "consumed"
 
     def test_consumed_deletes_marker(self, gate_env):
-        from nokori.gate import marker as marker_io
 
         cfg, db = gate_env
         ph = "consumedel123456"
@@ -163,7 +164,6 @@ class TestMarkerStateExpired:
             )
 
         with patch("nokori.gate.engine.marker_io.is_expired", return_value=True):
-            from nokori.hooks.pre_tool_use import handle
             handle(
                 {"session_id": "sess-exp-ev", "tool_name": "Bash", "prompt": "force push shared branch"},
                 cfg, host=Host.CLAUDE,
@@ -174,7 +174,6 @@ class TestMarkerStateExpired:
         assert events[0]["outcome"] == "expired"
 
     def test_expired_deletes_marker(self, gate_env):
-        from nokori.gate import marker as marker_io
 
         cfg, db = gate_env
         ph = "expireddel1234567"
@@ -219,7 +218,6 @@ class TestMarkerStateIneligible:
                 ("fe-ine-ev", "gate-rule-1", "sess-ine-ev", ph, "hot", _utcnow_iso()),
             )
 
-        from nokori.hooks.pre_tool_use import handle
         handle(
             {"session_id": "sess-ine-ev", "tool_name": "Bash", "prompt": "force push shared branch"},
             cfg, host=Host.CLAUDE,
@@ -230,7 +228,6 @@ class TestMarkerStateIneligible:
         assert events[0]["outcome"] == "ineligible"
 
     def test_ineligible_deletes_marker(self, gate_env):
-        from nokori.gate import marker as marker_io
 
         cfg, db = gate_env
         ph = "ineligdel12345678"
@@ -310,7 +307,6 @@ class TestMarkerStateEmpty:
                 ("fe-emp-ev", "gate-rule-1", "sess-emp-ev", ph, "hot", _utcnow_iso()),
             )
 
-        from nokori.hooks.pre_tool_use import handle
         handle(
             {"session_id": "sess-emp-ev", "tool_name": "Bash", "prompt": "force push shared branch"},
             cfg, host=Host.CLAUDE,
@@ -321,7 +317,6 @@ class TestMarkerStateEmpty:
         assert events[0]["outcome"] == "empty"
 
     def test_empty_deletes_marker(self, gate_env):
-        from nokori.gate import marker as marker_io
 
         cfg, db = gate_env
         ph = "emptydel12345678"
@@ -365,7 +360,6 @@ class TestMarkerStateError:
             )
 
         with patch("nokori.gate.engine._batch_check_eligibility", side_effect=RuntimeError("db error")):
-            from nokori.hooks.pre_tool_use import handle
             handle(
                 {"session_id": "sess-err-ev", "tool_name": "Bash", "prompt": "force push shared branch"},
                 cfg, host=Host.CLAUDE,
@@ -376,7 +370,6 @@ class TestMarkerStateError:
         assert events[0]["outcome"] == "error"
 
     def test_error_deletes_marker(self, gate_env):
-        from nokori.gate import marker as marker_io
 
         cfg, db = gate_env
         ph = "errordel123456789"
@@ -447,7 +440,6 @@ class TestPromptHashResolver:
                 "VALUES (?,?,?,?,?,?)",
                 ("fe-disk", "gate-rule-1", "sess-disk", ph, "hot", _utcnow_iso()),
             )
-        from nokori.gate.marker import read_latest_marker
         on_disk = read_latest_marker(cfg, "sess-disk")
 
         resolver = PromptHashResolver(cfg, "sess-disk", db)
@@ -488,7 +480,6 @@ class TestPromptHashResolver:
                 "VALUES (?,?,?,?,?,?)",
                 ("fe-fallthru", "gate-rule-1", "sess-fallthru", ph_fire, "hot", _utcnow_iso()),
             )
-        from nokori.gate.marker import read_latest_marker
         on_disk = read_latest_marker(cfg, "sess-fallthru")
 
         resolver = PromptHashResolver(cfg, "sess-fallthru", db)
@@ -496,7 +487,6 @@ class TestPromptHashResolver:
         assert ph_val == ph_fire
         assert source == "fire_events"
         # Verify stale disk marker was cleaned up by resolver side-effect
-        from nokori.gate import marker as marker_io
         assert marker_io.read(cfg, "sess-fallthru", prompt_hash_value=ph_disk) is None
 
 
