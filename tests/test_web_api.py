@@ -234,7 +234,77 @@ class TestLifecycle:
         assert resp.status_code == 200
 
 
+# --- Promotion Barriers ---
+
+
+class TestPromotionBarriers:
+    @staticmethod
+    def _insert_rule(db, rule_id, short_id, status):
+        now = now_iso()
+        with db.transaction() as tx:
+            tx.execute(
+                "INSERT INTO rules (id, short_id, schema_version, rule_version, "
+                "created_by_pipeline_version, runtime_policy_version, "
+                "trigger_canonical, trigger_variants, "
+                "search_terms, action_instruction, "
+                "source_origin, status, severity, "
+                "evidence_support_score, "
+                "project_scope, created_at, updated_at) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (
+                    rule_id, short_id, 1, 1,
+                    "v1", "v1",
+                    "test trigger",
+                    '[{"text":"test","kind":"strong_anchor","requires_concepts":["manual_trigger"]}]',
+                    '{"en": ["test"]}',
+                    "test action",
+                    "transcript_extraction", status, "reminder",
+                    3.0,
+                    "global", now, now,
+                ),
+            )
+
+    def test_candidate_barriers(self, cfg):
+        db = open_db(cfg.db_path)
+        try:
+            self._insert_rule(db, "rule-b", "bbb", "candidate")
+        finally:
+            db.close()
+        client = TestClient(create_app(cfg))
+        resp = client.get("/api/lifecycle/rules/bbb/barriers")
+        assert resp.status_code == 200
+        data = resp.json()["data"]
+        assert data["current_state"] == "candidate"
+        assert data["target_state"] == "active"
+        threshold_names = {t["name"] for t in data["thresholds"]}
+        assert threshold_names == {
+            "shadow_strong_match_count",
+            "evaluated_shadow_match_count",
+            "distinct_shadow_sessions",
+            "counterfactual_would_help_high",
+            "risky_or_near_miss_shadow_count",
+            "shadow_false_positive_rate",
+        }
+        assert data["blocking"] == "shadow_strong_match_count"
+
+    def test_trusted_barriers_returns_null(self, cfg):
+        db = open_db(cfg.db_path)
+        try:
+            self._insert_rule(db, "rule-t", "ttt", "trusted")
+        finally:
+            db.close()
+        client = TestClient(create_app(cfg))
+        resp = client.get("/api/lifecycle/rules/ttt/barriers")
+        assert resp.status_code == 200
+        assert resp.json()["data"] is None
+
+    def test_barriers_not_found(self, client_with_rule):
+        resp = client_with_rule.get("/api/lifecycle/rules/zzz/barriers")
+        assert resp.status_code == 404
+
+
 # --- Config ---
+
 
 class TestConfig:
     def test_config(self, client):

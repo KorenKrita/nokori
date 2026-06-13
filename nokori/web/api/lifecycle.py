@@ -9,6 +9,7 @@ from nokori.events.fire import (
     count_evaluated_fire_events,
     get_fire_events_for_rule,
 )
+from nokori.lifecycle.transitions import compute_promotion_barriers
 from nokori.web.deps import get_config
 from nokori.web.models import (
     DecisionFeaturesOut,
@@ -254,6 +255,28 @@ def rule_transitions(
         db.close()
 
     return {"data": [dict(r) for r in rows]}
+
+
+# ---------------------------------------------------------------------------
+# Promotion barriers
+# ---------------------------------------------------------------------------
+
+
+@router.get("/lifecycle/rules/{short_id}/barriers")
+def get_promotion_barriers(short_id: str):
+    """Return per-criterion promotion barrier data for a rule."""
+    cfg = get_config()
+    db = open_db(cfg.db_path)
+    try:
+        rule = fetch_rule_by_short_id(db, short_id)
+        if rule is None:
+            raise HTTPException(404, detail=f"no rule with short_id {short_id!r}")
+        result = compute_promotion_barriers(
+            db, rule.id, rule.status, rule.rule_version, rule.suppressed_at
+        )
+    finally:
+        db.close()
+    return {"data": result}
 
 
 # ---------------------------------------------------------------------------

@@ -1,8 +1,10 @@
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
-import { motion } from 'motion/react'
+import { motion, AnimatePresence } from 'motion/react'
 import { GlassCard } from '@/components/GlassCard'
 import { PageSkeleton } from '@/components/PageSkeleton'
 import { useApi } from '@/hooks/useApi'
+import { fetchApi } from '@/lib/api'
 import { formatDateTime } from '@/lib/formatDateTime'
 import { maintenanceJobLabel, t, lz } from '@/lib/i18n'
 
@@ -14,23 +16,151 @@ interface PromotionData {
       project_id: string
       trigger_canonical?: string
       trigger_canonical_zh?: string | null
-      shadow_hit_count: number
-      unique_projects: string[]
-      progress: number
-      threshold: number
+      status: string
+      rule_version: number
+      quality_score: number
     }[]
   }
 }
 interface MaintenanceData { data: Record<string, string> }
+
+interface BarrierThreshold {
+  name: string
+  current: number
+  target: number
+  met: boolean
+  direction: 'min' | 'max'
+}
+
+interface BarriersData {
+  data: {
+    current_state: string
+    target_state: string
+    thresholds: BarrierThreshold[]
+    blocking: string | null
+  } | null
+}
+
+interface BarriersState {
+  loading: boolean
+  error: string | null
+  data: BarriersData['data'] | null
+}
 
 function formatLastRun(value: string): string {
   if (!value || value === 'never') return t('lifecycle.last_run_never')
   return formatDateTime(value) || value
 }
 
+function BarriersPanel({ state, onRetry }: { state: BarriersState; onRetry: () => void }) {
+  if (state.loading) {
+    return <p className="text-xs text-text-tertiary mt-2">{t('lifecycle.barriers_loading')}</p>
+  }
+  if (state.error) {
+    return (
+      <p className="text-xs text-red-400 mt-2">
+        {t('lifecycle.barriers_error')}{' '}
+        <button type="button" onClick={onRetry} className="underline text-text-tertiary hover:text-text-secondary">↻</button>
+      </p>
+    )
+  }
+  if (!state.data) {
+    return <p className="text-xs text-text-tertiary mt-2">{t('lifecycle.barriers_none')}</p>
+  }
+
+  const { thresholds, target_state, blocking } = state.data
+
+  return (
+    <div className="mt-3 space-y-1.5">
+      <div className="flex items-center gap-2 text-xs text-text-tertiary">
+        <span>{t('lifecycle.target')}: <span className="font-mono text-text-secondary">{target_state}</span></span>
+        {blocking && (
+          <span className="text-amber-400">{t('lifecycle.blocking')}: <span className="font-mono">{blocking}</span></span>
+        )}
+      </div>
+      {(thresholds ?? []).map((th) => {
+        let pct: number
+        if (th.met) {
+          pct = 100
+        } else if (th.direction === 'max') {
+          pct = 0
+        } else if (th.target > 0) {
+          pct = Math.min(100, Math.max(0, (th.current / th.target) * 100))
+        } else {
+          pct = 0
+        }
+        const isBlocking = th.name === blocking
+        let barColor = 'bg-[var(--color-text-tertiary)]'
+        if (th.met) barColor = 'bg-emerald-500'
+        else if (isBlocking) barColor = 'bg-amber-500'
+        let labelColor = 'text-text-secondary'
+        if (isBlocking) labelColor = 'text-amber-400'
+        else if (th.met) labelColor = 'text-emerald-400'
+        return (
+          <div key={th.name} className="flex items-center gap-2">
+            <span className={`text-xs font-mono w-56 truncate shrink-0 ${labelColor}`}>
+              {th.name}
+            </span>
+            <div className="flex-1 h-1.5 rounded-full bg-[var(--color-bg-elevated)] overflow-hidden">
+              <motion.div
+                className={`h-full rounded-full ${barColor}`}
+                initial={{ width: 0 }}
+                animate={{ width: `${pct}%` }}
+                transition={{ duration: 0.6, ease: [0.32, 0.72, 0, 1] as const }}
+              />
+            </div>
+            <span className={`text-xs font-mono w-14 text-right shrink-0 ${th.met ? 'text-emerald-400' : 'text-text-tertiary'}`}>
+              {th.current}/{th.target}
+            </span>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 export function Lifecycle() {
   const { data: promo, isLoading: l1 } = useApi<PromotionData>('/lifecycle/promotion')
   const { data: maint, isLoading: l2 } = useApi<MaintenanceData>('/lifecycle/maintenance')
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [barriersCache, setBarriersCache] = useState<Record<string, BarriersState>>({})
+  const loadingRef = useRef<Set<string>>(new Set())
+  const loadedRef = useRef<Set<string>>(new Set())
+
+  const loadBarriers = useCallback(async (shortId: string) => {
+    if (loadingRef.current.has(shortId)) return
+    if (loadedRef.current.has(shortId)) return
+    setBarriersCache(prev => ({ ...prev, [shortId]: { loading: true, error: null, data: null } }))
+    loadingRef.current.add(shortId)
+    try {
+      const result = await fetchApi<BarriersData>(`/lifecycle/rules/${shortId}/barriers`)
+      loadedRef.current.add(shortId)
+      setBarriersCache(prev => ({ ...prev, [shortId]: { loading: false, error: null, data: result.data } }))
+    } catch (e: unknown) {
+      setBarriersCache(prev => ({
+        ...prev,
+        [shortId]: { loading: false, error: e instanceof Error ? e.message : 'Unknown error', data: null },
+      }))
+    } finally {
+      loadingRef.current.delete(shortId)
+    }
+  }, [])
+
+  const retryBarriers = useCallback((shortId: string) => {
+    loadingRef.current.delete(shortId)
+    loadedRef.current.delete(shortId)
+    setBarriersCache(prev => ({
+      ...prev,
+      [shortId]: { loading: true, error: null, data: null },
+    }))
+    void loadBarriers(shortId)
+  }, [loadBarriers])
+
+  useEffect(() => {
+    if (expandedId) {
+      void loadBarriers(expandedId)
+    }
+  }, [expandedId, loadBarriers])
 
   if (l1 || l2) return <PageSkeleton />
 
@@ -58,19 +188,32 @@ export function Lifecycle() {
               >
                 {c.short_id}
               </Link>
-              <span className="text-xs text-text-tertiary font-mono shrink-0">
-                {c.progress}/{c.threshold}
-              </span>
+              <button
+                type="button"
+                onClick={() => setExpandedId(expandedId === c.short_id ? null : c.short_id)}
+                className="text-xs text-text-tertiary hover:text-text-secondary transition-colors"
+              >
+                {expandedId === c.short_id ? '▲' : '▼'}
+              </button>
             </div>
             <p className="text-sm text-text-secondary mt-1 truncate">{lz(c.trigger_canonical, c.trigger_canonical_zh)}</p>
-            <div className="mt-2 h-1.5 rounded-full bg-[var(--color-bg-elevated)] overflow-hidden">
-              <motion.div
-                className="h-full rounded-full bg-accent-violet"
-                initial={{ width: 0 }}
-                animate={{ width: `${Math.min(100, (c.progress / c.threshold) * 100)}%` }}
-                transition={{ duration: 0.8, ease: [0.32, 0.72, 0, 1] as const }}
-              />
-            </div>
+            <AnimatePresence>
+              {expandedId === c.short_id && (
+                <motion.div
+                  key={c.short_id}
+                  className="overflow-hidden"
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <BarriersPanel
+                    state={barriersCache[c.short_id] ?? { loading: true, error: null, data: null }}
+                    onRetry={() => retryBarriers(c.short_id)}
+                  />
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         ))}
       </GlassCard>
