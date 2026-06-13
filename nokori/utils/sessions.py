@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import json
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -102,13 +103,23 @@ def update_project_id(
     atomic_write_json(p, data)
 
 
+_TOUCH_INTERVAL_SECONDS = 30
+
+
 def touch(cfg: Config, session_id: str) -> None:
+    p = _path_for(cfg, session_id)
+    # ponytail: single-writer per session_id; clock skew → extra write (perf only)
+    try:
+        if 0 <= (time.time() - p.stat().st_mtime) < _TOUCH_INTERVAL_SECONDS:
+            return
+    except OSError:
+        pass
     data = _read_record(cfg, session_id)
     if data is None:
         register(cfg, session_id)
         return
     data["last_activity"] = now_iso()
-    atomic_write_json(_path_for(cfg, session_id), data)
+    atomic_write_json(p, data)
 
 
 def end(cfg: Config, session_id: str) -> None:
