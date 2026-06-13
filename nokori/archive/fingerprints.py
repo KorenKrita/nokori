@@ -7,7 +7,7 @@ import uuid
 from ..db import Db
 
 _STRENGTH_ORDER = ("replacement", "system", "user")
-_STRENGTH_RANK = {s: i for i, s in enumerate(_STRENGTH_ORDER)}
+STRENGTH_RANK = {s: i for i, s in enumerate(_STRENGTH_ORDER)}
 
 
 def compute_signature(
@@ -24,6 +24,40 @@ def compute_signature(
         parts.append(",".join(sorted(t.strip().lower() for t in domain_tags)))
     raw = "\n".join(parts)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def compute_fingerprint_data(
+    rule_id: str,
+    trigger_canonical: str,
+    action_instruction: str,
+    domain_tags: list[str] | None = None,
+    strength: str = "user",
+    created_at: str | None = None,
+) -> dict:
+    """Pure computation of fingerprint data — no DB access.
+
+    Returns a dict with keys: id, signature, scope_summary, blocked_trigger_area,
+    blocked_action_area, archive_strength, can_be_overridden_by_changed_scope, rule_id, created_at.
+    """
+    if strength not in STRENGTH_RANK:
+        raise ValueError(f"invalid strength: {strength}")
+    signature = compute_signature(trigger_canonical, action_instruction, domain_tags)
+    scope_summary = f"domain:{','.join(domain_tags)}" if domain_tags else "general"
+    # spec 3.5: user/system fingerprints can be overridden by narrower scope; replacement cannot
+    can_be_overridden = 1 if strength in ("user", "system") else 0
+    fp_id = str(uuid.uuid4())
+    ts = created_at or _now_iso()
+    return {
+        "id": fp_id,
+        "signature": signature,
+        "scope_summary": scope_summary,
+        "blocked_trigger_area": trigger_canonical,
+        "blocked_action_area": action_instruction,
+        "archive_strength": strength,
+        "can_be_overridden_by_changed_scope": can_be_overridden,
+        "rule_id": rule_id,
+        "created_at": ts,
+    }
 
 
 def create_archived_fingerprint_from_data(
@@ -68,7 +102,7 @@ def create_archived_fingerprint_from_data(
             ).fetchone()
             if existing:
                 existing_strength = existing["archive_strength"]
-                if _STRENGTH_RANK.get(strength, -1) > _STRENGTH_RANK.get(existing_strength, -1):
+                if STRENGTH_RANK.get(strength, -1) > STRENGTH_RANK.get(existing_strength, -1):
                     tx.execute(
                         "UPDATE archived_fingerprints SET archive_strength = ?, "
                         "can_be_overridden_by_changed_scope = ?, created_at = ? "
@@ -252,7 +286,7 @@ def _find_related_fingerprint(
         score = max(overlap, containment)
         threshold = _thresholds.get(row["archive_strength"], 0.75)
         if score >= threshold:
-            priority = _STRENGTH_RANK.get(row["archive_strength"], -1)
+            priority = STRENGTH_RANK.get(row["archive_strength"], -1)
             candidates.append((priority, score, row))
 
     if not candidates:

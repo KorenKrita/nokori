@@ -1,5 +1,8 @@
 """Tests for nokori.archive.fingerprints -- archive fingerprint blocking logic."""
 
+import json
+from unittest.mock import patch
+
 import pytest
 
 from nokori.archive.fingerprints import (
@@ -7,7 +10,8 @@ from nokori.archive.fingerprints import (
     compute_signature,
     create_archived_fingerprint_from_data,
 )
-from nokori.db import open_db
+from nokori.db import archive_rule, open_db
+from nokori.utils.time import now_iso
 
 
 @pytest.fixture()
@@ -265,3 +269,111 @@ def test_check_fingerprint_block_no_conflict(db):
         domain_tags=["novel"],
     )
     assert result is None
+
+
+# ---------------------------------------------------------------------------
+# 8. archive_rule atomicity: rule archival + fingerprint in same transaction
+# ---------------------------------------------------------------------------
+
+
+def _insert_rule(db, rule_id="rule-atom-1", trigger="when user types hello",
+                 action="respond with greeting", domain_tags=None):
+    """Insert a minimal rule row for testing archive_rule."""
+    now = now_iso()
+    tags_json = json.dumps(domain_tags) if domain_tags is not None else None
+    with db.transaction() as tx:
+        tx.execute(
+            "INSERT INTO rules (id, short_id, schema_version, rule_version, "
+            "created_by_pipeline_version, runtime_policy_version, "
+            "trigger_canonical, action_instruction, domain_tags, "
+            "source_origin, status, severity, "
+            "project_scope, project_id, created_at, updated_at) "
+            "VALUES (?,?,1,1,'v1','v1',?,?,?,?,?,?,?,?,?,?)",
+            (
+                rule_id, rule_id[:6], trigger, action, tags_json,
+                "transcript_extraction", "active", "reminder",
+                "global", None, now, now,
+            ),
+        )
+
+
+def test_archive_rule_creates_fingerprint_atomically(db):
+    """archive_rule produces both archived status AND fingerprint in one transaction."""
+    _insert_rule(db, rule_id="rule-atom-1", trigger="when user types hello",
+                 action="respond with greeting", domain_tags=["chat"])
+
+    archive_rule(db, "rule-atom-1", "user dismissed", now_iso())
+
+    # Verify rule is archived
+    rule_row = db.fetchone("SELECT status FROM rules WHERE id = 'rule-atom-1'")
+    assert rule_row["status"] == "archived"
+
+    # Verify fingerprint exists with correct data
+    sig = compute_signature("when user types hello", "respond with greeting", ["chat"])
+    fp_row = db.fetchone(
+        "SELECT * FROM archived_fingerprints WHERE signature = ?", (sig,)
+    )
+    assert fp_row is not None
+    assert fp_row["rule_id"] == "rule-atom-1"
+    assert fp_row["archive_strength"] == "user"
+    assert fp_row["blocked_trigger_area"] == "when user types hello"
+    assert fp_row["blocked_action_area"] == "respond with greeting"
+    assert fp_row["scope_summary"] == "domain:chat"
+
+
+def test_archive_rule_graceful_degradation_on_computation_failure(db):
+    """If fingerprint computation raises, rule is still archived."""
+    _insert_rule(db, rule_id="rule-atom-2", trigger="trigger text",
+                 action="action text", domain_tags=["test"])
+
+    # Patch at source module — archive_rule does `from .archive.fingerprints import compute_fingerprint_data`
+    with patch(
+        "nokori.archive.fingerprints.compute_fingerprint_data",
+        side_effect=RuntimeError("simulated computation failure"),
+    ):
+        archive_rule(db, "rule-atom-2", "system dismissed", now_iso())
+
+    # Rule is still archived despite fingerprint computation failure
+    rule_row = db.fetchone("SELECT status FROM rules WHERE id = 'rule-atom-2'")
+    assert rule_row["status"] == "archived"
+
+    # No fingerprint was created
+    fp_row = db.fetchone(
+        "SELECT * FROM archived_fingerprints WHERE rule_id = ?", ("rule-atom-2",)
+    )
+    assert fp_row is None
+
+
+def test_archive_fingerprint_strength_upgrade(db):
+    """Archiving same content with stronger strength upgrades the fingerprint."""
+    _insert_rule(db, rule_id="rule-up-1", trigger="same trigger",
+                 action="same action", domain_tags=["x"])
+    archive_rule(db, "rule-up-1", "system_suppressed", now_iso(), strength="system")
+
+    sig = compute_signature("same trigger", "same action", ["x"])
+    fp = db.fetchone("SELECT archive_strength FROM archived_fingerprints WHERE signature = ?", (sig,))
+    assert fp["archive_strength"] == "system"
+
+    # Archive another rule with same content but user strength → upgrades
+    _insert_rule(db, rule_id="upgrade-2", trigger="same trigger",
+                 action="same action", domain_tags=["x"])
+    archive_rule(db, "upgrade-2", "user_dismissed_prompt", now_iso(), strength="user")
+
+    fp = db.fetchone("SELECT archive_strength FROM archived_fingerprints WHERE signature = ?", (sig,))
+    assert fp["archive_strength"] == "user"
+
+
+def test_archive_fingerprint_no_downgrade(db):
+    """Archiving same content with weaker strength does not downgrade the fingerprint."""
+    _insert_rule(db, rule_id="rule-down-1", trigger="same trigger2",
+                 action="same action2", domain_tags=["y"])
+    archive_rule(db, "rule-down-1", "user_dismissed_prompt", now_iso(), strength="user")
+
+    sig = compute_signature("same trigger2", "same action2", ["y"])
+
+    _insert_rule(db, rule_id="nodown-2", trigger="same trigger2",
+                 action="same action2", domain_tags=["y"])
+    archive_rule(db, "nodown-2", "system_suppressed", now_iso(), strength="system")
+
+    fp = db.fetchone("SELECT archive_strength FROM archived_fingerprints WHERE signature = ?", (sig,))
+    assert fp["archive_strength"] == "user"

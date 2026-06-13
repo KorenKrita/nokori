@@ -682,6 +682,32 @@ def archive_rule(db: "Db", rule_id: str, reason: str, now: str, *, strength: str
         "SELECT trigger_canonical, action_instruction, domain_tags FROM rules WHERE id = ?",
         (rule_id,),
     )
+
+    # Pre-compute fingerprint data (pure, no DB) so any failure here
+    # is caught before we open the transaction.
+    fp_data = None
+    strength_rank = None
+    if rule_row:
+        try:
+            from .archive.fingerprints import compute_fingerprint_data, STRENGTH_RANK
+            strength_rank = STRENGTH_RANK
+            domain_tags = loads_json(rule_row["domain_tags"], []) if rule_row["domain_tags"] else []
+            fp_data = compute_fingerprint_data(
+                rule_id=rule_id,
+                trigger_canonical=rule_row["trigger_canonical"] or "",
+                action_instruction=rule_row["action_instruction"] or "",
+                domain_tags=domain_tags,
+                strength=strength,
+                created_at=now,
+            )
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).warning(
+                "fingerprint computation failed for rule=%s: %s",
+                rule_id,
+                exc,
+            )
+
     with db.transaction() as tx:
         tx.execute(
             "UPDATE rules SET status = 'archived', archived_reason = ?, "
@@ -695,28 +721,39 @@ def archive_rule(db: "Db", rule_id: str, reason: str, now: str, *, strength: str
             "WHERE rule_id = ? AND shadow_label IS NULL",
             (rule_id,),
         )
-    # Create user-strength archived fingerprint (spec section 11)
-    # NOTE: This runs in a separate transaction from the archival above. If it
-    # fails, the rule is archived but no fingerprint exists — an atomicity gap.
-    if rule_row:
-        try:
-            from .archive.fingerprints import create_archived_fingerprint_from_data
-            domain_tags = loads_json(rule_row["domain_tags"], []) if rule_row["domain_tags"] else []
-            create_archived_fingerprint_from_data(
-                db,
-                rule_id=rule_id,
-                trigger_canonical=rule_row["trigger_canonical"] or "",
-                action_instruction=rule_row["action_instruction"] or "",
-                domain_tags=domain_tags,
-                strength=strength,
+        # Create archived fingerprint in the same transaction (atomic with archival)
+        if fp_data is not None:
+            tx.execute(
+                "INSERT INTO archived_fingerprints "
+                "(id, signature, scope_summary, blocked_trigger_area, blocked_action_area, "
+                "archive_strength, can_be_overridden_by_changed_scope, rule_id, created_at) "
+                "VALUES (?,?,?,?,?,?,?,?,?) "
+                "ON CONFLICT(signature) DO NOTHING",
+                (
+                    fp_data["id"], fp_data["signature"], fp_data["scope_summary"],
+                    fp_data["blocked_trigger_area"], fp_data["blocked_action_area"],
+                    fp_data["archive_strength"], fp_data["can_be_overridden_by_changed_scope"],
+                    fp_data["rule_id"], fp_data["created_at"],
+                ),
             )
-        except Exception as exc:
-            import logging
-            logging.getLogger(__name__).warning(
-                "fingerprint creation failed after archiving rule=%s: %s",
-                rule_id,
-                exc,
-            )
+            # id is uuid4 (no PK conflict); changes()==0 means signature UNIQUE conflict.
+            # rule_id stays as first creator — fingerprint is evidence the content was archived.
+            if tx.execute("SELECT changes()").fetchone()[0] == 0:
+                existing = tx.execute(
+                    "SELECT id, archive_strength FROM archived_fingerprints WHERE signature = ?",
+                    (fp_data["signature"],),
+                ).fetchone()
+                if existing and strength_rank:
+                    existing_strength = existing["archive_strength"]
+                    if strength_rank.get(fp_data["archive_strength"], -1) > strength_rank.get(existing_strength, -1):
+                        # created_at = time of strongest archival event (not first creation)
+                        tx.execute(
+                            "UPDATE archived_fingerprints SET archive_strength = ?, "
+                            "can_be_overridden_by_changed_scope = ?, created_at = ? "
+                            "WHERE id = ?",
+                            (fp_data["archive_strength"], fp_data["can_be_overridden_by_changed_scope"],
+                             fp_data["created_at"], existing["id"]),
+                        )
 
 
 def _delete_rule_cascade_tx(tx, rule_id: str) -> None:
