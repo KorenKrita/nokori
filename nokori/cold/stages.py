@@ -14,8 +14,12 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import Any
 
+from ..archive.fingerprints import check_fingerprint_block
 from ..db import Db
+from ..eval.synthetic import run_synthetic_eval as _run_synth_eval
+from ..matcher.compiler import CompilationError, compile_rule
 from ._result import ColdPipelineResult
+from .integrate import _run_merge_planner
 from .qualify import (
     _candidate_to_rule_data,
     _ensure_rule_data_variants,
@@ -24,6 +28,7 @@ from .qualify import (
     _run_rewriter,
 )
 from .roles import resolve_model_id
+from .verify import _generate_eval_cases
 
 
 @dataclass(frozen=True)
@@ -229,8 +234,6 @@ def run_merge_planner(
     rule_data = ctx.rule_data
     model_id = resolve_model_id("merge_planner", ctx.config.role_models, ctx.config.default_model)
 
-    from nokori.cold.pipeline import _run_merge_planner
-
     merge_op, merge_info = _run_merge_planner(
         db,
         llm,
@@ -257,8 +260,6 @@ def run_fingerprint_check(
     ctx: CandidateContext, db: Db, llm: Any
 ) -> CandidateContext | ColdPipelineResult:
     """Fingerprint check stage: reject if archived fingerprint blocks the rule."""
-    from nokori.cold.pipeline import check_fingerprint_block
-
     if ctx.rule_data is None:
         return ColdPipelineResult(
             status="rejected",
@@ -305,8 +306,6 @@ def run_compile_matcher(
     ctx: CandidateContext, db: Db, llm: Any
 ) -> CandidateContext | ColdPipelineResult:
     """Compile matcher stage: compile trigger data into a matcher."""
-    from nokori.cold.pipeline import CompilationError, compile_rule
-
     if ctx.rule_data is None:
         return ColdPipelineResult(
             status="rejected",
@@ -349,7 +348,6 @@ def run_synthetic_eval(
     ctx: CandidateContext, db: Db, llm: Any
 ) -> CandidateContext | ColdPipelineResult:
     """Synthetic eval stage: generate and run eval cases for active-targeting rules."""
-    from nokori.cold.pipeline import _generate_eval_cases, run_synthetic_eval as _run_synth_eval
     from nokori.eval.synthetic import SyntheticEvalResult
 
     from ..search.idf_stats import build_idf_stats
@@ -511,8 +509,6 @@ def run_insert_or_merge(ctx: CandidateContext, db: Db, llm: Any) -> ColdPipeline
                 scores=scores,
             )
         if target_id:
-            from nokori.cold.pipeline import run_synthetic_eval as _run_synth
-
             from .integrate import _apply_non_destructive_merge, _revert_merge
 
             _pre_variants = existing_rule.get("trigger_variants")
@@ -527,11 +523,6 @@ def run_insert_or_merge(ctx: CandidateContext, db: Db, llm: Any) -> ColdPipeline
 
             if _merge_changed_variants or _merge_changed_excluded:
                 import json as _json
-
-                from nokori.cold.pipeline import (
-                    CompilationError as _CompErr,
-                    compile_rule as _compile_rule,
-                )
 
                 _merged_row = db.fetchone(
                     "SELECT trigger_canonical, trigger_variants, excluded_contexts, "
@@ -567,8 +558,8 @@ def run_insert_or_merge(ctx: CandidateContext, db: Db, llm: Any) -> ColdPipeline
                     "action_instruction": _merged_row["action_instruction"],
                 }
                 try:
-                    _recompiled = _compile_rule(_recompile_data)
-                except _CompErr:
+                    _recompiled = compile_rule(_recompile_data)
+                except CompilationError:
                     _recompiled = None
 
                 _synth_ok = False
@@ -583,7 +574,7 @@ def run_insert_or_merge(ctx: CandidateContext, db: Db, llm: Any) -> ColdPipeline
                         "severity": _merged_row["severity"],
                         "first_observed_useful_at": _merged_row["first_observed_useful_at"],
                     }
-                    _synth_result = _run_synth(
+                    _synth_result = _run_synth_eval(
                         _reeval_rule_data,
                         _recompiled,
                         ctx.idf_stats,

@@ -344,7 +344,7 @@ class TestFailedRoleNoDurableRules:
         })
 
         with patch(
-            "nokori.cold.pipeline.check_fingerprint_block", return_value=None
+            "nokori.cold.stages.check_fingerprint_block", return_value=None
         ):
             result = run_cold_pipeline(
                 db,
@@ -516,8 +516,8 @@ class TestEvidenceSupportThreshold:
         })
 
         with patch(
-            "nokori.cold.pipeline.check_fingerprint_block", return_value=None
-        ), patch("nokori.cold.pipeline.run_synthetic_eval") as mock_eval:
+            "nokori.cold.stages.check_fingerprint_block", return_value=None
+        ), patch("nokori.cold.stages._run_synth_eval") as mock_eval:
             mock_eval.return_value = MagicMock(
                 passed=False, results=[], rule_id="", rule_version=1,
                 runtime_policy_version="1.0.0", tokenizer_version="1.0.0",
@@ -561,8 +561,8 @@ class TestEvidenceSupportThreshold:
         })
 
         with patch(
-            "nokori.cold.pipeline.check_fingerprint_block", return_value=None
-        ), patch("nokori.cold.pipeline.run_synthetic_eval") as mock_eval:
+            "nokori.cold.stages.check_fingerprint_block", return_value=None
+        ), patch("nokori.cold.stages._run_synth_eval") as mock_eval:
             mock_eval.return_value = MagicMock(
                 passed=True, results=[], rule_id="", rule_version=1,
                 runtime_policy_version="1.0.0", tokenizer_version="1.0.0",
@@ -606,9 +606,9 @@ class TestEvidenceSupportThreshold:
         })
 
         with patch(
-            "nokori.cold.pipeline.check_fingerprint_block", return_value=None
+            "nokori.cold.stages.check_fingerprint_block", return_value=None
         ), patch(
-            "nokori.cold.pipeline.run_synthetic_eval"
+            "nokori.cold.stages._run_synth_eval"
         ) as mock_eval:
             mock_eval.return_value = MagicMock(
                 passed=True, results=[], rule_id="", rule_version=1,
@@ -650,7 +650,7 @@ class TestReviseRoutesRewriter:
         })
 
         with patch(
-            "nokori.cold.pipeline.check_fingerprint_block", return_value=None
+            "nokori.cold.stages.check_fingerprint_block", return_value=None
         ):
             result = run_cold_pipeline(
                 db,
@@ -739,9 +739,9 @@ def test_non_destructive_merge_reeval_uses_synthetic_eval_signature(db: Db):
         return eval_result
 
     with patch(
-        "nokori.cold.pipeline.check_fingerprint_block", return_value=None
+        "nokori.cold.stages.check_fingerprint_block", return_value=None
     ), patch(
-        "nokori.cold.pipeline._run_merge_planner",
+        "nokori.cold.stages._run_merge_planner",
         return_value=(
             "update_existing_fields",
             {
@@ -755,7 +755,7 @@ def test_non_destructive_merge_reeval_uses_synthetic_eval_signature(db: Db):
             },
         ),
     ), patch(
-        "nokori.cold.pipeline._generate_eval_cases",
+        "nokori.cold.stages._generate_eval_cases",
         return_value=[{
             "input_prompt": "pytest parametrize with fixtures",
             "expected_decision_min": "warm",
@@ -763,7 +763,7 @@ def test_non_destructive_merge_reeval_uses_synthetic_eval_signature(db: Db):
             "case_type": "positive",
         }],
     ), patch(
-        "nokori.cold.pipeline.run_synthetic_eval",
+        "nokori.cold.stages._run_synth_eval",
         side_effect=fake_run_synthetic_eval,
     ):
         result = run_cold_pipeline(
@@ -843,9 +843,9 @@ def test_non_destructive_merge_reeval_runs_global_adversarial_without_local_case
     global_adversarial = [{"prompt": "unrelated global adversarial prompt"}]
 
     with patch(
-        "nokori.cold.pipeline.check_fingerprint_block", return_value=None
+        "nokori.cold.stages.check_fingerprint_block", return_value=None
     ), patch(
-        "nokori.cold.pipeline._run_merge_planner",
+        "nokori.cold.stages._run_merge_planner",
         return_value=(
             "update_existing_fields",
             {
@@ -859,10 +859,10 @@ def test_non_destructive_merge_reeval_runs_global_adversarial_without_local_case
             },
         ),
     ), patch(
-        "nokori.cold.pipeline._generate_eval_cases",
+        "nokori.cold.stages._generate_eval_cases",
         return_value=[],
     ), patch(
-        "nokori.cold.pipeline.run_synthetic_eval",
+        "nokori.cold.stages._run_synth_eval",
         return_value=eval_result,
     ) as mock_eval:
         result = run_cold_pipeline(
@@ -967,9 +967,9 @@ def test_non_destructive_merge_failed_reeval_revert_uses_full_cas(db: Db):
     fake_run_synthetic_eval.calls = 0
 
     with patch(
-        "nokori.cold.pipeline.check_fingerprint_block", return_value=None
+        "nokori.cold.stages.check_fingerprint_block", return_value=None
     ), patch(
-        "nokori.cold.pipeline._run_merge_planner",
+        "nokori.cold.stages._run_merge_planner",
         return_value=(
             "update_existing_fields",
             {
@@ -984,7 +984,7 @@ def test_non_destructive_merge_failed_reeval_revert_uses_full_cas(db: Db):
             },
         ),
     ), patch(
-        "nokori.cold.pipeline._generate_eval_cases",
+        "nokori.cold.stages._generate_eval_cases",
         return_value=[{
             "prompt": "pytest parametrize with fixtures",
             "expected_min_decision": "warm",
@@ -992,7 +992,7 @@ def test_non_destructive_merge_failed_reeval_revert_uses_full_cas(db: Db):
             "case_type": "positive",
         }],
     ), patch(
-        "nokori.cold.pipeline.run_synthetic_eval",
+        "nokori.cold.stages._run_synth_eval",
         side_effect=fake_run_synthetic_eval,
     ):
         result = run_cold_pipeline(
@@ -1035,9 +1035,9 @@ class TestColdFastLane:
         })
 
         with patch(
-            "nokori.cold.pipeline.check_fingerprint_block", return_value=None
+            "nokori.cold.stages.check_fingerprint_block", return_value=None
         ), patch(
-            "nokori.cold.pipeline.run_synthetic_eval"
+            "nokori.cold.stages._run_synth_eval"
         ) as mock_eval:
             mock_eval.return_value = MagicMock(
                 passed=True, results=[], rule_id="", rule_version=1,
@@ -1088,7 +1088,7 @@ class TestLowQualityCandidate:
         })
 
         with patch(
-            "nokori.cold.pipeline.check_fingerprint_block", return_value=None
+            "nokori.cold.stages.check_fingerprint_block", return_value=None
         ):
             result = run_cold_pipeline(
                 db,
@@ -1123,7 +1123,7 @@ class TestLowQualityCandidate:
         })
 
         with patch(
-            "nokori.cold.pipeline.check_fingerprint_block", return_value=None
+            "nokori.cold.stages.check_fingerprint_block", return_value=None
         ):
             result = run_cold_pipeline(
                 db,
@@ -1160,9 +1160,9 @@ class TestCompilationFailure:
         from nokori.matcher.compiler import CompilationError
 
         with patch(
-            "nokori.cold.pipeline.check_fingerprint_block", return_value=None
+            "nokori.cold.stages.check_fingerprint_block", return_value=None
         ), patch(
-            "nokori.cold.pipeline.compile_rule",
+            "nokori.cold.stages.compile_rule",
             side_effect=CompilationError("invalid regex in concept alias"),
         ):
             result = run_cold_pipeline(
@@ -1207,7 +1207,7 @@ class TestArchivedFingerprintBlock:
         }
 
         with patch(
-            "nokori.cold.pipeline.check_fingerprint_block",
+            "nokori.cold.stages.check_fingerprint_block",
             return_value=fingerprint_result,
         ):
             result = run_cold_pipeline(
@@ -1266,7 +1266,7 @@ class TestExternalSourceNoFastLane:
         })
 
         with patch(
-            "nokori.cold.pipeline.check_fingerprint_block", return_value=None
+            "nokori.cold.stages.check_fingerprint_block", return_value=None
         ):
             result = run_cold_pipeline(
                 db,
@@ -1306,7 +1306,7 @@ class TestVersionFieldsStored:
         })
 
         with patch(
-            "nokori.cold.pipeline.check_fingerprint_block", return_value=None
+            "nokori.cold.stages.check_fingerprint_block", return_value=None
         ):
             result = run_cold_pipeline(
                 db,
@@ -1388,7 +1388,7 @@ class TestSplitRequired:
         llm.call = MagicMock(side_effect=_dynamic_call)
 
         with patch(
-            "nokori.cold.pipeline.check_fingerprint_block", return_value=None
+            "nokori.cold.stages.check_fingerprint_block", return_value=None
         ):
             result = run_cold_pipeline(
                 db,

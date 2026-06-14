@@ -512,7 +512,7 @@ class TestMergePlannerStage:
         # apply_merge_policy overrides LLM's reject_new in most cases,
         # so we patch the composed function to test the stage's dispatch logic.
         with patch(
-            "nokori.cold.pipeline._run_merge_planner",
+            "nokori.cold.stages._run_merge_planner",
             return_value=("reject_new", {"merge_rationale": "duplicate", "target_rule_ids": []}),
         ):
             result = run_merge_planner(ctx, db, MagicMock())

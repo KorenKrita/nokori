@@ -232,7 +232,7 @@ class TestCheckpointResume:
             config=config,
         )
 
-        with patch("nokori.cold.pipeline.check_fingerprint_block", return_value=None):
+        with patch("nokori.cold.stages.check_fingerprint_block", return_value=None):
             result = _run_pipeline_staged(db, llm, ctx, segment_hash=segment_hash)
 
         assert result.status in ("candidate", "active")
@@ -253,7 +253,7 @@ class TestStageTiming:
             "merge planner": _merge_planner_json("keep_both"),
         })
 
-        with patch("nokori.cold.pipeline.check_fingerprint_block", return_value=None), \
+        with patch("nokori.cold.stages.check_fingerprint_block", return_value=None), \
              patch("nokori.cold.pipeline.log.info", side_effect=capture_info):
             run_cold_pipeline(
                 db, llm,
