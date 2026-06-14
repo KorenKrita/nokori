@@ -145,6 +145,17 @@ def get_fire_events_for_session(db: Db, session_id: str) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+def count_distinct_useful_projects(db: Db, rule_id: str) -> int:
+    """Count distinct project_ids with observed_useful fire events for a rule."""
+    row = db.fetchone(
+        "SELECT COUNT(DISTINCT project_id) AS n FROM rule_fire_events "
+        "WHERE rule_id = ? AND posthoc_label = 'observed_useful' "
+        "AND project_id IS NOT NULL",
+        (rule_id,),
+    )
+    return int(row["n"]) if row else 0
+
+
 def count_evaluated_fire_events(db: Db, rule_id: str, window_days: int = 30) -> dict:
     """Count fire events by posthoc_label within a time window.
 

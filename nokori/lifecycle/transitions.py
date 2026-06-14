@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 from ..db import Db
+from ..events.fire import count_distinct_useful_projects
 from ..events.observability import write_event
 from ..events.shadow import count_shadow_evidence
 from ..policy import (
@@ -19,6 +20,7 @@ from ..policy import (
     CANDIDATE_TO_ACTIVE,
     CANDIDATE_TO_ACTIVE_SINGLE_SESSION,
     CANDIDATE_TO_ARCHIVED,
+    CROSS_PROJECT_PROMOTION_THRESHOLD,
     FALSE_POSITIVE_REASON_CODES,
     MINIMUM_RATE_DENOMINATOR,
     RECENT_EVENT_WINDOW,
@@ -60,7 +62,7 @@ def evaluate_transitions(db: Db, rule_id: str) -> TransitionResult:
     """Main entry point. Reads rule state, aggregates events, applies policy."""
     row = db.fetchone(
         "SELECT id, rule_version, status, runtime_policy_version, "
-        "suppressed_at, replacement_id "
+        "suppressed_at, replacement_id, project_scope "
         "FROM rules WHERE id = ?",
         (rule_id,),
     )
@@ -899,6 +901,47 @@ def _evaluate_trusted(db: Db, row, rule_version: int) -> TransitionResult:
         )
         applied = _apply_transition(db, rule_id, rule_version, old_status, "active", rpv, reason)
         return TransitionResult(rule_id, old_status, "active", reason, applied)
+
+    # Cross-project promotion (ADR 0002: default on).
+    # Uses lifetime count (no time window) — a rule that helped across 3+ projects
+    # at any point in its history has proven cross-project value.
+    if row["project_scope"] == "project":
+        distinct_count = count_distinct_useful_projects(db, rule_id)
+        if distinct_count >= CROSS_PROJECT_PROMOTION_THRESHOLD:
+            # ponytail: scope promotion does not bump runtime_policy_version —
+            # it's a data-level change, not a policy-engine change.
+            now = now_iso()
+            with db.transaction() as tx:
+                cur = tx.execute(
+                    "UPDATE rules SET project_scope = 'global', "
+                    "rule_version = rule_version + 1, updated_at = ? "
+                    "WHERE id = ? AND rule_version = ? AND project_scope = 'project'",
+                    (now, rule_id, rule_version),
+                )
+                applied = cur.rowcount == 1
+            if applied:
+                log.info(
+                    "cross_project_promotion rule=%s distinct_projects=%d",
+                    rule_id,
+                    distinct_count,
+                )
+                write_event(
+                    db,
+                    source="lifecycle_transition",
+                    outcome="cross_project_promotion",
+                    details={
+                        "rule_id": rule_id,
+                        "transition_type": "cross_project_promotion",
+                        "distinct_project_count": distinct_count,
+                    },
+                )
+                return TransitionResult(
+                    rule_id, old_status, None, "cross_project_promotion", True
+                )
+            log.debug("stale cross_project_promotion rule=%s (CAS failed)", rule_id)
+            return TransitionResult(
+                rule_id, old_status, None, "cross_project_promotion_conflict", False
+            )
 
     return TransitionResult(rule_id, old_status, None, "no transition triggered", False)
 

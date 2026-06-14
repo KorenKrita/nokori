@@ -315,8 +315,10 @@ class TestSchemaMigration:
         finally:
             d.close()
 
-    def test_v6_db_migrates_to_v8(self, tmp_path):
+    def test_v6_db_migrates_to_latest(self, tmp_path):
         import sqlite3
+
+        from nokori.db import SCHEMA_VERSION
 
         db_path = tmp_path / "v6.db"
         conn = sqlite3.connect(str(db_path))
@@ -329,7 +331,7 @@ class TestSchemaMigration:
 
         d = open_db(db_path)
         try:
-            assert d.schema_version() == 8
+            assert d.schema_version() == SCHEMA_VERSION
             tables = {
                 r["name"]
                 for r in d.fetchall(

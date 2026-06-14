@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 
 from .errors import DbError
 
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 
 _SCHEMA_DDL = """
 CREATE TABLE IF NOT EXISTS rules (
@@ -144,6 +144,7 @@ CREATE TABLE IF NOT EXISTS rule_fire_events (
     posthoc_label TEXT CHECK(posthoc_label IS NULL OR posthoc_label IN ('observed_useful','plausible_useful','irrelevant','harmful','unclear')),
     posthoc_reason_code TEXT CHECK(posthoc_reason_code IS NULL OR posthoc_reason_code IN ('useful_prevented_error','useful_improved_quality','useful_followed_preference','irrelevant_not_applicable','irrelevant_redundant','irrelevant_unused','harmful_distracted','harmful_wrong_scope','harmful_blocked_valid_action')),
     posthoc_score REAL,
+    project_id TEXT,
     created_at TEXT NOT NULL
 );
 
@@ -251,6 +252,7 @@ CREATE INDEX IF NOT EXISTS idx_fire_events_session ON rule_fire_events(session_i
 CREATE INDEX IF NOT EXISTS idx_fire_events_rule_label_created ON rule_fire_events(rule_id, posthoc_label, created_at);
 CREATE INDEX IF NOT EXISTS idx_fire_events_created ON rule_fire_events(created_at);
 CREATE INDEX IF NOT EXISTS idx_fire_events_session_prompt ON rule_fire_events(session_id, prompt_hash);
+CREATE INDEX IF NOT EXISTS idx_fire_events_rule_project ON rule_fire_events(rule_id, posthoc_label, project_id);
 CREATE INDEX IF NOT EXISTS idx_shadow_events_rule ON rule_shadow_events(rule_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_shadow_events_fingerprint ON rule_shadow_events(rule_id, context_fingerprint);
 CREATE INDEX IF NOT EXISTS idx_shadow_events_rule_label ON rule_shadow_events(rule_id, shadow_label);
@@ -431,14 +433,27 @@ def _migrate(conn: sqlite3.Connection) -> None:
         except Exception as e:
             raise DbError(f"failed to initialize rules.db: {e}") from e
         _add_column_if_missing(conn, "transcript_ingest_jobs", "pipeline_checkpoint", "TEXT")
+        _add_column_if_missing(conn, "rule_fire_events", "project_id", "TEXT")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_fire_events_rule_project ON rule_fire_events(rule_id, posthoc_label, project_id)")
         return
     elif current == 7:
-        script = f"BEGIN;\nPRAGMA user_version = {int(SCHEMA_VERSION)};\nCOMMIT;\n"
+        script = (
+            "BEGIN;\n"
+            f"PRAGMA user_version = {int(SCHEMA_VERSION)};\n"
+            "COMMIT;\n"
+        )
         try:
             conn.executescript(script)
         except Exception as e:
-            raise DbError(f"failed to migrate rules.db from v7 to v8: {e}") from e
+            raise DbError(f"failed to migrate rules.db from v7 to v{SCHEMA_VERSION}: {e}") from e
         _add_column_if_missing(conn, "transcript_ingest_jobs", "pipeline_checkpoint", "TEXT")
+        _add_column_if_missing(conn, "rule_fire_events", "project_id", "TEXT")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_fire_events_rule_project ON rule_fire_events(rule_id, posthoc_label, project_id)")
+        return
+    elif current == 8:
+        _add_column_if_missing(conn, "rule_fire_events", "project_id", "TEXT")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_fire_events_rule_project ON rule_fire_events(rule_id, posthoc_label, project_id)")
+        conn.execute(f"PRAGMA user_version = {int(SCHEMA_VERSION)}")
         return
     else:
         raise DbError(

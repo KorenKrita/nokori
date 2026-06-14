@@ -243,6 +243,8 @@ SUPPRESSION_TTL_DAYS: int = 30
 # Runtime constants (section 9)
 # ---------------------------------------------------------------------------
 
+CROSS_PROJECT_PROMOTION_THRESHOLD: int = 3
+
 WARM_HARD_MAX: int = 3
 HOT_MAX_DEFAULT: int = 1
 
