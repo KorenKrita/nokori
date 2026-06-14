@@ -7,6 +7,12 @@ from ..db import fetch_rules, open_db
 
 
 def run(args: argparse.Namespace, cfg: Config) -> int:
+    if getattr(args, "global_eligible", False):
+        if getattr(args, "all", False) or getattr(args, "project", None):
+            print("error: --global-eligible cannot be combined with --all or --project")
+            return 1
+        return _run_global_eligible(cfg)
+
     statuses: tuple[str, ...] | None
     statuses = None if args.all else ("active", "trusted", "candidate")
 
@@ -31,4 +37,37 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
         )
         print(f"  trigger: {(r.trigger_canonical or '')[:60]}")
         print(f"  action : {(r.action_instruction or '')[:80]}")
+    return 0
+
+
+def _run_global_eligible(cfg: Config) -> int:
+    """Show trusted project-scoped rules approaching cross-project promotion."""
+    from ..events.fire import batch_count_distinct_useful_projects
+    from ..policy import CROSS_PROJECT_PROMOTION_THRESHOLD
+
+    db = open_db(cfg.db_path)
+    try:
+        rules = fetch_rules(db, statuses=("trusted",))
+        project_rules = [r for r in rules if r.project_scope == "project"]
+        counts = batch_count_distinct_useful_projects(db, [r.id for r in project_rules])
+        # ponytail: show rules within 1 step of promotion (at least 2 distinct projects)
+        approaching = max(2, CROSS_PROJECT_PROMOTION_THRESHOLD - 1)
+        eligible = [
+            (r, counts.get(r.id, 0))
+            for r in project_rules
+            if counts.get(r.id, 0) >= approaching
+        ]
+    finally:
+        db.close()
+
+    if not eligible:
+        print("(no rules approaching cross-project promotion)")
+        return 0
+
+    target = CROSS_PROJECT_PROMOTION_THRESHOLD
+    for r, count in eligible:
+        print(
+            f"{r.short_id}  projects={count}/{target}  "
+            f"trigger: {(r.trigger_canonical or '')[:50]}"
+        )
     return 0

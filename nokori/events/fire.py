@@ -156,6 +156,20 @@ def count_distinct_useful_projects(db: Db, rule_id: str) -> int:
     return int(row["n"]) if row else 0
 
 
+def batch_count_distinct_useful_projects(db: Db, rule_ids: list[str]) -> dict[str, int]:
+    """Batch version: count distinct useful projects for multiple rules at once."""
+    if not rule_ids:
+        return {}
+    placeholders = ",".join("?" * len(rule_ids))
+    rows = db.fetchall(
+        f"SELECT rule_id, COUNT(DISTINCT project_id) AS n FROM rule_fire_events "
+        f"WHERE rule_id IN ({placeholders}) AND posthoc_label = 'observed_useful' "
+        f"AND project_id IS NOT NULL GROUP BY rule_id",
+        tuple(rule_ids),
+    )
+    return {row["rule_id"]: int(row["n"]) for row in rows}
+
+
 def count_evaluated_fire_events(db: Db, rule_id: str, window_days: int = 30) -> dict:
     """Count fire events by posthoc_label within a time window.
 

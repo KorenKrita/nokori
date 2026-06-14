@@ -4,12 +4,14 @@ import json
 
 from fastapi import APIRouter, HTTPException, Query
 
-from nokori.db import fetch_rule_by_short_id, open_db
+from nokori.db import fetch_rule_by_short_id, fetch_rules, open_db
 from nokori.events.fire import (
+    batch_count_distinct_useful_projects,
     count_evaluated_fire_events,
     get_fire_events_for_rule,
 )
 from nokori.lifecycle.transitions import compute_promotion_barriers
+from nokori.policy import CROSS_PROJECT_PROMOTION_THRESHOLD
 from nokori.web.deps import get_config
 from nokori.web.models import (
     DecisionFeaturesOut,
@@ -338,3 +340,34 @@ def maintenance_status():
     finally:
         db.close()
     return {"data": {row["key"]: row["last_run"] for row in rows}}
+
+
+# ---------------------------------------------------------------------------
+# Cross-project promotion eligibility
+# ---------------------------------------------------------------------------
+
+
+@router.get("/lifecycle/global-eligible")
+def global_eligible_rules():
+    """Return trusted project-scoped rules approaching cross-project promotion threshold."""
+    cfg = get_config()
+    db = open_db(cfg.db_path)
+    try:
+        rules = fetch_rules(db, statuses=("trusted",))
+        project_rules = [r for r in rules if r.project_scope == "project"]
+        counts = batch_count_distinct_useful_projects(db, [r.id for r in project_rules])
+        eligible = [
+            {
+                "short_id": r.short_id,
+                "trigger_canonical": r.trigger_canonical,
+                "trigger_canonical_zh": r.trigger_canonical_zh,
+                "project_id": r.project_id,
+                "distinct_projects": counts.get(r.id, 0),
+                "target": CROSS_PROJECT_PROMOTION_THRESHOLD,
+            }
+            for r in project_rules
+            if counts.get(r.id, 0) >= max(2, CROSS_PROJECT_PROMOTION_THRESHOLD - 1)
+        ]
+    finally:
+        db.close()
+    return {"data": eligible}

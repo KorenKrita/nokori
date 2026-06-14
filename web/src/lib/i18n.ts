@@ -197,6 +197,9 @@ const translations: Record<Locale, Record<string, string>> = {
     'lifecycle.barriers_none': '无晋升路径',
     'lifecycle.target': '目标',
     'lifecycle.blocking': '阻塞',
+    'lifecycle.global_eligible': '全局提升候选',
+    'lifecycle.no_global_eligible': '暂无接近跨项目提升的规则',
+    'lifecycle.global_eligible_projects': '项目',
     // Config
     'config.title': '配置与健康',
     'config.health': '健康检查',
@@ -459,6 +462,9 @@ const translations: Record<Locale, Record<string, string>> = {
     'lifecycle.barriers_none': 'No promotion path',
     'lifecycle.target': 'Target',
     'lifecycle.blocking': 'Blocking',
+    'lifecycle.global_eligible': 'Global Eligible',
+    'lifecycle.no_global_eligible': 'No rules approaching cross-project promotion',
+    'lifecycle.global_eligible_projects': 'projects',
     // Config
     'config.title': 'Config & Health',
     'config.health': 'Health Checks',
@@ -721,6 +727,9 @@ const translations: Record<Locale, Record<string, string>> = {
     'lifecycle.barriers_none': 'プロモーションパスなし',
     'lifecycle.target': '目標',
     'lifecycle.blocking': 'ブロック中',
+    'lifecycle.global_eligible': 'グローバル昇格候補',
+    'lifecycle.no_global_eligible': 'クロスプロジェクト昇格に近いルールなし',
+    'lifecycle.global_eligible_projects': 'プロジェクト',
     // Config
     'config.title': '設定とヘルスチェック',
     'config.health': 'ヘルスチェック',

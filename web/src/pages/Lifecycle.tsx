@@ -22,6 +22,15 @@ interface PromotionData {
     }[]
   }
 }
+interface GlobalEligibleRule {
+  short_id: string
+  trigger_canonical?: string
+  trigger_canonical_zh?: string | null
+  project_id: string | null
+  distinct_projects: number
+  target: number
+}
+interface GlobalEligibleData { data: GlobalEligibleRule[] }
 interface MaintenanceData { data: Record<string, string> }
 
 interface BarrierThreshold {
@@ -119,9 +128,36 @@ function BarriersPanel({ state, onRetry }: { state: BarriersState; onRetry: () =
   )
 }
 
+function GlobalEligibleList({ data }: { data: GlobalEligibleData['data'] }) {
+  if (data.length === 0) {
+    return <p className="text-sm text-text-tertiary">{t('lifecycle.no_global_eligible')}</p>
+  }
+  return (
+    <>
+      {data.map((r) => (
+        <div key={r.short_id} className="border-b border-[var(--color-border-subtle)] py-3 last:border-0">
+          <div className="flex items-center justify-between gap-3">
+            <Link
+              to={`/rules/${r.short_id}`}
+              className="font-mono text-xs text-accent-sky hover:underline"
+            >
+              {r.short_id}
+            </Link>
+            <span className="text-xs font-mono text-emerald-400">
+              {r.distinct_projects}/{r.target} {t('lifecycle.global_eligible_projects')}
+            </span>
+          </div>
+          <p className="text-sm text-text-secondary mt-1 truncate">{lz(r.trigger_canonical, r.trigger_canonical_zh)}</p>
+        </div>
+      ))}
+    </>
+  )
+}
+
 export function Lifecycle() {
   const { data: promo, isLoading: l1 } = useApi<PromotionData>('/lifecycle/promotion')
   const { data: maint, isLoading: l2 } = useApi<MaintenanceData>('/lifecycle/maintenance')
+  const { data: globalEligible, isLoading: l3 } = useApi<GlobalEligibleData>('/lifecycle/global-eligible')
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [barriersCache, setBarriersCache] = useState<Record<string, BarriersState>>({})
   const loadingRef = useRef<Set<string>>(new Set())
@@ -162,7 +198,7 @@ export function Lifecycle() {
     }
   }, [expandedId, loadBarriers])
 
-  if (l1 || l2) return <PageSkeleton />
+  if (l1 || l2 || l3) return <PageSkeleton />
 
   return (
     <motion.div
@@ -216,6 +252,11 @@ export function Lifecycle() {
             </AnimatePresence>
           </div>
         ))}
+      </GlassCard>
+
+      <GlassCard hover>
+        <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary mb-4">{t('lifecycle.global_eligible')}</h3>
+        <GlobalEligibleList data={globalEligible?.data ?? []} />
       </GlassCard>
 
       <GlassCard>

@@ -41,6 +41,11 @@ def _build_parser() -> argparse.ArgumentParser:
         help="include candidate, suppressed, and archived rules",
     )
     sp_list.add_argument("--project", default=None)
+    sp_list.add_argument(
+        "--global-eligible",
+        action="store_true",
+        help="show only trusted project-scoped rules approaching cross-project promotion",
+    )
 
     sp_show = sub.add_parser("show", help="show a rule by short id")
     sp_show.add_argument("short_id")
