@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 
 from ..config import Config
 from ..db import fetch_rules, open_db
@@ -10,6 +11,9 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
     if getattr(args, "global_eligible", False):
         if getattr(args, "all", False) or getattr(args, "project", None):
             print("error: --global-eligible cannot be combined with --all or --project")
+            return 1
+        if getattr(args, "json", False):
+            print("error: --json is not supported with --global-eligible")
             return 1
         return _run_global_eligible(cfg)
 
@@ -21,6 +25,21 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
         rules = fetch_rules(db, statuses=statuses, project_id=args.project)
     finally:
         db.close()
+
+    if getattr(args, "json", False):
+        rules_list = [
+            {
+                "short_id": r.short_id,
+                "status": r.status,
+                "trigger": (r.trigger_canonical or "")[:100],
+                "severity": r.severity,
+                "project_id": r.project_id,
+                "created_at": r.created_at,
+            }
+            for r in rules
+        ]
+        print(json.dumps(rules_list, ensure_ascii=False))
+        return 0
 
     if not rules:
         print("(no rules)")

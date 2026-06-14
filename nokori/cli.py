@@ -58,6 +58,7 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="show only trusted project-scoped rules approaching cross-project promotion",
     )
+    sp_list.add_argument("--json", action="store_true", help="output JSON array instead of table")
 
     sp_show = sub.add_parser(
         "show",
@@ -169,6 +170,9 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     sp_report.add_argument("--session", default=None, help="filter to a specific session_id")
     sp_report.add_argument("--json", action="store_true", help="output JSON instead of markdown")
+    sp_report.add_argument(
+        "--metrics", action="store_true", help="show cold-path quality metrics"
+    )
 
     sp_stream = sub.add_parser("stream", help="AI-friendly event stream")
     sp_stream.add_argument(

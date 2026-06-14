@@ -20,6 +20,12 @@ def _default_since() -> str:
 
 
 def run(args: argparse.Namespace, cfg: Config) -> int:
+    if getattr(args, "metrics", False):
+        ignored = [f for f in ("--since", "--session") if getattr(args, f.lstrip("-"), None)]
+        if ignored:
+            print(f"warning: {', '.join(ignored)} ignored with --metrics", flush=True)
+        return _run_metrics(args, cfg)
+
     since = args.since or _default_since()
     session_id = args.session or None
     output_json = args.json
@@ -159,3 +165,91 @@ def _print_markdown(data: dict) -> None:
             print("### By Model")
             for row in errors["by_model"]:
                 print(f"  {row['model_id'] or '(unspecified)'}: {row['count']}")
+
+
+def _run_metrics(args: argparse.Namespace, cfg: Config) -> int:
+    output_json = getattr(args, "json", False)
+
+    db = open_db(cfg.db_path)
+    try:
+        data = _build_metrics(db)
+    finally:
+        db.close()
+
+    if output_json:
+        print(json.dumps(data, ensure_ascii=False, indent=2))
+    else:
+        _print_metrics(data)
+    return 0
+
+
+def _build_metrics(db) -> dict:
+    since_30d = local_days_ago(30)
+    since_7d = local_days_ago(7)
+
+    # Extraction stats
+    extract_rows = db.fetchall(
+        "SELECT status, COUNT(*) AS n FROM extract_state GROUP BY status"
+    )
+    extraction = {row["status"]: row["n"] for row in extract_rows}
+
+    # Rule counts by status
+    rule_rows = db.fetchall("SELECT status, COUNT(*) AS n FROM rules GROUP BY status")
+    rules = {row["status"]: row["n"] for row in rule_rows}
+
+    # Posthoc labels (30 days)
+    posthoc_rows = db.fetchall(
+        "SELECT posthoc_label, COUNT(*) AS n FROM rule_fire_events "
+        "WHERE posthoc_label IS NOT NULL AND created_at >= ? GROUP BY posthoc_label",
+        (since_30d,),
+    )
+    posthoc = {row["posthoc_label"]: row["n"] for row in posthoc_rows}
+
+    # Gate blocks (7 days)
+    gate_row = db.fetchone(
+        "SELECT COUNT(*) AS n FROM hook_events "
+        "WHERE source = 'pre_tool_use' AND outcome = 'blocked' AND created_at >= ?",
+        (since_7d,),
+    )
+    gate_blocks = gate_row["n"] if gate_row else 0
+
+    return {
+        "extraction": extraction,
+        "rules": rules,
+        "posthoc_30d": posthoc,
+        "gate_blocks_7d": gate_blocks,
+    }
+
+
+def _print_metrics(data: dict) -> None:
+    print("=== Cold-Path Quality Metrics ===")
+    print()
+
+    ext = data["extraction"]
+    done = ext.get("done", 0)
+    pending = ext.get("pending", 0)
+    failed = ext.get("failed", 0)
+    print(f"Extraction: {done} done, {pending} pending, {failed} failed")
+
+    rules = data["rules"]
+    candidate = rules.get("candidate", 0)
+    active = rules.get("active", 0)
+    trusted = rules.get("trusted", 0)
+    suppressed = rules.get("suppressed", 0)
+    archived = rules.get("archived", 0)
+    print(
+        f"Rules: {candidate} candidate, {active} active, {trusted} trusted, "
+        f"{suppressed} suppressed, {archived} archived"
+    )
+
+    ph = data["posthoc_30d"]
+    useful = ph.get("observed_useful", 0) + ph.get("plausible_useful", 0)
+    irrelevant = ph.get("irrelevant", 0)
+    harmful = ph.get("harmful", 0)
+    unclear = ph.get("unclear", 0)
+    print(
+        f"Injection quality (30d): {useful} useful, {irrelevant} irrelevant, "
+        f"{harmful} harmful, {unclear} unclear"
+    )
+
+    print(f"Gate: {data['gate_blocks_7d']} blocks in last 7 days")
