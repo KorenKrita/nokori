@@ -373,7 +373,17 @@ def open_db(path: Path) -> Db:
                 raise
             last_err = e
             time.sleep(0.05 * (attempt + 1))
-    raise DbError(f"failed to open db at {path}: {last_err}")
+    remediation: str
+    if last_err and "locked" in str(last_err).lower():
+        remediation = "Check for orphaned nokori processes: ps aux | grep nokori"
+    else:
+        remediation = (
+            "Ensure ~/.nokori exists with mode 700: mkdir -p ~/.nokori && chmod 700 ~/.nokori"
+        )
+    raise DbError(
+        f"failed to open db at {path}: {last_err}",
+        remediation=remediation,
+    )
 
 
 def _add_column_if_missing(

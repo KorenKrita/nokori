@@ -60,18 +60,18 @@ _TOML_TO_ENV = {
 from .config_file import get_nested as _get_nested  # noqa: E402
 
 
-def _resolve_file_values(data_dir_hint: str) -> dict[str, str]:
-    """Read config.toml and return a flat {ENV_NAME: value_str} dict."""
+def _resolve_file_values(data_dir_hint: str) -> tuple[dict[str, str], dict]:
+    """Read config.toml and return (flat {ENV_NAME: value_str} dict, raw TOML dict)."""
     data_dir = Path(data_dir_hint).expanduser().resolve()
     config_path = data_dir / _CONFIG_FILE_NAME
     if not config_path.exists():
         default_dir = Path("~/.nokori").expanduser().resolve()
         if data_dir != default_dir:
-            return {}
+            return {}, {}
         config_path = default_dir / _CONFIG_FILE_NAME
     toml = _load_toml(config_path)
     if not toml:
-        return {}
+        return {}, {}
     flat: dict[str, str] = {}
     for keys, env_name in _TOML_TO_ENV.items():
         val = _get_nested(toml, keys)
@@ -81,7 +81,7 @@ def _resolve_file_values(data_dir_hint: str) -> dict[str, str]:
             flat[env_name] = "1" if val else "0"
         else:
             flat[env_name] = str(val)
-    return flat
+    return flat, toml
 
 
 # --- Env + file resolution helpers ---
@@ -104,7 +104,10 @@ def _bool_val(name: str, default: bool, file_values: dict[str, str]) -> bool:
         return True
     if v in _FALSE:
         return False
-    raise ConfigError(f"{name} must be a boolean (got {raw!r})")
+    raise ConfigError(
+        f"{name} must be a boolean (got {raw!r})",
+        remediation=f"Check {name} environment variable or its corresponding key in ~/.nokori/config.toml",
+    )
 
 
 def _int_val(
@@ -116,9 +119,15 @@ def _int_val(
     try:
         n = int(raw)
     except ValueError as e:
-        raise ConfigError(f"{name} must be an integer (got {raw!r})") from e
+        raise ConfigError(
+            f"{name} must be an integer (got {raw!r})",
+            remediation=f"Check {name} environment variable or its corresponding key in ~/.nokori/config.toml",
+        ) from e
     if min_value is not None and n < min_value:
-        raise ConfigError(f"{name} must be >= {min_value} (got {n})")
+        raise ConfigError(
+            f"{name} must be >= {min_value} (got {n})",
+            remediation=f"Check {name} environment variable or its corresponding key in ~/.nokori/config.toml",
+        )
     return n
 
 
@@ -295,12 +304,9 @@ class Config:
     @classmethod
     def from_env(cls) -> "Config":
         data_dir_raw = os.environ.get("NOKORI_DATA_DIR") or "~/.nokori"
-        file_values = _resolve_file_values(data_dir_raw)
+        file_values, raw_toml = _resolve_file_values(data_dir_raw)
         data_dir = _expand_path(_str_val("NOKORI_DATA_DIR", "~/.nokori", file_values))
 
-        # Load raw TOML for [models] section parsing
-        config_path = data_dir / _CONFIG_FILE_NAME
-        raw_toml = _load_toml(config_path) if config_path.exists() else {}
         return cls(
             data_dir=data_dir,
             max_injection_chars=_int_val(

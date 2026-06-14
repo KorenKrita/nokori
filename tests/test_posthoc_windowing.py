@@ -177,9 +177,20 @@ class TestToolSequenceDetection:
         ]
         assert _preceded_by_tool_sequence(turns, 2) is False
 
-    def test_current_idx_too_small(self):
+    def test_current_idx_zero_returns_false(self):
         turns = [_turn("user", "hi", 0), _turn("assistant", "hello", 1)]
         assert _preceded_by_tool_sequence(turns, 0) is False
+
+    def test_current_idx_one_with_tool_prev_returns_true(self):
+        """When current_idx=1 and turns[0] has tool_name set, returns True."""
+        turns = [
+            _turn("assistant", "calling tool", 0, tool_name="bash"),
+            _turn("user", "ok", 1),
+        ]
+        assert _preceded_by_tool_sequence(turns, 1) is True
+
+    def test_current_idx_one_without_tool_prev_returns_false(self):
+        turns = [_turn("user", "hi", 0), _turn("assistant", "hello", 1)]
         assert _preceded_by_tool_sequence(turns, 1) is False
 
     def test_tool_role_detected(self):

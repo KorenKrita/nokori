@@ -216,7 +216,7 @@ def _is_topic_shift(
 
 def _preceded_by_tool_sequence(turns: list[dict[str, Any]], current_idx: int) -> bool:
     """Check if the current turn is preceded by tool calls (assistant tool use)."""
-    if current_idx < 2:
+    if current_idx < 1:
         return False
     prev = turns[current_idx - 1]
     return prev.get("tool_name") is not None or prev.get("role") == "tool"

@@ -72,6 +72,14 @@ def _build_parser() -> argparse.ArgumentParser:
         help="project_id filter (default: cwd via git root hash, same as hooks)",
     )
 
+    sp_search = sub.add_parser("search", help="search rules by prompt (compact table output)")
+    sp_search.add_argument("prompt", help="text to search against")
+    sp_search.add_argument(
+        "--project",
+        default=None,
+        help="project_id filter (default: cwd via git root hash)",
+    )
+
     sp_extract = sub.add_parser("extract", help="run the extraction pipeline")
     sp_extract.add_argument("--session", default=None, help="explicit transcript path")
     sp_extract.add_argument(
@@ -214,6 +222,10 @@ def _dispatch(args: argparse.Namespace, cfg: Config) -> int:
         from .commands import test as cmd_test
 
         return cmd_test.run(args, cfg)
+    if cmd == "search":
+        from .commands import search_debug
+
+        return search_debug.run(args, cfg)
     if cmd == "extract":
         from .commands import extract
 
@@ -279,6 +291,8 @@ def main(argv: Sequence[str]) -> int:
         cfg = Config.from_env()
     except NokoriError as e:
         print(f"nokori: {e}", file=sys.stderr)
+        if getattr(e, "remediation", None):
+            print(f"  hint: {e.remediation}", file=sys.stderr)
         return 1
     except Exception as e:
         import tomllib
@@ -305,4 +319,6 @@ def main(argv: Sequence[str]) -> int:
         return _dispatch(args, cfg)
     except NokoriError as e:
         print(f"nokori: {e}", file=sys.stderr)
+        if getattr(e, "remediation", None):
+            print(f"  hint: {e.remediation}", file=sys.stderr)
         return 1
