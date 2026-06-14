@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import logging
 import time
 
 from fastapi import APIRouter, Depends, HTTPException
 
 from nokori.search import embed_ipc
 from nokori.web.deps import get_config, require_write_auth
+
+log = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -53,8 +56,9 @@ def embed_start():
     if not local_model_cached(cfg):
         try:
             prefetch_local_model(cfg)
-        except Exception as e:
-            raise HTTPException(500, detail=f"model download failed: {e}")
+        except Exception:
+            log.exception("model download failed")
+            raise HTTPException(500, detail="model download failed")
 
     from nokori.search.embed_ipc import kickstart_server
 

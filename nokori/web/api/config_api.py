@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -9,6 +10,8 @@ from nokori.config import Config
 from nokori.config_editor import get_editor_state, save_editor
 from nokori.errors import ConfigError
 from nokori.web.deps import get_config, require_write_auth, set_config
+
+log = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -67,5 +70,6 @@ def config_editor_put(body: ConfigEditorSave):
     try:
         set_config(Config.from_env())
     except ConfigError as e:
-        raise HTTPException(status_code=500, detail=f"Config reload failed: {e}") from e
+        log.exception("config reload failed")
+        raise HTTPException(status_code=500, detail="config reload failed") from e
     return {"data": result}
