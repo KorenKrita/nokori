@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 
 from .errors import DbError
 
-SCHEMA_VERSION = 9
+SCHEMA_VERSION = 10
 
 _SCHEMA_DDL = """
 CREATE TABLE IF NOT EXISTS rules (
@@ -290,6 +290,9 @@ CREATE INDEX IF NOT EXISTS idx_error_events_role_model ON error_events(role, mod
 CREATE INDEX IF NOT EXISTS idx_error_events_created ON error_events(created_at);
 CREATE INDEX IF NOT EXISTS idx_error_events_source ON error_events(source, created_at);
 CREATE INDEX IF NOT EXISTS idx_error_events_session ON error_events(session_id, created_at);
+
+CREATE INDEX IF NOT EXISTS idx_synthetic_evals_rule ON rule_synthetic_evals(rule_id, rule_version, created_at);
+CREATE INDEX IF NOT EXISTS idx_reviews_rule ON rule_reviews(rule_id, decision, created_at);
 """
 
 
@@ -435,6 +438,8 @@ def _migrate(conn: sqlite3.Connection) -> None:
         _add_column_if_missing(conn, "transcript_ingest_jobs", "pipeline_checkpoint", "TEXT")
         _add_column_if_missing(conn, "rule_fire_events", "project_id", "TEXT")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_fire_events_rule_project ON rule_fire_events(rule_id, posthoc_label, project_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_synthetic_evals_rule ON rule_synthetic_evals(rule_id, rule_version, created_at)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_reviews_rule ON rule_reviews(rule_id, decision, created_at)")
         return
     elif current == 7:
         script = (
@@ -449,10 +454,19 @@ def _migrate(conn: sqlite3.Connection) -> None:
         _add_column_if_missing(conn, "transcript_ingest_jobs", "pipeline_checkpoint", "TEXT")
         _add_column_if_missing(conn, "rule_fire_events", "project_id", "TEXT")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_fire_events_rule_project ON rule_fire_events(rule_id, posthoc_label, project_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_synthetic_evals_rule ON rule_synthetic_evals(rule_id, rule_version, created_at)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_reviews_rule ON rule_reviews(rule_id, decision, created_at)")
         return
     elif current == 8:
         _add_column_if_missing(conn, "rule_fire_events", "project_id", "TEXT")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_fire_events_rule_project ON rule_fire_events(rule_id, posthoc_label, project_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_synthetic_evals_rule ON rule_synthetic_evals(rule_id, rule_version, created_at)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_reviews_rule ON rule_reviews(rule_id, decision, created_at)")
+        conn.execute(f"PRAGMA user_version = {int(SCHEMA_VERSION)}")
+        return
+    elif current == 9:
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_synthetic_evals_rule ON rule_synthetic_evals(rule_id, rule_version, created_at)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_reviews_rule ON rule_reviews(rule_id, decision, created_at)")
         conn.execute(f"PRAGMA user_version = {int(SCHEMA_VERSION)}")
         return
     else:
