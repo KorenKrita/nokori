@@ -27,5 +27,7 @@ jobs:
         run: ruff check nokori/
       - name: Type check
         run: mypy nokori/
+      - name: Mypy ratchet check
+        run: python scripts/check_mypy_ratchet.py
       - name: Run tests
         run: python -m pytest tests/ -q
