@@ -55,15 +55,9 @@ _TOML_TO_ENV = {
     ("log_level",): "NOKORI_LOG_LEVEL",
 }
 
-
-def _get_nested(d: dict, keys: tuple[str, ...]):
-    for k in keys:
-        if not isinstance(d, dict):
-            return None
-        d = d.get(k)
-        if d is None:
-            return None
-    return d
+# Import after _CONFIG_FILE_NAME and _TOML_TO_ENV are defined to avoid circular import
+# (config_file.py imports these two names from this module).
+from .config_file import get_nested as _get_nested  # noqa: E402
 
 
 def _resolve_file_values(data_dir_hint: str) -> dict[str, str]:
