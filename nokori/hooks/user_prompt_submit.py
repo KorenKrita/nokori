@@ -90,7 +90,7 @@ def _update_gate_marker(cfg: Config, session_id: str, prompt: str, hot, ph: str)
         marker_io.delete_session(cfg, session_id)
 
 
-def handle(payload: dict, cfg: Config, *, host: Host) -> dict:
+def handle(payload: dict, cfg: Config, *, host: Host) -> dict:  # type: ignore[return]
     session_id = effective_session_id(payload)
     prompt = payload.get("prompt") or ""
     normalized_prompt = normalize_prompt_for_hash(prompt)

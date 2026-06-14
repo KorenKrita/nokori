@@ -116,7 +116,7 @@ def _run_gate(ctx: HotPathContext) -> tuple[dict, str, list[str]]:
     return pre_tool_deny_response(host, reason), "blocked", short_ids
 
 
-def handle(payload: dict, cfg: Config, *, host: Host) -> dict:
+def handle(payload: dict, cfg: Config, *, host: Host) -> dict:  # type: ignore[return]
     session_id = effective_session_id(payload)
     tool_name = payload.get("tool_name") or payload.get("tool")
 

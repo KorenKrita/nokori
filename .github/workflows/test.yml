@@ -23,5 +23,9 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e ".[dev]"
+      - name: Lint
+        run: ruff check nokori/
+      - name: Type check
+        run: mypy nokori/
       - name: Run tests
         run: python -m pytest tests/ -q

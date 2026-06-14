@@ -81,8 +81,36 @@ no_implicit_optional = true
 check_untyped_defs = true
 
 [[tool.mypy.overrides]]
-module = ["sentence_transformers.*", "json_repair.*"]
+module = ["sentence_transformers.*", "json_repair.*", "setuptools.*"]
 ignore_missing_imports = true
+
+# ponytail: gradual mypy — transition phase. Most modules use sqlite3.Row (returns Any)
+# which causes arg-type/assignment/attr-defined cascades. Strict checking active on:
+# nokori.db, nokori.models, nokori.policy, nokori.config_schema, nokori.eval.*, nokori.matcher.*
+# Shrink this list as Task db-query-seam lands typed query returns.
+[[tool.mypy.overrides]]
+module = [
+    "nokori.runtime.*",
+    "nokori.gate.*",
+    "nokori.cold.*",
+    "nokori.web.*",
+    "nokori.search.*",
+    "nokori.hooks.*",
+    "nokori.llm.*",
+    "nokori.events.*",
+    "nokori.lifecycle.*",
+    "nokori.posthoc.*",
+    "nokori.extract.*",
+    "nokori.commands.*",
+    "nokori.archive.*",
+    "nokori.merge.*",
+    "nokori.config",
+    "nokori.config_editor",
+    "nokori.utils.*",
+]
+disallow_untyped_defs = false
+warn_return_any = false
+disable_error_code = ["arg-type", "assignment", "var-annotated", "union-attr", "attr-defined", "exit-return"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

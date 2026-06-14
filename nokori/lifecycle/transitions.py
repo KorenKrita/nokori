@@ -367,7 +367,7 @@ def _aggregate_fire_evidence(db: Db, rule_id: str, window_days: int = 30) -> dic
                 counts["observed_useful_strong"] = int(counts["observed_useful_strong"]) + 1
                 strong_useful_sessions.add(r["session_id"])
 
-    counts["reason_counts"] = reason_counts  # type: ignore[assignment]
+    counts["reason_counts"] = reason_counts
     counts["distinct_observed_useful_sessions"] = len(useful_sessions)
     counts["distinct_strong_useful_sessions"] = len(strong_useful_sessions)
     counts["false_positive_rate"] = compute_false_positive_rate(counts)

@@ -6,6 +6,10 @@ import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from .models import Rule
 
 from .errors import DbError
 
@@ -330,7 +334,7 @@ class Db:
 
     def fetchone(self, sql: str, params: tuple = ()) -> sqlite3.Row | None:
         cur = self.conn.execute(sql, params)
-        return cur.fetchone()
+        return cur.fetchone()  # type: ignore[no-any-return]
 
     def fetchall(self, sql: str, params: tuple = ()) -> list[sqlite3.Row]:
         cur = self.conn.execute(sql, params)
@@ -447,7 +451,7 @@ def _migrate(conn: sqlite3.Connection) -> None:
         raise DbError(f"failed to initialize rules.db: {e}") from e
 
 
-def loads_json(value, default):
+def loads_json(value: Any, default: Any) -> Any:
     if value is None or value == "":
         return _json_default_copy(default)
     if isinstance(value, list):
@@ -460,7 +464,7 @@ def loads_json(value, default):
         return _json_default_copy(default)
 
 
-def _json_default_copy(default):
+def _json_default_copy(default: Any) -> Any:
     if isinstance(default, list):
         return list(default)
     if isinstance(default, dict):
@@ -468,11 +472,11 @@ def _json_default_copy(default):
     return default
 
 
-def dumps_json(value) -> str:
+def dumps_json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True)
 
 
-def row_to_rule(row):
+def row_to_rule(row: sqlite3.Row) -> "Rule":
     from .models import Rule
 
     return Rule(
@@ -594,7 +598,7 @@ def fetch_rules(
     return [row_to_rule(r) for r in db.fetchall(sql, tuple(params))]
 
 
-def fetch_rule_by_short_id(db: "Db", short_id: str):
+def fetch_rule_by_short_id(db: "Db", short_id: str) -> "Rule | None":
     row = db.fetchone(f"SELECT {RULE_COLUMNS} FROM rules WHERE short_id = ?", (short_id,))
     return row_to_rule(row) if row else None
 
@@ -754,7 +758,7 @@ def archive_rule(db: "Db", rule_id: str, reason: str, now: str, *, strength: str
                         )
 
 
-def _delete_rule_cascade_tx(tx, rule_id: str) -> None:
+def _delete_rule_cascade_tx(tx: sqlite3.Connection, rule_id: str) -> None:
     """Remove rule and dependent rows within an existing transaction cursor."""
     # Delete children of fire_events first (they reference fire_event_id)
     tx.execute(

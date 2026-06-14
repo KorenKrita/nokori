@@ -22,8 +22,8 @@ class FieldDef:
     read_only: bool = False
     exclusive_group: str | None = None
     exclusive_variant: Literal["local", "remote"] | None = None
-    label: dict[Locale, str] = None  # type: ignore[assignment]
-    description: dict[Locale, str] = None  # type: ignore[assignment]
+    label: dict[Locale, str] | None = None
+    description: dict[Locale, str] | None = None
 
     def __post_init__(self) -> None:
         if self.label is None:
