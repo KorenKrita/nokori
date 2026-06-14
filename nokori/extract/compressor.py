@@ -59,11 +59,7 @@ def compress(turns: Iterable[Turn], budget_tokens: int = 100000) -> str:
     # Phase 3: hard truncate head+tail as last resort
     keep_chars = max(400, int(len(text) * budget_tokens / tokens))
     half = keep_chars // 2
-    return (
-        text[:half]
-        + "\n...[transcript truncated: middle omitted]...\n"
-        + text[-half:]
-    )
+    return text[:half] + "\n...[transcript truncated: middle omitted]...\n" + text[-half:]
 
 
 def _pair_tools_and_results(sections: list[str]) -> list:
@@ -139,9 +135,7 @@ def _collapse_consecutive_tools(sections: list[str]) -> str:
             # Count consecutive same-tool successes
             tool_name = _extract_tool_name(tool_line)
             run_start = i
-            while (i < len(item)
-                   and not item[i][2]
-                   and _extract_tool_name(item[i][0]) == tool_name):
+            while i < len(item) and not item[i][2] and _extract_tool_name(item[i][0]) == tool_name:
                 i += 1
 
             count = i - run_start

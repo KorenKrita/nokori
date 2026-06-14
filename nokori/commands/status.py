@@ -2,20 +2,20 @@ from __future__ import annotations
 
 import argparse
 
-from ..config import Config
 from ..cold.jobs import is_circuit_breaker_open
-from ..db import open_db, fetch_rules
-from ..utils.time import local_hours_ago
-from ..extract import jobs as job_io
-from ..search import embed_ipc
-from ..search.idf_stats import build_idf_stats
 from ..commands.install import (
     describe_claude_hooks,
     describe_cursor_hooks,
     describe_dual_hook_registration,
 )
+from ..config import Config
+from ..db import fetch_rules, open_db
+from ..extract import jobs as job_io
 from ..hooks.coalesce import coalesce_enabled
+from ..search import embed_ipc
+from ..search.idf_stats import build_idf_stats
 from ..utils import sessions
+from ..utils.time import local_hours_ago
 
 
 def _yn(value: bool) -> str:
@@ -24,10 +24,10 @@ def _yn(value: bool) -> str:
 
 def _print_hook_platform(label: str, state: dict[str, object], *, disable_hint: str) -> None:
     installed = bool(state.get("installed"))
-    print(f"hooks.{label}.installed { _yn(installed) }")
+    print(f"hooks.{label}.installed {_yn(installed)}")
     if label == "claude":
         disabled = bool(state.get("disabled"))
-        print(f"hooks.{label}.disabled  { _yn(disabled) if installed else 'n/a' }")
+        print(f"hooks.{label}.disabled  {_yn(disabled) if installed else 'n/a'}")
         if disabled:
             print(
                 f"hooks.{label}.note      NOKORI_DISABLED in settings.json env "
@@ -58,9 +58,7 @@ def run(_args: argparse.Namespace, cfg: Config) -> int:
             "SELECT COUNT(*) AS n FROM rule_fire_events WHERE created_at >= ?",
             (cutoff,),
         )
-        global_rules = db.fetchone(
-            "SELECT COUNT(*) AS n FROM rules WHERE project_scope = 'global'"
-        )
+        global_rules = db.fetchone("SELECT COUNT(*) AS n FROM rules WHERE project_scope = 'global'")
 
         # Pending cold/posthoc jobs
         pending_cold = db.fetchone(
@@ -71,9 +69,7 @@ def run(_args: argparse.Namespace, cfg: Config) -> int:
         )
 
         # Circuit breaker states
-        cb_roles = db.fetchall(
-            "SELECT DISTINCT role FROM llm_jobs ORDER BY role"
-        )
+        cb_roles = db.fetchall("SELECT DISTINCT role FROM llm_jobs ORDER BY role")
         cb_states: dict[str, bool] = {}
         for r in cb_roles:
             cb_states[r["role"]] = is_circuit_breaker_open(db, r["role"])
@@ -161,18 +157,14 @@ def run(_args: argparse.Namespace, cfg: Config) -> int:
             trigger = (row["trigger_canonical"] or "").strip()
             if len(trigger) > 48:
                 trigger = trigger[:45] + "..."
-            print(
-                f"  {row['short_id']}  from={row['project_id']}  {trigger}"
-            )
+            print(f"  {row['short_id']}  from={row['project_id']}  {trigger}")
         if not promotion_rows:
             print("  (no project-scoped active rules)")
     else:
         print("promotion.enabled (disabled)")
 
     session_records = sessions.list_session_records(cfg)
-    open_sess = [
-        d for d in session_records if sessions.is_session_open(d)
-    ]
+    open_sess = [d for d in session_records if sessions.is_session_open(d)]
     active = sessions.list_active_sessions(cfg, records=session_records)
     print(f"sessions.open     {len(open_sess)} (no SessionEnd)")
     print(f"sessions.active   {len(active)} (open + idle window)")

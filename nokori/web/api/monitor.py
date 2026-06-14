@@ -55,7 +55,9 @@ def get_monitor_overview(
             tuple(params),
         )
 
-        error_summary = query_errors(db, group_by="role", session_id=session_id, since=since, until=until)
+        error_summary = query_errors(
+            db, group_by="role", session_id=session_id, since=since, until=until
+        )
 
         # Conversion funnel: cold pipeline events
         pipeline_where = list(where_parts)
@@ -91,7 +93,9 @@ def get_monitor_errors(
     cfg = get_config()
     db = open_db(cfg.db_path)
     try:
-        results = query_errors(db, group_by=group_by, session_id=session_id, since=since, until=until)
+        results = query_errors(
+            db, group_by=group_by, session_id=session_id, since=since, until=until
+        )
         return {"errors": results, "group_by": group_by}
     finally:
         db.close()

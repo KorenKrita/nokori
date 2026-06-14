@@ -9,7 +9,6 @@ from .constants import DEFAULT_GATE_MATCHER
 from .errors import ConfigError
 from .utils.ids import safe_session_id
 
-
 _TRUE = {"1", "true", "yes", "on"}
 _FALSE = {"0", "false", "no", "off", ""}
 
@@ -114,7 +113,9 @@ def _bool_val(name: str, default: bool, file_values: dict[str, str]) -> bool:
     raise ConfigError(f"{name} must be a boolean (got {raw!r})")
 
 
-def _int_val(name: str, default: int, file_values: dict[str, str], *, min_value: int | None = None) -> int:
+def _int_val(
+    name: str, default: int, file_values: dict[str, str], *, min_value: int | None = None
+) -> int:
     raw = _get(name, file_values)
     if raw is None or raw.strip() == "":
         return default
@@ -221,9 +222,7 @@ def _log_level_val(name: str, default: str, file_values: dict[str, str]) -> str:
         return default
     level = raw.strip().lower()
     if level not in _LOG_LEVELS:
-        raise ConfigError(
-            f"{name} must be one of debug, info, warn, warning, error (got {raw!r})"
-        )
+        raise ConfigError(f"{name} must be one of debug, info, warn, warning, error (got {raw!r})")
     return "warn" if level == "warning" else level
 
 
@@ -234,7 +233,9 @@ def _str_val(name: str, default: str, file_values: dict[str, str]) -> str:
     return raw.strip()
 
 
-def _enum_val(name: str, default: str, choices: tuple[str, ...], file_values: dict[str, str]) -> str:
+def _enum_val(
+    name: str, default: str, choices: tuple[str, ...], file_values: dict[str, str]
+) -> str:
     raw = _str_val(name, default, file_values)
     if raw not in choices:
         raise ConfigError(f"{name} must be one of {choices} (got {raw!r})")
@@ -251,13 +252,9 @@ def _value_explicitly_set(name: str, file_values: dict[str, str]) -> bool:
 
 
 def _gate_matcher_val(file_values: dict[str, str]) -> str:
-    raw = _str_val(
-        "NOKORI_GATE_MATCHER", DEFAULT_GATE_MATCHER, file_values
-    )
+    raw = _str_val("NOKORI_GATE_MATCHER", DEFAULT_GATE_MATCHER, file_values)
     if len(raw) > _GATE_MATCHER_MAX_LEN:
-        raise ConfigError(
-            f"NOKORI_GATE_MATCHER exceeds {_GATE_MATCHER_MAX_LEN} characters"
-        )
+        raise ConfigError(f"NOKORI_GATE_MATCHER exceeds {_GATE_MATCHER_MAX_LEN} characters")
     return raw
 
 
@@ -312,17 +309,17 @@ class Config:
         raw_toml = _load_toml(config_path) if config_path.exists() else {}
         return cls(
             data_dir=data_dir,
-            max_injection_chars=_int_val("NOKORI_MAX_INJECTION_CHARS", 1500, file_values, min_value=0),
+            max_injection_chars=_int_val(
+                "NOKORI_MAX_INJECTION_CHARS", 1500, file_values, min_value=0
+            ),
             gate_enabled=_bool_val("NOKORI_GATE_ENABLED", True, file_values),
             gate_ttl_seconds=_int_val("NOKORI_GATE_TTL_SECONDS", 600, file_values, min_value=0),
             gate_matcher=_gate_matcher_val(file_values),
-            extract_mode=_enum_val("NOKORI_EXTRACT_MODE", "manual", ("manual", "async"), file_values),
-            extract_defer_when_active=_bool_val(
-                "NOKORI_EXTRACT_DEFER_ACTIVE", False, file_values
+            extract_mode=_enum_val(
+                "NOKORI_EXTRACT_MODE", "manual", ("manual", "async"), file_values
             ),
-            extract_fork_cache=_bool_val(
-                "NOKORI_EXTRACT_FORK_CACHE", False, file_values
-            ),
+            extract_defer_when_active=_bool_val("NOKORI_EXTRACT_DEFER_ACTIVE", False, file_values),
+            extract_fork_cache=_bool_val("NOKORI_EXTRACT_FORK_CACHE", False, file_values),
             llm_base_url=_str_or_none_val("NOKORI_LLM_BASE_URL", file_values),
             llm_model=_str_or_none_val("NOKORI_LLM_MODEL", file_values),
             llm_api_key=_str_or_none_val("NOKORI_LLM_API_KEY", file_values),
@@ -345,9 +342,7 @@ class Config:
             embed_server_idle_seconds=_int_val(
                 "NOKORI_EMBED_SERVER_IDLE", 3600, file_values, min_value=60
             ),
-            embed_server_auto_start=_bool_val(
-                "NOKORI_EMBED_SERVER_AUTO_START", True, file_values
-            ),
+            embed_server_auto_start=_bool_val("NOKORI_EMBED_SERVER_AUTO_START", True, file_values),
             hot_cache_enabled=_bool_val("NOKORI_HOT_CACHE", True, file_values),
             session_idle_seconds=_int_val(
                 "NOKORI_SESSION_IDLE_SECONDS", 1800, file_values, min_value=60

@@ -31,19 +31,35 @@ def create_fire_event(
     event_id = str(uuid.uuid4())
     now = now_iso()
 
-    resolved_decision_reason = decision_reason or (decision_features.get("decision_reason") if decision_features else None)
+    resolved_decision_reason = decision_reason or (
+        decision_features.get("decision_reason") if decision_features else None
+    )
 
-    injected_structured_snapshot = dumps_json({
-        "concepts": rule.concepts if isinstance(rule.concepts, list) else loads_json(rule.concepts, []),
-        "required_concept_groups": rule.required_concept_groups if isinstance(rule.required_concept_groups, list) else loads_json(rule.required_concept_groups, []),
-        "trigger_variants": rule.trigger_variants if isinstance(rule.trigger_variants, list) else loads_json(rule.trigger_variants, []),
-        "excluded_contexts": rule.excluded_contexts if isinstance(rule.excluded_contexts, list) else loads_json(rule.excluded_contexts, []),
-        "domain_tags": rule.domain_tags,
-        "tool_tags": rule.tool_tags,
-        "path_patterns": rule.path_patterns,
-    })
+    injected_structured_snapshot = dumps_json(
+        {
+            "concepts": rule.concepts
+            if isinstance(rule.concepts, list)
+            else loads_json(rule.concepts, []),
+            "required_concept_groups": rule.required_concept_groups
+            if isinstance(rule.required_concept_groups, list)
+            else loads_json(rule.required_concept_groups, []),
+            "trigger_variants": rule.trigger_variants
+            if isinstance(rule.trigger_variants, list)
+            else loads_json(rule.trigger_variants, []),
+            "excluded_contexts": rule.excluded_contexts
+            if isinstance(rule.excluded_contexts, list)
+            else loads_json(rule.excluded_contexts, []),
+            "domain_tags": rule.domain_tags,
+            "tool_tags": rule.tool_tags,
+            "path_patterns": rule.path_patterns,
+        }
+    )
 
-    transcript_window_ref = f"session:{session_id}:turn:{turn_index}" if turn_index is not None else f"session:{session_id}"
+    transcript_window_ref = (
+        f"session:{session_id}:turn:{turn_index}"
+        if turn_index is not None
+        else f"session:{session_id}"
+    )
 
     with db.transaction() as tx:
         tx.execute(
@@ -109,13 +125,9 @@ def update_first_observed_useful(db: Db, rule_id: str) -> None:
         )
 
 
-def get_fire_events_for_rule(
-    db: Db, rule_id: str, limit: int | None = None
-) -> list[dict]:
+def get_fire_events_for_rule(db: Db, rule_id: str, limit: int | None = None) -> list[dict]:
     """Fetch fire events for a rule ordered by created_at DESC."""
-    sql = (
-        "SELECT * FROM rule_fire_events WHERE rule_id = ? ORDER BY created_at DESC"
-    )
+    sql = "SELECT * FROM rule_fire_events WHERE rule_id = ? ORDER BY created_at DESC"
     params: tuple = (rule_id,)
     if limit is not None:
         sql += " LIMIT ?"
@@ -133,9 +145,7 @@ def get_fire_events_for_session(db: Db, session_id: str) -> list[dict]:
     return [dict(r) for r in rows]
 
 
-def count_evaluated_fire_events(
-    db: Db, rule_id: str, window_days: int = 30
-) -> dict:
+def count_evaluated_fire_events(db: Db, rule_id: str, window_days: int = 30) -> dict:
     """Count fire events by posthoc_label within a time window.
 
     Returns counts keyed by label plus total_evaluated.

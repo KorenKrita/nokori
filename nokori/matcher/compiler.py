@@ -219,12 +219,8 @@ class CompilationError(ValueError):
 AliasStrength = Literal["strong", "weak"]
 ConceptMatchMode = Literal["any_alias", "phrase", "all_terms", "regex", "tool_pattern"]
 VariantKind = Literal["strong_anchor", "weak_recall"]
-ExcludedContextMatchMode = Literal[
-    "negative_context_detector", "phrase", "regex", "tool_pattern"
-]
-ExcludedContextScope = Literal[
-    "global", "near_trigger_span", "tool_input_only", "prompt_only"
-]
+ExcludedContextMatchMode = Literal["negative_context_detector", "phrase", "regex", "tool_pattern"]
+ExcludedContextScope = Literal["global", "near_trigger_span", "tool_input_only", "prompt_only"]
 
 
 @dataclass(frozen=True)
@@ -352,9 +348,7 @@ def _compile_regex_pattern(pattern: str) -> re.Pattern[str]:
         raise CompilationError(f"Invalid regex pattern '{pattern}': {e}") from e
 
 
-def _compile_alias(
-    alias_data: dict[str, Any], match_mode: ConceptMatchMode
-) -> CompiledAlias:
+def _compile_alias(alias_data: dict[str, Any], match_mode: ConceptMatchMode) -> CompiledAlias:
     """Compile a single alias entry."""
     text = alias_data.get("text", "")
     if not text:
@@ -364,15 +358,11 @@ def _compile_alias(
     requires_neighbor = tuple(alias_data.get("requires_neighbor") or ())
 
     if strength == "weak" and not requires_neighbor:
-        raise CompilationError(
-            f"Weak alias '{text}' must have non-empty requires_neighbor"
-        )
+        raise CompilationError(f"Weak alias '{text}' must have non-empty requires_neighbor")
 
     if strength == "strong" and match_mode in ("any_alias", "phrase"):
         if _is_single_generic_token(text):
-            raise CompilationError(
-                f"Strong alias '{text}' cannot be a single generic token"
-            )
+            raise CompilationError(f"Strong alias '{text}' cannot be a single generic token")
 
     text_lower = text.lower()
     compiled_pattern: Optional[re.Pattern[str]] = None
@@ -413,9 +403,7 @@ def _compile_concept(data: dict[str, Any]) -> CompiledConcept:
     if not aliases_data:
         raise CompilationError(f"Concept '{concept_id}' must have at least one alias")
 
-    compiled_aliases = tuple(
-        _compile_alias(a, match_mode) for a in aliases_data
-    )
+    compiled_aliases = tuple(_compile_alias(a, match_mode) for a in aliases_data)
 
     return CompiledConcept(
         id=concept_id,
@@ -453,13 +441,9 @@ def _compile_variant(data: dict[str, Any]) -> CompiledVariant:
     # Validate strong_anchor constraints
     if kind == "strong_anchor":
         if not requires_concepts:
-            raise CompilationError(
-                f"strong_anchor variant '{text}' must have requires_concepts"
-            )
+            raise CompilationError(f"strong_anchor variant '{text}' must have requires_concepts")
         if not _is_multi_token(text):
-            raise CompilationError(
-                f"strong_anchor variant '{text}' must be multi-token"
-            )
+            raise CompilationError(f"strong_anchor variant '{text}' must be multi-token")
 
     text_lower = text.lower()
     compiled_pattern = _compile_phrase_pattern(text)
@@ -484,9 +468,7 @@ def _compile_excluded_context(data: dict[str, Any]) -> CompiledExcludedContext:
     label = data.get("label", "")
     patterns = data.get("patterns", [])
     if not patterns:
-        raise CompilationError(
-            f"Excluded context '{ctx_id}' must have at least one pattern"
-        )
+        raise CompilationError(f"Excluded context '{ctx_id}' must have at least one pattern")
 
     match_mode: ExcludedContextMatchMode = data.get("match_mode", "phrase")
     scope: ExcludedContextScope = data.get("scope", "global")
@@ -620,13 +602,10 @@ def compile_rule(
     required_concept_ids = {c.id for c in concepts if c.required}
     if concept_groups:
         has_valid_group = not required_concept_ids or any(
-            all(cid in required_concept_ids for cid in group.all_of)
-            for group in concept_groups
+            all(cid in required_concept_ids for cid in group.all_of) for group in concept_groups
         )
         if not has_valid_group:
-            raise CompilationError(
-                "At least one concept group must contain only required concepts"
-            )
+            raise CompilationError("At least one concept group must contain only required concepts")
     elif required_concept_ids:
         logger.warning(
             "Rule has required concepts %s but no concept groups; "
@@ -649,19 +628,18 @@ def compile_rule(
 
     # Compile excluded contexts
     excluded_data = trigger_data.get("excluded_contexts", [])
-    excluded_contexts = tuple(
-        _compile_excluded_context(e) for e in excluded_data
-    )
+    excluded_contexts = tuple(_compile_excluded_context(e) for e in excluded_data)
 
     # Build trigger anchors
-    canonical_trigger_text = trigger_data.get("canonical_trigger_text") or trigger_data.get("trigger_canonical", "")
+    canonical_trigger_text = trigger_data.get("canonical_trigger_text") or trigger_data.get(
+        "trigger_canonical", ""
+    )
     trigger_anchors = _build_trigger_anchors(concepts, variants, canonical_trigger_text)
 
     # Normalize search terms
     raw_search = search_terms or {}
     normalized_search: dict[str, tuple[str, ...]] = {
-        k: tuple(v) if isinstance(v, list) else (v,)
-        for k, v in raw_search.items()
+        k: tuple(v) if isinstance(v, list) else (v,) for k, v in raw_search.items()
     }
 
     return CompiledMatcher(

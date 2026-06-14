@@ -49,9 +49,11 @@ def configure(logs_dir: Path, level: str = "warn") -> None:
         )
         hook_handler.setFormatter(formatter)
         hook_handler.addFilter(sess_filter)
-        hook_handler.addFilter(_NameStartsWith(
-            ("nokori.hooks.", "nokori.gate.", "nokori.utils."),
-        ))
+        hook_handler.addFilter(
+            _NameStartsWith(
+                ("nokori.hooks.", "nokori.gate.", "nokori.utils."),
+            )
+        )
         root.addHandler(hook_handler)
 
         pipeline_handler = logging.handlers.RotatingFileHandler(
@@ -59,14 +61,22 @@ def configure(logs_dir: Path, level: str = "warn") -> None:
         )
         pipeline_handler.setFormatter(formatter)
         pipeline_handler.addFilter(sess_filter)
-        pipeline_handler.addFilter(_NameStartsWith(
-            (
-                "nokori.extract.", "nokori.lifecycle.", "nokori.llm.",
-                "nokori.search.", "nokori.commands.", "nokori.db.",
-                "nokori.config.", "nokori.models.", "nokori.prefetch.",
-                "nokori.cold.",
-            ),
-        ))
+        pipeline_handler.addFilter(
+            _NameStartsWith(
+                (
+                    "nokori.extract.",
+                    "nokori.lifecycle.",
+                    "nokori.llm.",
+                    "nokori.search.",
+                    "nokori.commands.",
+                    "nokori.db.",
+                    "nokori.config.",
+                    "nokori.models.",
+                    "nokori.prefetch.",
+                    "nokori.cold.",
+                ),
+            )
+        )
         root.addHandler(pipeline_handler)
 
         _configured = True
@@ -78,10 +88,7 @@ class _NameStartsWith(logging.Filter):
         self.prefixes = prefixes
 
     def filter(self, record: logging.LogRecord) -> bool:
-        return any(
-            record.name == p.rstrip(".") or record.name.startswith(p)
-            for p in self.prefixes
-        )
+        return any(record.name == p.rstrip(".") or record.name.startswith(p) for p in self.prefixes)
 
 
 def get_logger(name: str) -> logging.Logger:

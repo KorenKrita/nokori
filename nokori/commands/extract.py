@@ -4,11 +4,11 @@ import argparse
 import os
 from pathlib import Path
 
+from ..cold.jobs import expire_stale_ingest_jobs
 from ..config import Config
 from ..constants import TRANSCRIPT_MTIME_EPSILON_SEC
 from ..db import open_db
 from ..events.observability import write_event
-from ..cold.jobs import expire_stale_ingest_jobs
 from ..extract import jobs as job_io
 from ..extract.compressor import compress
 from ..extract.extractor import extract as extract_candidates
@@ -33,8 +33,9 @@ def _safe_mtime(path: Path) -> float:
         return 0.0
 
 
-def _process_path(path: Path, project_id: str | None, cfg: Config,
-                  *, dry_run: bool) -> tuple[int, int, bool]:
+def _process_path(
+    path: Path, project_id: str | None, cfg: Config, *, dry_run: bool
+) -> tuple[int, int, bool]:
     """Read transcript, extract candidates, enqueue through cold pipeline.
 
     Returns (candidates_found, rules_created, finished).
@@ -59,7 +60,8 @@ def _process_path(path: Path, project_id: str | None, cfg: Config,
         if not llm_ok:
             log.warning("extract failed (llm): %s", path)
             write_event(
-                db, source="cli_extract",
+                db,
+                source="cli_extract",
                 outcome="llm_failure",
                 details={"transcript": path.name, "project_id": project_id},
             )
@@ -68,16 +70,23 @@ def _process_path(path: Path, project_id: str | None, cfg: Config,
             return (len(candidates), 0, False)
 
         rules_created, all_ok = process_candidates(
-            candidates, path, project_id, cfg, transcript_text=text,
+            candidates,
+            path,
+            project_id,
+            cfg,
+            transcript_text=text,
         )
 
         if all_ok:
             mark_extracted(db, path, _safe_mtime(path), new_offset)
         else:
-            log.warning("extract incomplete (cold pipeline errors), transcript not marked: %s", path)
+            log.warning(
+                "extract incomplete (cold pipeline errors), transcript not marked: %s", path
+            )
 
         write_event(
-            db, source="cli_extract",
+            db,
+            source="cli_extract",
             outcome="ok" if all_ok else "partial_failure",
             details={
                 "transcript": path.name,
@@ -156,11 +165,14 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
             current_mtime = path.stat().st_mtime
             if (
                 job_mtime is not None
-                and abs(float(job_mtime) - float(current_mtime))
-                > TRANSCRIPT_MTIME_EPSILON_SEC
+                and abs(float(job_mtime) - float(current_mtime)) > TRANSCRIPT_MTIME_EPSILON_SEC
             ):
                 new_job_path = job_io.refresh_job_mtime(
-                    cfg, job_path, path, job.get("project_id"), current_mtime,
+                    cfg,
+                    job_path,
+                    path,
+                    job.get("project_id"),
+                    current_mtime,
                 )
                 if new_job_path is None:
                     log.warning("refresh_job_mtime returned None for: %s", path)
@@ -182,9 +194,7 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
                 if finished:
                     job_io.delete_job(job_path)
                 else:
-                    log.warning(
-                        "extract job kept pending (not finished): %s", job_path.name
-                    )
+                    log.warning("extract job kept pending (not finished): %s", job_path.name)
 
         print(f"jobs:       {len(pending)}")
         print(f"candidates: {total_cands}")

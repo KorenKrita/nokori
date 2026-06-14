@@ -6,8 +6,7 @@ from ..config import Config
 from ..db import total_rule_count
 from ..lifecycle import hot_cache, maintenance
 from ..lifecycle.maintenance import cold_eval_due, mark_cold_eval_run
-from ..search import embedding as embedding_search
-from ..search import embed_ipc
+from ..search import embed_ipc, embedding as embedding_search
 from ..utils import sessions
 from ..utils.hook_response import session_start_response
 from ..utils.host import Host, effective_session_id
@@ -34,9 +33,7 @@ def _maybe_kickstart_embed(cfg: Config, db) -> str:
         )
         return "skipped_weights_missing"
     if not embedding_search.local_embed_package_available():
-        log.warning(
-            "local embed package missing; run: pip install -e \".[local-embed]\""
-        )
+        log.warning('local embed package missing; run: pip install -e ".[local-embed]"')
         return "skipped_package_missing"
     if not cfg.embed_server_auto_start:
         return "skipped_auto_start_off"
@@ -58,9 +55,7 @@ def _maybe_spawn_cold_eval(db, cfg: Config) -> bool:
     has_unlabeled = db.fetchone(
         "SELECT 1 FROM rule_shadow_events WHERE shadow_label IS NULL LIMIT 1"
     )
-    has_pending_posthoc = db.fetchone(
-        "SELECT 1 FROM posthoc_jobs WHERE status = 'pending' LIMIT 1"
-    )
+    has_pending_posthoc = db.fetchone("SELECT 1 FROM posthoc_jobs WHERE status = 'pending' LIMIT 1")
     if not has_unlabeled and not has_pending_posthoc:
         return False
 
@@ -69,11 +64,20 @@ def _maybe_spawn_cold_eval(db, cfg: Config) -> bool:
     import sys
 
     _SAFE_VARS = (
-        "PATH", "HOME", "USER", "LANG", "SHELL", "TERM", "TMPDIR",
+        "PATH",
+        "HOME",
+        "USER",
+        "LANG",
+        "SHELL",
+        "TERM",
+        "TMPDIR",
         "XDG_RUNTIME_DIR",
     )
-    env = {k: v for k, v in os.environ.items()
-           if k in _SAFE_VARS or k.startswith("NOKORI_") or k.startswith("ANTHROPIC_")}
+    env = {
+        k: v
+        for k, v in os.environ.items()
+        if k in _SAFE_VARS or k.startswith("NOKORI_") or k.startswith("ANTHROPIC_")
+    }
     env["NOKORI_DATA_DIR"] = str(cfg.data_dir)
 
     cfg.ensure_dirs()
@@ -112,7 +116,10 @@ def handle(payload: dict, cfg: Config, *, host: Host) -> dict:
         session_id = str(uuid.uuid4())
     project_id, from_git = resolve_project_id_detailed(payload.get("cwd"))
     sessions.register(
-        cfg, session_id, project_id, project_id_from_git=from_git,
+        cfg,
+        session_id,
+        project_id,
+        project_id_from_git=from_git,
     )
 
     cache_text = None

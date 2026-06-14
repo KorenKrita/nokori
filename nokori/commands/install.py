@@ -14,8 +14,7 @@ from ..constants import CURSOR_GATE_MATCHER, DEFAULT_GATE_MATCHER
 NOKORI_MARKER = "nokori"
 
 _CURSOR_DISABLE_HINT = (
-    "Cursor hooks unchanged. To stop Nokori in Cursor: "
-    "nokori install --uninstall --cursor"
+    "Cursor hooks unchanged. To stop Nokori in Cursor: nokori install --uninstall --cursor"
 )
 
 _BOTH_TARGETS_NOTE = """\
@@ -44,7 +43,9 @@ _CURSOR_HOOK_SPECS = (
 
 
 def resolve_install_targets(
-    args: argparse.Namespace, *, uninstall: bool = False,
+    args: argparse.Namespace,
+    *,
+    uninstall: bool = False,
 ) -> tuple[bool, bool]:
     """Default: Claude only. --all: both. Uninstall with no flags: both."""
     if getattr(args, "all_platforms", False):
@@ -76,6 +77,7 @@ def _build_command() -> str:
     # -I: ignore PYTHONPATH / cwd so hooks always use the installed package
     # (avoids shadowing by a repo-local ``nokori/`` when cwd is the project).
     import shlex
+
     return f"{shlex.quote(sys.executable)} -I -m nokori hook"
 
 
@@ -93,7 +95,10 @@ def _build_claude_hook_entry(matcher: str, command: str, event_arg: str, timeout
 
 
 def _build_cursor_hook_entry(
-    matcher: str | None, command: str, event_arg: str, timeout: int,
+    matcher: str | None,
+    command: str,
+    event_arg: str,
+    timeout: int,
 ) -> dict:
     entry: dict = {
         "command": f"{command} {event_arg}",
@@ -209,10 +214,7 @@ def _claude_has_nokori_hooks(hooks: dict) -> bool:
         spec = hooks.get(evt) or []
         if not any(
             isinstance(entry, dict)
-            and any(
-                "nokori" in (h.get("command", ""))
-                for h in entry.get("hooks", [])
-            )
+            and any("nokori" in (h.get("command", "")) for h in entry.get("hooks", []))
             for entry in spec
         ):
             return False
@@ -224,8 +226,7 @@ def _cursor_has_nokori_hooks(hooks: dict) -> bool:
     for evt in needed:
         spec = hooks.get(evt) or []
         if not any(
-            isinstance(entry, dict) and "nokori" in entry.get("command", "")
-            for entry in spec
+            isinstance(entry, dict) and "nokori" in entry.get("command", "") for entry in spec
         ):
             return False
     return True
@@ -339,9 +340,7 @@ def _print_both_targets_note() -> None:
 def _diff(before: dict, after: dict, path: Path) -> str:
     a = json.dumps(before, indent=2, ensure_ascii=False, sort_keys=True).splitlines(keepends=True)
     b = json.dumps(after, indent=2, ensure_ascii=False, sort_keys=True).splitlines(keepends=True)
-    return "".join(
-        difflib.unified_diff(a, b, fromfile=str(path), tofile=f"{path} (proposed)")
-    )
+    return "".join(difflib.unified_diff(a, b, fromfile=str(path), tofile=f"{path} (proposed)"))
 
 
 def _set_env_flag(data: dict, key: str, value: str | None) -> None:
@@ -385,7 +384,8 @@ def _install_one_target(
 
 def run(args: argparse.Namespace, cfg: Config) -> int:
     claude_target, cursor_target = resolve_install_targets(
-        args, uninstall=bool(args.uninstall),
+        args,
+        uninstall=bool(args.uninstall),
     )
     command = _build_command()
 
@@ -488,15 +488,25 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
     )
 
     if verb == "install":
-        selected = [p for p, on in ((PLATFORM_CLAUDE, claude_target), (PLATFORM_CURSOR, cursor_target)) if on]
+        selected = [
+            p
+            for p, on in ((PLATFORM_CLAUDE, claude_target), (PLATFORM_CURSOR, cursor_target))
+            if on
+        ]
         if dry_run:
             print(f"(dry-run) would record platforms: {format_platforms_label(selected)}")
         else:
             recorded = merge_platforms(cfg, selected)
             print(f"Recorded install platforms: {format_platforms_label(recorded)}")
-            print("Hook diagnostics: set log_level=info in config.toml (or NOKORI_LOG_LEVEL=info); see ~/.nokori/logs/hook.log")
+            print(
+                "Hook diagnostics: set log_level=info in config.toml (or NOKORI_LOG_LEVEL=info); see ~/.nokori/logs/hook.log"
+            )
     elif verb == "uninstall" and not dry_run:
-        removed = [p for p, on in ((PLATFORM_CLAUDE, claude_target), (PLATFORM_CURSOR, cursor_target)) if on]
+        removed = [
+            p
+            for p, on in ((PLATFORM_CLAUDE, claude_target), (PLATFORM_CURSOR, cursor_target))
+            if on
+        ]
         recorded = remove_platforms(cfg, removed)
         print(f"Recorded install platforms: {format_platforms_label(recorded)}")
 

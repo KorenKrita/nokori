@@ -5,17 +5,15 @@ import argparse
 from ..cold.jobs import expire_stale_ingest_jobs
 from ..config import Config
 from ..db import fetch_rules, open_db
+from ..events.shadow import run_shadow_counterfactual_evaluation
 from ..lifecycle import maintenance
 from ..llm.adapter import LLMAdapter
-from ..events.shadow import run_shadow_counterfactual_evaluation
 from ..posthoc.jobs import process_pending_posthoc_jobs
 from ..search.idf_stats import (
     build_idf_stats,
     compute_eligible_rule_set_hash,
     store_idf_stats,
 )
-
-
 
 
 class _PosthocLLMAdapter:
@@ -48,17 +46,13 @@ def run(_args: argparse.Namespace, cfg: Config) -> int:
         llm = _PosthocLLMAdapter(cfg)
         posthoc_summary: dict | None = None
         try:
-            posthoc_summary = process_pending_posthoc_jobs(
-                db, llm, limit=20
-            )
+            posthoc_summary = process_pending_posthoc_jobs(db, llm, limit=20)
         except Exception as exc:
             print(f"maintain: process_pending_posthoc_jobs failed: {exc}")
 
         shadow_summary: dict | None = None
         try:
-            shadow_summary = run_shadow_counterfactual_evaluation(
-                db, llm, limit=20
-            )
+            shadow_summary = run_shadow_counterfactual_evaluation(db, llm, limit=20)
         except Exception as exc:
             print(f"maintain: run_shadow_counterfactual_evaluation failed: {exc}")
 
@@ -94,7 +88,9 @@ def run(_args: argparse.Namespace, cfg: Config) -> int:
         print(f"unmerge_check         restored={summary['unmerge_check']}")
         obs = summary.get("observability_cleanup")
         if obs and (obs["hook_events_deleted"] or obs["error_events_deleted"]):
-            print(f"observability_cleanup hook_events={obs['hook_events_deleted']} errors={obs['error_events_deleted']}")
+            print(
+                f"observability_cleanup hook_events={obs['hook_events_deleted']} errors={obs['error_events_deleted']}"
+            )
     else:
         print("transitions.applied   (failed)")
 

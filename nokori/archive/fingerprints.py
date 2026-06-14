@@ -89,9 +89,15 @@ def create_archived_fingerprint_from_data(
             "archive_strength, can_be_overridden_by_changed_scope, rule_id, created_at) "
             "VALUES (?,?,?,?,?,?,?,?,?)",
             (
-                fp_id, signature, scope_summary,
-                trigger_canonical, action_instruction,
-                strength, can_be_overridden, rule_id, now,
+                fp_id,
+                signature,
+                scope_summary,
+                trigger_canonical,
+                action_instruction,
+                strength,
+                can_be_overridden,
+                rule_id,
+                now,
             ),
         )
         if tx.execute("SELECT changes()").fetchone()[0] == 0:
@@ -162,7 +168,9 @@ def check_fingerprint_block(
         return None
     # Related (non-exact) match: check if new rule is narrower scope
     is_narrower = _is_narrower_scope(
-        trigger_canonical, action_instruction, row,
+        trigger_canonical,
+        action_instruction,
+        row,
         new_domain_tags=domain_tags,
     )
     return _fingerprint_decision(
@@ -257,9 +265,7 @@ def _fingerprint_decision(
     return None
 
 
-def _find_related_fingerprint(
-    db: Db, trigger_canonical: str, action_instruction: str
-):
+def _find_related_fingerprint(db: Db, trigger_canonical: str, action_instruction: str):
     new_tokens = _content_tokens(f"{trigger_canonical} {action_instruction}")
     if not new_tokens:
         return None
@@ -276,9 +282,7 @@ def _find_related_fingerprint(
     _thresholds = {"user": 0.75, "system": 0.75, "replacement": 0.85}
     candidates: list[tuple[int, float, dict]] = []
     for row in rows:
-        old_tokens = _content_tokens(
-            f"{row['blocked_trigger_area']} {row['blocked_action_area']}"
-        )
+        old_tokens = _content_tokens(f"{row['blocked_trigger_area']} {row['blocked_action_area']}")
         if not old_tokens:
             continue
         overlap = len(new_tokens & old_tokens) / len(old_tokens)
@@ -319,7 +323,9 @@ def _is_narrower_scope(
     old_in_new = len(new_tokens & old_tokens) / len(old_tokens) if old_tokens else 0
 
     # Structural narrowness: new has domain_tags that old's scope_summary lacks
-    scope_summary = (fingerprint_row["scope_summary"] if "scope_summary" in fingerprint_row.keys() else "") or ""
+    scope_summary = (
+        fingerprint_row["scope_summary"] if "scope_summary" in fingerprint_row.keys() else ""
+    ) or ""
     has_structural_narrowing = bool(
         new_domain_tags
         and len(new_domain_tags) > 0
@@ -327,9 +333,7 @@ def _is_narrower_scope(
             scope_summary == "general"
             or (
                 scope_summary.startswith("domain:")
-                and set(new_domain_tags).issubset(
-                    set(scope_summary[len("domain:"):].split(","))
-                )
+                and set(new_domain_tags).issubset(set(scope_summary[len("domain:") :].split(",")))
             )
         )
     )
@@ -345,4 +349,5 @@ def _content_tokens(text: str) -> set[str]:
 
 def _now_iso() -> str:
     from nokori.utils.time import now_iso
+
     return now_iso()

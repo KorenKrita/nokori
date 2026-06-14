@@ -1,4 +1,5 @@
 """Idempotent hook claims when Claude + Cursor both register the same events."""
+
 from __future__ import annotations
 
 import hashlib
@@ -29,14 +30,14 @@ def coalesce_enabled() -> bool:
 def claim_key_for_event(cli_event: str, payload: dict) -> str | None:
     """Stable idempotency key per hook invocation, or None to skip coalesce.
 
-  pre-tool-use: intentionally None — gate uses a single on-disk marker; the first
-  process deletes it after deny, so a parallel second hook sees no marker and
-  pass-throughs (cursor deferred uses try_claim_deferred separately).
+    pre-tool-use: intentionally None — gate uses a single on-disk marker; the first
+    process deletes it after deny, so a parallel second hook sees no marker and
+    pass-throughs (cursor deferred uses try_claim_deferred separately).
 
-  session-end: key is transcript path; Claude (~/.claude) vs Cursor (~/.cursor)
-  paths differ, so cross-platform dedup does not apply. Coalesce only helps when
-  the same platform fires session-end twice; extract defer is idempotent via
-  sessions.end() and job files.
+    session-end: key is transcript path; Claude (~/.claude) vs Cursor (~/.cursor)
+    paths differ, so cross-platform dedup does not apply. Coalesce only helps when
+    the same platform fires session-end twice; extract defer is idempotent via
+    sessions.end() and job files.
     """
     session_id = effective_session_id(payload)
     if cli_event == "session-start":
@@ -118,6 +119,7 @@ def duplicate_passthrough(cli_event: str, host) -> dict:
         session_start_response,
         user_prompt_submit_response,
     )
+
     log.info("duplicate hook suppressed cli_event=%s host=%s", cli_event, host.value)
     if cli_event == "session-start":
         return session_start_response(host, None)

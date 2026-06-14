@@ -28,7 +28,8 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
         archive_rule(db, rule.id, "user_archived", now)
         strip_short_id_from_all_markers(cfg, rule.short_id)
         write_event(
-            db, source="cli_dismiss",
+            db,
+            source="cli_dismiss",
             outcome="archived",
             details={"short_id": args.short_id, "rule_id": rule.id},
         )

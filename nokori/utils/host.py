@@ -1,4 +1,5 @@
 """Detect Claude Code vs Cursor from transcript / session log paths."""
+
 from __future__ import annotations
 
 import os
@@ -14,25 +15,27 @@ class Host(str, Enum):
 
 # Cursor native hook_event_name values (camelCase). Claude Code uses PascalCase
 # (e.g. PreToolUse) and is not matched here.
-_CURSOR_HOOK_EVENT_NAMES = frozenset({
-    "sessionStart",
-    "sessionEnd",
-    "preToolUse",
-    "postToolUse",
-    "postToolUseFailure",
-    "beforeSubmitPrompt",
-    "beforeShellExecution",
-    "afterShellExecution",
-    "beforeMCPExecution",
-    "afterMCPExecution",
-    "beforeReadFile",
-    "afterFileEdit",
-    "subagentStart",
-    "subagentStop",
-    "stop",
-    "afterAgentResponse",
-    "afterAgentThought",
-})
+_CURSOR_HOOK_EVENT_NAMES = frozenset(
+    {
+        "sessionStart",
+        "sessionEnd",
+        "preToolUse",
+        "postToolUse",
+        "postToolUseFailure",
+        "beforeSubmitPrompt",
+        "beforeShellExecution",
+        "afterShellExecution",
+        "beforeMCPExecution",
+        "afterMCPExecution",
+        "beforeReadFile",
+        "afterFileEdit",
+        "subagentStart",
+        "subagentStop",
+        "stop",
+        "afterAgentResponse",
+        "afterAgentThought",
+    }
+)
 
 
 def effective_session_id(payload: dict, *, default: str = "-") -> str:

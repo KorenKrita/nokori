@@ -205,12 +205,12 @@ def parse_posthoc_output(raw_json: str) -> dict:
     except json.JSONDecodeError:
         data = parse_json_payload(text)
         if data is None:
-            raise ValueError("posthoc_evaluator: invalid JSON: could not extract JSON from response")
+            raise ValueError(
+                "posthoc_evaluator: invalid JSON: could not extract JSON from response"
+            )
 
     if not isinstance(data, dict):
-        raise ValueError(
-            f"posthoc_evaluator: expected JSON object, got {type(data).__name__}"
-        )
+        raise ValueError(f"posthoc_evaluator: expected JSON object, got {type(data).__name__}")
 
     # Normalize field aliases
     if "would_likely_have_happened_without_rule" not in data:
@@ -227,11 +227,12 @@ def parse_posthoc_output(raw_json: str) -> dict:
                 val = data.pop(alias)
                 break
         if val is None:
-            raise ValueError("posthoc_evaluator: missing required field 'reason_code' (no alias found)")
+            raise ValueError(
+                "posthoc_evaluator: missing required field 'reason_code' (no alias found)"
+            )
         if val not in POSTHOC_REASON_CODES:
             raise ValueError(
-                f"posthoc_evaluator: alias-popped reason_code {val!r} "
-                f"not in POSTHOC_REASON_CODES"
+                f"posthoc_evaluator: alias-popped reason_code {val!r} not in POSTHOC_REASON_CODES"
             )
         data["reason_code"] = val
 
@@ -244,8 +245,7 @@ def parse_posthoc_output(raw_json: str) -> dict:
     label = data.get("label")
     if label not in POSTHOC_LABELS:
         raise ValueError(
-            f"posthoc_evaluator: invalid label {label!r}, "
-            f"must be one of {POSTHOC_LABELS}"
+            f"posthoc_evaluator: invalid label {label!r}, must be one of {POSTHOC_LABELS}"
         )
 
     reason_code = data.get("reason_code")

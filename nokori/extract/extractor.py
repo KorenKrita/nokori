@@ -8,11 +8,9 @@ from ..constants import MAX_EXTRACT_CANDIDATES
 from ..llm.adapter import LLMAdapter
 from ..llm.prompts import EXTRACT_SYSTEM, wrap_untrusted
 from ..utils.logging import get_logger
-
 from .term_normalize import normalize_search_terms, normalize_trigger_variants
 
 log = get_logger("nokori.extract.extractor")
-
 
 
 def _has_cjk(text: str) -> bool:
@@ -57,7 +55,11 @@ def extract(transcript: str, llm: LLMAdapter) -> tuple[list[Candidate], bool]:
     for attempt in range(_EXTRACT_MAX_RETRIES + 1):
         try:
             raw = llm.complete_role(
-                "extractor", EXTRACT_SYSTEM, user_content, max_tokens=3000, timeout=60,
+                "extractor",
+                EXTRACT_SYSTEM,
+                user_content,
+                max_tokens=3000,
+                timeout=60,
             )
         except Exception as e:
             log.warning("extract LLM call failed (attempt %d): %s", attempt + 1, type(e).__name__)
@@ -110,7 +112,11 @@ def _coerce_str_list(item: dict, key: str) -> list[str]:
     raw = item.get(key) or []
     if not isinstance(raw, list):
         return []
-    return [str(v).strip() for v in raw if isinstance(v, (str, int, float)) and not isinstance(v, bool) and str(v).strip()]
+    return [
+        str(v).strip()
+        for v in raw
+        if isinstance(v, (str, int, float)) and not isinstance(v, bool) and str(v).strip()
+    ]
 
 
 def _coerce(item: dict) -> Candidate:
@@ -123,9 +129,7 @@ def _coerce(item: dict) -> Candidate:
     variants = item.get("trigger_variants") or []
     if not isinstance(variants, list):
         variants = []
-    variants = normalize_trigger_variants(
-        [str(v).strip() for v in variants if str(v).strip()]
-    )
+    variants = normalize_trigger_variants([str(v).strip() for v in variants if str(v).strip()])
     terms_raw = item.get("search_terms") or {}
     if not isinstance(terms_raw, dict):
         terms_raw = {}

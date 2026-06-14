@@ -4,8 +4,8 @@ import json
 import sys
 
 from ..config import Config
-from ..utils.host import detect_host_from_payload
 from ..utils.hook_diag import log_hook_enter, log_hook_exit, set_diag_from_config
+from ..utils.host import detect_host_from_payload
 from ..utils.logging import get_logger
 from .coalesce import claim_key_for_event, duplicate_passthrough, try_claim
 
@@ -24,7 +24,11 @@ def dispatch(event: str, cfg: Config) -> int:
 
     host = detect_host_from_payload(payload)
     log_hook_enter(
-        _log, cli_event=event, payload=payload, raw_stdin_len=len(raw), host=host,
+        _log,
+        cli_event=event,
+        payload=payload,
+        raw_stdin_len=len(raw),
+        host=host,
     )
 
     claim_key = claim_key_for_event(event, payload)

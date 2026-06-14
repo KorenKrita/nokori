@@ -5,12 +5,12 @@ from ..gate import marker as marker_io
 from ..gate.blocker import format_block_reason, format_cursor_user_notice
 from ..gate.engine import GateEngine, tool_matches_gate
 from ..gate.marker import PromptHashResolver
-from .context import HotPathContext
-from .cursor_deferred import maybe_deferred_pre_tool_use
 from ..utils.hook_diag import log_diag
 from ..utils.hook_response import pre_tool_deny_response
 from ..utils.host import Host, effective_gate_matcher, effective_session_id
 from ..utils.logging import get_logger
+from .context import HotPathContext
+from .cursor_deferred import maybe_deferred_pre_tool_use
 
 log = get_logger("nokori.hooks.pre_tool_use")
 
@@ -36,8 +36,7 @@ def _run_gate(ctx: HotPathContext) -> tuple[dict, str, list[str]]:
     matched = tool_matches_gate(tool_name, gate_matcher)
     log_diag(
         log,
-        "[diag] pre_tool_use gate_check tool=%s host=%s matcher=%s matched=%s "
-        "cfg_gate_matcher=%s",
+        "[diag] pre_tool_use gate_check tool=%s host=%s matcher=%s matched=%s cfg_gate_matcher=%s",
         tool_name or "-",
         host.value,
         gate_matcher,
@@ -93,7 +92,8 @@ def _run_gate(ctx: HotPathContext) -> tuple[dict, str, list[str]]:
     reason = format_block_reason(blocked_rules, dismiss_phrase=cfg.dismiss_phrase)
     log.info(
         "gate blocked tool session=%s rules=%s",
-        session_id, ",".join(r.short_id for r in blocked_rules),
+        session_id,
+        ",".join(r.short_id for r in blocked_rules),
     )
     short_ids = sorted({r.short_id for r in blocked_rules})
     if host.value == "cursor":
@@ -103,9 +103,16 @@ def _run_gate(ctx: HotPathContext) -> tuple[dict, str, list[str]]:
             dismiss_phrase=cfg.dismiss_phrase,
             deferred=decision.deferred,
         )
-        return pre_tool_deny_response(
-            host, reason, user_message=user_note, agent_message=reason,
-        ), "blocked", short_ids
+        return (
+            pre_tool_deny_response(
+                host,
+                reason,
+                user_message=user_note,
+                agent_message=reason,
+            ),
+            "blocked",
+            short_ids,
+        )
     return pre_tool_deny_response(host, reason), "blocked", short_ids
 
 
@@ -115,11 +122,17 @@ def handle(payload: dict, cfg: Config, *, host: Host) -> dict:
 
     with HotPathContext(payload, cfg, host=host, session_id=session_id) as ctx:
         deferred = maybe_deferred_pre_tool_use(
-            payload, cfg, session_id, tool_name, host, db=ctx.db,
+            payload,
+            cfg,
+            session_id,
+            tool_name,
+            host,
+            db=ctx.db,
         )
         if deferred is not None:
             ctx.record_event(
-                "pre_tool_use", "deferred",
+                "pre_tool_use",
+                "deferred",
                 details={"tool_name": tool_name},
             )
             return deferred

@@ -1,6 +1,6 @@
 def _resolve_version() -> str:
-    from pathlib import Path as _P
     import re as _re
+    from pathlib import Path as _P
 
     # Prefer pyproject.toml next to source when running from a checkout. Editable
     # installs can leave package metadata stale after version-only commits.

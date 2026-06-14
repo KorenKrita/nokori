@@ -16,9 +16,7 @@ def dashboard():
     cfg = get_config()
     db = open_db(cfg.db_path)
     try:
-        rules_by_status = db.fetchall(
-            "SELECT status, COUNT(*) AS n FROM rules GROUP BY status"
-        )
+        rules_by_status = db.fetchall("SELECT status, COUNT(*) AS n FROM rules GROUP BY status")
         cutoff = local_hours_ago(24)
         fire_row = db.fetchone(
             "SELECT COUNT(*) AS n FROM rule_fire_events WHERE created_at >= ?",
@@ -28,9 +26,7 @@ def dashboard():
             "SELECT COUNT(*) AS n FROM rule_fire_events WHERE created_at >= ? AND level = 'hot'",
             (cutoff,),
         )
-        global_count = db.fetchone(
-            "SELECT COUNT(*) AS n FROM rules WHERE project_scope = 'global'"
-        )
+        global_count = db.fetchone("SELECT COUNT(*) AS n FROM rules WHERE project_scope = 'global'")
     finally:
         db.close()
 

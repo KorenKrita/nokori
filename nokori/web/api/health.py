@@ -3,8 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from nokori.db import open_db, total_rule_count
-from nokori.search import embed_ipc
-from nokori.search import embedding as embedding_search
+from nokori.search import embed_ipc, embedding as embedding_search
 from nokori.web.deps import get_config
 
 router = APIRouter()

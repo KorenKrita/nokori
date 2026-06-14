@@ -32,7 +32,9 @@ def _fire_event_to_out(row: dict) -> dict:
     raw_features = row.get("decision_features")
     if raw_features:
         try:
-            features_data = json.loads(raw_features) if isinstance(raw_features, str) else raw_features
+            features_data = (
+                json.loads(raw_features) if isinstance(raw_features, str) else raw_features
+            )
             decision_features = DecisionFeaturesOut(**features_data).model_dump()
         except (json.JSONDecodeError, TypeError, ValueError):
             decision_features = None
@@ -41,7 +43,9 @@ def _fire_event_to_out(row: dict) -> dict:
     raw_snapshot = row.get("injected_structured_snapshot")
     if raw_snapshot:
         try:
-            structured_snapshot = json.loads(raw_snapshot) if isinstance(raw_snapshot, str) else raw_snapshot
+            structured_snapshot = (
+                json.loads(raw_snapshot) if isinstance(raw_snapshot, str) else raw_snapshot
+            )
         except (json.JSONDecodeError, TypeError):
             structured_snapshot = None
 
@@ -103,8 +107,7 @@ def rule_shadow_events(
         if rule is None:
             raise HTTPException(404, detail=f"no rule with short_id {short_id!r}")
         rows = db.fetchall(
-            "SELECT * FROM rule_shadow_events WHERE rule_id = ? "
-            "ORDER BY created_at DESC LIMIT ?",
+            "SELECT * FROM rule_shadow_events WHERE rule_id = ? ORDER BY created_at DESC LIMIT ?",
             (rule.id, limit),
         )
     finally:
@@ -112,18 +115,20 @@ def rule_shadow_events(
 
     events = []
     for row in rows:
-        events.append(ShadowEventOut(
-            id=row["id"],
-            rule_id=row["rule_id"],
-            session_id=row["session_id"],
-            shadow_rule_version=row.get("shadow_rule_version"),
-            prompt_hash=row.get("prompt_hash"),
-            shadow_label=row.get("shadow_label"),
-            shadow_type=row.get("shadow_type"),
-            context_fingerprint=row.get("context_fingerprint"),
-            status_at_match=row.get("status_at_match"),
-            created_at=row["created_at"],
-        ).model_dump())
+        events.append(
+            ShadowEventOut(
+                id=row["id"],
+                rule_id=row["rule_id"],
+                session_id=row["session_id"],
+                shadow_rule_version=row.get("shadow_rule_version"),
+                prompt_hash=row.get("prompt_hash"),
+                shadow_label=row.get("shadow_label"),
+                shadow_type=row.get("shadow_type"),
+                context_fingerprint=row.get("context_fingerprint"),
+                status_at_match=row.get("status_at_match"),
+                created_at=row["created_at"],
+            ).model_dump()
+        )
     return {"data": events}
 
 
@@ -178,8 +183,7 @@ def rule_synthetic_eval(short_id: str):
         if rule is None:
             raise HTTPException(404, detail=f"no rule with short_id {short_id!r}")
         row = db.fetchone(
-            "SELECT * FROM rule_synthetic_evals "
-            "WHERE rule_id = ? ORDER BY created_at DESC LIMIT 1",
+            "SELECT * FROM rule_synthetic_evals WHERE rule_id = ? ORDER BY created_at DESC LIMIT 1",
             (rule.id,),
         )
     finally:
@@ -247,8 +251,7 @@ def rule_transitions(
             return {"data": []}
 
         rows = db.fetchall(
-            "SELECT * FROM rule_transitions WHERE rule_id = ? "
-            "ORDER BY created_at DESC LIMIT ?",
+            "SELECT * FROM rule_transitions WHERE rule_id = ? ORDER BY created_at DESC LIMIT ?",
             (rule.id, limit),
         )
     finally:
@@ -307,15 +310,17 @@ def promotion_progress():
 
     candidates = []
     for row in rows:
-        candidates.append({
-            "short_id": row["short_id"],
-            "project_id": row["project_id"],
-            "trigger_canonical": row["trigger_canonical"],
-            "trigger_canonical_zh": row["trigger_canonical_zh"],
-            "status": row["status"],
-            "rule_version": row["rule_version"],
-            "quality_score": row["quality_score"],
-        })
+        candidates.append(
+            {
+                "short_id": row["short_id"],
+                "project_id": row["project_id"],
+                "trigger_canonical": row["trigger_canonical"],
+                "trigger_canonical_zh": row["trigger_canonical_zh"],
+                "status": row["status"],
+                "rule_version": row["rule_version"],
+                "quality_score": row["quality_score"],
+            }
+        )
     return {"data": {"enabled": True, "candidates": candidates}}
 
 

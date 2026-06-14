@@ -109,17 +109,12 @@ def _build_fielded_doc(rule: Rule) -> _FieldedDoc:
 
 def _index_key(rules_list: list[Rule]) -> tuple:
     def _rule_key(r: Rule) -> tuple:
-        terms = tuple(
-            (lang, tuple(sorted(vals)))
-            for lang, vals in sorted(r.search_terms.items())
-        )
+        terms = tuple((lang, tuple(sorted(vals))) for lang, vals in sorted(r.search_terms.items()))
         return (
             r.id,
             r.trigger_canonical,
             r.action_instruction,
-            r.trigger_variants
-            if isinstance(r.trigger_variants, str)
-            else str(r.trigger_variants),
+            r.trigger_variants if isinstance(r.trigger_variants, str) else str(r.trigger_variants),
             tuple(r.trigger_variants_zh),
             terms,
             r.trigger_canonical_zh,
@@ -137,8 +132,7 @@ def _build_index(rules_list: list[Rule]):
     for doc in fielded_docs:
         df.update(frozenset(doc.all_tf))
     idf: Mapping[str, float] = {
-        term: math.log(1 + (n_docs - count + 0.5) / (count + 0.5))
-        for term, count in df.items()
+        term: math.log(1 + (n_docs - count + 0.5) / (count + 0.5)) for term, count in df.items()
     }
     return fielded_docs, idf, avgdl
 
@@ -169,9 +163,7 @@ def _check_phrase_hit(query_tokens: list[str], phrases: list[list[str]]) -> bool
     return False
 
 
-def search(
-    query: str, rules: Iterable[Rule], top_k: int = 5
-) -> list[ScoredResult]:
+def search(query: str, rules: Iterable[Rule], top_k: int = 5) -> list[ScoredResult]:
     rules_list = list(rules)
     if not rules_list:
         return []
@@ -214,7 +206,9 @@ def search(
         has_action = bool(matched_action)
         has_trigger = bool(matched_trigger)
         action_only = has_action and not has_trigger and not has_variant
-        search_only = bool(matched_search) and not has_trigger and not has_variant and not has_action
+        search_only = (
+            bool(matched_search) and not has_trigger and not has_variant and not has_action
+        )
 
         scored.append(
             ScoredResult(

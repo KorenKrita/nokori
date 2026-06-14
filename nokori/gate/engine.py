@@ -83,7 +83,9 @@ class GateEngine:
             marker_io.delete(self._cfg, session_id, prompt_hash_value=prompt_hash)
             elapsed = (time.monotonic() - t0) * 1000
             return GateDecision(
-                blocked=False, state=MarkerState.expired, reason="marker_expired",
+                blocked=False,
+                state=MarkerState.expired,
+                reason="marker_expired",
                 elapsed_ms=elapsed,
             )
 
@@ -91,7 +93,9 @@ class GateEngine:
             marker_io.delete(self._cfg, session_id, prompt_hash_value=prompt_hash)
             elapsed = (time.monotonic() - t0) * 1000
             return GateDecision(
-                blocked=False, state=MarkerState.empty, reason="empty_marker",
+                blocked=False,
+                state=MarkerState.empty,
+                reason="empty_marker",
                 elapsed_ms=elapsed,
             )
 
@@ -99,7 +103,9 @@ class GateEngine:
             marker_io.delete(self._cfg, session_id, prompt_hash_value=prompt_hash)
             elapsed = (time.monotonic() - t0) * 1000
             return GateDecision(
-                blocked=False, state=MarkerState.hash_mismatch, reason="hash_mismatch",
+                blocked=False,
+                state=MarkerState.hash_mismatch,
+                reason="hash_mismatch",
                 elapsed_ms=elapsed,
             )
 
@@ -119,7 +125,9 @@ class GateEngine:
             elapsed = (time.monotonic() - t0) * 1000
             marker_io.delete(self._cfg, session_id, prompt_hash_value=prompt_hash)
             return GateDecision(
-                blocked=False, state=MarkerState.error, reason="processing_error",
+                blocked=False,
+                state=MarkerState.error,
+                reason="processing_error",
                 rules_checked=len(marker.rules),
                 elapsed_ms=elapsed,
             )
@@ -129,8 +137,11 @@ class GateEngine:
 
         if not gate_rules:
             return GateDecision(
-                blocked=False, state=MarkerState.ineligible, reason="no_eligible_rules",
-                rules_checked=len(marker.rules), rules_blocked=0,
+                blocked=False,
+                state=MarkerState.ineligible,
+                reason="no_eligible_rules",
+                rules_checked=len(marker.rules),
+                rules_blocked=0,
                 elapsed_ms=elapsed,
             )
 
@@ -144,10 +155,14 @@ class GateEngine:
             pass
 
         return GateDecision(
-            blocked=True, state=MarkerState.consumed, rules=tuple(gate_rules),
+            blocked=True,
+            state=MarkerState.consumed,
+            rules=tuple(gate_rules),
             reason="blocked",
-            rules_checked=len(marker.rules), rules_blocked=len(gate_rules),
-            elapsed_ms=elapsed, deferred=deferred,
+            rules_checked=len(marker.rules),
+            rules_blocked=len(gate_rules),
+            elapsed_ms=elapsed,
+            deferred=deferred,
         )
 
 
@@ -226,7 +241,9 @@ def _batch_check_eligibility(
             if marker_policy and marker_policy != row["runtime_policy_version"]:
                 results.append((rule, False, None))
                 continue
-            excluded_contexts = loads_json(row["excluded_contexts"], []) if row["excluded_contexts"] else []
+            excluded_contexts = (
+                loads_json(row["excluded_contexts"], []) if row["excluded_contexts"] else []
+            )
             eligible = row["runtime_policy_version"] == RUNTIME_POLICY_VERSION
             results.append((rule, eligible, excluded_contexts if eligible else None))
         except (ValueError, TypeError):
@@ -258,7 +275,9 @@ def is_gate_eligible_rule(rule: MarkerRule, db: Db) -> tuple[bool, list | None]:
         marker_policy = getattr(rule, "runtime_policy_version", None)
         if marker_policy and marker_policy != row["runtime_policy_version"]:
             return False, None
-        excluded_contexts = loads_json(row["excluded_contexts"], []) if row["excluded_contexts"] else []
+        excluded_contexts = (
+            loads_json(row["excluded_contexts"], []) if row["excluded_contexts"] else []
+        )
         eligible = row["runtime_policy_version"] == RUNTIME_POLICY_VERSION
         return eligible, excluded_contexts if eligible else None
     return False, None
@@ -283,9 +302,29 @@ def has_tool_evidence(rule: MarkerRule, payload: dict) -> bool:
     tokens = {
         t
         for t in re.findall(r"[a-z0-9_+-]{4,}", f"{trigger} {action}".lower())
-        if t not in {"the", "and", "for", "with", "before", "after", "rule",
-                     "when", "that", "this", "from", "into", "also", "have",
-                     "been", "will", "should", "must", "always", "never"}
+        if t
+        not in {
+            "the",
+            "and",
+            "for",
+            "with",
+            "before",
+            "after",
+            "rule",
+            "when",
+            "that",
+            "this",
+            "from",
+            "into",
+            "also",
+            "have",
+            "been",
+            "will",
+            "should",
+            "must",
+            "always",
+            "never",
+        }
     }
     if not tokens:
         return True
@@ -294,7 +333,9 @@ def has_tool_evidence(rule: MarkerRule, payload: dict) -> bool:
     return len(hits) >= max(1, len(tokens) // 2)
 
 
-def tool_input_exclusion_fires(rule: MarkerRule, payload: dict, excluded_contexts: list | None) -> bool:
+def tool_input_exclusion_fires(
+    rule: MarkerRule, payload: dict, excluded_contexts: list | None
+) -> bool:
     tool_input = payload.get("tool_input") or payload.get("input")
     if not tool_input:
         return False

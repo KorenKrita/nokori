@@ -113,9 +113,7 @@ def read(
     """Read gate marker for this session and prompt turn (per-hash file)."""
     if not prompt_hash_value:
         return None
-    return _load_marker_file(
-        cfg.marker_path(session_id, prompt_hash_value), session_id
-    )
+    return _load_marker_file(cfg.marker_path(session_id, prompt_hash_value), session_id)
 
 
 def delete(
@@ -262,13 +260,15 @@ class PromptHashResolver:
             if disk_ph and injection_exists(self._db, self._session_id, disk_ph):
                 log.debug(
                     "prompt_hash resolved from disk_marker session=%s ph=%s",
-                    self._session_id, disk_ph[:8],
+                    self._session_id,
+                    disk_ph[:8],
                 )
                 return disk_ph, "disk_marker"
             else:
                 log.debug(
                     "disk_marker present but no injection_exists session=%s ph=%s",
-                    self._session_id, disk_ph[:8] if disk_ph else "-",
+                    self._session_id,
+                    disk_ph[:8] if disk_ph else "-",
                 )
                 if disk_ph:
                     delete(self._cfg, self._session_id, prompt_hash_value=disk_ph)
@@ -283,7 +283,8 @@ class PromptHashResolver:
             ph = str(row["prompt_hash"])
             log.debug(
                 "prompt_hash resolved from fire_events session=%s ph=%s",
-                self._session_id, ph[:8],
+                self._session_id,
+                ph[:8],
             )
             return ph, "fire_events"
 
@@ -327,15 +328,15 @@ def prompt_hash_matches(
         return False
     if not current_ph:
         if session_id:
-            log.info(
-                "gate prompt_hash unknown, fail-open session=%s", session_id
-            )
+            log.info("gate prompt_hash unknown, fail-open session=%s", session_id)
         return False
     if marker.prompt_hash != current_ph:
         if session_id:
             log.info(
                 "gate prompt_hash stale session=%s marker=%s current=%s",
-                session_id, marker.prompt_hash[:8], current_ph[:8],
+                session_id,
+                marker.prompt_hash[:8],
+                current_ph[:8],
             )
         return False
     return True

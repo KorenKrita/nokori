@@ -127,11 +127,7 @@ def _barriers_candidate_to_active(db: Db, rule_id: str, rule_version: int) -> di
     distinct_sessions = shadow.get("distinct_sessions", 0)
     risky_harmful = shadow.get("risky", 0) + shadow.get("near_miss", 0)
     shadow_fp_numerator = shadow.get("irrelevant", 0) + shadow.get("near_miss", 0)
-    shadow_fp_rate = (
-        shadow_fp_numerator / task_deduped_count
-        if task_deduped_count > 0
-        else 0.0
-    )
+    shadow_fp_rate = shadow_fp_numerator / task_deduped_count if task_deduped_count > 0 else 0.0
 
     thresholds = [
         {
@@ -251,7 +247,10 @@ def _barriers_suppressed_to_active(
     if suppressed_at is None:
         return None
     shadow = _aggregate_shadow_evidence(
-        db, rule_id, rule_version, since_iso=suppressed_at,
+        db,
+        rule_id,
+        rule_version,
+        since_iso=suppressed_at,
         shadow_type="suppression_recovery",
     )
     th = SUPPRESSED_TO_ACTIVE
@@ -391,13 +390,20 @@ def _aggregate_fire_evidence(db: Db, rule_id: str, window_days: int = 30) -> dic
 
 
 def _aggregate_shadow_evidence(
-    db: Db, rule_id: str, rule_version: int, window_days: int = 30,
+    db: Db,
+    rule_id: str,
+    rule_version: int,
+    window_days: int = 30,
     shadow_type: str | None = None,
     since_iso: str | None = None,
 ) -> dict:
     """Count shadow labels with fingerprint dedup, distinct sessions."""
     return count_shadow_evidence(
-        db, rule_id, rule_version, window_days=window_days, shadow_type=shadow_type,
+        db,
+        rule_id,
+        rule_version,
+        window_days=window_days,
+        shadow_type=shadow_type,
         since_iso=since_iso,
     )
 
@@ -529,7 +535,8 @@ def _apply_transition(
             reason,
         )
         write_event(
-            db, source="lifecycle_transition",
+            db,
+            source="lifecycle_transition",
             outcome=f"{old_status}_to_{new_status}",
             details={
                 "rule_id": rule_id,
@@ -562,6 +569,7 @@ def _create_system_archive_fingerprint(db: Db, rule_id: str) -> None:
         return
     from ..archive.fingerprints import create_archived_fingerprint_from_data
     from ..db import loads_json
+
     domain_tags = loads_json(row["domain_tags"], []) if row["domain_tags"] else []
     create_archived_fingerprint_from_data(
         db,
@@ -589,23 +597,17 @@ def _evaluate_candidate(db: Db, row, rule_version: int) -> TransitionResult:
     risky_harmful = shadow.get("risky", 0) + shadow.get("near_miss", 0)
     if risky_harmful >= CANDIDATE_TO_ARCHIVED.risky_or_harmful_shadow_count_min:
         reason = f"risky_or_harmful_shadow_count={risky_harmful}"
-        applied = _apply_transition(
-            db, rule_id, rule_version, old_status, "archived", rpv, reason
-        )
+        applied = _apply_transition(db, rule_id, rule_version, old_status, "archived", rpv, reason)
         return TransitionResult(rule_id, old_status, "archived", reason, applied)
 
     if shadow.get("irrelevant", 0) >= CANDIDATE_TO_ARCHIVED.irrelevant_shadow_count_min:
         reason = f"irrelevant_shadow_count={shadow['irrelevant']}"
-        applied = _apply_transition(
-            db, rule_id, rule_version, old_status, "archived", rpv, reason
-        )
+        applied = _apply_transition(db, rule_id, rule_version, old_status, "archived", rpv, reason)
         return TransitionResult(rule_id, old_status, "archived", reason, applied)
 
     if row["replacement_id"] is not None:
         reason = "covered_by_replacement"
-        applied = _apply_transition(
-            db, rule_id, rule_version, old_status, "archived", rpv, reason
-        )
+        applied = _apply_transition(db, rule_id, rule_version, old_status, "archived", rpv, reason)
         return TransitionResult(rule_id, old_status, "archived", reason, applied)
 
     # Check synthetic eval status
@@ -641,9 +643,7 @@ def _evaluate_candidate(db: Db, row, rule_version: int) -> TransitionResult:
     # FP numerator = irrelevant + near_miss (closest posthoc FP equivalents).
     shadow_fp_numerator = shadow.get("irrelevant", 0) + shadow.get("near_miss", 0)
     shadow_fp_rate = (
-        shadow_fp_numerator / max(1, task_deduped_count)
-        if task_deduped_count > 0
-        else 0.0
+        shadow_fp_numerator / max(1, task_deduped_count) if task_deduped_count > 0 else 0.0
     )
 
     normal_path = (
@@ -659,7 +659,11 @@ def _evaluate_candidate(db: Db, row, rule_version: int) -> TransitionResult:
     # already demonstrates the matcher works, the simulated test is redundant.
     if not synthetic_eval_passed and not normal_path:
         return TransitionResult(
-            rule_id, old_status, None, "synthetic_eval not passed and insufficient shadow evidence", False
+            rule_id,
+            old_status,
+            None,
+            "synthetic_eval not passed and insufficient shadow evidence",
+            False,
         )
 
     if normal_path:
@@ -667,9 +671,7 @@ def _evaluate_candidate(db: Db, row, rule_version: int) -> TransitionResult:
             f"shadow_promotion: strong={strong_count} "
             f"evaluated={evaluated_count} sessions={distinct_sessions}"
         )
-        applied = _apply_transition(
-            db, rule_id, rule_version, old_status, "active", rpv, reason
-        )
+        applied = _apply_transition(db, rule_id, rule_version, old_status, "active", rpv, reason)
         return TransitionResult(rule_id, old_status, "active", reason, applied)
 
     # Check single-session exception
@@ -707,7 +709,9 @@ def _evaluate_candidate(db: Db, row, rule_version: int) -> TransitionResult:
         best_session_contexts = shadow.get("best_single_session_contexts", 0)
         if best_session_contexts < 2:
             return TransitionResult(
-                rule_id, old_status, None,
+                rule_id,
+                old_status,
+                None,
                 f"single_session_exception: insufficient per-session context diversity ({best_session_contexts} < 2)",
                 False,
             )
@@ -724,9 +728,7 @@ def _evaluate_candidate(db: Db, row, rule_version: int) -> TransitionResult:
             )
             return TransitionResult(rule_id, old_status, "active", reason, applied)
 
-    return TransitionResult(
-        rule_id, old_status, None, "insufficient promotion evidence", False
-    )
+    return TransitionResult(rule_id, old_status, None, "insufficient promotion evidence", False)
 
 
 def _candidate_has_miss_evidence(db: Db, rule_id: str, rule_version: int) -> bool:
@@ -786,7 +788,10 @@ def _evaluate_active(db: Db, row, rule_version: int) -> TransitionResult:
 
     fp_rate = fire.get("false_positive_rate", 0.0)
     total_evaluated = fire.get("total_evaluated", 0)
-    if total_evaluated >= MINIMUM_RATE_DENOMINATOR and fp_rate >= sup.recent_false_positive_rate_min:
+    if (
+        total_evaluated >= MINIMUM_RATE_DENOMINATOR
+        and fp_rate >= sup.recent_false_positive_rate_min
+    ):
         reason = f"false_positive_rate={fp_rate:.2f}"
         applied = _apply_transition(
             db, rule_id, rule_version, old_status, "suppressed", rpv, reason
@@ -809,9 +814,7 @@ def _evaluate_active(db: Db, row, rule_version: int) -> TransitionResult:
             "trusted promotion rejected: fire evidence contaminated with shadow data rule=%s",
             rule_id,
         )
-        return TransitionResult(
-            rule_id, old_status, None, "shadow_evidence_contamination", False
-        )
+        return TransitionResult(rule_id, old_status, None, "shadow_evidence_contamination", False)
 
     # Rate-based promotion NOT allowed below minimum_rate_denominator (spec 3.4)
     # Spec 3.3: harmful_count = 0 for trusted promotion. Per spec 3.4:
@@ -829,14 +832,10 @@ def _evaluate_active(db: Db, row, rule_version: int) -> TransitionResult:
             f"trusted_promotion: useful={observed_useful} "
             f"evaluated={total_evaluated} sessions={distinct_sessions}"
         )
-        applied = _apply_transition(
-            db, rule_id, rule_version, old_status, "trusted", rpv, reason
-        )
+        applied = _apply_transition(db, rule_id, rule_version, old_status, "trusted", rpv, reason)
         return TransitionResult(rule_id, old_status, "trusted", reason, applied)
 
-    return TransitionResult(
-        rule_id, old_status, None, "no transition triggered", False
-    )
+    return TransitionResult(rule_id, old_status, None, "no transition triggered", False)
 
 
 def _evaluate_trusted(db: Db, row, rule_version: int) -> TransitionResult:
@@ -867,7 +866,10 @@ def _evaluate_trusted(db: Db, row, rule_version: int) -> TransitionResult:
 
     fp_rate = fire.get("false_positive_rate", 0.0)
     total_evaluated = fire.get("total_evaluated", 0)
-    if total_evaluated >= MINIMUM_RATE_DENOMINATOR and fp_rate >= sup.recent_false_positive_rate_min:
+    if (
+        total_evaluated >= MINIMUM_RATE_DENOMINATOR
+        and fp_rate >= sup.recent_false_positive_rate_min
+    ):
         reason = f"false_positive_rate={fp_rate:.2f}"
         applied = _apply_transition(
             db, rule_id, rule_version, old_status, "suppressed", rpv, reason
@@ -893,17 +895,12 @@ def _evaluate_trusted(db: Db, row, rule_version: int) -> TransitionResult:
         and fp_rate >= th.recent_false_positive_rate_min
     ):
         reason = (
-            f"trust_decay: useful={observed_useful} "
-            f"irrelevant={irrelevant} fp_rate={fp_rate:.2f}"
+            f"trust_decay: useful={observed_useful} irrelevant={irrelevant} fp_rate={fp_rate:.2f}"
         )
-        applied = _apply_transition(
-            db, rule_id, rule_version, old_status, "active", rpv, reason
-        )
+        applied = _apply_transition(db, rule_id, rule_version, old_status, "active", rpv, reason)
         return TransitionResult(rule_id, old_status, "active", reason, applied)
 
-    return TransitionResult(
-        rule_id, old_status, None, "no transition triggered", False
-    )
+    return TransitionResult(rule_id, old_status, None, "no transition triggered", False)
 
 
 def _evaluate_suppressed(db: Db, row, rule_version: int) -> TransitionResult:
@@ -927,7 +924,10 @@ def _evaluate_suppressed(db: Db, row, rule_version: int) -> TransitionResult:
         )
 
     shadow = _aggregate_shadow_evidence(
-        db, rule_id, rule_version, since_iso=suppressed_at_iso,
+        db,
+        rule_id,
+        rule_version,
+        since_iso=suppressed_at_iso,
         shadow_type="suppression_recovery",
     )
 
@@ -935,16 +935,12 @@ def _evaluate_suppressed(db: Db, row, rule_version: int) -> TransitionResult:
     risky_harmful = shadow.get("risky", 0) + shadow.get("near_miss", 0)
     if risky_harmful >= SUPPRESSED_TO_ARCHIVED.risky_or_harmful_shadow_count_after_suppression_min:
         reason = f"risky_or_harmful_after_suppression={risky_harmful}"
-        applied = _apply_transition(
-            db, rule_id, rule_version, old_status, "archived", rpv, reason
-        )
+        applied = _apply_transition(db, rule_id, rule_version, old_status, "archived", rpv, reason)
         return TransitionResult(rule_id, old_status, "archived", reason, applied)
 
     if row["replacement_id"] is not None:
         reason = "covered_by_replacement"
-        applied = _apply_transition(
-            db, rule_id, rule_version, old_status, "archived", rpv, reason
-        )
+        applied = _apply_transition(db, rule_id, rule_version, old_status, "archived", rpv, reason)
         return TransitionResult(rule_id, old_status, "archived", reason, applied)
 
     # Check TTL FIRST — prevents recovery after TTL expiry
@@ -975,17 +971,11 @@ def _evaluate_suppressed(db: Db, row, rule_version: int) -> TransitionResult:
             applied = _apply_transition(
                 db, rule_id, rule_version, old_status, "archived", rpv, reason
             )
-            return TransitionResult(
-                rule_id, old_status, "archived", reason, applied
-            )
+            return TransitionResult(rule_id, old_status, "archived", reason, applied)
         # TTL expired but recovery evidence exists — still archive (no recovery after TTL)
         reason = "ttl_expired"
-        applied = _apply_transition(
-            db, rule_id, rule_version, old_status, "archived", rpv, reason
-        )
-        return TransitionResult(
-            rule_id, old_status, "archived", reason, applied
-        )
+        applied = _apply_transition(db, rule_id, rule_version, old_status, "archived", rpv, reason)
+        return TransitionResult(rule_id, old_status, "archived", reason, applied)
 
     # TTL NOT expired — check suppressed -> active (recovery)
     th = SUPPRESSED_TO_ACTIVE
@@ -1008,18 +998,11 @@ def _evaluate_suppressed(db: Db, row, rule_version: int) -> TransitionResult:
         and distinct_sessions >= th.distinct_recovery_sessions_min
         and recent_harmful <= th.recent_harmful_count_max
     ):
-        reason = (
-            f"shadow_recovery: would_help_high={would_help_high} "
-            f"sessions={distinct_sessions}"
-        )
-        applied = _apply_transition(
-            db, rule_id, rule_version, old_status, "active", rpv, reason
-        )
+        reason = f"shadow_recovery: would_help_high={would_help_high} sessions={distinct_sessions}"
+        applied = _apply_transition(db, rule_id, rule_version, old_status, "active", rpv, reason)
         return TransitionResult(rule_id, old_status, "active", reason, applied)
 
-    return TransitionResult(
-        rule_id, old_status, None, "no transition triggered", False
-    )
+    return TransitionResult(rule_id, old_status, None, "no transition triggered", False)
 
 
 # ---------------------------------------------------------------------------

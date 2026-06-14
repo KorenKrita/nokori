@@ -295,18 +295,9 @@ def embed_chunk_params(cfg: Config, *, local: bool) -> tuple[int, int]:
     """
     if not local:
         return cfg.embed_chunk_size, cfg.embed_chunk_count
-    size = (
-        cfg.embed_chunk_size
-        if cfg.embed_chunk_size_configured
-        else LOCAL_EMBED_CHUNK_SIZE
-    )
-    count = (
-        cfg.embed_chunk_count
-        if cfg.embed_chunk_count_configured
-        else LOCAL_EMBED_CHUNK_COUNT
-    )
+    size = cfg.embed_chunk_size if cfg.embed_chunk_size_configured else LOCAL_EMBED_CHUNK_SIZE
+    count = cfg.embed_chunk_count if cfg.embed_chunk_count_configured else LOCAL_EMBED_CHUNK_COUNT
     return size, count
-
 
 
 def local_model_hub_dir(model_id: str = LOCAL_MODEL_HF_ID) -> str:
@@ -383,6 +374,7 @@ def prefetch_local_model(cfg: Config) -> str:
 def _sentence_transformers_available() -> bool:
     try:
         import sentence_transformers  # noqa: F401
+
         return True
     except ImportError:
         return False
@@ -418,9 +410,8 @@ class LocalEmbeddingClient:
         if self._model is not None:
             return self._model
         from sentence_transformers import SentenceTransformer
-        self._model = SentenceTransformer(
-            self._model_name, cache_folder=self._cache_dir
-        )
+
+        self._model = SentenceTransformer(self._model_name, cache_folder=self._cache_dir)
         return self._model
 
     def embed(self, text: str, *, kind: EmbedKind = "document") -> list[list[float]]:
@@ -450,14 +441,10 @@ def search_local_shared(
 
     if interaction == "hook":
         if not local_model_cached(cfg):
-            log.info(
-                "embed skipped on hook (local weights missing; run `nokori embed prefetch`)"
-            )
+            log.info("embed skipped on hook (local weights missing; run `nokori embed prefetch`)")
             return [], "off"
         if not local_embed_package_available():
-            log.info(
-                "embed skipped on hook (install `pip install -e \".[local-embed]\"`)"
-            )
+            log.info('embed skipped on hook (install `pip install -e ".[local-embed]"`)')
             return [], "off"
         if not embed_ipc.kickstart_server(cfg):
             log.info("embed skipped on hook (server not ready; BM25-only this turn)")
@@ -467,9 +454,7 @@ def search_local_shared(
     elif not embed_ipc.ensure_running(cfg, max_wait=15.0):
         return [], "off"
 
-    qvecs = embed_ipc.embed_text(
-        cfg, query, timeout=timeout, auto_start=False, kind="query"
-    )
+    qvecs = embed_ipc.embed_text(cfg, query, timeout=timeout, auto_start=False, kind="query")
     if not qvecs:
         return [], "off"
 

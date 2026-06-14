@@ -1,4 +1,5 @@
 """Structured hook diagnostics for Claude Code vs Cursor (written to hook.log)."""
+
 from __future__ import annotations
 
 import json
@@ -138,8 +139,7 @@ def log_hook_exit(log, *, cli_event: str, host: Host, response: dict) -> None:
     if not deny and isinstance(hso, dict):
         deny = str(hso.get("permissionDecision") or hso.get("permission") or "")
     log.debug(
-        "[diag] hook_exit cli_event=%s host=%s response_keys=%s deny=%s "
-        "response=%s",
+        "[diag] hook_exit cli_event=%s host=%s response_keys=%s deny=%s response=%s",
         cli_event,
         host.value,
         top_keys,

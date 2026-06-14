@@ -1,4 +1,5 @@
 """Normalize user prompt text for stable hashing across hooks and transcripts."""
+
 from __future__ import annotations
 
 import re

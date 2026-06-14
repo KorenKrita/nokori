@@ -1,4 +1,5 @@
 """Cold-path verification stage: synthetic evaluation and final admission policy."""
+
 from __future__ import annotations
 
 import json
@@ -85,7 +86,6 @@ def _check_cold_fast_lane(
 # ---------------------------------------------------------------------------
 
 
-
 def _generate_eval_cases(
     db: Db,
     llm,
@@ -112,46 +112,46 @@ def _generate_eval_cases(
         "Produce diverse, tricky test cases. Near-miss cases must be genuinely hard to distinguish.\n\n"
         "IMPORTANT: Generate cases in BOTH English AND Chinese. At least one positive case "
         "and one near_miss case must have Chinese prompts, to verify bilingual matching works.\n\n"
-        "Output a single JSON object with a \"cases\" array. Each case object has:\n\n"
+        'Output a single JSON object with a "cases" array. Each case object has:\n\n'
         "REQUIRED fields per case:\n"
-        "- \"prompt\" (string, REQUIRED): a realistic developer prompt/context\n"
-        "- \"case_type\" (string, REQUIRED): one of \"positive\", \"medium_positive\", \"near_miss\", \"negative\"\n"
-        "- \"expected_min_decision\" (string, REQUIRED): the minimum expected decision level.\n"
-        "  For positive: \"warm\" or \"hot\". For medium_positive: \"cold\". For near_miss/negative: \"cold\".\n"
-        "- \"expected_max_decision\" (string, REQUIRED): the maximum allowed decision level.\n"
-        "  For positive: \"hot\". For medium_positive: \"warm\". For near_miss/negative: \"cold\".\n"
-        "- \"rationale\" (string, REQUIRED): brief explanation of why this case should produce the expected decision\n\n"
+        '- "prompt" (string, REQUIRED): a realistic developer prompt/context\n'
+        '- "case_type" (string, REQUIRED): one of "positive", "medium_positive", "near_miss", "negative"\n'
+        '- "expected_min_decision" (string, REQUIRED): the minimum expected decision level.\n'
+        '  For positive: "warm" or "hot". For medium_positive: "cold". For near_miss/negative: "cold".\n'
+        '- "expected_max_decision" (string, REQUIRED): the maximum allowed decision level.\n'
+        '  For positive: "hot". For medium_positive: "warm". For near_miss/negative: "cold".\n'
+        '- "rationale" (string, REQUIRED): brief explanation of why this case should produce the expected decision\n\n'
         "Example output:\n"
         "```json\n"
         "{\n"
-        "  \"cases\": [\n"
+        '  "cases": [\n'
         "    {\n"
-        "      \"prompt\": \"I need to force push to the main branch to fix a rebase issue\",\n"
-        "      \"case_type\": \"positive\",\n"
-        "      \"expected_min_decision\": \"warm\",\n"
-        "      \"expected_max_decision\": \"hot\",\n"
-        "      \"rationale\": \"Contains force push + shared branch context, rule should fire\"\n"
+        '      "prompt": "I need to force push to the main branch to fix a rebase issue",\n'
+        '      "case_type": "positive",\n'
+        '      "expected_min_decision": "warm",\n'
+        '      "expected_max_decision": "hot",\n'
+        '      "rationale": "Contains force push + shared branch context, rule should fire"\n'
         "    },\n"
         "    {\n"
-        "      \"prompt\": \"I want to push my changes to the release branch\",\n"
-        "      \"case_type\": \"medium_positive\",\n"
-        "      \"expected_min_decision\": \"cold\",\n"
-        "      \"expected_max_decision\": \"warm\",\n"
-        "      \"rationale\": \"Mentions pushing to shared branch but no force flag — partial match\"\n"
+        '      "prompt": "I want to push my changes to the release branch",\n'
+        '      "case_type": "medium_positive",\n'
+        '      "expected_min_decision": "cold",\n'
+        '      "expected_max_decision": "warm",\n'
+        '      "rationale": "Mentions pushing to shared branch but no force flag — partial match"\n'
         "    },\n"
         "    {\n"
-        "      \"prompt\": \"Let me push my changes to my personal feature branch\",\n"
-        "      \"case_type\": \"near_miss\",\n"
-        "      \"expected_min_decision\": \"cold\",\n"
-        "      \"expected_max_decision\": \"cold\",\n"
-        "      \"rationale\": \"Push without force, personal branch — rule should not fire\"\n"
+        '      "prompt": "Let me push my changes to my personal feature branch",\n'
+        '      "case_type": "near_miss",\n'
+        '      "expected_min_decision": "cold",\n'
+        '      "expected_max_decision": "cold",\n'
+        '      "rationale": "Push without force, personal branch — rule should not fire"\n'
         "    },\n"
         "    {\n"
-        "      \"prompt\": \"How do I set up ESLint in my React project?\",\n"
-        "      \"case_type\": \"negative\",\n"
-        "      \"expected_min_decision\": \"cold\",\n"
-        "      \"expected_max_decision\": \"cold\",\n"
-        "      \"rationale\": \"Completely unrelated to git push\"\n"
+        '      "prompt": "How do I set up ESLint in my React project?",\n'
+        '      "case_type": "negative",\n'
+        '      "expected_min_decision": "cold",\n'
+        '      "expected_max_decision": "cold",\n'
+        '      "rationale": "Completely unrelated to git push"\n'
         "    }\n"
         "  ]\n"
         "}\n"
@@ -190,12 +190,8 @@ def _generate_eval_cases(
             model_id=model_id,
             system=system_prompt,
             user=_prompt_text(prompt),
-            max_tokens=_role_max_tokens(
-                "synthetic_eval_generator", role_max_tokens
-            ),
-            timeout=_role_timeout(
-                "synthetic_eval_generator", role_timeouts
-            ),
+            max_tokens=_role_max_tokens("synthetic_eval_generator", role_max_tokens),
+            timeout=_role_timeout("synthetic_eval_generator", role_timeouts),
             validate_response=_validate_eval_cases_response,
         )
         cases = json.loads(response)
@@ -208,4 +204,3 @@ def _generate_eval_cases(
         raise
     except (json.JSONDecodeError, ValueError):
         raise  # Propagate for retry (spec section 13)
-

@@ -1,4 +1,5 @@
 """Shared local embed weight prefetch (install / pip / CLI)."""
+
 from __future__ import annotations
 
 import sys

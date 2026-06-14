@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 from ..config import Config
 from ..extract.jobs import write_job as write_extract_job
@@ -61,6 +62,7 @@ def handle(payload: dict, cfg: Config, *, host: Host) -> dict:
         async_spawned = False
         if job_path and cfg.extract_mode == "async" and not fork_spawned:
             from ..extract.lock import is_locked
+
             try:
                 locked = is_locked(cfg)
             except Exception as e:
@@ -97,9 +99,7 @@ def _enqueue_extract_job_from_path(
         return None
     try:
         mtime = transcript_path.stat().st_mtime
-        project_id = payload.get("project_id") or resolve_project_id(
-            payload.get("cwd") or ""
-        )
+        project_id = payload.get("project_id") or resolve_project_id(payload.get("cwd") or "")
         job_path = write_extract_job(cfg, transcript_path, project_id, mtime)
         log.info("wrote extract job for %s", transcript_path.name)
         return job_path
@@ -126,7 +126,9 @@ def _extract_session_turns(payload: dict) -> list[dict]:
             continue
         turn = {
             "role": msg.get("role", "unknown"),
-            "content": msg.get("content", "") if isinstance(msg.get("content"), str) else str(msg.get("content", "")),
+            "content": msg.get("content", "")
+            if isinstance(msg.get("content"), str)
+            else str(msg.get("content", "")),
             "turn_index": msg.get("turn_index", i),
         }
         if msg.get("tool_name"):
@@ -188,8 +190,12 @@ def _populate_transcript_windows(
                 )
 
 
-def _try_fork_extract(session_id: str, cfg: Config, transcript_path: "Path | None" = None,
-                      job_path: "Path | None" = None) -> bool:
+def _try_fork_extract(
+    session_id: str,
+    cfg: Config,
+    transcript_path: "Path | None" = None,
+    job_path: "Path | None" = None,
+) -> bool:
     """Attempt fork-based extraction. Returns True if successfully spawned."""
     import os
     import subprocess
@@ -210,8 +216,11 @@ def _try_fork_extract(session_id: str, cfg: Config, transcript_path: "Path | Non
     env["NOKORI_DATA_DIR"] = str(cfg.data_dir)
 
     cmd = [
-        sys.executable, "-m", "nokori.extract.fork_runner",
-        "--session-id", session_id,
+        sys.executable,
+        "-m",
+        "nokori.extract.fork_runner",
+        "--session-id",
+        session_id,
     ]
     if transcript_path is not None:
         cmd.extend(["--transcript-path", str(transcript_path)])
@@ -254,11 +263,16 @@ def _spawn_async_extract(cfg: Config) -> None:
     import sys
 
     _SAFE_VARS = (
-        "PATH", "HOME", "USER", "LANG", "SHELL", "TERM", "TMPDIR",
+        "PATH",
+        "HOME",
+        "USER",
+        "LANG",
+        "SHELL",
+        "TERM",
+        "TMPDIR",
         "XDG_RUNTIME_DIR",
     )
-    env = {k: v for k, v in os.environ.items()
-           if k in _SAFE_VARS or k.startswith("NOKORI_")}
+    env = {k: v for k, v in os.environ.items() if k in _SAFE_VARS or k.startswith("NOKORI_")}
     env.pop("NOKORI_EXTRACTING", None)
     env["NOKORI_DATA_DIR"] = str(cfg.data_dir)
     cfg.ensure_dirs()

@@ -1,4 +1,5 @@
 """Setuptools hooks: prefetch local embed weights after pip install with [local-embed]."""
+
 from __future__ import annotations
 
 from setuptools.command.develop import develop

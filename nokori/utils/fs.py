@@ -1,4 +1,5 @@
 """Atomic JSON file writes shared across the package."""
+
 from __future__ import annotations
 
 import json

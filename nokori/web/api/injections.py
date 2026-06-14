@@ -17,7 +17,9 @@ def _fire_event_row_to_dict(row: dict) -> dict:
     raw_features = row.get("decision_features")
     if raw_features:
         try:
-            features_data = json.loads(raw_features) if isinstance(raw_features, str) else raw_features
+            features_data = (
+                json.loads(raw_features) if isinstance(raw_features, str) else raw_features
+            )
             decision_features = DecisionFeaturesOut(**features_data).model_dump()
         except (json.JSONDecodeError, TypeError, ValueError):
             decision_features = None
@@ -26,7 +28,9 @@ def _fire_event_row_to_dict(row: dict) -> dict:
     raw_snapshot = row.get("injected_structured_snapshot")
     if raw_snapshot:
         try:
-            structured_snapshot = json.loads(raw_snapshot) if isinstance(raw_snapshot, str) else raw_snapshot
+            structured_snapshot = (
+                json.loads(raw_snapshot) if isinstance(raw_snapshot, str) else raw_snapshot
+            )
         except (json.JSONDecodeError, TypeError):
             structured_snapshot = None
 

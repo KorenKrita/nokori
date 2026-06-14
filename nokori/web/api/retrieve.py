@@ -101,14 +101,8 @@ def retrieve(body: RetrieveRequest):
 
     db = open_db(cfg.db_path)
     try:
-        formal = fetch_rules(
-            db, statuses=("active", "trusted"), project_id=body.project_id
-        )
-        shadow = (
-            fetch_shadow_rules(db, project_id=body.project_id)
-            if cfg.promotion_enabled
-            else []
-        )
+        formal = fetch_rules(db, statuses=("active", "trusted"), project_id=body.project_id)
+        shadow = fetch_shadow_rules(db, project_id=body.project_id) if cfg.promotion_enabled else []
 
         engine = RetrievalEngine(cfg, db)
         result = engine.retrieve(body.prompt, formal, shadow, interaction="cli")

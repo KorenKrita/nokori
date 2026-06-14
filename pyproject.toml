@@ -38,7 +38,7 @@ classifiers = [
 dependencies = ["fastapi>=0.104", "pydantic>=2.0", "uvicorn[standard]>=0.24", "websockets>=12.0", "json-repair>=0.30"]
 
 [project.optional-dependencies]
-dev = ["pytest>=7.0", "pytest-xdist>=3.0", "httpx>=0.27", "setuptools>=68.0"]
+dev = ["pytest>=7.0", "pytest-xdist>=3.0", "httpx>=0.27", "setuptools>=68.0", "ruff>=0.8", "mypy>=1.13"]
 # >=3.0 required: Granite uses encode_query / encode_document (ST 2.x lacks these).
 local-embed = ["sentence-transformers>=3.0"]
 web = ["fastapi>=0.104", "uvicorn[standard]>=0.24", "websockets>=12.0"]
@@ -59,6 +59,30 @@ nokori = ["web/static/**/*"]
 [tool.setuptools.cmdclass]
 install = "nokori._packaging.InstallWithPrefetch"
 develop = "nokori._packaging.DevelopWithPrefetch"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E501", "F401"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["nokori"]
+combine-as-imports = true
+
+[tool.mypy]
+python_version = "3.11"
+disallow_untyped_defs = true
+warn_return_any = true
+warn_unused_ignores = true
+no_implicit_optional = true
+check_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = ["sentence_transformers.*", "json_repair.*"]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

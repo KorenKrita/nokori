@@ -17,8 +17,13 @@ log = get_logger("nokori.llm.adapter")
 
 
 class LLMAdapter:
-    def __init__(self, cfg: Config, *, http_open: Callable | None = None,
-                 subprocess_run: Callable | None = None):
+    def __init__(
+        self,
+        cfg: Config,
+        *,
+        http_open: Callable | None = None,
+        subprocess_run: Callable | None = None,
+    ):
         self.cfg = cfg
         self._open = http_open or urllib.request.urlopen
         self._run = subprocess_run or subprocess.run
@@ -26,12 +31,19 @@ class LLMAdapter:
     def configured(self) -> bool:
         return bool(self.cfg.llm_base_url and self.cfg.llm_model)
 
-    def complete(self, prompt: str, *, max_tokens: int = 2000,
-                 timeout: int = 30) -> str | None:
+    def complete(self, prompt: str, *, max_tokens: int = 2000, timeout: int = 30) -> str | None:
         """Single user message (legacy). Prefer complete_messages for extract/merge."""
         return self.complete_messages(None, prompt, max_tokens=max_tokens, timeout=timeout)
 
-    def complete_role(self, role: str, system: str, user: str, *, max_tokens: int | None = None, timeout: int | None = None) -> str | None:
+    def complete_role(
+        self,
+        role: str,
+        system: str,
+        user: str,
+        *,
+        max_tokens: int | None = None,
+        timeout: int | None = None,
+    ) -> str | None:
         if os.environ.get("NOKORI_EXTRACTING") == "1":
             log.warning("recursion guard tripped; skipping LLM call for role=%s", role)
             return None
@@ -40,7 +52,9 @@ class LLMAdapter:
         effective_timeout = self.cfg.role_timeouts.get(role) or timeout or 30
         log.info("LLM role call: role=%s model=%s", role, model_id or "claude-cli")
         if model_id and self.cfg.llm_base_url:
-            return self._call_openai_compatible(system, user, effective_max, effective_timeout, model_id=model_id)
+            return self._call_openai_compatible(
+                system, user, effective_max, effective_timeout, model_id=model_id
+            )
         return self._fallback_claude_cli(system, user, effective_timeout)
 
     def complete_messages(
@@ -57,7 +71,10 @@ class LLMAdapter:
 
         if self.configured():
             return self._call_openai_compatible(
-                system, user, max_tokens, timeout,
+                system,
+                user,
+                max_tokens,
+                timeout,
             )
         return self._fallback_claude_cli(system, user, timeout)
 
@@ -114,24 +131,31 @@ class LLMAdapter:
             raise LlmError(f"bad response shape: {e}") from e
 
     def _fallback_claude_cli(
-        self, system: str | None, user: str, timeout: int,
+        self,
+        system: str | None,
+        user: str,
+        timeout: int,
     ) -> str | None:
         env = os.environ.copy()
         env["NOKORI_EXTRACTING"] = "1"
         env["CLAUDECODE"] = ""
         system_prompt = system or (
-            "You are a JSON extraction engine. Output only valid JSON. "
-            "No explanations."
+            "You are a JSON extraction engine. Output only valid JSON. No explanations."
         )
         if len(user) > MAX_CLAUDE_CLI_INPUT_CHARS:
-            log.warning("claude -p input truncated %d -> %d chars", len(user), MAX_CLAUDE_CLI_INPUT_CHARS)
+            log.warning(
+                "claude -p input truncated %d -> %d chars", len(user), MAX_CLAUDE_CLI_INPUT_CHARS
+            )
             user = user[:MAX_CLAUDE_CLI_INPUT_CHARS]
         try:
             result = self._run(
                 [
-                    "claude", "-p",
-                    "--model", "haiku",
-                    "--system-prompt", system_prompt,
+                    "claude",
+                    "-p",
+                    "--model",
+                    "haiku",
+                    "--system-prompt",
+                    system_prompt,
                     "--strict-mcp-config",
                     "--no-session-persistence",
                     "--no-chrome",

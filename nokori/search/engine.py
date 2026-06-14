@@ -118,7 +118,11 @@ class RetrievalEngine:
             return TierResult([], [], 0, "off")
 
         fused = self._scorer.score(
-            prompt, rules, top_k=top_k, interaction=interaction, pool_size=pool_size,
+            prompt,
+            rules,
+            top_k=top_k,
+            interaction=interaction,
+            pool_size=pool_size,
         )
 
         idf_stats = self._build_idf_stats(rules, background_idf_rules)
@@ -126,8 +130,7 @@ class RetrievalEngine:
         eligible = [
             applied
             for r in fused
-            if (applied := evaluate_evidence(r, prompt, idf_stats=idf_stats))
-            is not None
+            if (applied := evaluate_evidence(r, prompt, idf_stats=idf_stats)) is not None
         ]
 
         selection = select_injection(

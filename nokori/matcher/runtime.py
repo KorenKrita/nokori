@@ -23,8 +23,8 @@ from nokori.matcher.compiler import (
     CompiledVariant,
 )
 from nokori.runtime.applicability import (
-    _trigger_evidence_passes,
     _strong_trigger_evidence,
+    _trigger_evidence_passes,
 )
 
 # ---------------------------------------------------------------------------
@@ -133,7 +133,11 @@ def _evaluate_alias(
     if match_mode == "regex":
         if alias.compiled_pattern and alias.compiled_pattern.search(text_lower):
             return True
-        if tool_input_lower and alias.compiled_pattern and alias.compiled_pattern.search(tool_input_lower):
+        if (
+            tool_input_lower
+            and alias.compiled_pattern
+            and alias.compiled_pattern.search(tool_input_lower)
+        ):
             return True
         return False
 
@@ -147,7 +151,11 @@ def _evaluate_alias(
         # Substring match
         if alias.compiled_pattern and alias.compiled_pattern.search(text_lower):
             return True
-        if tool_input_lower and alias.compiled_pattern and alias.compiled_pattern.search(tool_input_lower):
+        if (
+            tool_input_lower
+            and alias.compiled_pattern
+            and alias.compiled_pattern.search(tool_input_lower)
+        ):
             return True
         return False
 
@@ -472,10 +480,13 @@ def evaluate_match(
             trigger_anchor_phrases=anchor_phrases,
         ):
             # Check if override is allowed and override_requires are met
-            override_passed = ctx.override_allowed and (not ctx.override_requires or all(
-                _text_contains_phrase(combined_lower, req.lower())
-                for req in ctx.override_requires
-            ))
+            override_passed = ctx.override_allowed and (
+                not ctx.override_requires
+                or all(
+                    _text_contains_phrase(combined_lower, req.lower())
+                    for req in ctx.override_requires
+                )
+            )
             if override_passed:
                 excluded_context_hits.append(ctx.id)
                 _has_any_override = True
@@ -492,9 +503,7 @@ def evaluate_match(
     # 6. Determine action_only and search_only flags
     # action_only: no trigger/concept/variant evidence at all
     has_trigger_evidence = (
-        bool(strong_variant_hits)
-        or required_concepts_match
-        or trigger_coverage > 0.0
+        bool(strong_variant_hits) or required_concepts_match or trigger_coverage > 0.0
     )
     action_only_match = not has_trigger_evidence
 
@@ -524,7 +533,7 @@ def evaluate_match(
         if pool_size > 0:
             seen_terms: set[str] = set()
             for token in matched_anchors:
-                if ' ' in token:
+                if " " in token:
                     continue
                 if token in seen_terms:
                     continue
@@ -533,23 +542,17 @@ def evaluate_match(
                 if is_shadow:
                     # Shadow IDF: df_effective = max(1, df), cap at idf_max (spec 9.3)
                     df_effective = max(1, df_t)
-                    raw_idf = math.log(
-                        1 + (pool_size - df_effective + 0.5) / (df_effective + 0.5)
-                    )
+                    raw_idf = math.log(1 + (pool_size - df_effective + 0.5) / (df_effective + 0.5))
                     trigger_idf_sum += min(raw_idf, idf_max)
                 else:
                     # Normal IDF uses raw df_trigger(t) per spec formula.
                     # df=0 means novel term not in any rule — still computable
                     # but should not appear since matched_anchors come from rules.
                     if df_t > 0:
-                        trigger_idf_sum += math.log(
-                            1 + (pool_size - df_t + 0.5) / (df_t + 0.5)
-                        )
+                        trigger_idf_sum += math.log(1 + (pool_size - df_t + 0.5) / (df_t + 0.5))
                     else:
                         # Novel term safety: use df=1 as minimum
-                        trigger_idf_sum += math.log(
-                            1 + (pool_size - 0.5) / 1.5
-                        )
+                        trigger_idf_sum += math.log(1 + (pool_size - 0.5) / 1.5)
             distinct_trigger_terms = len(seen_terms)
 
     # 8. Evaluate trigger evidence pass/fail (spec section 9.3)
@@ -665,5 +668,3 @@ def _evaluate_strong_trigger_evidence(
         pool_size=pool_size,
         dynamic_trigger_info_min=dynamic_trigger_info_min,
     )
-
-

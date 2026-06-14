@@ -38,6 +38,7 @@ def _find_previous_transcript_glob(current: Path) -> Path | None:
 
     best: Path | None = None
     best_mtime = -1.0
+
     def _mtime_key(p: Path) -> float:
         try:
             return p.stat().st_mtime

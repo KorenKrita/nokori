@@ -25,9 +25,7 @@ def get_timeline(
     db = open_db(cfg.db_path)
     try:
         if latest:
-            events = query_events_latest(
-                db, session_id=session_id, source=source, limit=limit
-            )
+            events = query_events_latest(db, session_id=session_id, source=source, limit=limit)
             has_more = False
         else:
             events = query_events(
@@ -70,8 +68,7 @@ def _find_related_pipeline_events(db, session_id: str, limit: int) -> list[dict]
     that occurred within a window after the session's last event.
     """
     session_range = db.fetchone(
-        "SELECT MAX(created_at) AS end_at "
-        "FROM hook_events WHERE session_id = ?",
+        "SELECT MAX(created_at) AS end_at FROM hook_events WHERE session_id = ?",
         (session_id,),
     )
     if not session_range or not session_range["end_at"]:

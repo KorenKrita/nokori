@@ -1,4 +1,5 @@
 """Record which hook platforms were installed via `nokori install`."""
+
 from __future__ import annotations
 
 import json

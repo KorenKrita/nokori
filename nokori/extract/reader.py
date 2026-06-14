@@ -68,9 +68,16 @@ def _parse_large_line(line: str) -> list[Turn]:
     if t == "tool_use":
         name_match = re.search(r'"name"\s*:\s*"([^"]+)"', line[:2000])
         name = name_match.group(1) if name_match else "tool"
-        return [Turn(role="tool_use", content="", tool_name=name, input_summary="[large input truncated]")]
+        return [
+            Turn(
+                role="tool_use", content="", tool_name=name, input_summary="[large input truncated]"
+            )
+        ]
     if t == "tool_result":
-        is_err = bool(re.search(r'"is_error"\s*:\s*true', line[:2000]) or re.search(r'"error"\s*:\s*true', line[:2000]))
+        is_err = bool(
+            re.search(r'"is_error"\s*:\s*true', line[:2000])
+            or re.search(r'"error"\s*:\s*true', line[:2000])
+        )
         if is_err:
             err_match = re.search(r'"(?:error_line|content)"\s*:\s*"([^"]{0,300})', line[:3000])
             err = err_match.group(1) if err_match else "error"
@@ -94,9 +101,7 @@ def read(path: Path) -> list[Turn]:
     with open(path, "rb") as fh:
         raw = fh.read(MAX_TRANSCRIPT_BYTES + 1)
     if len(raw) > MAX_TRANSCRIPT_BYTES:
-        raise NokoriError(
-            f"transcript too large ({len(raw)} bytes; max {MAX_TRANSCRIPT_BYTES})"
-        )
+        raise NokoriError(f"transcript too large ({len(raw)} bytes; max {MAX_TRANSCRIPT_BYTES})")
     return _parse_jsonl_text(raw.decode("utf-8", errors="replace"), path)
 
 
@@ -126,7 +131,9 @@ def read_after(path: Path, byte_offset: int) -> tuple[list[Turn], int]:
     return incremental, size
 
 
-def read_tail_user_turns(path: Path, limit: int = 3, *, end_offset: int | None = None) -> list[Turn]:
+def read_tail_user_turns(
+    path: Path, limit: int = 3, *, end_offset: int | None = None
+) -> list[Turn]:
     """Last N human turns, scanning backwards from end_offset (default: EOF)."""
     if limit <= 0 or not path.exists():
         return []
@@ -293,11 +300,11 @@ def _parse_legacy(entry: dict) -> Turn | None:
 
 
 _TOOL_LIMITS: tuple[tuple[re.Pattern, int], ...] = (
-    (re.compile(r'(?:^|[_:\-])bash(?:$|[_:\-])', re.I), 0),
-    (re.compile(r'(?:^|[_:\-])read(?:$|[_:\-])', re.I), 0),
-    (re.compile(r'(?:^|[_:\-])edit(?:$|[_:\-])', re.I), 100),
-    (re.compile(r'(?:^|[_:\-])write(?:$|[_:\-])', re.I), 100),
-    (re.compile(r'(?:^|[_:\-])grep(?:$|[_:\-])', re.I), 50),
+    (re.compile(r"(?:^|[_:\-])bash(?:$|[_:\-])", re.I), 0),
+    (re.compile(r"(?:^|[_:\-])read(?:$|[_:\-])", re.I), 0),
+    (re.compile(r"(?:^|[_:\-])edit(?:$|[_:\-])", re.I), 100),
+    (re.compile(r"(?:^|[_:\-])write(?:$|[_:\-])", re.I), 100),
+    (re.compile(r"(?:^|[_:\-])grep(?:$|[_:\-])", re.I), 50),
 )
 _DEFAULT_HEAD = 200
 _DEFAULT_TAIL = 100

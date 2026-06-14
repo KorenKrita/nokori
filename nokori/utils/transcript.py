@@ -1,4 +1,5 @@
 """Shared transcript path resolution from hook payloads."""
+
 from __future__ import annotations
 
 import os

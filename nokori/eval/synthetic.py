@@ -15,12 +15,11 @@ import json
 from dataclasses import dataclass
 from typing import Any
 
-from ..matcher.compiler import COMPILER_VERSION as MATCHER_COMPILER_VERSION
-from ..matcher.compiler import CompiledMatcher
+from ..matcher.compiler import COMPILER_VERSION as MATCHER_COMPILER_VERSION, CompiledMatcher
 from ..matcher.runtime import MatchResult, evaluate_match
 from ..policy import RUNTIME_POLICY_VERSION
 from ..runtime.applicability import ApplicabilityDecision, evaluate_applicability
-from ..search.idf_stats import IdfPoolStats, TOKENIZER_VERSION, compute_trigger_idf_sum
+from ..search.idf_stats import TOKENIZER_VERSION, IdfPoolStats, compute_trigger_idf_sum
 from ..utils.time import now_iso
 
 # ---------------------------------------------------------------------------
@@ -154,9 +153,7 @@ def _evaluate_single_case(
     }
 
 
-def _case_passes(
-    case_type: str, actual_decision: str, case: dict[str, Any]
-) -> bool:
+def _case_passes(case_type: str, actual_decision: str, case: dict[str, Any]) -> bool:
     """Determine whether a single case passed based on type and expectations."""
     if case_type == "positive":
         expected_min = case.get("expected_min_decision", "warm")
@@ -227,10 +224,12 @@ def run_synthetic_eval(
     # Add global adversarial cases with case_type marker
     if global_adversarial_cases:
         for adv_case in global_adversarial_cases:
-            all_cases.append({
-                **adv_case,
-                "case_type": "global_adversarial",
-            })
+            all_cases.append(
+                {
+                    **adv_case,
+                    "case_type": "global_adversarial",
+                }
+            )
 
     results: list[dict[str, Any]] = []
     overall_passed = True
@@ -357,12 +356,18 @@ Output strict JSON array:
 # ---------------------------------------------------------------------------
 
 
-def is_eval_stale(stored: SyntheticEvalResult, current_idf_pool_version: str,
-                  current_matcher_version: str, current_rule_version: int) -> bool:
+def is_eval_stale(
+    stored: SyntheticEvalResult,
+    current_idf_pool_version: str,
+    current_matcher_version: str,
+    current_rule_version: int,
+) -> bool:
     """Check whether stored eval results match current component versions."""
-    return (stored.trigger_idf_pool_version != current_idf_pool_version
-            or stored.matcher_compiler_version != current_matcher_version
-            or stored.rule_version != current_rule_version)
+    return (
+        stored.trigger_idf_pool_version != current_idf_pool_version
+        or stored.matcher_compiler_version != current_matcher_version
+        or stored.rule_version != current_rule_version
+    )
 
 
 # ---------------------------------------------------------------------------

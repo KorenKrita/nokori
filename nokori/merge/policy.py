@@ -71,9 +71,7 @@ def apply_merge_policy(
     confidence: float = float(planner_output.get("confidence", 0.0))
     planner_reason: str = planner_output.get("reason", "")
 
-    target_id: str | None = (
-        existing_rule.get("id") if existing_rule else None
-    )
+    target_id: str | None = existing_rule.get("id") if existing_rule else None
 
     # --- reject_new gates (checked first) ---
 
@@ -155,11 +153,7 @@ def apply_merge_policy(
 
     # --- merge_into_existing ---
 
-    if (
-        relation == "equivalent"
-        and op_safety == "safe"
-        and quality_winner in ("both", "existing")
-    ):
+    if relation == "equivalent" and op_safety == "safe" and quality_winner in ("both", "existing"):
         return MergeDecision(
             operation="merge_into_existing",
             target_rule_id=target_id,
@@ -321,6 +315,7 @@ def record_lineage(
     from datetime import datetime
 
     from nokori.utils.time import now_iso
+
     now = now_iso()
     with db.transaction() as tx:
         tx.execute(
@@ -352,7 +347,7 @@ def find_merge_neighbors(
 
     Returns up to `limit` existing rules as dicts, ordered by relevance.
     """
-    from nokori.db import loads_json, RULE_COLUMNS
+    from nokori.db import RULE_COLUMNS, loads_json
 
     def _variant_texts(value) -> set[str]:
         raw_variants = loads_json(value, []) if isinstance(value, str) else value
@@ -397,8 +392,7 @@ def find_merge_neighbors(
 
     # Fetch all non-archived rules for scoring.
     rows = db.fetchall(
-        f"SELECT {RULE_COLUMNS} FROM rules "
-        f"WHERE status != 'archived' AND {scope_where}",
+        f"SELECT {RULE_COLUMNS} FROM rules WHERE status != 'archived' AND {scope_where}",
         scope_params,
     )
 
@@ -426,7 +420,9 @@ def find_merge_neighbors(
         row_search_terms = loads_json(row["search_terms"], {})
         if search_terms and row_search_terms:
             st_keys = set(search_terms.keys()) if isinstance(search_terms, dict) else set()
-            row_st_keys = set(row_search_terms.keys()) if isinstance(row_search_terms, dict) else set()
+            row_st_keys = (
+                set(row_search_terms.keys()) if isinstance(row_search_terms, dict) else set()
+            )
             st_overlap = len(st_keys & row_st_keys)
             score += st_overlap * 1.5
 
@@ -452,12 +448,12 @@ def find_merge_neighbors(
 
     # Embedding-based recall: augment BM25/token candidates with cosine similarity.
     try:
+        from ..config import Config
         from ..search.embedding import (
             EmbeddingClient,
             _cosine,
             _deserialize,
         )
-        from ..config import Config
 
         cfg = Config.load()
         if cfg.embed_enabled and cfg.embed_base_url and cfg.embed_model:
@@ -522,9 +518,7 @@ def find_merge_neighbors(
     )
 
     # Sort by score descending, return top limit.
-    sorted_candidates = sorted(
-        candidates.values(), key=lambda x: x[1], reverse=True
-    )
+    sorted_candidates = sorted(candidates.values(), key=lambda x: x[1], reverse=True)
     results = []
     for entry in sorted_candidates[:limit]:
         # Attach any fingerprints whose blocked area overlaps this candidate's trigger/action
@@ -534,14 +528,18 @@ def find_merge_neighbors(
         for fp in fp_rows:
             fp_trigger = (fp["blocked_trigger_area"] or "").lower()
             fp_action = (fp["blocked_action_area"] or "").lower()
-            if (fp_trigger and fp_trigger in candidate_trigger) or \
-               (fp_action and fp_action in candidate_action) or \
-               (candidate_trigger and candidate_trigger in fp_trigger):
-                related_fps.append({
-                    "id": fp["id"],
-                    "strength": fp["archive_strength"],
-                    "blocked_trigger": fp["blocked_trigger_area"],
-                })
+            if (
+                (fp_trigger and fp_trigger in candidate_trigger)
+                or (fp_action and fp_action in candidate_action)
+                or (candidate_trigger and candidate_trigger in fp_trigger)
+            ):
+                related_fps.append(
+                    {
+                        "id": fp["id"],
+                        "strength": fp["archive_strength"],
+                        "blocked_trigger": fp["blocked_trigger_area"],
+                    }
+                )
         candidate_dict = {**entry[0], "archived_fingerprints": related_fps}
         results.append(candidate_dict)
     return results
@@ -577,12 +575,14 @@ def validate_merge_transaction(
 
     Returns True if the transaction is valid and may proceed.
     """
-    destructive_ops: frozenset[str] = frozenset((
-        "replace_existing",
-        "suppress_existing",
-        "archive_existing",
-        "update_existing_fields",
-    ))
+    destructive_ops: frozenset[str] = frozenset(
+        (
+            "replace_existing",
+            "suppress_existing",
+            "archive_existing",
+            "update_existing_fields",
+        )
+    )
 
     # Non-destructive operations always pass validation.
     if merge_decision.operation not in destructive_ops:
@@ -633,12 +633,14 @@ def _new_evidence_improves(existing_rule: dict, new_rule_data: dict) -> bool:
     Returns True only if the new rule provides strictly more evidence in at
     least one of these dimensions without reducing any other.
     """
+
     def _len(obj, key: str) -> int:
         val = obj.get(key)
         if isinstance(val, list):
             return len(val)
         if isinstance(val, str) and val:
             from nokori.db import loads_json
+
             parsed = loads_json(val, [])
             return len(parsed) if isinstance(parsed, list) else 0
         return 0
@@ -651,9 +653,7 @@ def _new_evidence_improves(existing_rule: dict, new_rule_data: dict) -> bool:
             existing_count = _len(existing_rule, "trigger_variants") or _len(
                 existing_rule, "variants"
             )
-            new_count = _len(new_rule_data, "variants") or _len(
-                new_rule_data, "trigger_variants"
-            )
+            new_count = _len(new_rule_data, "variants") or _len(new_rule_data, "trigger_variants")
         else:
             existing_count = _len(existing_rule, field)
             new_count = _len(new_rule_data, field)
@@ -723,6 +723,7 @@ def _existing_usefulness_weak_or_stale(existing_rule: dict) -> bool:
         if first_dt.tzinfo is None:
             first_dt = first_dt.astimezone()
         from nokori.utils.time import local_now
+
         if local_now() - first_dt > timedelta(days=90):
             return True
     except (TypeError, ValueError):

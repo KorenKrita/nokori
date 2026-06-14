@@ -14,8 +14,7 @@ from typing import Literal
 from ..config import Config
 from ..db import Db
 from ..models import Rule, ScoredResult
-from . import bm25
-from . import embedding as embedding_search
+from . import bm25, embedding as embedding_search
 
 InteractionKind = Literal["hook", "cli"]
 
@@ -48,9 +47,7 @@ def rrf_fuse(
     return fused
 
 
-def merge_scored_fields(
-    bm25_result: ScoredResult, embed_result: ScoredResult
-) -> ScoredResult:
+def merge_scored_fields(bm25_result: ScoredResult, embed_result: ScoredResult) -> ScoredResult:
     """Combine fielded evidence from BM25 and embedding sources."""
     embedding_only = (
         embed_result.cosine is not None
@@ -101,13 +98,16 @@ class SearchScorer:
                     self._cfg.embed_hook_timeout_seconds if interaction == "hook" else 30
                 )
                 embed_results, self.last_embed_mode = embedding_search.search_local_shared(
-                    prompt, rules, self._db, self._cfg,
-                    top_k=top_k, timeout=timeout, interaction=interaction,
+                    prompt,
+                    rules,
+                    self._db,
+                    self._cfg,
+                    top_k=top_k,
+                    timeout=timeout,
+                    interaction=interaction,
                 )
             else:
-                timeout = (
-                    self._cfg.embed_hook_timeout_seconds if interaction == "hook" else 10
-                )
+                timeout = self._cfg.embed_hook_timeout_seconds if interaction == "hook" else 10
                 client = embedding_search.EmbeddingClient(self._cfg)
                 embed_results = embedding_search.search(
                     prompt, rules, self._db, client, top_k=top_k, timeout=timeout

@@ -82,30 +82,30 @@ def _run_admission_judge(
         "below 0.7 = too rigid or generic, rule will rarely match real prompts.\n\n"
         "Output a single JSON object with these fields:\n\n"
         "REQUIRED fields:\n"
-        "- \"scores\" (object): quality scores, each a number from 0.0 to 1.0\n"
-        "  - \"overall_quality\" (number, REQUIRED): composite quality assessment, 0.0-1.0\n"
-        "  - \"evidence_support\" (number, REQUIRED): how well evidence_quotes support the rule, 0.0-1.0\n"
-        "  - \"trigger_specificity\" (number, REQUIRED): how specific/narrow the trigger is, 0.0-1.0\n"
-        "  - \"action_clarity\" (number, REQUIRED): how clear and actionable the instruction is, 0.0-1.0\n"
-        "  - \"scope_control\" (number, REQUIRED): how well-bounded the scope is, 0.0-1.0\n"
-        "  - \"generalization_safety\" (number, REQUIRED): how safe from over-generalization, 0.0-1.0\n"
-        "  - \"retrieval_readiness\" (number, REQUIRED): whether trigger has enough retrievable terms, 0.0-1.0\n"
-        "- \"decision\" (string, REQUIRED): one of \"accept\", \"revise\", \"reject\"\n"
-        "- \"reasoning\" (string, REQUIRED): brief explanation of your decision\n\n"
+        '- "scores" (object): quality scores, each a number from 0.0 to 1.0\n'
+        '  - "overall_quality" (number, REQUIRED): composite quality assessment, 0.0-1.0\n'
+        '  - "evidence_support" (number, REQUIRED): how well evidence_quotes support the rule, 0.0-1.0\n'
+        '  - "trigger_specificity" (number, REQUIRED): how specific/narrow the trigger is, 0.0-1.0\n'
+        '  - "action_clarity" (number, REQUIRED): how clear and actionable the instruction is, 0.0-1.0\n'
+        '  - "scope_control" (number, REQUIRED): how well-bounded the scope is, 0.0-1.0\n'
+        '  - "generalization_safety" (number, REQUIRED): how safe from over-generalization, 0.0-1.0\n'
+        '  - "retrieval_readiness" (number, REQUIRED): whether trigger has enough retrievable terms, 0.0-1.0\n'
+        '- "decision" (string, REQUIRED): one of "accept", "revise", "reject"\n'
+        '- "reasoning" (string, REQUIRED): brief explanation of your decision\n\n'
         "Example output:\n"
         "```json\n"
         "{\n"
-        "  \"scores\": {\n"
-        "    \"overall_quality\": 0.85,\n"
-        "    \"evidence_support\": 0.90,\n"
-        "    \"trigger_specificity\": 0.80,\n"
-        "    \"action_clarity\": 0.88,\n"
-        "    \"scope_control\": 0.82,\n"
-        "    \"generalization_safety\": 0.75,\n"
-        "    \"retrieval_readiness\": 0.78\n"
+        '  "scores": {\n'
+        '    "overall_quality": 0.85,\n'
+        '    "evidence_support": 0.90,\n'
+        '    "trigger_specificity": 0.80,\n'
+        '    "action_clarity": 0.88,\n'
+        '    "scope_control": 0.82,\n'
+        '    "generalization_safety": 0.75,\n'
+        '    "retrieval_readiness": 0.78\n'
         "  },\n"
-        "  \"decision\": \"accept\",\n"
-        "  \"reasoning\": \"Strong transcript evidence directly supports the trigger and action. Scope is narrow enough for reliable retrieval.\"\n"
+        '  "decision": "accept",\n'
+        '  "reasoning": "Strong transcript evidence directly supports the trigger and action. Scope is narrow enough for reliable retrieval."\n'
         "}\n"
         "```\n"
         "Output ONLY the JSON object, no markdown fences, no extra text."
@@ -137,10 +137,14 @@ def _run_admission_judge(
         decision = _enforce_admission_policy(llm_decision, scores)
         log.info(
             "admission_judge: llm_decision=%s policy_decision=%s scores={overall=%.2f evidence=%.2f specificity=%.2f action=%.2f scope=%.2f generalization=%.2f}",
-            llm_decision, decision,
-            scores.get("overall_quality", 0), scores.get("evidence_support", 0),
-            scores.get("trigger_specificity", 0), scores.get("action_clarity", 0),
-            scores.get("scope_control", 0), scores.get("generalization_safety", 0),
+            llm_decision,
+            decision,
+            scores.get("overall_quality", 0),
+            scores.get("evidence_support", 0),
+            scores.get("trigger_specificity", 0),
+            scores.get("action_clarity", 0),
+            scores.get("scope_control", 0),
+            scores.get("generalization_safety", 0),
         )
         return decision, scores
     except CircuitBreakerOpenError:
@@ -207,83 +211,83 @@ def _run_rewriter(
         "Separate trigger, action, concepts, variants, search_terms, and excluded_contexts.\n\n"
         "Output a single JSON object with these fields:\n\n"
         "REQUIRED fields:\n"
-        "- \"trigger_canonical\" (string, REQUIRED): the canonical trigger text, concise and specific\n"
-        "- \"concepts\" (array of objects, REQUIRED): concept definitions used for matching. Each object:\n"
-        "  - \"id\" (string): short identifier (e.g. \"force_push\", \"shared_branch\")\n"
-        "  - \"label\" (string): human-readable label\n"
-        "  - \"aliases\" (array of objects): each alias has:\n"
-        "    - \"text\" (string): distinctive keyword or short phrase\n"
-        "    - \"strength\" (string): \"strong\" (must match as substring) or \"weak\" (assists recall only)\n"
-        "    - \"requires_neighbor\" (array of strings, REQUIRED when strength=\"weak\"): other alias texts that must appear "
-        "nearby for this weak alias to count. E.g. a weak alias \"output\" needs requires_neighbor=[\"test\"] so it only "
-        "matches when \"test\" is also present. Strong aliases do NOT need this field.\n"
+        '- "trigger_canonical" (string, REQUIRED): the canonical trigger text, concise and specific\n'
+        '- "concepts" (array of objects, REQUIRED): concept definitions used for matching. Each object:\n'
+        '  - "id" (string): short identifier (e.g. "force_push", "shared_branch")\n'
+        '  - "label" (string): human-readable label\n'
+        '  - "aliases" (array of objects): each alias has:\n'
+        '    - "text" (string): distinctive keyword or short phrase\n'
+        '    - "strength" (string): "strong" (must match as substring) or "weak" (assists recall only)\n'
+        '    - "requires_neighbor" (array of strings, REQUIRED when strength="weak"): other alias texts that must appear '
+        'nearby for this weak alias to count. E.g. a weak alias "output" needs requires_neighbor=["test"] so it only '
+        'matches when "test" is also present. Strong aliases do NOT need this field.\n'
         "    CONSTRAINTS: Strong aliases must NOT be a single common/stop word (like 'the', 'is', 'do', 'when', 'how', "
         "'use', 'run', 'for', 'with'). Use multi-word phrases or domain-specific terms for strong aliases.\n"
         "    IMPORTANT: include BOTH English AND Chinese aliases for each concept so the rule matches "
-        "regardless of prompt language. E.g. [{\"text\": \"force push\", \"strength\": \"strong\"}, "
-        "{\"text\": \"强推\", \"strength\": \"strong\"}, {\"text\": \"git push --force\", \"strength\": \"strong\"}, "
-        "{\"text\": \"push\", \"strength\": \"weak\", \"requires_neighbor\": [\"force\"]}]\n"
-        "  - \"match_mode\" (string): \"all_terms\" (all words in alias must appear) or \"any_alias\" (exact phrase substring)\n"
-        "  - \"required\" (boolean): true if this concept MUST match for the rule to fire\n"
-        "- \"required_concept_groups\" (array of objects, REQUIRED): each object has:\n"
-        "  - \"id\" (string): group identifier\n"
-        "  - \"all_of\" (array of strings): concept IDs that must all be present. "
+        'regardless of prompt language. E.g. [{"text": "force push", "strength": "strong"}, '
+        '{"text": "强推", "strength": "strong"}, {"text": "git push --force", "strength": "strong"}, '
+        '{"text": "push", "strength": "weak", "requires_neighbor": ["force"]}]\n'
+        '  - "match_mode" (string): "all_terms" (all words in alias must appear) or "any_alias" (exact phrase substring)\n'
+        '  - "required" (boolean): true if this concept MUST match for the rule to fire\n'
+        '- "required_concept_groups" (array of objects, REQUIRED): each object has:\n'
+        '  - "id" (string): group identifier\n'
+        '  - "all_of" (array of strings): concept IDs that must all be present. '
         "Every ID listed MUST exist in the concepts array above.\n"
-        "- \"variants\" (array of objects, REQUIRED): trigger phrasing variants in BOTH languages. Each object:\n"
-        "  - \"text\" (string): a short phrase (2-5 words, MUST be multi-word for strong_anchor). "
+        '- "variants" (array of objects, REQUIRED): trigger phrasing variants in BOTH languages. Each object:\n'
+        '  - "text" (string): a short phrase (2-5 words, MUST be multi-word for strong_anchor). '
         "Include both English AND Chinese variants as separate entries.\n"
-        "  - \"kind\" (string): \"strong_anchor\" (text must appear as exact substring in prompt — high precision) or \"weak_recall\" (only helps BM25 retrieval — no substring requirement)\n"
-        "  - \"requires_concepts\" (array of strings): concept IDs required alongside this variant. "
+        '  - "kind" (string): "strong_anchor" (text must appear as exact substring in prompt — high precision) or "weak_recall" (only helps BM25 retrieval — no substring requirement)\n'
+        '  - "requires_concepts" (array of strings): concept IDs required alongside this variant. '
         "MUST be non-empty for strong_anchor (at least one concept ID). Use [] for weak_recall. "
         "Every ID listed MUST exist in the concepts array.\n"
-        "- \"excluded_contexts\" (array of objects, REQUIRED): situations where the rule should NOT fire. Each:\n"
-        "  - \"id\" (string): unique identifier (e.g. \"exc_personal\")\n"
-        "  - \"label\" (string): human-readable description\n"
-        "  - \"patterns\" (array of strings): text patterns to match. Include BOTH English AND Chinese patterns "
+        '- "excluded_contexts" (array of objects, REQUIRED): situations where the rule should NOT fire. Each:\n'
+        '  - "id" (string): unique identifier (e.g. "exc_personal")\n'
+        '  - "label" (string): human-readable description\n'
+        '  - "patterns" (array of strings): text patterns to match. Include BOTH English AND Chinese patterns '
         "so exclusion works regardless of prompt language.\n"
-        "  - \"match_mode\" (string): \"phrase\" (substring) or \"all_terms\" (all words present)\n"
-        "  - \"scope\" (string): \"global\", \"trigger\", or \"tool_input_only\"\n"
-        "- \"action_instruction\" (string, REQUIRED): what the agent should do\n"
-        "- \"severity\" (string, REQUIRED): one of \"reminder\", \"high_risk\", \"gate_eligible\"\n"
-        "- \"search_terms\" (object, REQUIRED): BM25 retrieval keywords — terms a developer would type when this scenario arises.\n"
-        "  - \"en\" (array of strings): Latin-script terms (commands, identifiers, tool names, flags)\n"
-        "  - \"zh\" (array of strings): CJK terms (if applicable, else empty [])\n"
-        "- \"scope\" (object, REQUIRED): matching scope constraints\n"
-        "  - \"domain_tags\" (array of strings): e.g. [\"git\", \"testing\"]\n"
-        "  - \"file_or_path_patterns\" (array of strings): e.g. [\"*.py\", \"tests/\"]\n"
-        "  - \"tool_tags\" (array of strings): e.g. [\"Bash\", \"Write\"]\n\n"
+        '  - "match_mode" (string): "phrase" (substring) or "all_terms" (all words present)\n'
+        '  - "scope" (string): "global", "trigger", or "tool_input_only"\n'
+        '- "action_instruction" (string, REQUIRED): what the agent should do\n'
+        '- "severity" (string, REQUIRED): one of "reminder", "high_risk", "gate_eligible"\n'
+        '- "search_terms" (object, REQUIRED): BM25 retrieval keywords — terms a developer would type when this scenario arises.\n'
+        '  - "en" (array of strings): Latin-script terms (commands, identifiers, tool names, flags)\n'
+        '  - "zh" (array of strings): CJK terms (if applicable, else empty [])\n'
+        '- "scope" (object, REQUIRED): matching scope constraints\n'
+        '  - "domain_tags" (array of strings): e.g. ["git", "testing"]\n'
+        '  - "file_or_path_patterns" (array of strings): e.g. ["*.py", "tests/"]\n'
+        '  - "tool_tags" (array of strings): e.g. ["Bash", "Write"]\n\n'
         "REQUIRED continued:\n"
-        "- \"rewrite_rationale\" (string, REQUIRED): explanation of what was changed and why\n\n"
+        '- "rewrite_rationale" (string, REQUIRED): explanation of what was changed and why\n\n'
         "Example output:\n"
         "```json\n"
         "{\n"
-        "  \"trigger_canonical\": \"When force-pushing to a shared branch without --force-with-lease\",\n"
-        "  \"concepts\": [\n"
-        "    {\"id\": \"force_push\", \"label\": \"force push\", \"aliases\": [{\"text\": \"force push\", \"strength\": \"strong\"}, {\"text\": \"强推\", \"strength\": \"strong\"}, {\"text\": \"push --force\", \"strength\": \"strong\"}, {\"text\": \"push -f\", \"strength\": \"strong\"}], \"match_mode\": \"any_alias\", \"required\": true},\n"
-        "    {\"id\": \"shared_branch\", \"label\": \"shared branch\", \"aliases\": [{\"text\": \"shared branch\", \"strength\": \"strong\"}, {\"text\": \"共享分支\", \"strength\": \"strong\"}, {\"text\": \"main branch\", \"strength\": \"strong\"}, {\"text\": \"origin main\", \"strength\": \"weak\"}], \"match_mode\": \"any_alias\", \"required\": true}\n"
+        '  "trigger_canonical": "When force-pushing to a shared branch without --force-with-lease",\n'
+        '  "concepts": [\n'
+        '    {"id": "force_push", "label": "force push", "aliases": [{"text": "force push", "strength": "strong"}, {"text": "强推", "strength": "strong"}, {"text": "push --force", "strength": "strong"}, {"text": "push -f", "strength": "strong"}], "match_mode": "any_alias", "required": true},\n'
+        '    {"id": "shared_branch", "label": "shared branch", "aliases": [{"text": "shared branch", "strength": "strong"}, {"text": "共享分支", "strength": "strong"}, {"text": "main branch", "strength": "strong"}, {"text": "origin main", "strength": "weak"}], "match_mode": "any_alias", "required": true}\n'
         "  ],\n"
-        "  \"required_concept_groups\": [\n"
-        "    {\"id\": \"grp1\", \"all_of\": [\"force_push\", \"shared_branch\"]}\n"
+        '  "required_concept_groups": [\n'
+        '    {"id": "grp1", "all_of": ["force_push", "shared_branch"]}\n'
         "  ],\n"
-        "  \"variants\": [\n"
-        "    {\"text\": \"force push\", \"kind\": \"strong_anchor\", \"requires_concepts\": [\"force_push\"]},\n"
-        "    {\"text\": \"git push --force\", \"kind\": \"strong_anchor\", \"requires_concepts\": [\"force_push\"]},\n"
-        "    {\"text\": \"强推到共享分支\", \"kind\": \"strong_anchor\", \"requires_concepts\": [\"force_push\", \"shared_branch\"]},\n"
-        "    {\"text\": \"force push main\", \"kind\": \"strong_anchor\", \"requires_concepts\": [\"force_push\", \"shared_branch\"]},\n"
-        "    {\"text\": \"overwrite remote\", \"kind\": \"weak_recall\", \"requires_concepts\": []}\n"
+        '  "variants": [\n'
+        '    {"text": "force push", "kind": "strong_anchor", "requires_concepts": ["force_push"]},\n'
+        '    {"text": "git push --force", "kind": "strong_anchor", "requires_concepts": ["force_push"]},\n'
+        '    {"text": "强推到共享分支", "kind": "strong_anchor", "requires_concepts": ["force_push", "shared_branch"]},\n'
+        '    {"text": "force push main", "kind": "strong_anchor", "requires_concepts": ["force_push", "shared_branch"]},\n'
+        '    {"text": "overwrite remote", "kind": "weak_recall", "requires_concepts": []}\n'
         "  ],\n"
-        "  \"excluded_contexts\": [\n"
-        "    {\"id\": \"exc_personal\", \"label\": \"personal branch\", \"patterns\": [\"personal branch\", \"feature branch\", \"个人分支\"], \"match_mode\": \"phrase\", \"scope\": \"global\"}\n"
+        '  "excluded_contexts": [\n'
+        '    {"id": "exc_personal", "label": "personal branch", "patterns": ["personal branch", "feature branch", "个人分支"], "match_mode": "phrase", "scope": "global"}\n'
         "  ],\n"
-        "  \"action_instruction\": \"Use --force-with-lease instead of --force to prevent overwriting others' work.\",\n"
-        "  \"severity\": \"high_risk\",\n"
-        "  \"search_terms\": {\"en\": [\"force-with-lease\", \"git push\", \"--force\", \"shared branch\"], \"zh\": [\"强推\", \"共享分支\", \"远程分支\"]},\n"
-        "  \"scope\": {\n"
-        "    \"domain_tags\": [\"git\"],\n"
-        "    \"file_or_path_patterns\": [],\n"
-        "    \"tool_tags\": [\"Bash\"]\n"
+        '  "action_instruction": "Use --force-with-lease instead of --force to prevent overwriting others\' work.",\n'
+        '  "severity": "high_risk",\n'
+        '  "search_terms": {"en": ["force-with-lease", "git push", "--force", "shared branch"], "zh": ["强推", "共享分支", "远程分支"]},\n'
+        '  "scope": {\n'
+        '    "domain_tags": ["git"],\n'
+        '    "file_or_path_patterns": [],\n'
+        '    "tool_tags": ["Bash"]\n'
         "  },\n"
-        "  \"rewrite_rationale\": \"Narrowed from generic 'git push' to specifically force-push on shared branches. Added bilingual aliases and short variants.\"\n"
+        '  "rewrite_rationale": "Narrowed from generic \'git push\' to specifically force-push on shared branches. Added bilingual aliases and short variants."\n'
         "}\n"
         "```\n"
         "Output ONLY the JSON object, no markdown fences, no extra text."
@@ -337,22 +341,22 @@ def _run_final_judge(
         "You must cite evidence for any accept decision.\n\n"
         "Output a single JSON object with these fields:\n\n"
         "REQUIRED fields:\n"
-        "- \"decision\" (string, REQUIRED): one of:\n"
-        "  - \"accept_active\": narrow, evidence-rich, low-near-miss rule ready for active use\n"
-        "  - \"accept_candidate\": good rule but needs shadow proof before active\n"
-        "  - \"reject\": insufficient evidence or too broad\n\n"
+        '- "decision" (string, REQUIRED): one of:\n'
+        '  - "accept_active": narrow, evidence-rich, low-near-miss rule ready for active use\n'
+        '  - "accept_candidate": good rule but needs shadow proof before active\n'
+        '  - "reject": insufficient evidence or too broad\n\n'
         "REQUIRED continued:\n"
-        "- \"reasoning\" (string, REQUIRED): explanation of your decision\n\n"
+        '- "reasoning" (string, REQUIRED): explanation of your decision\n\n'
         "OPTIONAL fields:\n"
-        "- \"evidence_citations\" (array of strings): verbatim quotes from the evidence that support your decision\n\n"
+        '- "evidence_citations" (array of strings): verbatim quotes from the evidence that support your decision\n\n'
         "Example output:\n"
         "```json\n"
         "{\n"
-        "  \"decision\": \"accept_candidate\",\n"
-        "  \"reasoning\": \"Rule has solid evidence but trigger is moderately broad. Needs shadow observation to confirm precision.\",\n"
-        "  \"evidence_citations\": [\n"
-        "    \"user said: always use --force-with-lease not --force\",\n"
-        "    \"the assistant corrected itself after the user's feedback\"\n"
+        '  "decision": "accept_candidate",\n'
+        '  "reasoning": "Rule has solid evidence but trigger is moderately broad. Needs shadow observation to confirm precision.",\n'
+        '  "evidence_citations": [\n'
+        '    "user said: always use --force-with-lease not --force",\n'
+        '    "the assistant corrected itself after the user\'s feedback"\n'
         "  ]\n"
         "}\n"
         "```\n"
@@ -458,11 +462,13 @@ def _ensure_rule_data_variants(rule_data: dict[str, Any]) -> dict[str, Any]:
         return rule_data
     strong_anchor = bool(required_concepts and len(tokenize(trigger)) >= 2)
     updated = dict(rule_data)
-    updated["variants"] = [{
-        "text": trigger,
-        "kind": "strong_anchor" if strong_anchor else "weak_recall",
-        "requires_concepts": required_concepts if strong_anchor else [],
-    }]
+    updated["variants"] = [
+        {
+            "text": trigger,
+            "kind": "strong_anchor" if strong_anchor else "weak_recall",
+            "requires_concepts": required_concepts if strong_anchor else [],
+        }
+    ]
     return updated
 
 
@@ -510,13 +516,15 @@ def _draft_concepts(candidate: dict[str, Any]) -> list[dict[str, Any]]:
         # required=False: aliases won't contribute to trigger_coverage anchors, but
         # the concept group still requires this concept to match for
         # required_concepts_match. Rule can fire via other evidence paths.
-        return [{
-            "id": "concept_0",
-            "label": trigger[:80],
-            "aliases": [{"text": trigger[:120], "strength": "strong"}],
-            "match_mode": "all_terms",
-            "required": False,
-        }]
+        return [
+            {
+                "id": "concept_0",
+                "label": trigger[:80],
+                "aliases": [{"text": trigger[:120], "strength": "strong"}],
+                "match_mode": "all_terms",
+                "required": False,
+            }
+        ]
 
     from ..matcher.compiler import _is_single_generic_token
 
@@ -531,13 +539,15 @@ def _draft_concepts(candidate: dict[str, Any]) -> list[dict[str, Any]]:
         if not parts:
             continue
         aliases = [{"text": p, "strength": "strong"} for p in parts]
-        result.append({
-            "id": f"concept_{i}",
-            "label": parts[0][:80],
-            "aliases": aliases,
-            "match_mode": "any_alias",
-            "required": True,
-        })
+        result.append(
+            {
+                "id": f"concept_{i}",
+                "label": parts[0][:80],
+                "aliases": aliases,
+                "match_mode": "any_alias",
+                "required": True,
+            }
+        )
     return result
 
 
@@ -550,16 +560,18 @@ def _draft_excluded_contexts(candidate: dict[str, Any]) -> list[dict[str, Any]]:
         patterns = [p.strip() for p in ctx_text.split(" / ") if p.strip()]
         if not patterns:
             patterns = [ctx_text]
-        result.append({
-            "id": f"excluded_{i}",
-            "label": patterns[0][:80],
-            "patterns": patterns,
-            "match_mode": "phrase",
-            "scope": "global",
-            "window_tokens": 12,
-            "override_allowed": False,
-            "override_requires": [],
-        })
+        result.append(
+            {
+                "id": f"excluded_{i}",
+                "label": patterns[0][:80],
+                "patterns": patterns,
+                "match_mode": "phrase",
+                "scope": "global",
+                "window_tokens": 12,
+                "override_allowed": False,
+                "override_requires": [],
+            }
+        )
     return result
 
 
@@ -580,9 +592,11 @@ def _draft_variants(candidate: dict[str, Any]) -> list[dict[str, Any]]:
             continue
         seen.add(text)
         strong_anchor = bool(required_concepts and len(tokenize(text)) >= 2)
-        result.append({
-            "text": text,
-            "kind": "strong_anchor" if strong_anchor else "weak_recall",
-            "requires_concepts": required_concepts if strong_anchor else [],
-        })
+        result.append(
+            {
+                "text": text,
+                "kind": "strong_anchor" if strong_anchor else "weak_recall",
+                "requires_concepts": required_concepts if strong_anchor else [],
+            }
+        )
     return result

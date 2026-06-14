@@ -53,9 +53,11 @@ def _format_posthoc_summary(db, rule_id: str) -> str:
 def _print_scored_detail(r, db, pool_size: int) -> None:
     """Print fielded match details for a scored result."""
     # Fielded match evidence
-    print(f"    trigger_idf_sum={r.trigger_idf_sum:.3f}  "
-          f"trigger_coverage={r.trigger_coverage:.3f}  "
-          f"matched_trigger={sorted(r.matched_trigger_tokens)}")
+    print(
+        f"    trigger_idf_sum={r.trigger_idf_sum:.3f}  "
+        f"trigger_coverage={r.trigger_coverage:.3f}  "
+        f"matched_trigger={sorted(r.matched_trigger_tokens)}"
+    )
     if r.matched_variant_tokens:
         print(f"    matched_variant={sorted(r.matched_variant_tokens)}")
     # Eligibility
@@ -67,10 +69,12 @@ def _print_scored_detail(r, db, pool_size: int) -> None:
     if r.embedding_profile_bucket:
         print(f"    embedding_profile_bucket={r.embedding_profile_bucket}")
     # Rule state and key scores
-    print(f"    state={r.rule.status}  severity={r.rule.severity}  "
-          f"usefulness={r.rule.observed_usefulness_score:.2f}  "
-          f"fp={r.rule.false_positive_score:.2f}  "
-          f"harmful={r.rule.harmful_score:.2f}")
+    print(
+        f"    state={r.rule.status}  severity={r.rule.severity}  "
+        f"usefulness={r.rule.observed_usefulness_score:.2f}  "
+        f"fp={r.rule.false_positive_score:.2f}  "
+        f"harmful={r.rule.harmful_score:.2f}"
+    )
     # Posthoc summary
     posthoc = _format_posthoc_summary(db, r.rule.id)
     print(f"    posthoc(30d): {posthoc}")
@@ -84,13 +88,9 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
     db = open_db(cfg.db_path)
     try:
         if project_id is None:
-            formal_rules = fetch_rules(
-                db, statuses=("active", "trusted"), global_only=True
-            )
+            formal_rules = fetch_rules(db, statuses=("active", "trusted"), global_only=True)
         else:
-            formal_rules = fetch_rules(
-                db, statuses=("active", "trusted"), project_id=project_id
-            )
+            formal_rules = fetch_rules(db, statuses=("active", "trusted"), project_id=project_id)
         shadow_rules = (
             fetch_shadow_rules(db, project_id=project_id)
             if project_id and cfg.promotion_enabled
@@ -117,19 +117,13 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
         print(f"HOT  ({len(hot)}):")
         for r in hot:
             cos_str = f"  cos={r.cosine:.3f}" if r.cosine else ""
-            print(
-                f"  {r.rule.short_id}  rrf={r.rrf_score:.4f}  bm25={r.bm25_score:.4f}"
-                f"{cos_str}"
-            )
+            print(f"  {r.rule.short_id}  rrf={r.rrf_score:.4f}  bm25={r.bm25_score:.4f}{cos_str}")
             print(f"    {r.rule.trigger_canonical[:80]}")
             _print_scored_detail(r, db, pool_size)
         print(f"WARM ({len(warm)}):")
         for r in warm:
             cos_str = f"  cos={r.cosine:.3f}" if r.cosine else ""
-            print(
-                f"  {r.rule.short_id}  rrf={r.rrf_score:.4f}  bm25={r.bm25_score:.4f}"
-                f"{cos_str}"
-            )
+            print(f"  {r.rule.short_id}  rrf={r.rrf_score:.4f}  bm25={r.bm25_score:.4f}{cos_str}")
             _print_scored_detail(r, db, pool_size)
 
         gateable = select_gate_rules(hot)

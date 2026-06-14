@@ -1,4 +1,5 @@
 """Cold-path integration stage: merge planning, compilation, and rule insertion."""
+
 from __future__ import annotations
 
 import json
@@ -7,7 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
-from ..db import Db, SCHEMA_VERSION, dumps_json
+from ..db import SCHEMA_VERSION, Db, dumps_json
 from ..eval.synthetic import SyntheticEvalResult
 from ..matcher.compiler import CompilationError, CompiledMatcher, compile_rule
 from ..merge.policy import (
@@ -17,7 +18,7 @@ from ..merge.policy import (
     record_lineage,
     validate_merge_transaction,
 )
-from ..policy import RUNTIME_POLICY_VERSION, SourceOrigin, ActivationOrigin
+from ..policy import RUNTIME_POLICY_VERSION, ActivationOrigin, SourceOrigin
 from ..utils.logging import get_logger
 from ..utils.time import now_iso
 from ._constants import DESTRUCTIVE_MERGE_OPS, PIPELINE_VERSION
@@ -48,9 +49,7 @@ def _run_merge_planner(
         Tuple of (operation, full_merge_info).
     """
     # Retrieve existing rules for comparison
-    existing_rules = _get_existing_rules_for_merge(
-        db, rule_data, project_id=project_id
-    )
+    existing_rules = _get_existing_rules_for_merge(db, rule_data, project_id=project_id)
 
     if not existing_rules:
         return "keep_both", {"merge_rationale": "no existing overlap", "target_rule_ids": []}
@@ -61,37 +60,37 @@ def _run_merge_planner(
         "Do not replace trusted rules with plausible but weaker text.\n\n"
         "Output a single JSON object with these fields:\n\n"
         "REQUIRED fields:\n"
-        "- \"relation_shape\" (string, REQUIRED): one of:\n"
-        "  - \"equivalent\": same rule, different wording\n"
-        "  - \"new_broader\": new rule covers more ground than existing\n"
-        "  - \"new_narrower\": new rule is more specific than existing\n"
-        "  - \"overlap\": partial overlap in scope\n"
-        "  - \"complementary\": different aspects of same domain\n"
-        "  - \"contradiction\": rules conflict with each other\n"
-        "  - \"obsolete\": existing rule is outdated\n"
-        "  - \"unrelated\": no meaningful relationship\n"
-        "  - \"split_required\": new rule contains multiple independent concerns\n"
-        "- \"new_rule_safety\" (string, REQUIRED): \"safe\", \"unsafe\", or \"uncertain\"\n"
-        "- \"operation_safety\" (string, REQUIRED): \"safe\", \"unsafe\", or \"uncertain\"\n"
-        "- \"quality_winner\" (string, REQUIRED): \"new\", \"existing\", \"both\", or \"neither\"\n"
-        "- \"operation\" (string, REQUIRED): one of:\n"
-        "  - \"merge_into_existing\", \"update_existing_fields\", \"replace_existing\",\n"
-        "  - \"keep_both\", \"reject_new\", \"suppress_existing\", \"archive_existing\", \"split_required\"\n"
-        "- \"confidence\" (number, REQUIRED): 0.0 to 1.0, how confident in this assessment\n"
-        "- \"reason\" (string, REQUIRED): brief explanation\n\n"
+        '- "relation_shape" (string, REQUIRED): one of:\n'
+        '  - "equivalent": same rule, different wording\n'
+        '  - "new_broader": new rule covers more ground than existing\n'
+        '  - "new_narrower": new rule is more specific than existing\n'
+        '  - "overlap": partial overlap in scope\n'
+        '  - "complementary": different aspects of same domain\n'
+        '  - "contradiction": rules conflict with each other\n'
+        '  - "obsolete": existing rule is outdated\n'
+        '  - "unrelated": no meaningful relationship\n'
+        '  - "split_required": new rule contains multiple independent concerns\n'
+        '- "new_rule_safety" (string, REQUIRED): "safe", "unsafe", or "uncertain"\n'
+        '- "operation_safety" (string, REQUIRED): "safe", "unsafe", or "uncertain"\n'
+        '- "quality_winner" (string, REQUIRED): "new", "existing", "both", or "neither"\n'
+        '- "operation" (string, REQUIRED): one of:\n'
+        '  - "merge_into_existing", "update_existing_fields", "replace_existing",\n'
+        '  - "keep_both", "reject_new", "suppress_existing", "archive_existing", "split_required"\n'
+        '- "confidence" (number, REQUIRED): 0.0 to 1.0, how confident in this assessment\n'
+        '- "reason" (string, REQUIRED): brief explanation\n\n'
         "OPTIONAL fields:\n"
-        "- \"target_rule_ids\" (array of strings): IDs of existing rules this relates to\n\n"
+        '- "target_rule_ids" (array of strings): IDs of existing rules this relates to\n\n'
         "Example output:\n"
         "```json\n"
         "{\n"
-        "  \"relation_shape\": \"new_narrower\",\n"
-        "  \"new_rule_safety\": \"safe\",\n"
-        "  \"operation_safety\": \"safe\",\n"
-        "  \"quality_winner\": \"new\",\n"
-        "  \"operation\": \"keep_both\",\n"
-        "  \"confidence\": 0.82,\n"
-        "  \"reason\": \"New rule covers a specific subset (Python testing) of the existing general testing rule. Both are valuable.\",\n"
-        "  \"target_rule_ids\": [\"abc123-def456\"]\n"
+        '  "relation_shape": "new_narrower",\n'
+        '  "new_rule_safety": "safe",\n'
+        '  "operation_safety": "safe",\n'
+        '  "quality_winner": "new",\n'
+        '  "operation": "keep_both",\n'
+        '  "confidence": 0.82,\n'
+        '  "reason": "New rule covers a specific subset (Python testing) of the existing general testing rule. Both are valuable.",\n'
+        '  "target_rule_ids": ["abc123-def456"]\n'
         "}\n"
         "```\n"
         "Output ONLY the JSON object, no markdown fences, no extra text."
@@ -137,8 +136,10 @@ def _run_merge_planner(
         decision = apply_merge_policy(planner_output, existing, rule_data)
         log.info(
             "merge_planner: llm_op=%s policy_op=%s relation=%s quality_winner=%s",
-            operation, decision.operation,
-            planner_output.get("relation_shape"), planner_output.get("quality_winner"),
+            operation,
+            decision.operation,
+            planner_output.get("relation_shape"),
+            planner_output.get("quality_winner"),
         )
         return decision.operation, {
             **planner_output,
@@ -153,7 +154,6 @@ def _run_merge_planner(
         raise
     except ValueError:
         raise  # Propagate for retry (spec section 13)
-
 
 
 def _operation_to_relation_shape(operation: str) -> str:
@@ -220,7 +220,9 @@ def apply_merge_with_reeval(
 
     _raw_variants = json.loads(_merged_row["trigger_variants"] or "[]")
     _variants = [
-        v if isinstance(v, dict) else {
+        v
+        if isinstance(v, dict)
+        else {
             "text": str(v),
             "kind": "weak_recall",
             "requires_concepts": [],
@@ -269,9 +271,13 @@ def apply_merge_with_reeval(
 
     if not _synth_ok:
         _revert_merge(
-            db, target_id, _merged_row,
-            _merge_changed_variants, _merge_changed_excluded,
-            _pre_variants, _pre_excluded,
+            db,
+            target_id,
+            _merged_row,
+            _merge_changed_variants,
+            _merge_changed_excluded,
+            _pre_variants,
+            _pre_excluded,
         )
         return MergeRevalOutcome(success=False, rule_id=None)
 
@@ -299,15 +305,19 @@ def _revert_merge(
     if changed_variants:
         _revert_sets.append("trigger_variants = ?")
         _revert_params.append(
-            pre_variants if isinstance(pre_variants, str)
-            else dumps_json(pre_variants) if pre_variants is not None
+            pre_variants
+            if isinstance(pre_variants, str)
+            else dumps_json(pre_variants)
+            if pre_variants is not None
             else None
         )
     if changed_excluded:
         _revert_sets.append("excluded_contexts = ?")
         _revert_params.append(
-            pre_excluded if isinstance(pre_excluded, str)
-            else dumps_json(pre_excluded) if pre_excluded is not None
+            pre_excluded
+            if isinstance(pre_excluded, str)
+            else dumps_json(pre_excluded)
+            if pre_excluded is not None
             else None
         )
     if _revert_sets:
@@ -318,7 +328,11 @@ def _revert_merge(
         _revert_sets.append("updated_at = ?")
         _revert_params.append(_now_revert)
         _revert_params.extend([target_id, _revert_version, _revert_status])
-        _rpv_where = "AND runtime_policy_version = ?" if _revert_rpv else "AND runtime_policy_version IS NULL"
+        _rpv_where = (
+            "AND runtime_policy_version = ?"
+            if _revert_rpv
+            else "AND runtime_policy_version IS NULL"
+        )
         _rpv_params = (_revert_rpv,) if _revert_rpv else ()
         with db.transaction() as tx:
             cur = tx.execute(
@@ -329,14 +343,14 @@ def _revert_merge(
             if cur.rowcount == 0:
                 log.warning(
                     "merge_reeval revert CAS failed rule=%s version=%s",
-                    target_id, _revert_version,
+                    target_id,
+                    _revert_version,
                 )
 
 
 # ---------------------------------------------------------------------------
 # Cold fast lane check
 # ---------------------------------------------------------------------------
-
 
 
 def insert_rule_from_pipeline(
@@ -406,7 +420,9 @@ def insert_rule_from_pipeline(
     path_patterns_json = dumps_json(scope.get("file_or_path_patterns", []))
     language_hints_json = dumps_json(rule_data.get("language_hints", []))
     evidence_quotes_json = dumps_json(rule_data.get("evidence_quotes", []))
-    non_generalization_boundaries_json = dumps_json(rule_data.get("non_generalization_boundaries", []))
+    non_generalization_boundaries_json = dumps_json(
+        rule_data.get("non_generalization_boundaries", [])
+    )
     project_scope = "project" if project_id else "global"
 
     with db.transaction() as tx:
@@ -530,7 +546,6 @@ def insert_rule_from_pipeline(
 # ---------------------------------------------------------------------------
 
 
-
 def _apply_merge_side_effects(
     db: Db,
     new_rule_id: str,
@@ -558,7 +573,9 @@ def _apply_merge_side_effects(
     now = now_iso()
     reason = merge_info.get("merge_rationale", merge_op)
     # CAS over all 4 fields: rule_id, rule_version, status, runtime_policy_version (spec section 13)
-    rpv_where = "AND runtime_policy_version = ?" if existing_rpv else "AND runtime_policy_version IS NULL"
+    rpv_where = (
+        "AND runtime_policy_version = ?" if existing_rpv else "AND runtime_policy_version IS NULL"
+    )
     rpv_params: tuple = (existing_rpv,) if existing_rpv else ()
 
     cas_applied = False
@@ -569,8 +586,16 @@ def _apply_merge_side_effects(
                 "replacement_id = ?, rule_version = rule_version + 1, "
                 f"runtime_policy_version = ?, updated_at = ? "
                 f"WHERE id = ? AND rule_version = ? AND status = ? {rpv_where}",
-                (reason, new_rule_id, RUNTIME_POLICY_VERSION, now,
-                 target_rule_id, existing_version, existing_status, *rpv_params),
+                (
+                    reason,
+                    new_rule_id,
+                    RUNTIME_POLICY_VERSION,
+                    now,
+                    target_rule_id,
+                    existing_version,
+                    existing_status,
+                    *rpv_params,
+                ),
             )
             cas_applied = cur.rowcount == 1
         elif merge_op == "suppress_existing":
@@ -579,8 +604,15 @@ def _apply_merge_side_effects(
                 "rule_version = rule_version + 1, "
                 f"runtime_policy_version = ?, updated_at = ? "
                 f"WHERE id = ? AND rule_version = ? AND status = ? {rpv_where}",
-                (now, RUNTIME_POLICY_VERSION, now,
-                 target_rule_id, existing_version, existing_status, *rpv_params),
+                (
+                    now,
+                    RUNTIME_POLICY_VERSION,
+                    now,
+                    target_rule_id,
+                    existing_version,
+                    existing_status,
+                    *rpv_params,
+                ),
             )
             cas_applied = cur.rowcount == 1
         elif merge_op == "archive_existing":
@@ -589,8 +621,15 @@ def _apply_merge_side_effects(
                 "rule_version = rule_version + 1, "
                 f"runtime_policy_version = ?, updated_at = ? "
                 f"WHERE id = ? AND rule_version = ? AND status = ? {rpv_where}",
-                (reason, RUNTIME_POLICY_VERSION, now,
-                 target_rule_id, existing_version, existing_status, *rpv_params),
+                (
+                    reason,
+                    RUNTIME_POLICY_VERSION,
+                    now,
+                    target_rule_id,
+                    existing_version,
+                    existing_status,
+                    *rpv_params,
+                ),
             )
             cas_applied = cur.rowcount == 1
 
@@ -604,6 +643,7 @@ def _apply_merge_side_effects(
         rule_data = _get_rule_data_for_fingerprint(db, target_rule_id)
         if rule_data:
             from ..archive.fingerprints import create_archived_fingerprint_from_data
+
             create_archived_fingerprint_from_data(
                 db,
                 rule_id=target_rule_id,
@@ -614,7 +654,6 @@ def _apply_merge_side_effects(
             )
 
 
-
 def _build_trigger_data(rule_data: dict[str, Any]) -> dict[str, Any]:
     """Build trigger_data dict suitable for compile_rule from structured rule_data."""
     return {
@@ -623,7 +662,6 @@ def _build_trigger_data(rule_data: dict[str, Any]) -> dict[str, Any]:
         "excluded_contexts": rule_data.get("excluded_contexts", []),
         "variants": rule_data.get("variants", []),
     }
-
 
 
 def _get_existing_rules_for_merge(
@@ -639,7 +677,6 @@ def _get_existing_rules_for_merge(
     return find_merge_neighbors(db, rule_data, limit=20, project_id=project_id)
 
 
-
 def _get_rule_data_for_fingerprint(db: Db, rule_id: str) -> dict | None:
     """Read minimal rule data needed for fingerprint creation."""
     row = db.fetchone(
@@ -649,12 +686,12 @@ def _get_rule_data_for_fingerprint(db: Db, rule_id: str) -> dict | None:
     if row is None:
         return None
     from ..db import loads_json
+
     return {
         "trigger_canonical": row["trigger_canonical"] or "",
         "action_instruction": row["action_instruction"] or "",
         "domain_tags": loads_json(row["domain_tags"], []) if row["domain_tags"] else [],
     }
-
 
 
 def _apply_non_destructive_merge(
@@ -703,13 +740,13 @@ def _apply_non_destructive_merge(
     # Merge new variants into existing
     new_variants = new_rule_data.get("variants", [])
     if new_variants:
-        raw_current = json.loads(rule_row["trigger_variants"]) if rule_row["trigger_variants"] else []
+        raw_current = (
+            json.loads(rule_row["trigger_variants"]) if rule_row["trigger_variants"] else []
+        )
         current = [_variant_entry(v) for v in raw_current]
         normalized_new = [_variant_entry(v) for v in new_variants]
         current_texts = {_variant_text(v) for v in current}
-        added = [
-            v for v in normalized_new if _variant_text(v) not in current_texts
-        ]
+        added = [v for v in normalized_new if _variant_text(v) not in current_texts]
         if added:
             merged = current + added
             updates.append("trigger_variants = ?")
@@ -729,7 +766,9 @@ def _apply_non_destructive_merge(
     # Merge near-miss examples
     new_near_miss = new_rule_data.get("near_miss_examples", [])
     if new_near_miss:
-        current = json.loads(rule_row["near_miss_examples"]) if rule_row["near_miss_examples"] else []
+        current = (
+            json.loads(rule_row["near_miss_examples"]) if rule_row["near_miss_examples"] else []
+        )
         added = [nm for nm in new_near_miss if nm not in current]
         if added:
             merged = current + added
@@ -743,7 +782,11 @@ def _apply_non_destructive_merge(
         updates.append("updated_at = ?")
         params.append(now)
         # CAS: verify rule hasn't changed concurrently
-        rpv_where = "AND runtime_policy_version = ?" if current_rpv else "AND runtime_policy_version IS NULL"
+        rpv_where = (
+            "AND runtime_policy_version = ?"
+            if current_rpv
+            else "AND runtime_policy_version IS NULL"
+        )
         rpv_params: tuple = (current_rpv,) if current_rpv else ()
         params.append(target_rule_id)
         params.append(current_version)
@@ -757,6 +800,6 @@ def _apply_non_destructive_merge(
             if cur.rowcount == 0:
                 log.warning(
                     "non_destructive_merge CAS failed rule=%s version=%s",
-                    target_rule_id, current_version,
+                    target_rule_id,
+                    current_version,
                 )
-

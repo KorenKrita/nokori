@@ -258,8 +258,14 @@ MERGE_PLANNER_SCHEMA: dict[str, Any] = {
         "relation_shape": {
             "type": "string",
             "enum": [
-                "equivalent", "new_broader", "new_narrower", "overlap",
-                "complementary", "contradiction", "obsolete", "unrelated",
+                "equivalent",
+                "new_broader",
+                "new_narrower",
+                "overlap",
+                "complementary",
+                "contradiction",
+                "obsolete",
+                "unrelated",
                 "split_required",
             ],
         },
@@ -278,9 +284,14 @@ MERGE_PLANNER_SCHEMA: dict[str, Any] = {
         "operation": {
             "type": "string",
             "enum": [
-                "merge_into_existing", "update_existing_fields",
-                "replace_existing", "keep_both", "reject_new",
-                "suppress_existing", "archive_existing", "split_required",
+                "merge_into_existing",
+                "update_existing_fields",
+                "replace_existing",
+                "keep_both",
+                "reject_new",
+                "suppress_existing",
+                "archive_existing",
+                "split_required",
             ],
         },
         "confidence": {"type": "number", "minimum": 0, "maximum": 1},
@@ -291,8 +302,13 @@ MERGE_PLANNER_SCHEMA: dict[str, Any] = {
         },
     },
     "required": [
-        "relation_shape", "new_rule_safety", "operation_safety",
-        "quality_winner", "operation", "confidence", "reason",
+        "relation_shape",
+        "new_rule_safety",
+        "operation_safety",
+        "quality_winner",
+        "operation",
+        "confidence",
+        "reason",
     ],
 }
 
@@ -319,7 +335,13 @@ SYNTHETIC_EVAL_GENERATOR_SCHEMA: dict[str, Any] = {
                     },
                     "rationale": {"type": "string"},
                 },
-                "required": ["prompt", "case_type", "expected_min_decision", "expected_max_decision", "rationale"],
+                "required": [
+                    "prompt",
+                    "case_type",
+                    "expected_min_decision",
+                    "expected_max_decision",
+                    "rationale",
+                ],
             },
         },
     },
@@ -492,8 +514,13 @@ def _pop_first(data: dict, *keys, default=None):
 
 
 _ADMISSION_SCORE_KEYS = (
-    "overall_quality", "evidence_support", "trigger_specificity",
-    "action_clarity", "scope_control", "generalization_safety", "retrieval_readiness",
+    "overall_quality",
+    "evidence_support",
+    "trigger_specificity",
+    "action_clarity",
+    "scope_control",
+    "generalization_safety",
+    "retrieval_readiness",
 )
 
 
@@ -604,13 +631,27 @@ def _normalize_role_output(role: str, data: dict[str, Any]) -> dict[str, Any]:
                     for item in st:
                         en_val = item.get("en", [])
                         zh_val = item.get("zh", [])
-                        en_merged.extend(en_val if isinstance(en_val, list) else [en_val] if isinstance(en_val, str) else [])
-                        zh_merged.extend(zh_val if isinstance(zh_val, list) else [zh_val] if isinstance(zh_val, str) else [])
+                        en_merged.extend(
+                            en_val
+                            if isinstance(en_val, list)
+                            else [en_val]
+                            if isinstance(en_val, str)
+                            else []
+                        )
+                        zh_merged.extend(
+                            zh_val
+                            if isinstance(zh_val, list)
+                            else [zh_val]
+                            if isinstance(zh_val, str)
+                            else []
+                        )
                     data["search_terms"] = {"en": en_merged, "zh": zh_merged}
                 else:
                     # LLM returned flat list of strings
                     logger.warning("search_terms has unexpected list format: %r", st)
-                    terms = [str(t) for t in st if isinstance(t, (str, int, float)) and str(t).strip()]
+                    terms = [
+                        str(t) for t in st if isinstance(t, (str, int, float)) and str(t).strip()
+                    ]
                     data["search_terms"] = {"en": terms, "zh": []}
             elif isinstance(st, str) and st.strip():
                 data["search_terms"] = {"en": [st], "zh": []}
@@ -622,7 +663,11 @@ def _normalize_role_output(role: str, data: dict[str, Any]) -> dict[str, Any]:
             for k in ("domain_tags", "file_or_path_patterns", "tool_tags"):
                 if k in data:
                     scope[k] = data.pop(k)
-            data["scope"] = scope if scope else {"domain_tags": [], "file_or_path_patterns": [], "tool_tags": []}
+            data["scope"] = (
+                scope
+                if scope
+                else {"domain_tags": [], "file_or_path_patterns": [], "tool_tags": []}
+            )
         # Fix: rewrite_rationale alias (required field)
         if "rewrite_rationale" not in data:
             r = _pop_first(data, "rationale", "reasoning", "reason")
@@ -648,6 +693,7 @@ def _normalize_role_output(role: str, data: dict[str, Any]) -> dict[str, Any]:
             rc = _pop_first(data, "reason", "code")
             if rc is not None:
                 from ..posthoc.evaluator import POSTHOC_REASON_CODES
+
                 if rc in POSTHOC_REASON_CODES:
                     data["reason_code"] = rc
                 # else: discard — 'reason'/'code' alias too generic to trust

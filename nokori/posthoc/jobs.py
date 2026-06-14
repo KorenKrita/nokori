@@ -13,9 +13,9 @@ import uuid
 from ..db import Db, loads_json
 from ..events.fire import get_fire_events_for_session, update_first_observed_useful
 from ..events.observability import write_event
-from .evaluator import run_posthoc_evaluation
 from ..utils.logging import get_logger
 from ..utils.time import now_iso
+from .evaluator import run_posthoc_evaluation
 
 log = get_logger("nokori.posthoc.jobs")
 
@@ -36,9 +36,7 @@ def enqueue_posthoc_for_session(db: Db, session_id: str) -> int:
 
             fire_event_id = event["id"]
             turn_index = event.get("turn_index")
-            window_hash = compute_window_payload_hash(
-                session_id, fire_event_id, turn_index
-            )
+            window_hash = compute_window_payload_hash(session_id, fire_event_id, turn_index)
 
             # Skip if already enqueued (one posthoc job per fire event)
             existing = db.fetchone(
@@ -85,9 +83,7 @@ def mark_posthoc_job_complete(
     """Mark a posthoc job as done and propagate the label to the fire event."""
     now = now_iso()
 
-    row = db.fetchone(
-        "SELECT fire_event_id FROM posthoc_jobs WHERE id = ?", (job_id,)
-    )
+    row = db.fetchone("SELECT fire_event_id FROM posthoc_jobs WHERE id = ?", (job_id,))
     if row is None:
         return
 
@@ -112,9 +108,7 @@ _POSTHOC_MAX_RETRIES = 5
 def mark_posthoc_job_failed(db: Db, job_id: str) -> None:
     """Increment retries. After max retries, mark as permanently failed."""
     now = now_iso()
-    row = db.fetchone(
-        "SELECT retries FROM posthoc_jobs WHERE id = ?", (job_id,)
-    )
+    row = db.fetchone("SELECT retries FROM posthoc_jobs WHERE id = ?", (job_id,))
     if row is None:
         return
 
@@ -184,7 +178,8 @@ def process_pending_posthoc_jobs(db: Db, llm, *, limit: int = 20) -> dict[str, i
             attribution_weight,
         )
         write_event(
-            db, source="posthoc_evaluation",
+            db,
+            source="posthoc_evaluation",
             outcome=label,
             details={
                 "rule_id": row["rule_id"],
@@ -215,9 +210,7 @@ def process_pending_posthoc_jobs(db: Db, llm, *, limit: int = 20) -> dict[str, i
     return summary
 
 
-def compute_window_payload_hash(
-    session_id: str, fire_event_id: str, turn_index: int | None
-) -> str:
+def compute_window_payload_hash(session_id: str, fire_event_id: str, turn_index: int | None) -> str:
     """Compute a hash for idempotency of posthoc evaluation windows."""
     payload = f"{session_id}:{fire_event_id}:{turn_index}"
     return hashlib.sha256(payload.encode()).hexdigest()[:16]
@@ -267,15 +260,22 @@ def build_evaluator_input(db: Db, fire_event: dict) -> dict | None:
     else:
         injection_context = trigger_snapshot
 
-    decision_features = loads_json(
-        fire_event.get("decision_features"), {}
-    )
+    decision_features = loads_json(fire_event.get("decision_features"), {})
     # Spec 10.2: evaluator must NOT see status-revealing fields or quality scores.
     _BLIND_KEYS = (
-        "decision_reason", "quality_score", "evidence_support_score",
-        "specificity_score", "retrieval_readiness_score", "observed_usefulness_score",
-        "plausible_usefulness_score", "false_positive_score", "harmful_score",
-        "status", "severity", "activation_origin", "merge_lineage",
+        "decision_reason",
+        "quality_score",
+        "evidence_support_score",
+        "specificity_score",
+        "retrieval_readiness_score",
+        "observed_usefulness_score",
+        "plausible_usefulness_score",
+        "false_positive_score",
+        "harmful_score",
+        "status",
+        "severity",
+        "activation_origin",
+        "merge_lineage",
     )
     for k in _BLIND_KEYS:
         decision_features.pop(k, None)
@@ -308,7 +308,6 @@ def build_evaluator_input(db: Db, fire_event: dict) -> dict | None:
     }
 
 
-
 def _load_transcript_window(
     db: Db,
     fire_event_id: str,
@@ -337,9 +336,10 @@ def _load_transcript_window(
     # or be a reference identifier. Refs that look like hex hashes (16-64 hex chars)
     # are just IDs without real content — mark as unclear rather than wrapping as fake content.
     import re as _re
+
     ref = bounded_window_ref or transcript_window_ref
     if ref:
-        if _re.match(r'^[0-9a-f]{16,64}$', ref):
+        if _re.match(r"^[0-9a-f]{16,64}$", ref):
             return None
         if ref.startswith("session:") or len(ref) < 80:
             return None

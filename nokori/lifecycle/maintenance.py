@@ -55,12 +55,14 @@ def _due(db: Db, key: str, interval_days: int) -> bool:
 def run_candidate_cleanup(db: Db) -> int:
     if not _due(db, "candidate_cleanup", CANDIDATE_CLEANUP_INTERVAL_DAYS):
         return 0
-    rows = db.fetchall(
-        "SELECT id, source_origin, created_at FROM rules WHERE status = 'candidate'"
-    )
+    rows = db.fetchall("SELECT id, source_origin, created_at FROM rules WHERE status = 'candidate'")
     deleted = 0
     for r in rows:
-        ttl = ANTI_PATTERN_TTL_DAYS if r["source_origin"] == "external_source_material" else CANDIDATE_TTL_DAYS
+        ttl = (
+            ANTI_PATTERN_TTL_DAYS
+            if r["source_origin"] == "external_source_material"
+            else CANDIDATE_TTL_DAYS
+        )
         age = _days_since_iso(r["created_at"])
         if age is not None and age >= ttl:
             actually_deleted = False
@@ -76,7 +78,8 @@ def run_candidate_cleanup(db: Db) -> int:
                 actually_deleted = True
             if actually_deleted:
                 write_event(
-                    db, source="candidate_cleanup",
+                    db,
+                    source="candidate_cleanup",
                     outcome="deleted",
                     details={"rule_id": r["id"], "age_days": age, "ttl_days": ttl},
                 )
@@ -104,12 +107,9 @@ def restore_orphaned_archived(db: Db, *, include_inactive_targets: bool = False)
     restored = 0
     ts = now_iso()
     for r in rows:
-        target = db.fetchone(
-            "SELECT status FROM rules WHERE id = ?", (r["replacement_id"],)
-        )
-        should_restore = (
-            target is None
-            or (include_inactive_targets and target["status"] in ("suppressed", "archived"))
+        target = db.fetchone("SELECT status FROM rules WHERE id = ?", (r["replacement_id"],))
+        should_restore = target is None or (
+            include_inactive_targets and target["status"] in ("suppressed", "archived")
         )
         if not should_restore:
             continue
@@ -186,7 +186,6 @@ def run_maintenance(db: Db, cfg=None) -> dict:
     return run_due_jobs(db, cfg, transition_results)
 
 
-
 def run_session_file_cleanup(cfg) -> int:
     from ..utils import sessions
 
@@ -214,7 +213,9 @@ def run_observability_cleanup(db: Db, *, force: bool = False) -> dict:
 
     _set_last_run(db, "observability_cleanup")
     if hook_deleted or error_deleted:
-        log.info("observability_cleanup hook_events=%d error_events=%d", hook_deleted, error_deleted)
+        log.info(
+            "observability_cleanup hook_events=%d error_events=%d", hook_deleted, error_deleted
+        )
     return {"hook_events_deleted": hook_deleted, "error_events_deleted": error_deleted}
 
 

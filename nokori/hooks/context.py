@@ -35,8 +35,13 @@ class HotPathContext:
     """
 
     __slots__ = (
-        "cfg", "host", "session_id", "payload",
-        "_db", "_db_open_attempted", "_db_unavailable",
+        "cfg",
+        "host",
+        "session_id",
+        "payload",
+        "_db",
+        "_db_open_attempted",
+        "_db_unavailable",
         "errors",
     )
 
@@ -81,12 +86,14 @@ class HotPathContext:
         message: str,
         exception: BaseException | None = None,
     ) -> None:
-        self.errors.append(SubsystemError(
-            subsystem=subsystem,
-            category=category,
-            message=message,
-            exception=exception,
-        ))
+        self.errors.append(
+            SubsystemError(
+                subsystem=subsystem,
+                category=category,
+                message=message,
+                exception=exception,
+            )
+        )
 
     def record_event(
         self,

@@ -35,7 +35,8 @@ def require_write_auth(request: Request) -> None:
     supplied_cookie = request.cookies.get(WRITE_AUTH_COOKIE)
     if not expected:
         raise HTTPException(status_code=403, detail="write authentication required")
-    if (supplied_header and secrets.compare_digest(supplied_header, expected)) or \
-       (supplied_cookie and secrets.compare_digest(supplied_cookie, expected)):
+    if (supplied_header and secrets.compare_digest(supplied_header, expected)) or (
+        supplied_cookie and secrets.compare_digest(supplied_cookie, expected)
+    ):
         return
     raise HTTPException(status_code=403, detail="write authentication required")

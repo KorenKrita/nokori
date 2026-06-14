@@ -1,4 +1,5 @@
 """Config editor: merge user file values, defaults, and save semantics."""
+
 from __future__ import annotations
 
 import os
@@ -17,10 +18,10 @@ from .config_schema import (
     FIELD_BY_ID,
     FIELDS,
     SECTION_LABELS,
+    SECTIONS,
     VARIANT_LABELS,
     FieldDef,
     Locale,
-    SECTIONS,
 )
 from .errors import ConfigError
 from .search.embedding import remote_embed_configured
@@ -131,18 +132,26 @@ def _effective_values(cfg: Config) -> dict[str, Any]:
         "models.synthetic_eval_generator": cfg.role_models.get("synthetic_eval_generator", ""),
         "models.posthoc_evaluator": cfg.role_models.get("posthoc_evaluator", ""),
         "models.limits.extractor_max_tokens": cfg.role_max_tokens.get("extractor", 4000),
-        "models.limits.admission_judge_max_tokens": cfg.role_max_tokens.get("admission_judge", 2000),
+        "models.limits.admission_judge_max_tokens": cfg.role_max_tokens.get(
+            "admission_judge", 2000
+        ),
         "models.limits.rule_rewriter_max_tokens": cfg.role_max_tokens.get("rule_rewriter", 4000),
         "models.limits.final_judge_max_tokens": cfg.role_max_tokens.get("final_judge", 2000),
         "models.limits.merge_planner_max_tokens": cfg.role_max_tokens.get("merge_planner", 3000),
-        "models.limits.synthetic_eval_generator_max_tokens": cfg.role_max_tokens.get("synthetic_eval_generator", 4000),
-        "models.limits.posthoc_evaluator_max_tokens": cfg.role_max_tokens.get("posthoc_evaluator", 3000),
+        "models.limits.synthetic_eval_generator_max_tokens": cfg.role_max_tokens.get(
+            "synthetic_eval_generator", 4000
+        ),
+        "models.limits.posthoc_evaluator_max_tokens": cfg.role_max_tokens.get(
+            "posthoc_evaluator", 3000
+        ),
         "models.timeouts.extractor_timeout": cfg.role_timeouts.get("extractor", 60),
         "models.timeouts.admission_judge_timeout": cfg.role_timeouts.get("admission_judge", 30),
         "models.timeouts.rule_rewriter_timeout": cfg.role_timeouts.get("rule_rewriter", 60),
         "models.timeouts.final_judge_timeout": cfg.role_timeouts.get("final_judge", 30),
         "models.timeouts.merge_planner_timeout": cfg.role_timeouts.get("merge_planner", 45),
-        "models.timeouts.synthetic_eval_generator_timeout": cfg.role_timeouts.get("synthetic_eval_generator", 60),
+        "models.timeouts.synthetic_eval_generator_timeout": cfg.role_timeouts.get(
+            "synthetic_eval_generator", 60
+        ),
         "models.timeouts.posthoc_evaluator_timeout": cfg.role_timeouts.get("posthoc_evaluator", 45),
     }
 
@@ -339,4 +348,9 @@ def save_editor(
 
     cfg.ensure_dirs()
     apply_patch(path, sets=sets, removes=deduped_removes)
-    return {"saved": True, "config_path": str(path), "written_keys": sorted(sets.keys()), "removed_keys": deduped_removes}
+    return {
+        "saved": True,
+        "config_path": str(path),
+        "written_keys": sorted(sets.keys()),
+        "removed_keys": deduped_removes,
+    }

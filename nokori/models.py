@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal
 
-
 TurnRole = Literal["human", "assistant", "tool_use", "tool_result"]
 
 Status = Literal["candidate", "active", "trusted", "suppressed", "archived"]

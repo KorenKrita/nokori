@@ -41,9 +41,7 @@ def format_injection(
     if not hot and not warm:
         return "", []
 
-    footer = (
-        f"\n(Say `{dismiss_phrase} <short_id>` to retire an outdated rule.)"
-    )
+    footer = f"\n(Say `{dismiss_phrase} <short_id>` to retire an outdated rule.)"
     budget = max(_INJECTION_BUDGET_FLOOR, max(0, max_chars - len(footer)))
 
     parts: list[str] = []
@@ -75,7 +73,9 @@ def format_injection(
         logged.append((r.rule.id, "hot"))
 
     for r in spillover + list(warm):
-        line = f"\n[warm {r.rule.short_id}] {r.rule.trigger_canonical} — {r.rule.action_instruction}"
+        line = (
+            f"\n[warm {r.rule.short_id}] {r.rule.trigger_canonical} — {r.rule.action_instruction}"
+        )
         if used + len(line) > budget:
             break
         parts.append(line)

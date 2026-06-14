@@ -1,4 +1,5 @@
 """Format hook stdout JSON for Claude Code vs Cursor (per Cursor docs compatibility)."""
+
 from __future__ import annotations
 
 from .host import Host

@@ -8,14 +8,16 @@ _CJK_RE = re.compile(r"[\u4e00-\u9fff]+")
 _LATIN_TOKEN_RE = re.compile(r"[A-Za-z][A-Za-z0-9._-]*")
 
 # zh phrases that only locate a correction, not useful for retrieval
-_ZH_DROP_EXACT = frozenset({
-    "不对",
-    "不是这里",
-    "不是这个意思",
-    "换一个",
-    "别在这里",
-    "别用",
-})
+_ZH_DROP_EXACT = frozenset(
+    {
+        "不对",
+        "不是这里",
+        "不是这个意思",
+        "换一个",
+        "别在这里",
+        "别用",
+    }
+)
 
 _VARIANT_ACTOR_PREFIXES = (
     "user ",

@@ -1,4 +1,5 @@
 """Config editor schema: field metadata, defaults, and localized labels."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -694,9 +695,22 @@ FIELDS: tuple[FieldDef, ...] = (
 )
 
 SECTIONS: tuple[dict[str, Any], ...] = (
-    {"id": "general", "field_ids": ("data_dir", "log_level", "max_injection_chars", "disabled", "strict", "dismiss_phrase")},
+    {
+        "id": "general",
+        "field_ids": (
+            "data_dir",
+            "log_level",
+            "max_injection_chars",
+            "disabled",
+            "strict",
+            "dismiss_phrase",
+        ),
+    },
     {"id": "gate", "field_ids": ("gate.enabled", "gate.ttl_seconds", "gate.matcher")},
-    {"id": "extract", "field_ids": ("extract.mode", "extract.defer_when_active", "extract.fork_cache")},
+    {
+        "id": "extract",
+        "field_ids": ("extract.mode", "extract.defer_when_active", "extract.fork_cache"),
+    },
     {"id": "llm", "field_ids": ("llm.base_url", "llm.model", "llm.api_key")},
     {
         "id": "embed",
@@ -709,12 +723,22 @@ SECTIONS: tuple[dict[str, Any], ...] = (
         "exclusive": {
             "group": "embed_backend",
             "variants": (
-                {"id": "local", "field_ids": ("embed.server_auto_start", "embed.hook_timeout_seconds", "embed.server_idle_seconds")},
+                {
+                    "id": "local",
+                    "field_ids": (
+                        "embed.server_auto_start",
+                        "embed.hook_timeout_seconds",
+                        "embed.server_idle_seconds",
+                    ),
+                },
                 {"id": "remote", "field_ids": ("embed.base_url", "embed.model", "embed.api_key")},
             ),
         },
     },
-    {"id": "session", "field_ids": ("hot_cache.enabled", "session.idle_seconds", "promotion.enabled")},
+    {
+        "id": "session",
+        "field_ids": ("hot_cache.enabled", "session.idle_seconds", "promotion.enabled"),
+    },
     {
         "id": "models",
         "field_ids": (
@@ -747,9 +771,17 @@ SECTION_LABELS: dict[str, dict[Locale, str]] = {
     "general": {"zh": "常规", "en": "General", "ja": "一般"},
     "gate": {"zh": "Gate 阻断", "en": "Gate", "ja": "Gate"},
     "extract": {"zh": "规则提取", "en": "Extraction", "ja": "抽出"},
-    "llm": {"zh": "LLM（后台抽规则）", "en": "LLM (background extract)", "ja": "LLM（バックグラウンド抽出）"},
+    "llm": {
+        "zh": "LLM（后台抽规则）",
+        "en": "LLM (background extract)",
+        "ja": "LLM（バックグラウンド抽出）",
+    },
     "embed": {"zh": "向量检索", "en": "Embedding", "ja": "ベクトル検索"},
-    "session": {"zh": "会话与生命周期", "en": "Session & lifecycle", "ja": "セッションとライフサイクル"},
+    "session": {
+        "zh": "会话与生命周期",
+        "en": "Session & lifecycle",
+        "ja": "セッションとライフサイクル",
+    },
     "models": {"zh": "角色模型配置", "en": "Per-role models", "ja": "ロール別モデル設定"},
 }
 

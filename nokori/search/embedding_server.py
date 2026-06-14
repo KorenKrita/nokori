@@ -1,4 +1,5 @@
 """Blocking Unix-socket server for local embeddings (one loaded model per process)."""
+
 from __future__ import annotations
 
 import json
@@ -10,8 +11,8 @@ from typing import Any
 
 from ..config import Config
 from ..utils.logging import get_logger
-from .embedding import LocalEmbeddingClient
 from . import embed_ipc
+from .embedding import LocalEmbeddingClient
 
 log = get_logger("nokori.search.embedding_server")
 

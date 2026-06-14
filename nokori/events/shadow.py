@@ -57,14 +57,22 @@ def create_shadow_event(
     ts = now_iso()
 
     # Snapshot the rule at time of shadow match
-    structured_snapshot = dumps_json({
-        "concepts": rule.concepts if isinstance(rule.concepts, list) else loads_json(rule.concepts, []),
-        "required_concept_groups": rule.required_concept_groups if isinstance(rule.required_concept_groups, list) else loads_json(rule.required_concept_groups, []),
-        "excluded_contexts": rule.excluded_contexts if isinstance(rule.excluded_contexts, list) else loads_json(rule.excluded_contexts, []),
-        "domain_tags": rule.domain_tags,
-        "tool_tags": rule.tool_tags,
-        "path_patterns": rule.path_patterns,
-    })
+    structured_snapshot = dumps_json(
+        {
+            "concepts": rule.concepts
+            if isinstance(rule.concepts, list)
+            else loads_json(rule.concepts, []),
+            "required_concept_groups": rule.required_concept_groups
+            if isinstance(rule.required_concept_groups, list)
+            else loads_json(rule.required_concept_groups, []),
+            "excluded_contexts": rule.excluded_contexts
+            if isinstance(rule.excluded_contexts, list)
+            else loads_json(rule.excluded_contexts, []),
+            "domain_tags": rule.domain_tags,
+            "tool_tags": rule.tool_tags,
+            "path_patterns": rule.path_patterns,
+        }
+    )
 
     with db.transaction() as tx:
         tx.execute(
@@ -184,7 +192,9 @@ def count_shadow_evidence(
     best_single_session_strong = max(per_session_strong.values()) if per_session_strong else 0
 
     # Best single-session's context diversity (for single-session exception)
-    best_session_id = max(per_session_strong, key=per_session_strong.get) if per_session_strong else None
+    best_session_id = (
+        max(per_session_strong, key=per_session_strong.get) if per_session_strong else None
+    )
     best_single_session_contexts = (
         len(per_session_contexts.get(best_session_id, set())) if best_session_id else 0
     )
@@ -248,11 +258,7 @@ def _compute_task_deduped_count(deduped_rows: list[dict]) -> int:
                 j_prefix = (session_rows[j].get("prompt_hash") or "")[:8]
 
                 # Same task if prompt_hash prefix matches
-                same_prefix = (
-                    group_prefix
-                    and j_prefix
-                    and group_prefix == j_prefix
-                )
+                same_prefix = group_prefix and j_prefix and group_prefix == j_prefix
                 # Same task if within 3 consecutive positions from group start
                 consecutive = (j - i) <= 3
 
@@ -292,8 +298,7 @@ def mark_shadow_label(
     """Update shadow event with evaluated label."""
     with db.transaction() as tx:
         tx.execute(
-            "UPDATE rule_shadow_events SET shadow_label = ?, evaluator_model_id = ? "
-            "WHERE id = ?",
+            "UPDATE rule_shadow_events SET shadow_label = ?, evaluator_model_id = ? WHERE id = ?",
             (label, evaluator_model_id, shadow_event_id),
         )
 
@@ -309,9 +314,7 @@ def get_unlabeled_shadow_events(db: Db, limit: int = 20) -> list[dict]:
     return [dict(r) for r in rows]
 
 
-def run_shadow_counterfactual_evaluation(
-    db: Db, llm, *, limit: int = 20
-) -> dict[str, int]:
+def run_shadow_counterfactual_evaluation(db: Db, llm, *, limit: int = 20) -> dict[str, int]:
     """Evaluate unlabeled shadow events via LLM counterfactual analysis.
 
     For each shadow event, determines whether the rule would have helped
@@ -336,9 +339,14 @@ def run_shadow_counterfactual_evaluation(
             if rule_id:
                 affected_rule_ids.add(rule_id)
             write_event(
-                db, source="shadow_counterfactual",
+                db,
+                source="shadow_counterfactual",
                 outcome="unclear",
-                details={"rule_id": rule_id, "shadow_event_id": shadow_event_id, "reason": "empty_snapshot"},
+                details={
+                    "rule_id": rule_id,
+                    "shadow_event_id": shadow_event_id,
+                    "reason": "empty_snapshot",
+                },
             )
             summary["processed"] += 1
             summary["labeled"] += 1
@@ -368,7 +376,7 @@ def run_shadow_counterfactual_evaluation(
             "- unclear: Cannot determine from available information.\n\n"
             "Key distinction: would_help_high = the context is a clear match and omission is risky; "
             "would_help_low = the context is related but the suggestion is just a nice-to-have.\n\n"
-            "Return JSON: {\"label\": \"...\", \"reasoning\": \"...\"}"
+            'Return JSON: {"label": "...", "reasoning": "..."}'
         )
 
         user_prompt = (
@@ -386,8 +394,14 @@ def run_shadow_counterfactual_evaluation(
                 user=user_prompt,
                 role="posthoc_evaluator",
             )
-        except (json.JSONDecodeError, KeyError, TypeError, RuntimeError,
-                OSError, ValueError) as exc:
+        except (
+            json.JSONDecodeError,
+            KeyError,
+            TypeError,
+            RuntimeError,
+            OSError,
+            ValueError,
+        ) as exc:
             log.warning(
                 "shadow counterfactual evaluation LLM call failed for event=%s: %s",
                 shadow_event_id,
@@ -397,9 +411,14 @@ def run_shadow_counterfactual_evaluation(
             if rule_id:
                 affected_rule_ids.add(rule_id)
             write_event(
-                db, source="shadow_counterfactual",
+                db,
+                source="shadow_counterfactual",
                 outcome="unclear",
-                details={"rule_id": rule_id, "shadow_event_id": shadow_event_id, "reason": "llm_failed"},
+                details={
+                    "rule_id": rule_id,
+                    "shadow_event_id": shadow_event_id,
+                    "reason": "llm_failed",
+                },
             )
             summary["failed"] += 1
             summary["processed"] += 1
@@ -416,17 +435,26 @@ def run_shadow_counterfactual_evaluation(
             if rule_id:
                 affected_rule_ids.add(rule_id)
             write_event(
-                db, source="shadow_counterfactual",
+                db,
+                source="shadow_counterfactual",
                 outcome="unclear",
-                details={"rule_id": rule_id, "shadow_event_id": shadow_event_id, "reason": "parse_failed"},
+                details={
+                    "rule_id": rule_id,
+                    "shadow_event_id": shadow_event_id,
+                    "reason": "parse_failed",
+                },
             )
             summary["labeled"] += 1
             summary["processed"] += 1
             continue
         raw_label = data.get("label", "unclear")
         valid_labels = (
-            "would_help_high", "would_help_low", "irrelevant",
-            "risky", "near_miss", "unclear",
+            "would_help_high",
+            "would_help_low",
+            "irrelevant",
+            "risky",
+            "near_miss",
+            "unclear",
         )
         label_invalid = raw_label not in valid_labels
         label = "unclear" if label_invalid else raw_label
@@ -440,7 +468,8 @@ def run_shadow_counterfactual_evaluation(
         if label_invalid:
             event_details["reason"] = "invalid_label"
         write_event(
-            db, source="shadow_counterfactual",
+            db,
+            source="shadow_counterfactual",
             outcome=label,
             details=event_details,
         )
@@ -461,4 +490,5 @@ def run_shadow_counterfactual_evaluation(
 
 def _days_ago_iso(days: int) -> str:
     from ..utils.time import local_days_ago
+
     return local_days_ago(days)

@@ -5,6 +5,7 @@ Both the normal extract path (commands/extract.py) and the fork path
 means. This module provides the single shared function that takes those
 candidates and routes them through the cold pipeline.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -67,7 +68,7 @@ def _candidate_evidence_quotes(cand: Candidate, transcript_text: str | None) -> 
                 verified.append(q[:_EVIDENCE_QUOTE_MAX])
             elif q.lower() in lower:
                 idx = lower.find(q.lower())
-                verified.append(haystack[idx:idx + len(q)][:_EVIDENCE_QUOTE_MAX])
+                verified.append(haystack[idx : idx + len(q)][:_EVIDENCE_QUOTE_MAX])
         if verified:
             return verified
 
@@ -145,7 +146,9 @@ def process_candidates(
                 "evidence_quotes": _candidate_evidence_quotes(cand, transcript_text),
             }
 
-            segment_text = f"{transcript_ref}::{extractor_output['trigger']}::{extractor_output['action']}"
+            segment_text = (
+                f"{transcript_ref}::{extractor_output['trigger']}::{extractor_output['action']}"
+            )
             seg_hash = _segment_hash(segment_text)
 
             try:
@@ -191,8 +194,9 @@ def process_candidates(
                 if result.rule_id is not None:
                     rules_created += 1
             except Exception as exc:
-                log.warning("cold pipeline failed for candidate: %s (%s)",
-                            (cand.trigger or "")[:60], exc)
+                log.warning(
+                    "cold pipeline failed for candidate: %s (%s)", (cand.trigger or "")[:60], exc
+                )
                 all_ok = False
     finally:
         db.close()

@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-
-
 # ---------------------------------------------------------------------------
 # Decision Features (fielded evidence for a retrieval decision)
 # ---------------------------------------------------------------------------
@@ -178,15 +176,13 @@ class RuleResponse(BaseModel):
     fire_count: int = 0
     fire_last_at: str | None = None
     fire_levels: dict[str, int] = Field(default_factory=dict)  # {"hot": N, "warm": N, "gate": N}
-    posthoc_labels: dict[str, int] = Field(default_factory=dict)  # {"observed_useful": N, "irrelevant": N, ...}
+    posthoc_labels: dict[str, int] = Field(
+        default_factory=dict
+    )  # {"observed_useful": N, "irrelevant": N, ...}
     shadow_count: int = 0
-
-
 
 
 class RetrieveRequest(BaseModel):
     prompt: str = Field(max_length=20000)
     project_id: str | None = None
     use_embedding: bool = True
-
-

@@ -1,4 +1,5 @@
 """Shared result dataclass for cold-path pipeline."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

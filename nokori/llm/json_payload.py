@@ -1,4 +1,5 @@
 """Extract JSON from LLM text that may include thinking blocks or markdown fences."""
+
 from __future__ import annotations
 
 import json
@@ -123,6 +124,7 @@ def _repair_json(text: str) -> Any | None:
     """Use json-repair library as last resort for malformed LLM output."""
     try:
         from json_repair import repair_json
+
         result = repair_json(text, return_objects=True)
         if result is not None and result != "" and result != [] and result != {}:
             if not isinstance(result, (dict, list)):

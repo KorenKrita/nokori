@@ -3,6 +3,7 @@
 Outputs structured markdown (default) or JSON with usage stats, rule stats,
 error aggregation, and conversion metrics for a specified time range.
 """
+
 from __future__ import annotations
 
 import argparse

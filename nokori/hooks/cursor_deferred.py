@@ -1,4 +1,5 @@
 """Cursor preToolUse path when beforeSubmitPrompt did not run for the latest user turn."""
+
 from __future__ import annotations
 
 from ..config import Config
@@ -24,7 +25,10 @@ log = get_logger("nokori.hooks.cursor_deferred")
 
 
 def _prompt_from_transcript(
-    payload: dict, *, session_id: str, tool_name: str | None,
+    payload: dict,
+    *,
+    session_id: str,
+    tool_name: str | None,
 ) -> tuple[str, str] | None:
     path = resolve_transcript_path(payload)
     if path is None:
@@ -52,8 +56,13 @@ def _generation_id_from_payload(payload: dict) -> str:
 
 
 def maybe_deferred_pre_tool_use(
-    payload: dict, cfg: Config, session_id: str, tool_name: str | None, host: Host,
-    *, db: Db | None = None,
+    payload: dict,
+    cfg: Config,
+    session_id: str,
+    tool_name: str | None,
+    host: Host,
+    *,
+    db: Db | None = None,
 ) -> dict | None:
     """Deliver rules via deny+agent_message when the latest user turn skipped submit hook.
 
@@ -67,7 +76,9 @@ def maybe_deferred_pre_tool_use(
         return None
 
     resolved = _prompt_from_transcript(
-        payload, session_id=session_id, tool_name=tool_name,
+        payload,
+        session_id=session_id,
+        tool_name=tool_name,
     )
     if resolved is None:
         return None
@@ -81,7 +92,9 @@ def maybe_deferred_pre_tool_use(
         return None
 
     project_id = sessions.resolve_project_id_for_session(
-        cfg, session_id, payload.get("cwd"),
+        cfg,
+        session_id,
+        payload.get("cwd"),
     )
 
     owns_db = db is None
@@ -91,7 +104,8 @@ def maybe_deferred_pre_tool_use(
         except DbError as e:
             log.warning(
                 "cursor deferred db open failed (claimed but abandoned) session=%s: %s",
-                session_id, e,
+                session_id,
+                e,
             )
             return None
     try:

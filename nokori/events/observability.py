@@ -3,6 +3,7 @@
 Provides write_event() and write_error() with fail-open semantics (never raises).
 Events are retained for 30 days and cleaned by maintenance sweep.
 """
+
 from __future__ import annotations
 
 import uuid
@@ -169,7 +170,12 @@ def query_errors(
     until: str | None = None,
 ) -> list[dict]:
     """Aggregate error_events by a dimension. Returns list of dicts with count."""
-    column_map = {"role": "role", "model_id": "model_id", "error_type": "error_type", "source": "source"}
+    column_map = {
+        "role": "role",
+        "model_id": "model_id",
+        "error_type": "error_type",
+        "source": "source",
+    }
     group_col = column_map.get(group_by, "role")
 
     where = []

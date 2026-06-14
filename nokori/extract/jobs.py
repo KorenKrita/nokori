@@ -16,8 +16,7 @@ def transcript_hash(path: Path, mtime: float) -> str:
     return hashlib.sha256(raw).hexdigest()[:16]
 
 
-def write_job(cfg: Config, transcript_path: Path, project_id: str | None,
-              mtime: float) -> Path:
+def write_job(cfg: Config, transcript_path: Path, project_id: str | None, mtime: float) -> Path:
     cfg.ensure_dirs()
     h = transcript_hash(transcript_path, mtime)
     out = cfg.jobs_dir / f"extract-{h}.json"
@@ -106,8 +105,11 @@ def delete_job(path: Path) -> None:
 
 
 def refresh_job_mtime(
-    cfg: Config, job_path: Path, transcript_path: Path,
-    project_id: str | None, new_mtime: float,
+    cfg: Config,
+    job_path: Path,
+    transcript_path: Path,
+    project_id: str | None,
+    new_mtime: float,
 ) -> Path:
     """Re-queue job when transcript mtime changed after SessionEnd (keep pending)."""
     delete_job(job_path)

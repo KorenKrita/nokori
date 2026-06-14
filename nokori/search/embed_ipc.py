@@ -1,4 +1,5 @@
 """Unix-socket IPC for a shared local embedding server (one model, all hook processes)."""
+
 from __future__ import annotations
 
 import json
@@ -248,5 +249,3 @@ def embed_text(
         return []
     vectors = resp.get("vectors") or []
     return [list(v) for v in vectors]
-
-

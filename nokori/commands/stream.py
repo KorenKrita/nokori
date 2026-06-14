@@ -3,11 +3,13 @@
 Dumps event history (default) or continuously follows new events (--follow).
 Designed for AI agent consumption, not human viewing.
 """
+
 from __future__ import annotations
 
 import argparse
 import json
 import time
+
 from ..config import Config
 from ..db import open_db
 from ..events.observability import query_events
@@ -27,10 +29,20 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
 
     if follow:
         return _follow_mode(cfg, since=since, session_id=session_id, source=source, verbose=verbose)
-    return _dump_mode(cfg, since=since, session_id=session_id, source=source, verbose=verbose, limit=limit)
+    return _dump_mode(
+        cfg, since=since, session_id=session_id, source=source, verbose=verbose, limit=limit
+    )
 
 
-def _dump_mode(cfg: Config, *, since: str, session_id: str | None, source: str | None, verbose: bool, limit: int) -> int:
+def _dump_mode(
+    cfg: Config,
+    *,
+    since: str,
+    session_id: str | None,
+    source: str | None,
+    verbose: bool,
+    limit: int,
+) -> int:
     db = open_db(cfg.db_path)
     try:
         events = query_events(db, session_id=session_id, source=source, since=since, limit=limit)
@@ -41,7 +53,9 @@ def _dump_mode(cfg: Config, *, since: str, session_id: str | None, source: str |
     return 0
 
 
-def _follow_mode(cfg: Config, *, since: str, session_id: str | None, source: str | None, verbose: bool) -> int:
+def _follow_mode(
+    cfg: Config, *, since: str, session_id: str | None, source: str | None, verbose: bool
+) -> int:
     last_id: str | None = None
 
     db = open_db(cfg.db_path)
@@ -60,8 +74,11 @@ def _follow_mode(cfg: Config, *, since: str, session_id: str | None, source: str
             db = open_db(cfg.db_path)
             try:
                 events = query_events(
-                    db, session_id=session_id, source=source,
-                    after_id=last_id, since=since,
+                    db,
+                    session_id=session_id,
+                    source=source,
+                    after_id=last_id,
+                    since=since,
                     limit=50,
                 )
                 if not events and last_id is not None:
@@ -71,8 +88,11 @@ def _follow_mode(cfg: Config, *, since: str, session_id: str | None, source: str
                     if cursor_exists is None:
                         last_id = None
                         events = query_events(
-                            db, session_id=session_id, source=source,
-                            since=last_seen_at, limit=50,
+                            db,
+                            session_id=session_id,
+                            source=source,
+                            since=last_seen_at,
+                            limit=50,
                         )
                 for event in events:
                     _print_event(event, verbose=verbose)

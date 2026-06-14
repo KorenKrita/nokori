@@ -124,8 +124,7 @@ def _check_embed(cfg: Config, rule_count: int) -> tuple[str, str]:
     if not embedding_search.local_embed_package_available():
         return (
             "fail",
-            f"mode=local; model={model_name}; package=missing "
-            "(pip install -e '.[local-embed]')",
+            f"mode=local; model={model_name}; package=missing (pip install -e '.[local-embed]')",
         )
 
     cached = embedding_search.local_model_cached(cfg)
@@ -220,8 +219,7 @@ def _check_claude_hooks_registered() -> tuple[str, str]:
     for evt in needed:
         spec = hooks.get(evt) or []
         if not any(
-            isinstance(entry, dict)
-            and "nokori" in (h.get("command", ""))
+            isinstance(entry, dict) and "nokori" in (h.get("command", ""))
             for entry in spec
             for h in entry.get("hooks", [])
         ):
@@ -246,7 +244,9 @@ def _check_cursor_hooks_registered() -> tuple[str, str]:
     missing = []
     for evt in needed:
         spec = hooks.get(evt) or []
-        if not any(isinstance(entry, dict) and "nokori" in entry.get("command", "") for entry in spec):
+        if not any(
+            isinstance(entry, dict) and "nokori" in entry.get("command", "") for entry in spec
+        ):
             missing.append(evt)
     if missing:
         return ("warn", f"missing: {','.join(missing)}")
@@ -332,10 +332,12 @@ def run(_args: argparse.Namespace, cfg: Config) -> int:
         rows.append(("hooks.cursor", *_check_cursor_hooks_registered()))
         rows.append(("hooks.host", *_check_hook_host_detection()))
     rows.append(("hooks.duplicate", *_check_dual_hook_registration()))
-    rows.extend([
-        ("llm", *_check_llm_endpoint(cfg)),
-        ("embed", *_check_embed(cfg, rule_count)),
-    ])
+    rows.extend(
+        [
+            ("llm", *_check_llm_endpoint(cfg)),
+            ("embed", *_check_embed(cfg, rule_count)),
+        ]
+    )
     width = max(len(name) for name, *_ in rows)
     bad = False
     for name, status, detail in rows:

@@ -46,9 +46,7 @@ def mmr_penalty(
 ) -> float:
     if not selected_tokens_list:
         return 0.0
-    max_sim = max(
-        jaccard(candidate_tokens, selected) for selected in selected_tokens_list
-    )
+    max_sim = max(jaccard(candidate_tokens, selected) for selected in selected_tokens_list)
     return max_sim * _MMR_PENALTY_WEIGHT
 
 
@@ -85,9 +83,7 @@ def _has_distinct_domain(candidate: ScoredResult, selected: list[ScoredResult]) 
 
     for s in selected:
         s_domains = set(s.rule.domain_tags) if s.rule.domain_tags else set()
-        s_groups = frozenset(
-            g.get("id", "") for g in (s.rule.required_concept_groups or [])
-        )
+        s_groups = frozenset(g.get("id", "") for g in (s.rule.required_concept_groups or []))
         if candidate_domains == s_domains and candidate_groups == s_groups:
             if not candidate_domains and not candidate_groups:
                 overlap = jaccard(candidate.matched_trigger_tokens, s.matched_trigger_tokens)
@@ -140,7 +136,9 @@ def select_injection(
         selected_tokens.append(sr.matched_trigger_tokens)
 
     if len(hot) == 1 and len(scored_with_utility) > 1:
-        idf_policy = DYNAMIC_IDF_SMALL_POOL if pool_size < SMALL_POOL_THRESHOLD else DYNAMIC_IDF_NORMAL
+        idf_policy = (
+            DYNAMIC_IDF_SMALL_POOL if pool_size < SMALL_POOL_THRESHOLD else DYNAMIC_IDF_NORMAL
+        )
         for _initial_utility, sr in scored_with_utility:
             if sr is hot[0]:
                 continue
@@ -181,9 +179,7 @@ def select_injection(
         u = compute_utility(sr, selected_tokens_list=selected_tokens)
 
         if selected_tokens:
-            max_overlap = max(
-                jaccard(sr.matched_trigger_tokens, st) for st in selected_tokens
-            )
+            max_overlap = max(jaccard(sr.matched_trigger_tokens, st) for st in selected_tokens)
             if max_overlap > _DIVERSITY_OVERLAP_MAX:
                 shadow_matches.append(sr)
                 continue

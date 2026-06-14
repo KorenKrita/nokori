@@ -4,6 +4,7 @@ Split into two independently testable layers:
   - retrieve_and_format(): pure pipeline (fetch → retrieve → format → return outcome)
   - record_injection_events(): side-effect layer (fire + shadow event persistence)
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -45,16 +46,12 @@ class PromptInjectOutcome:
 # ---------------------------------------------------------------------------
 
 
-def _fetch_formal_and_shadow(
-    db: Db, cfg: Config, project_id: str | None
-) -> tuple[list, list]:
+def _fetch_formal_and_shadow(db: Db, cfg: Config, project_id: str | None) -> tuple[list, list]:
     """Fetch injection pool (active+trusted) and shadow pool (candidate+suppressed)."""
     if project_id is None:
         formal_rules = fetch_rules(db, statuses=("active", "trusted"), global_only=True)
     else:
-        formal_rules = fetch_rules(
-            db, statuses=("active", "trusted"), project_id=project_id
-        )
+        formal_rules = fetch_rules(db, statuses=("active", "trusted"), project_id=project_id)
     if cfg.promotion_enabled:
         if project_id is None:
             shadow_rules = fetch_shadow_rules(db, project_id=None, global_only=True)
@@ -211,8 +208,12 @@ _SHADOW_TYPE_BY_STATUS = {
 
 
 def _record_shadow_events(
-    db: Db, session_id: str, ph: str, results: list,
-    *, turn_index: int | None = None,
+    db: Db,
+    session_id: str,
+    ph: str,
+    results: list,
+    *,
+    turn_index: int | None = None,
 ) -> None:
     """Create shadow events for candidate/suppressed matches with fingerprint dedup."""
     for r in results:
@@ -275,7 +276,10 @@ def record_injection_events(
 
     if record_shadow_hits:
         _record_shadow_events(
-            db, session_id, outcome.ph, outcome.shadow_hot + outcome.shadow_warm,
+            db,
+            session_id,
+            outcome.ph,
+            outcome.shadow_hot + outcome.shadow_warm,
             turn_index=turn_index,
         )
 
@@ -302,7 +306,11 @@ def inject_for_prompt(
     Combines retrieve_and_format() + record_injection_events() for backward compatibility.
     """
     outcome = retrieve_and_format(
-        db, cfg, prompt=prompt, project_id=project_id, engine=engine,
+        db,
+        cfg,
+        prompt=prompt,
+        project_id=project_id,
+        engine=engine,
     )
     if outcome is None:
         return None

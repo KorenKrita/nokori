@@ -83,9 +83,7 @@ class CandidateContext:
     global_adversarial_cases: list | None = None
 
 
-def run_admission(
-    ctx: CandidateContext, db: Db, llm: Any
-) -> CandidateContext | ColdPipelineResult:
+def run_admission(ctx: CandidateContext, db: Db, llm: Any) -> CandidateContext | ColdPipelineResult:
     """Admission stage: pre-check evidence, then run admission judge.
 
     Returns CandidateContext with admission_decision/scores on accept/revise,
@@ -100,12 +98,14 @@ def run_admission(
             scores=None,
         )
 
-    model_id = resolve_model_id(
-        "admission_judge", ctx.config.role_models, ctx.config.default_model
-    )
+    model_id = resolve_model_id("admission_judge", ctx.config.role_models, ctx.config.default_model)
     decision, scores = _run_admission_judge(
-        db, llm, ctx.extractor_output, model_id,
-        ctx.config.role_max_tokens, ctx.config.role_timeouts,
+        db,
+        llm,
+        ctx.extractor_output,
+        model_id,
+        ctx.config.role_max_tokens,
+        ctx.config.role_timeouts,
     )
 
     if decision == "reject":
@@ -133,8 +133,13 @@ def run_build_rule_data(
             "rule_rewriter", ctx.config.role_models, ctx.config.default_model
         )
         rule_data = _run_rewriter(
-            db, llm, candidate, ctx.admission_scores or {},
-            rewriter_model, ctx.config.role_max_tokens, ctx.config.role_timeouts,
+            db,
+            llm,
+            candidate,
+            ctx.admission_scores or {},
+            rewriter_model,
+            ctx.config.role_max_tokens,
+            ctx.config.role_timeouts,
         )
         if rule_data is None:
             return ColdPipelineResult(
@@ -147,7 +152,9 @@ def run_build_rule_data(
         rule_data["trigger_canonical_zh"] = candidate.get("trigger_zh")
         rule_data["action_instruction_zh"] = candidate.get("action_zh")
         rule_data["trigger_variants_zh"] = candidate.get("trigger_variants_zh", [])
-        rule_data["non_generalization_boundaries"] = candidate.get("non_generalization_boundaries", [])
+        rule_data["non_generalization_boundaries"] = candidate.get(
+            "non_generalization_boundaries", []
+        )
         rule_data["near_miss_examples"] = candidate.get("near_miss_examples", [])
         rule_data["_rewritten"] = True
     else:
@@ -174,17 +181,19 @@ def run_final_judge(
         )
     rule_data = ctx.rule_data
     rule_data_for_judge = {
-        k: v for k, v in rule_data.items()
-        if k != "evidence_quotes" and not k.startswith("_")
+        k: v for k, v in rule_data.items() if k != "evidence_quotes" and not k.startswith("_")
     }
     evidence_quotes = ctx.extractor_output.get("evidence_quotes", [])
 
-    model_id = resolve_model_id(
-        "final_judge", ctx.config.role_models, ctx.config.default_model
-    )
+    model_id = resolve_model_id("final_judge", ctx.config.role_models, ctx.config.default_model)
     final_decision = _run_final_judge(
-        db, llm, rule_data_for_judge, evidence_quotes, model_id,
-        ctx.config.role_max_tokens, ctx.config.role_timeouts,
+        db,
+        llm,
+        rule_data_for_judge,
+        evidence_quotes,
+        model_id,
+        ctx.config.role_max_tokens,
+        ctx.config.role_timeouts,
     )
 
     if final_decision == "reject":
@@ -218,14 +227,17 @@ def run_merge_planner(
             scores=ctx.admission_scores,
         )
     rule_data = ctx.rule_data
-    model_id = resolve_model_id(
-        "merge_planner", ctx.config.role_models, ctx.config.default_model
-    )
+    model_id = resolve_model_id("merge_planner", ctx.config.role_models, ctx.config.default_model)
 
     from nokori.cold.pipeline import _run_merge_planner
+
     merge_op, merge_info = _run_merge_planner(
-        db, llm, rule_data, model_id,
-        ctx.config.role_max_tokens, ctx.config.role_timeouts,
+        db,
+        llm,
+        rule_data,
+        model_id,
+        ctx.config.role_max_tokens,
+        ctx.config.role_timeouts,
         project_id=ctx.project_id,
     )
 
@@ -260,7 +272,9 @@ def run_fingerprint_check(
     action_instruction = rule_data.get("action_instruction", "")
     domain_tags = rule_data.get("scope", {}).get("domain_tags", [])
 
-    scope_evidence = rule_data.get("non_generalization_boundaries") or rule_data.get("evidence_quotes")
+    scope_evidence = rule_data.get("non_generalization_boundaries") or rule_data.get(
+        "evidence_quotes"
+    )
     admission_cited = (
         ctx.admission_scores is not None
         and ctx.admission_scores.get("overall_quality", 0) >= 0.82
@@ -268,7 +282,10 @@ def run_fingerprint_check(
     )
 
     fingerprint_block = check_fingerprint_block(
-        db, trigger_canonical, action_instruction, domain_tags,
+        db,
+        trigger_canonical,
+        action_instruction,
+        domain_tags,
         stronger_evidence=str(scope_evidence[0]) if scope_evidence else None,
         admission_judge_cited=admission_cited,
     )
@@ -311,7 +328,10 @@ def run_compile_matcher(
     try:
         compiled_matcher = compile_rule(
             trigger_data,
-            action_data={"instruction": action_instruction, "severity": rule_data.get("severity", "reminder")},
+            action_data={
+                "instruction": action_instruction,
+                "severity": rule_data.get("severity", "reminder"),
+            },
             search_terms=rule_data.get("search_terms"),
         )
     except CompilationError as e:
@@ -329,23 +349,23 @@ def run_synthetic_eval(
     ctx: CandidateContext, db: Db, llm: Any
 ) -> CandidateContext | ColdPipelineResult:
     """Synthetic eval stage: generate and run eval cases for active-targeting rules."""
-    from nokori.cold.pipeline import run_synthetic_eval as _run_synth_eval, _generate_eval_cases
+    from nokori.cold.pipeline import _generate_eval_cases, run_synthetic_eval as _run_synth_eval
     from nokori.eval.synthetic import SyntheticEvalResult
+
     from ..search.idf_stats import build_idf_stats
     from ._llm_call import CircuitBreakerOpenError
 
     idf_stats = ctx.idf_stats
     if idf_stats is None:
         from ..db import row_to_rule
-        rows = db.fetchall(
-            "SELECT * FROM rules WHERE status IN ('active', 'trusted')"
-        )
+
+        rows = db.fetchall("SELECT * FROM rules WHERE status IN ('active', 'trusted')")
         rules = [row_to_rule(row) for row in rows]
         idf_stats = build_idf_stats(rules)
 
-    needs_eval = (
-        ctx.target_status == "active"
-        or ctx.merge_op in ("merge_into_existing", "update_existing_fields")
+    needs_eval = ctx.target_status == "active" or ctx.merge_op in (
+        "merge_into_existing",
+        "update_existing_fields",
     )
 
     synthetic_eval_skipped = False
@@ -359,12 +379,17 @@ def run_synthetic_eval(
     else:
         try:
             eval_cases = _generate_eval_cases(
-                db, llm, ctx.rule_data or {},
-                ctx.config.role_models, ctx.config.default_model,
-                ctx.config.role_max_tokens, ctx.config.role_timeouts,
+                db,
+                llm,
+                ctx.rule_data or {},
+                ctx.config.role_models,
+                ctx.config.default_model,
+                ctx.config.role_max_tokens,
+                ctx.config.role_timeouts,
             )
         except (CircuitBreakerOpenError, ValueError) as exc:
             from ..utils.logging import get_logger
+
             log = get_logger("nokori.cold.stages")
             log.warning("synthetic eval generation failed, passing through: %s", exc)
             eval_cases = []
@@ -389,7 +414,8 @@ def run_synthetic_eval(
         synthetic_passed = synthetic_result.passed
         if synthetic_result.results:
             adversarial_failures = sum(
-                1 for r in synthetic_result.results
+                1
+                for r in synthetic_result.results
                 if r.get("case_type") == "global_adversarial" and not r.get("case_passed", True)
             )
 
@@ -423,9 +449,7 @@ def run_fast_lane_check(
     return replace(ctx, fast_lane_passed=fast_lane_passed)
 
 
-def run_insert_or_merge(
-    ctx: CandidateContext, db: Db, llm: Any
-) -> ColdPipelineResult:
+def run_insert_or_merge(ctx: CandidateContext, db: Db, llm: Any) -> ColdPipelineResult:
     """Final stage: insert new rule or apply non-destructive merge.
 
     Always returns ColdPipelineResult (terminal stage).
@@ -489,6 +513,7 @@ def run_insert_or_merge(
             )
         if target_id:
             from nokori.cold.pipeline import run_synthetic_eval as _run_synth
+
             from .integrate import _apply_non_destructive_merge, _revert_merge
 
             _pre_variants = existing_rule.get("trigger_variants")
@@ -496,12 +521,18 @@ def run_insert_or_merge(
 
             _apply_non_destructive_merge(db, target_id, rule_data, merge_op, merge_info)
 
-            _merge_changed_variants = bool(rule_data.get("variants") or rule_data.get("trigger_variants"))
+            _merge_changed_variants = bool(
+                rule_data.get("variants") or rule_data.get("trigger_variants")
+            )
             _merge_changed_excluded = bool(rule_data.get("excluded_contexts"))
 
             if _merge_changed_variants or _merge_changed_excluded:
                 import json as _json
-                from nokori.cold.pipeline import compile_rule as _compile_rule, CompilationError as _CompErr
+
+                from nokori.cold.pipeline import (
+                    CompilationError as _CompErr,
+                    compile_rule as _compile_rule,
+                )
 
                 _merged_row = db.fetchone(
                     "SELECT trigger_canonical, trigger_variants, excluded_contexts, "
@@ -520,7 +551,9 @@ def run_insert_or_merge(
                     )
                 _raw_variants = _json.loads(_merged_row["trigger_variants"] or "[]")
                 _variants = [
-                    v if isinstance(v, dict) else {"text": str(v), "kind": "weak_recall", "requires_concepts": []}
+                    v
+                    if isinstance(v, dict)
+                    else {"text": str(v), "kind": "weak_recall", "requires_concepts": []}
                     for v in _raw_variants
                 ]
                 _recompile_data = {
@@ -528,7 +561,9 @@ def run_insert_or_merge(
                     "variants": _variants,
                     "excluded_contexts": _json.loads(_merged_row["excluded_contexts"] or "[]"),
                     "concepts": _json.loads(_merged_row["concepts"] or "[]"),
-                    "required_concept_groups": _json.loads(_merged_row["required_concept_groups"] or "[]"),
+                    "required_concept_groups": _json.loads(
+                        _merged_row["required_concept_groups"] or "[]"
+                    ),
                     "near_miss_examples": _json.loads(_merged_row["near_miss_examples"] or "[]"),
                     "action_instruction": _merged_row["action_instruction"],
                 }
@@ -562,9 +597,13 @@ def run_insert_or_merge(
 
                 if not _synth_ok:
                     _revert_merge(
-                        db, target_id, _merged_row,
-                        _merge_changed_variants, _merge_changed_excluded,
-                        _pre_variants, _pre_excluded,
+                        db,
+                        target_id,
+                        _merged_row,
+                        _merge_changed_variants,
+                        _merge_changed_excluded,
+                        _pre_variants,
+                        _pre_excluded,
                     )
                     return ColdPipelineResult(
                         status="rejected",
@@ -602,7 +641,9 @@ def run_insert_or_merge(
         scores=scores,
         synthetic_eval_skipped=ctx.synthetic_eval_skipped,
         project_id=ctx.project_id,
-        admission_model_id=ctx.config.role_models.get("admission_judge") if ctx.config.role_models else ctx.config.default_model,
+        admission_model_id=ctx.config.role_models.get("admission_judge")
+        if ctx.config.role_models
+        else ctx.config.default_model,
     )
 
     _apply_merge_side_effects(db, rule_id, merge_op, merge_info)

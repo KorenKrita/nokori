@@ -42,8 +42,12 @@ def _rule_to_response(
         required_concept_groups=loads_json(rule.required_concept_groups, []),
         excluded_contexts=loads_json(rule.excluded_contexts, []),
         near_miss_examples=rule.near_miss_examples,
-        trigger_variants=rule.trigger_variants if isinstance(rule.trigger_variants, list) else loads_json(rule.trigger_variants, []),
-        trigger_variants_zh=rule.trigger_variants_zh if isinstance(rule.trigger_variants_zh, list) else loads_json(rule.trigger_variants_zh, []),
+        trigger_variants=rule.trigger_variants
+        if isinstance(rule.trigger_variants, list)
+        else loads_json(rule.trigger_variants, []),
+        trigger_variants_zh=rule.trigger_variants_zh
+        if isinstance(rule.trigger_variants_zh, list)
+        else loads_json(rule.trigger_variants_zh, []),
         search_terms=rule.search_terms,
         action_instruction=rule.action_instruction,
         action_instruction_zh=rule.action_instruction_zh,
@@ -122,10 +126,7 @@ def list_rules(
             fire_counts = {row["rule_id"]: row["cnt"] for row in rows}
 
         result = {
-            "data": [
-                _rule_to_response(r, fire_count=fire_counts.get(r.id, 0))
-                for r in page_rules
-            ],
+            "data": [_rule_to_response(r, fire_count=fire_counts.get(r.id, 0)) for r in page_rules],
             "meta": {"total": total, "page": page, "per_page": per_page},
         }
     finally:

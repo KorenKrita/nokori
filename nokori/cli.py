@@ -18,7 +18,8 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--version", action="version", version=f"nokori {__version__}")
     p.add_argument(
-        "-v", "--verbose",
+        "-v",
+        "--verbose",
         action="store_true",
         help="debug logging (same as NOKORI_LOG_LEVEL=debug)",
     )
@@ -87,12 +88,16 @@ def _build_parser() -> argparse.ArgumentParser:
     sub.add_parser("maintain", help="run maintenance jobs now")
 
     sp_report = sub.add_parser("report", help="AI-friendly system status report")
-    sp_report.add_argument("--since", default=None, help="ISO timestamp start (default: 7 days ago)")
+    sp_report.add_argument(
+        "--since", default=None, help="ISO timestamp start (default: 7 days ago)"
+    )
     sp_report.add_argument("--session", default=None, help="filter to a specific session_id")
     sp_report.add_argument("--json", action="store_true", help="output JSON instead of markdown")
 
     sp_stream = sub.add_parser("stream", help="AI-friendly event stream")
-    sp_stream.add_argument("--since", default=None, help="ISO timestamp start (default: 1 hour ago)")
+    sp_stream.add_argument(
+        "--since", default=None, help="ISO timestamp start (default: 1 hour ago)"
+    )
     sp_stream.add_argument("--session", default=None, help="filter to a specific session_id")
     sp_stream.add_argument("--type", default=None, help="filter by event source type")
     sp_stream.add_argument("--verbose", action="store_true", help="full JSON per event")

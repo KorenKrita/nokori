@@ -4,15 +4,14 @@ import argparse
 
 from ..config import Config
 from ..db import SCHEMA_VERSION, dumps_json, fetch_rule_by_short_id, open_db
-from ..events.observability import write_event
 from ..errors import NokoriError
+from ..events.observability import write_event
 from ..policy import RUNTIME_POLICY_VERSION
 from ..search.embedding import index_rule_if_enabled
 from ..search.tokenizer import tokenize
 from ..utils.ids import new_uuid, short_id_for
 from ..utils.text import split_csv
 from ..utils.time import now_iso
-
 
 _MAX_TRIGGER = 16_384
 _MAX_ACTION = 8_192
@@ -51,13 +50,15 @@ def _manual_trigger_structure(
         if v_stripped and v_stripped not in seen_aliases:
             seen_aliases.add(v_stripped)
             aliases.append({"text": v_stripped, "strength": "strong"})
-    concepts = [{
-        "id": concept_id,
-        "label": trigger[:80],
-        "aliases": aliases,
-        "match_mode": "phrase",
-        "required": True,
-    }]
+    concepts = [
+        {
+            "id": concept_id,
+            "label": trigger[:80],
+            "aliases": aliases,
+            "match_mode": "phrase",
+            "required": True,
+        }
+    ]
     groups = [{"id": "manual_primary", "all_of": [concept_id]}]
     seen: set[str] = set()
     variant_entries: list[dict] = []
@@ -140,7 +141,8 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
         if rule:
             index_rule_if_enabled(db, rule, cfg)
         write_event(
-            db, source="cli_add",
+            db,
+            source="cli_add",
             outcome="added",
             details={
                 "short_id": sid,

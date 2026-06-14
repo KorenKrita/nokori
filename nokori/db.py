@@ -367,7 +367,9 @@ def open_db(path: Path) -> Db:
     raise DbError(f"failed to open db at {path}: {last_err}")
 
 
-def _add_column_if_missing(conn: sqlite3.Connection, table: str, column: str, col_type: str) -> None:
+def _add_column_if_missing(
+    conn: sqlite3.Connection, table: str, column: str, col_type: str
+) -> None:
     """Add a column if it doesn't already exist (idempotent ALTER)."""
     cur = conn.execute(f"PRAGMA table_info({table})")
     existing = {row[1] for row in cur.fetchall()}
@@ -382,18 +384,11 @@ def _add_column_if_missing(conn: sqlite3.Connection, table: str, column: str, co
 def _migrate(conn: sqlite3.Connection) -> None:
     current = _read_version(conn)
     if current > SCHEMA_VERSION:
-        raise DbError(
-            "rules.db was created by a newer nokori; upgrade this installation"
-        )
+        raise DbError("rules.db was created by a newer nokori; upgrade this installation")
     if current >= SCHEMA_VERSION:
         return
     if current == 0:
-        script = (
-            "BEGIN;\n"
-            f"{_SCHEMA_DDL}\n"
-            f"PRAGMA user_version = {int(SCHEMA_VERSION)};\n"
-            "COMMIT;\n"
-        )
+        script = f"BEGIN;\n{_SCHEMA_DDL}\nPRAGMA user_version = {int(SCHEMA_VERSION)};\nCOMMIT;\n"
     elif current == 6:
         script = (
             "BEGIN;\n"
@@ -434,11 +429,7 @@ def _migrate(conn: sqlite3.Connection) -> None:
         _add_column_if_missing(conn, "transcript_ingest_jobs", "pipeline_checkpoint", "TEXT")
         return
     elif current == 7:
-        script = (
-            "BEGIN;\n"
-            f"PRAGMA user_version = {int(SCHEMA_VERSION)};\n"
-            "COMMIT;\n"
-        )
+        script = f"BEGIN;\nPRAGMA user_version = {int(SCHEMA_VERSION)};\nCOMMIT;\n"
         try:
             conn.executescript(script)
         except Exception as e:
@@ -560,9 +551,7 @@ RULE_COLUMNS = (
 
 def total_rule_count(db: "Db") -> int:
     """Rules in injection pool (active + trusted)."""
-    row = db.fetchone(
-        "SELECT COUNT(*) AS n FROM rules WHERE status IN ('active', 'trusted')"
-    )
+    row = db.fetchone("SELECT COUNT(*) AS n FROM rules WHERE status IN ('active', 'trusted')")
     return int(row["n"]) if row else 0
 
 
@@ -606,9 +595,7 @@ def fetch_rules(
 
 
 def fetch_rule_by_short_id(db: "Db", short_id: str):
-    row = db.fetchone(
-        f"SELECT {RULE_COLUMNS} FROM rules WHERE short_id = ?", (short_id,)
-    )
+    row = db.fetchone(f"SELECT {RULE_COLUMNS} FROM rules WHERE short_id = ?", (short_id,))
     return row_to_rule(row) if row else None
 
 
@@ -670,9 +657,7 @@ def find_rule_id_by_recent_injection(
     return find_rule_id_by_injection(db, short_id, since_iso, session_id=session_id)
 
 
-def find_rule_id_injected_since(
-    db: "Db", short_id: str, since_iso: str
-) -> str | None:
+def find_rule_id_injected_since(db: "Db", short_id: str, since_iso: str) -> str | None:
     return find_rule_id_by_injection(db, short_id, since_iso)
 
 
@@ -689,7 +674,8 @@ def archive_rule(db: "Db", rule_id: str, reason: str, now: str, *, strength: str
     strength_rank = None
     if rule_row:
         try:
-            from .archive.fingerprints import compute_fingerprint_data, STRENGTH_RANK
+            from .archive.fingerprints import STRENGTH_RANK, compute_fingerprint_data
+
             strength_rank = STRENGTH_RANK
             domain_tags = loads_json(rule_row["domain_tags"], []) if rule_row["domain_tags"] else []
             fp_data = compute_fingerprint_data(
@@ -702,6 +688,7 @@ def archive_rule(db: "Db", rule_id: str, reason: str, now: str, *, strength: str
             )
         except Exception as exc:
             import logging
+
             logging.getLogger(__name__).warning(
                 "fingerprint computation failed for rule=%s: %s",
                 rule_id,
@@ -730,10 +717,15 @@ def archive_rule(db: "Db", rule_id: str, reason: str, now: str, *, strength: str
                 "VALUES (?,?,?,?,?,?,?,?,?) "
                 "ON CONFLICT(signature) DO NOTHING",
                 (
-                    fp_data["id"], fp_data["signature"], fp_data["scope_summary"],
-                    fp_data["blocked_trigger_area"], fp_data["blocked_action_area"],
-                    fp_data["archive_strength"], fp_data["can_be_overridden_by_changed_scope"],
-                    fp_data["rule_id"], fp_data["created_at"],
+                    fp_data["id"],
+                    fp_data["signature"],
+                    fp_data["scope_summary"],
+                    fp_data["blocked_trigger_area"],
+                    fp_data["blocked_action_area"],
+                    fp_data["archive_strength"],
+                    fp_data["can_be_overridden_by_changed_scope"],
+                    fp_data["rule_id"],
+                    fp_data["created_at"],
                 ),
             )
             # id is uuid4 (no PK conflict); changes()==0 means signature UNIQUE conflict.
@@ -745,22 +737,31 @@ def archive_rule(db: "Db", rule_id: str, reason: str, now: str, *, strength: str
                 ).fetchone()
                 if existing and strength_rank:
                     existing_strength = existing["archive_strength"]
-                    if strength_rank.get(fp_data["archive_strength"], -1) > strength_rank.get(existing_strength, -1):
+                    if strength_rank.get(fp_data["archive_strength"], -1) > strength_rank.get(
+                        existing_strength, -1
+                    ):
                         # created_at = time of strongest archival event (not first creation)
                         tx.execute(
                             "UPDATE archived_fingerprints SET archive_strength = ?, "
                             "can_be_overridden_by_changed_scope = ?, created_at = ? "
                             "WHERE id = ?",
-                            (fp_data["archive_strength"], fp_data["can_be_overridden_by_changed_scope"],
-                             fp_data["created_at"], existing["id"]),
+                            (
+                                fp_data["archive_strength"],
+                                fp_data["can_be_overridden_by_changed_scope"],
+                                fp_data["created_at"],
+                                existing["id"],
+                            ),
                         )
 
 
 def _delete_rule_cascade_tx(tx, rule_id: str) -> None:
     """Remove rule and dependent rows within an existing transaction cursor."""
     # Delete children of fire_events first (they reference fire_event_id)
-    tx.execute("DELETE FROM posthoc_jobs WHERE fire_event_id IN "
-               "(SELECT id FROM rule_fire_events WHERE rule_id = ?)", (rule_id,))
+    tx.execute(
+        "DELETE FROM posthoc_jobs WHERE fire_event_id IN "
+        "(SELECT id FROM rule_fire_events WHERE rule_id = ?)",
+        (rule_id,),
+    )
     # Then fire/shadow events themselves
     tx.execute("DELETE FROM rule_fire_events WHERE rule_id = ?", (rule_id,))
     tx.execute("DELETE FROM rule_shadow_events WHERE rule_id = ?", (rule_id,))
@@ -768,8 +769,8 @@ def _delete_rule_cascade_tx(tx, rule_id: str) -> None:
     tx.execute("DELETE FROM rule_reviews WHERE rule_id = ?", (rule_id,))
     tx.execute("DELETE FROM rule_synthetic_evals WHERE rule_id = ?", (rule_id,))
     tx.execute("DELETE FROM rule_embeddings WHERE rule_id = ?", (rule_id,))
-    tx.execute("DELETE FROM rule_lineage WHERE old_rule_id = ? OR new_rule_id = ?", (rule_id, rule_id))
+    tx.execute(
+        "DELETE FROM rule_lineage WHERE old_rule_id = ? OR new_rule_id = ?", (rule_id, rule_id)
+    )
     # Finally the rule itself
     tx.execute("DELETE FROM rules WHERE id = ?", (rule_id,))
-
-

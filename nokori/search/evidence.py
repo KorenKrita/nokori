@@ -201,22 +201,26 @@ def _variant_dicts(rule: Rule, required_concepts: list[str]) -> list[dict]:
             text = str(variant).strip()
             if text:
                 is_strong = required_concepts and len(tokenize(text)) >= 2
-                variants.append({
-                    "text": text,
-                    "kind": "strong_anchor" if is_strong else "weak_recall",
-                    "requires_concepts": required_concepts if is_strong else [],
-                })
+                variants.append(
+                    {
+                        "text": text,
+                        "kind": "strong_anchor" if is_strong else "weak_recall",
+                        "requires_concepts": required_concepts if is_strong else [],
+                    }
+                )
 
     canonical = rule.trigger_canonical.strip()
     if canonical and required_concepts:
         existing = {v.get("text") for v in variants}
         if canonical not in existing:
             is_multi_token = len(tokenize(canonical)) >= 2
-            variants.append({
-                "text": canonical,
-                "kind": "strong_anchor" if is_multi_token else "weak_recall",
-                "requires_concepts": required_concepts if is_multi_token else [],
-            })
+            variants.append(
+                {
+                    "text": canonical,
+                    "kind": "strong_anchor" if is_multi_token else "weak_recall",
+                    "requires_concepts": required_concepts if is_multi_token else [],
+                }
+            )
     return variants
 
 
@@ -232,13 +236,15 @@ def trigger_data_for_rule(rule: Rule) -> dict | None:
         if not rule.trigger_canonical.strip():
             return None
         concept_id = "legacy_trigger"
-        concepts = [{
-            "id": concept_id,
-            "label": rule.trigger_canonical[:80],
-            "aliases": [{"text": rule.trigger_canonical, "strength": "strong"}],
-            "match_mode": "phrase",
-            "required": True,
-        }]
+        concepts = [
+            {
+                "id": concept_id,
+                "label": rule.trigger_canonical[:80],
+                "aliases": [{"text": rule.trigger_canonical, "strength": "strong"}],
+                "match_mode": "phrase",
+                "required": True,
+            }
+        ]
         groups = [{"id": "legacy_primary", "all_of": [concept_id]}]
 
     required_concepts = list(groups[0].get("all_of") or []) if groups else []

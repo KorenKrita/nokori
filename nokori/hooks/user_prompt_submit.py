@@ -10,17 +10,15 @@ from ..db import (
     find_rule_id_by_recent_injection,
     find_rule_id_injected_since,
 )
-from ..utils.time import local_now
-from ..gate import marker as marker_io
-from ..gate import prompt_ack
+from ..gate import marker as marker_io, prompt_ack
 from ..gate.blocker import select_gate_rules
 from ..gate.marker import MarkerRule, prompt_hash
-from ..utils.prompt_text import normalize_prompt_for_hash
 from ..utils import sessions
 from ..utils.hook_response import user_prompt_submit_response
 from ..utils.host import Host, effective_session_id
 from ..utils.logging import get_logger
-from ..utils.time import iso_of, now_iso
+from ..utils.prompt_text import normalize_prompt_for_hash
+from ..utils.time import iso_of, local_now, now_iso
 from .context import ErrorCategory, HotPathContext
 from .prompt_inject import RetrieveFailed, build_decision_features, inject_for_prompt
 
@@ -29,9 +27,7 @@ log = get_logger("nokori.hooks.user_prompt_submit")
 
 def _dismiss_re(phrase: str) -> re.Pattern[str]:
     escaped = re.escape(phrase.lower())
-    return re.compile(
-        rf"(?i)(?<![a-z]){escaped}[\s,，、;:：]+(?P<sid>[a-f0-9]{{6,32}})\b"
-    )
+    return re.compile(rf"(?i)(?<![a-z]){escaped}[\s,，、;:：]+(?P<sid>[a-f0-9]{{6,32}})\b")
 
 
 def _run_dismiss(db: Db, prompt: str, session_id: str, cfg: Config) -> int:
@@ -61,9 +57,7 @@ def _run_dismiss(db: Db, prompt: str, session_id: str, cfg: Config) -> int:
     return count
 
 
-def _update_gate_marker(
-    cfg: Config, session_id: str, prompt: str, hot, ph: str
-) -> None:
+def _update_gate_marker(cfg: Config, session_id: str, prompt: str, hot, ph: str) -> None:
     if not cfg.gate_enabled:
         return
     gate_rules = select_gate_rules(hot)
@@ -103,7 +97,9 @@ def handle(payload: dict, cfg: Config, *, host: Host) -> dict:
     ph_for_ack = prompt_hash(normalized_prompt) if normalized_prompt else ""
 
     project_id = sessions.resolve_project_id_for_session(
-        cfg, session_id, payload.get("cwd"),
+        cfg,
+        session_id,
+        payload.get("cwd"),
     )
 
     sessions.touch(cfg, session_id)
@@ -133,7 +129,8 @@ def handle(payload: dict, cfg: Config, *, host: Host) -> dict:
             if cfg.gate_enabled:
                 marker_io.delete_session(cfg, session_id)
             ctx.record_event(
-                "user_prompt_submit", "retrieve_failed",
+                "user_prompt_submit",
+                "retrieve_failed",
                 prompt_snippet=prompt[:200] if prompt else None,
                 details={"error": str(e), "dismissed_count": dismissed},
             )
@@ -143,7 +140,8 @@ def handle(payload: dict, cfg: Config, *, host: Host) -> dict:
             if cfg.gate_enabled:
                 marker_io.delete_session(cfg, session_id)
             ctx.record_event(
-                "user_prompt_submit", "no_rules",
+                "user_prompt_submit",
+                "no_rules",
                 prompt_snippet=prompt[:200] if prompt else None,
                 details={"dismissed_count": dismissed},
             )
@@ -159,7 +157,8 @@ def handle(payload: dict, cfg: Config, *, host: Host) -> dict:
             if cfg.gate_enabled:
                 marker_io.delete_session(cfg, session_id)
             ctx.record_event(
-                "user_prompt_submit", "no_matches",
+                "user_prompt_submit",
+                "no_matches",
                 prompt_snippet=prompt[:200] if prompt else None,
                 details={"dismissed_count": dismissed},
             )
@@ -168,12 +167,14 @@ def handle(payload: dict, cfg: Config, *, host: Host) -> dict:
         gate_marker_written = False
         gate_rule_ids = []
         if text:
-            injected_hot_ids = {
-                rid for rid, level in rendered_entries if level == "hot"
-            }
+            injected_hot_ids = {rid for rid, level in rendered_entries if level == "hot"}
             gate_hot = [r for r in hot if r.rule.id in injected_hot_ids]
             _update_gate_marker(
-                cfg, session_id, normalized_prompt or prompt, gate_hot, ph,
+                cfg,
+                session_id,
+                normalized_prompt or prompt,
+                gate_hot,
+                ph,
             )
             if cfg.gate_enabled:
                 gate_candidates = select_gate_rules(gate_hot)
@@ -189,7 +190,8 @@ def handle(payload: dict, cfg: Config, *, host: Host) -> dict:
         hot_count = len(hot)
         warm_count = len(warm)
         ctx.record_event(
-            "user_prompt_submit", "injected",
+            "user_prompt_submit",
+            "injected",
             prompt_snippet=prompt[:200] if prompt else None,
             details={
                 "hot_count": hot_count,
@@ -197,12 +199,10 @@ def handle(payload: dict, cfg: Config, *, host: Host) -> dict:
                 "shadow_hot_count": len(shadow_hot),
                 "shadow_warm_count": len(shadow_warm),
                 "hot_rules": [
-                    {"short_id": r.rule.short_id, "rrf_score": round(r.rrf_score, 4)}
-                    for r in hot
+                    {"short_id": r.rule.short_id, "rrf_score": round(r.rrf_score, 4)} for r in hot
                 ],
                 "warm_rules": [
-                    {"short_id": r.rule.short_id, "rrf_score": round(r.rrf_score, 4)}
-                    for r in warm
+                    {"short_id": r.rule.short_id, "rrf_score": round(r.rrf_score, 4)} for r in warm
                 ],
                 "gate_marker_written": gate_marker_written,
                 "gate_rule_ids": gate_rule_ids,
@@ -212,7 +212,11 @@ def handle(payload: dict, cfg: Config, *, host: Host) -> dict:
 
         log.info(
             "injected hot=%d warm=%d shadow_hot=%d shadow_warm=%d session=%s",
-            len(hot), len(warm), len(shadow_hot), len(shadow_warm), session_id,
+            len(hot),
+            len(warm),
+            len(shadow_hot),
+            len(shadow_warm),
+            session_id,
         )
         if host == Host.CURSOR and text:
             log.info(

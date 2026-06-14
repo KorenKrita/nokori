@@ -11,9 +11,9 @@ from ..config import Config
 from ..db import (
     SCHEMA_VERSION,
     dumps_json,
-    loads_json,
     fetch_rules,
     fetch_short_ids,
+    loads_json,
     open_db,
 )
 from ..errors import NokoriError
@@ -133,18 +133,22 @@ def _normalize_variants_for_compile(rec: dict) -> list[dict]:
         text = str(variant).strip()
         if not text:
             continue
-        variants.append({
-            "text": text,
-            "kind": "weak_recall",
-            "requires_concepts": [],
-        })
+        variants.append(
+            {
+                "text": text,
+                "kind": "weak_recall",
+                "requires_concepts": [],
+            }
+        )
     trigger = str(rec.get("trigger_canonical") or "").strip()
     if trigger and required_concepts and len(re.findall(r"[\w+-]+", trigger)) >= 2:
-        variants.append({
-            "text": trigger,
-            "kind": "strong_anchor",
-            "requires_concepts": required_concepts,
-        })
+        variants.append(
+            {
+                "text": trigger,
+                "kind": "strong_anchor",
+                "requires_concepts": required_concepts,
+            }
+        )
     return variants
 
 
@@ -158,8 +162,7 @@ def _validate_matcher_structure(rec: dict) -> str | None:
     variants = rec.get("trigger_variants") or []
     if not isinstance(concepts, list) or not concepts or not isinstance(groups, list) or not groups:
         return (
-            "concepts and required_concept_groups must be non-empty lists "
-            "for non-archived imports"
+            "concepts and required_concept_groups must be non-empty lists for non-archived imports"
         )
     if not isinstance(excluded_contexts, list):
         return "excluded_contexts must be a list"
@@ -270,9 +273,7 @@ def run_import(args: argparse.Namespace, cfg: Config) -> int:
         raise NokoriError("unrecognized export format")
     file_schema = data.get("version")
     if file_schema is None:
-        raise NokoriError(
-            "export missing version field (must match rules.db PRAGMA user_version)"
-        )
+        raise NokoriError("export missing version field (must match rules.db PRAGMA user_version)")
     try:
         file_schema = int(file_schema)
     except (TypeError, ValueError) as e:
@@ -310,36 +311,39 @@ def run_import(args: argparse.Namespace, cfg: Config) -> int:
                 sid = short_id_for(rid, existing_short_ids)
             existing_short_ids.add(sid)
             existing_ids.add(rid)
-            pending.append((
-                rid, sid,
-                SCHEMA_VERSION,
-                rec.get("rule_version", 1),
-                rec.get("created_by_pipeline_version", f"import_v{file_schema}"),
-                RUNTIME_POLICY_VERSION,
-                rec.get("trigger_canonical", ""),
-                rec.get("trigger_canonical_zh"),
-                dumps_json(rec.get("concepts") or []),
-                dumps_json(rec.get("required_concept_groups") or []),
-                dumps_json(rec.get("excluded_contexts") or []),
-                dumps_json(rec.get("near_miss_examples") or []),
-                dumps_json(rec.get("trigger_variants") or []),
-                dumps_json(rec.get("trigger_variants_zh") or []),
-                dumps_json(rec.get("search_terms") or {}),
-                rec.get("action_instruction", ""),
-                rec.get("action_instruction_zh"),
-                dumps_json(rec.get("domain_tags") or []),
-                dumps_json(rec.get("tool_tags") or []),
-                dumps_json(rec.get("path_patterns") or []),
-                _import_status(rec),
-                rec.get("severity", "reminder"),
-                _import_source_origin(rec),
-                rec.get("project_scope", "global"),
-                rec.get("project_id"),
-                rec.get("archived_reason"),
-                rec.get("replacement_id"),
-                rec.get("created_at") or now_iso(),
-                rec.get("updated_at") or now_iso(),
-            ))
+            pending.append(
+                (
+                    rid,
+                    sid,
+                    SCHEMA_VERSION,
+                    rec.get("rule_version", 1),
+                    rec.get("created_by_pipeline_version", f"import_v{file_schema}"),
+                    RUNTIME_POLICY_VERSION,
+                    rec.get("trigger_canonical", ""),
+                    rec.get("trigger_canonical_zh"),
+                    dumps_json(rec.get("concepts") or []),
+                    dumps_json(rec.get("required_concept_groups") or []),
+                    dumps_json(rec.get("excluded_contexts") or []),
+                    dumps_json(rec.get("near_miss_examples") or []),
+                    dumps_json(rec.get("trigger_variants") or []),
+                    dumps_json(rec.get("trigger_variants_zh") or []),
+                    dumps_json(rec.get("search_terms") or {}),
+                    rec.get("action_instruction", ""),
+                    rec.get("action_instruction_zh"),
+                    dumps_json(rec.get("domain_tags") or []),
+                    dumps_json(rec.get("tool_tags") or []),
+                    dumps_json(rec.get("path_patterns") or []),
+                    _import_status(rec),
+                    rec.get("severity", "reminder"),
+                    _import_source_origin(rec),
+                    rec.get("project_scope", "global"),
+                    rec.get("project_id"),
+                    rec.get("archived_reason"),
+                    rec.get("replacement_id"),
+                    rec.get("created_at") or now_iso(),
+                    rec.get("updated_at") or now_iso(),
+                )
+            )
             inserted_sids.append(sid)
         if pending:
             with db.transaction() as tx:

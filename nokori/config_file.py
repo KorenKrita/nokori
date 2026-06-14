@@ -1,4 +1,5 @@
 """Read/write ~/.nokori/config.toml for the web config editor."""
+
 from __future__ import annotations
 
 import json

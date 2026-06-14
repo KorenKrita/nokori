@@ -4,6 +4,7 @@ Only applicable to Claude Code sessions (not Cursor). Forks the ended session
 with --no-session-persistence, passing the extraction prompt as a user message
 so the conversation prefix remains identical and the prompt cache is hit.
 """
+
 from __future__ import annotations
 
 import json
@@ -41,12 +42,17 @@ def fork_extract(session_id: str, extract_prompt: str, cfg: Config) -> str | Non
 
     env = _build_env(cfg)
     cmd = [
-        "claude", "-r", session_id,
+        "claude",
+        "-r",
+        session_id,
         "--fork-session",
         "--no-session-persistence",
-        "--max-turns", "1",
-        "--tools", "",
-        "-p", prompt,
+        "--max-turns",
+        "1",
+        "--tools",
+        "",
+        "-p",
+        prompt,
     ]
 
     try:

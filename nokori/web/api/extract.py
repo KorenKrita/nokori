@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Query
 
-from nokori.db import open_db, loads_json
+from nokori.db import loads_json, open_db
 from nokori.extract import jobs as job_io
 from nokori.utils.sql_batch import batched
 from nokori.web.deps import get_config
@@ -14,7 +14,6 @@ def _parse_details(raw) -> dict:
     if isinstance(raw, str):
         return loads_json(raw, {})
     return raw if isinstance(raw, dict) else {}
-
 
 
 @router.get("/extract/jobs")
@@ -112,13 +111,15 @@ def extract_state():
             tr = details.get("transcript_ref")
             if not tr:
                 continue
-            pipeline_by_transcript.setdefault(tr, []).append({
-                "id": ev["id"],
-                "source": ev["source"],
-                "outcome": ev["outcome"],
-                "details": details,
-                "created_at": ev["created_at"],
-            })
+            pipeline_by_transcript.setdefault(tr, []).append(
+                {
+                    "id": ev["id"],
+                    "source": ev["source"],
+                    "outcome": ev["outcome"],
+                    "details": details,
+                    "created_at": ev["created_at"],
+                }
+            )
 
         # Assemble result
         result = []
@@ -128,47 +129,51 @@ def extract_state():
             for r in rules_by_transcript.get(tp, []):
                 reviews = reviews_by_rule.get(r["id"], [])
                 lineage = lineage_by_rule.get(r["id"], [])
-                rules_data.append({
-                    "id": r["id"],
-                    "short_id": r["short_id"],
-                    "status": r["status"],
-                    "trigger_canonical": r["trigger_canonical"],
-                    "trigger_canonical_zh": r["trigger_canonical_zh"],
-                    "action_instruction": r["action_instruction"],
-                    "action_instruction_zh": r["action_instruction_zh"],
-                    "severity": r["severity"],
-                    "source_origin": r["source_origin"],
-                    "created_at": r["created_at"],
-                    "updated_at": r["updated_at"],
-                    "reviews": [
-                        {
-                            "role": rv["role"],
-                            "decision": rv["decision"],
-                            "scores": loads_json(rv["scores"], {}),
-                            "created_at": rv["created_at"],
-                        }
-                        for rv in reviews
-                    ],
-                    "lineage": [
-                        {
-                            "old_rule_id": ln["old_rule_id"],
-                            "new_rule_id": ln["new_rule_id"],
-                            "operation": ln["operation"],
-                            "reason": ln["reason"],
-                            "created_at": ln["created_at"],
-                        }
-                        for ln in lineage
-                    ],
-                })
-            result.append({
-                "transcript_path": tp,
-                "transcript_mtime": row["transcript_mtime"],
-                "extracted_at": row["extracted_at"],
-                "status": row["status"],
-                "last_byte_offset": row["last_byte_offset"],
-                "rules": rules_data,
-                "pipeline_events": pipeline_by_transcript.get(tp, []),
-            })
+                rules_data.append(
+                    {
+                        "id": r["id"],
+                        "short_id": r["short_id"],
+                        "status": r["status"],
+                        "trigger_canonical": r["trigger_canonical"],
+                        "trigger_canonical_zh": r["trigger_canonical_zh"],
+                        "action_instruction": r["action_instruction"],
+                        "action_instruction_zh": r["action_instruction_zh"],
+                        "severity": r["severity"],
+                        "source_origin": r["source_origin"],
+                        "created_at": r["created_at"],
+                        "updated_at": r["updated_at"],
+                        "reviews": [
+                            {
+                                "role": rv["role"],
+                                "decision": rv["decision"],
+                                "scores": loads_json(rv["scores"], {}),
+                                "created_at": rv["created_at"],
+                            }
+                            for rv in reviews
+                        ],
+                        "lineage": [
+                            {
+                                "old_rule_id": ln["old_rule_id"],
+                                "new_rule_id": ln["new_rule_id"],
+                                "operation": ln["operation"],
+                                "reason": ln["reason"],
+                                "created_at": ln["created_at"],
+                            }
+                            for ln in lineage
+                        ],
+                    }
+                )
+            result.append(
+                {
+                    "transcript_path": tp,
+                    "transcript_mtime": row["transcript_mtime"],
+                    "extracted_at": row["extracted_at"],
+                    "status": row["status"],
+                    "last_byte_offset": row["last_byte_offset"],
+                    "rules": rules_data,
+                    "pipeline_events": pipeline_by_transcript.get(tp, []),
+                }
+            )
     finally:
         db.close()
     return {"data": result}
@@ -189,13 +194,15 @@ def transcript_events(transcript_path: str = Query(...)):
         )
         result = []
         for ev in events:
-            result.append({
-                "id": ev["id"],
-                "source": ev["source"],
-                "outcome": ev["outcome"],
-                "details": _parse_details(ev["details"]),
-                "created_at": ev["created_at"],
-            })
+            result.append(
+                {
+                    "id": ev["id"],
+                    "source": ev["source"],
+                    "outcome": ev["outcome"],
+                    "details": _parse_details(ev["details"]),
+                    "created_at": ev["created_at"],
+                }
+            )
     finally:
         db.close()
     return {"events": result}

@@ -96,8 +96,7 @@ def mark_job_complete(db: Db, job_id: str, output_json: str) -> None:
     now = _now_iso()
     with db.transaction() as tx:
         tx.execute(
-            "UPDATE llm_jobs SET status = 'done', output_json = ?, updated_at = ? "
-            "WHERE id = ?",
+            "UPDATE llm_jobs SET status = 'done', output_json = ?, updated_at = ? WHERE id = ?",
             (output_json, now, job_id),
         )
 
@@ -106,9 +105,7 @@ def mark_job_failed(db: Db, job_id: str, error_info: str | None = None) -> None:
     """Increment retries, set next_retry_at. Stores error_info in output_json for circuit breaker classification."""
     now = _now_iso()
     with db.transaction() as tx:
-        row = tx.execute(
-            "SELECT role, retries FROM llm_jobs WHERE id = ?", (job_id,)
-        ).fetchone()
+        row = tx.execute("SELECT role, retries FROM llm_jobs WHERE id = ?", (job_id,)).fetchone()
         if row is None:
             return
         new_retries = row["retries"] + 1
@@ -137,8 +134,7 @@ def is_circuit_breaker_open(db: Db, role: str, model_id: str | None = None) -> b
     """
     # Type 1: role_failure_rate >= 0.50 over last 10 attempts -> pause (spec 5.2)
     rows = db.fetchall(
-        "SELECT status, updated_at FROM llm_jobs WHERE role = ? "
-        "ORDER BY updated_at DESC LIMIT ?",
+        "SELECT status, updated_at FROM llm_jobs WHERE role = ? ORDER BY updated_at DESC LIMIT ?",
         (role, CIRCUIT_BREAKER_SAMPLE_SIZE),
     )
     if len(rows) >= CIRCUIT_BREAKER_SAMPLE_SIZE:
@@ -146,9 +142,7 @@ def is_circuit_breaker_open(db: Db, role: str, model_id: str | None = None) -> b
         total = len(rows)
         failure_rate = failure_count / total if total > 0 else 0.0
         if failure_rate >= CIRCUIT_BREAKER_RATE_THRESHOLD:
-            last_failure = next(
-                (r["updated_at"] for r in rows if r["status"] == "failed"), None
-            )
+            last_failure = next((r["updated_at"] for r in rows if r["status"] == "failed"), None)
             if last_failure:
                 recent_dt = parse_iso(last_failure)
                 if recent_dt is None:
@@ -165,14 +159,18 @@ def is_circuit_breaker_open(db: Db, role: str, model_id: str | None = None) -> b
             (model_id, PROVIDER_AUTH_SAMPLE_SIZE),
         )
         auth_failures = sum(
-            1 for r in provider_rows
+            1
+            for r in provider_rows
             if r["status"] == "failed" and _is_auth_rate_error(r["output_json"])
         )
         if auth_failures >= 2:
             # Check cooldown: if most recent auth failure is within cooldown, breaker open
             most_recent_auth = next(
-                (r["updated_at"] for r in provider_rows
-                 if r["status"] == "failed" and _is_auth_rate_error(r["output_json"])),
+                (
+                    r["updated_at"]
+                    for r in provider_rows
+                    if r["status"] == "failed" and _is_auth_rate_error(r["output_json"])
+                ),
                 None,
             )
             if most_recent_auth:
@@ -185,6 +183,7 @@ def is_circuit_breaker_open(db: Db, role: str, model_id: str | None = None) -> b
 
     # Type 3: consecutive schema parse failures for this role+prompt_version
     from .roles import PROMPT_VERSIONS
+
     prompt_version = PROMPT_VERSIONS.get(role)
     if prompt_version:
         schema_rows = db.fetchall(
@@ -233,9 +232,7 @@ def enqueue_transcript_ingest(
     """
     job_id = str(uuid.uuid4())
     now = _now_iso()
-    ttl_expires_at = _iso_of(
-        local_now() + timedelta(hours=TRANSCRIPT_INGEST_TTL_HOURS)
-    )
+    ttl_expires_at = _iso_of(local_now() + timedelta(hours=TRANSCRIPT_INGEST_TTL_HOURS))
 
     with db.transaction() as tx:
         existing = tx.execute(
@@ -286,5 +283,3 @@ def expire_stale_ingest_jobs(db: Db) -> int:
         )
         changed = cursor.rowcount
     return changed
-
-

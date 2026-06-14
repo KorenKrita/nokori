@@ -4,6 +4,7 @@ Provides the durable idempotency/circuit-breaker layer used by all
 cold-path roles (admission_judge, rule_rewriter, final_judge, merge_planner,
 synthetic_eval_generator).
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -30,6 +31,7 @@ log = get_logger("nokori.cold.pipeline")
 
 class CircuitBreakerOpenError(RuntimeError):
     """Raised when a circuit breaker is open — job should remain pending, not rejected."""
+
     pass
 
 
@@ -40,13 +42,15 @@ def prompt_text(value: str) -> str:
 
 
 def llm_input_hash(role: str, system: str, user: str, model_id: str = "") -> str:
-    payload = dumps_json({
-        "role": role,
-        "prompt_version": PROMPT_VERSIONS.get(role),
-        "model_id": model_id,
-        "system": system,
-        "user": user,
-    })
+    payload = dumps_json(
+        {
+            "role": role,
+            "prompt_version": PROMPT_VERSIONS.get(role),
+            "model_id": model_id,
+            "system": system,
+            "user": user,
+        }
+    )
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
@@ -64,6 +68,7 @@ def call_llm_role(
 ) -> str:
     """Call an LLM role through the durable idempotency/circuit-breaker layer."""
     from .roles import compute_prompt_version
+
     prompt_version = compute_prompt_version(role, system)
     input_hash = llm_input_hash(role, system, user, model_id)
 
@@ -75,7 +80,13 @@ def call_llm_role(
         log.info("role=%s model=%s cache_hit=true", role, model_id)
         return cached
 
-    log.info("role=%s model=%s calling LLM (max_tokens=%d timeout=%ds)", role, model_id, max_tokens, timeout)
+    log.info(
+        "role=%s model=%s calling LLM (max_tokens=%d timeout=%ds)",
+        role,
+        model_id,
+        max_tokens,
+        timeout,
+    )
     job_id = enqueue_job(db, role, model_id, prompt_version, input_hash)
 
     _MAX_IMMEDIATE_RETRIES = 2
@@ -92,7 +103,14 @@ def call_llm_role(
         except Exception as exc:
             last_error = exc
             if attempt < _MAX_IMMEDIATE_RETRIES - 1:
-                log.warning("role=%s model=%s attempt %d/%d LLM call failed: %s, retrying", role, model_id, attempt + 1, _MAX_IMMEDIATE_RETRIES, exc)
+                log.warning(
+                    "role=%s model=%s attempt %d/%d LLM call failed: %s, retrying",
+                    role,
+                    model_id,
+                    attempt + 1,
+                    _MAX_IMMEDIATE_RETRIES,
+                    exc,
+                )
                 continue
             error_info = f"{type(exc).__name__}: {exc}"
             mark_job_failed(db, job_id, error_info=error_info)
@@ -106,7 +124,14 @@ def call_llm_role(
         except (json.JSONDecodeError, TypeError, ValueError) as exc:
             last_error = exc
             if attempt < _MAX_IMMEDIATE_RETRIES - 1:
-                log.warning("role=%s model=%s attempt %d/%d validation failed: %s, retrying", role, model_id, attempt + 1, _MAX_IMMEDIATE_RETRIES, exc)
+                log.warning(
+                    "role=%s model=%s attempt %d/%d validation failed: %s, retrying",
+                    role,
+                    model_id,
+                    attempt + 1,
+                    _MAX_IMMEDIATE_RETRIES,
+                    exc,
+                )
                 continue
             error_info = f"schema validation failed: {exc}"
             mark_job_failed(db, job_id, error_info=error_info)
@@ -119,9 +144,7 @@ def call_llm_role(
     raise last_error  # type: ignore[misc]
 
 
-def role_max_tokens(
-    role: str, role_max_tokens: dict[str, int] | None
-) -> int:
+def role_max_tokens(role: str, role_max_tokens: dict[str, int] | None) -> int:
     if role_max_tokens and role_max_tokens.get(role):
         return role_max_tokens[role]
     return DEFAULT_MAX_TOKENS[role]

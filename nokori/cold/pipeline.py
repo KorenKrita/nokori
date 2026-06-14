@@ -25,29 +25,23 @@ from typing import Any
 from ..archive.fingerprints import check_fingerprint_block
 from ..db import Db, dumps_json
 from ..errors import LlmError
-from ..matcher.compiler import CompilationError, CompiledMatcher, compile_rule
 from ..eval.synthetic import SyntheticEvalResult, run_synthetic_eval
-from ..policy import (
-    RUNTIME_POLICY_VERSION,
-    SourceOrigin,
-    ActivationOrigin,
-)
+from ..events.observability import write_error, write_event
+from ..matcher.compiler import CompilationError, CompiledMatcher, compile_rule
 from ..merge.policy import (
     MergeDecision,
     record_lineage,
     validate_merge_transaction,
 )
-from ..search.idf_stats import IdfPoolStats, build_idf_stats
-from .roles import (
-    PROMPT_VERSIONS,
-    resolve_model_id,
-    validate_role_output,
+from ..policy import (
+    RUNTIME_POLICY_VERSION,
+    ActivationOrigin,
+    SourceOrigin,
 )
-from ..events.observability import write_error, write_event
+from ..search.idf_stats import IdfPoolStats, build_idf_stats
 from ..utils.logging import get_logger
 from ..utils.time import now_iso
-
-from ._constants import DESTRUCTIVE_MERGE_OPS, PIPELINE_VERSION, _MAX_SPLIT_DEPTH
+from ._constants import _MAX_SPLIT_DEPTH, DESTRUCTIVE_MERGE_OPS, PIPELINE_VERSION
 from ._llm_call import (
     CircuitBreakerOpenError,
     call_llm_role as _call_llm_role,
@@ -55,31 +49,32 @@ from ._llm_call import (
     role_max_tokens as _role_max_tokens,
     role_timeout as _role_timeout,
 )
+from .integrate import (
+    _apply_merge_side_effects,
+    _apply_non_destructive_merge,
+    _build_trigger_data,
+    _get_existing_rules_for_merge,
+    _get_rule_data_for_fingerprint,
+    _operation_to_relation_shape,
+    _run_merge_planner,
+    insert_rule_from_pipeline,
+)
 from .qualify import (
-    _run_admission_judge,
-    _enforce_admission_policy,
-    _run_rewriter,
-    _run_final_judge,
     _candidate_to_rule_data,
-    _ensure_rule_data_variants,
     _draft_concept_groups,
     _draft_concepts,
     _draft_excluded_contexts,
     _draft_variants,
+    _enforce_admission_policy,
+    _ensure_rule_data_variants,
+    _run_admission_judge,
+    _run_final_judge,
+    _run_rewriter,
 )
-from .integrate import (
-    _run_merge_planner,
-    _operation_to_relation_shape,
-    _get_existing_rules_for_merge,
-    _apply_merge_side_effects,
-    _apply_non_destructive_merge,
-    _build_trigger_data,
-    _get_rule_data_for_fingerprint,
-    insert_rule_from_pipeline,
-)
-from .verify import (
-    _generate_eval_cases,
-    _check_cold_fast_lane,
+from .roles import (
+    PROMPT_VERSIONS,
+    resolve_model_id,
+    validate_role_output,
 )
 from .stages import (
     CandidateContext,
@@ -93,6 +88,10 @@ from .stages import (
     run_insert_or_merge,
     run_merge_planner,
     run_synthetic_eval as run_synthetic_eval_stage,
+)
+from .verify import (
+    _check_cold_fast_lane,
+    _generate_eval_cases,
 )
 
 log = get_logger("nokori.cold.pipeline")
@@ -150,11 +149,13 @@ def _write_checkpoint(
         "synthetic_eval_skipped": ctx.synthetic_eval_skipped,
         "fast_lane_passed": ctx.fast_lane_passed,
     }
-    checkpoint = dumps_json({
-        "pipeline_version": _CHECKPOINT_PIPELINE_VERSION,
-        "stage": stage_name,
-        "context": serializable_fields,
-    })
+    checkpoint = dumps_json(
+        {
+            "pipeline_version": _CHECKPOINT_PIPELINE_VERSION,
+            "stage": stage_name,
+            "context": serializable_fields,
+        }
+    )
     if segment_hash:
         with db.transaction() as tx:
             tx.execute(
@@ -218,7 +219,9 @@ def _run_pipeline_staged(
             )
             log.info("checkpoint resume: stage=%s start_idx=%d", checkpoint_stage, start_idx)
 
-    for i, (name, stage_fn, should_checkpoint) in enumerate(STAGE_CHAIN[start_idx:], start=start_idx):
+    for i, (name, stage_fn, should_checkpoint) in enumerate(
+        STAGE_CHAIN[start_idx:], start=start_idx
+    ):
         t0 = time.monotonic()
         result = stage_fn(ctx, db, llm)
         elapsed_ms = int((time.monotonic() - t0) * 1000)
@@ -250,7 +253,6 @@ def _run_pipeline_staged(
 # ---------------------------------------------------------------------------
 
 from ._result import ColdPipelineResult  # noqa: E402
-
 
 # ---------------------------------------------------------------------------
 # Public orchestration entry point
@@ -303,19 +305,29 @@ def run_cold_pipeline(
     trigger_preview_zh = str(extractor_output.get("trigger_zh", ""))[:60] or None
     try:
         result = _run_cold_pipeline_inner(
-            db, llm, transcript_ref, extractor_output,
-            role_models=role_models, default_model=default_model,
-            role_max_tokens=role_max_tokens, role_timeouts=role_timeouts,
-            idf_stats=idf_stats, global_adversarial_cases=global_adversarial_cases,
+            db,
+            llm,
+            transcript_ref,
+            extractor_output,
+            role_models=role_models,
+            default_model=default_model,
+            role_max_tokens=role_max_tokens,
+            role_timeouts=role_timeouts,
+            idf_stats=idf_stats,
+            global_adversarial_cases=global_adversarial_cases,
             source_origin=source_origin,
             project_id=project_id,
         )
         log.info(
             "cold_pipeline done: trigger=%r status=%s rule_id=%s rejection=%s",
-            trigger_preview, result.status, result.rule_id, result.rejection_reason,
+            trigger_preview,
+            result.status,
+            result.rule_id,
+            result.rejection_reason,
         )
         write_event(
-            db, source="cold_pipeline",
+            db,
+            source="cold_pipeline",
             outcome=result.status,
             details={
                 "trigger_preview": trigger_preview,
@@ -333,7 +345,9 @@ def run_cold_pipeline(
         # Spec section 5.2: paused jobs remain pending, not rejected
         log.warning("cold_pipeline pending (circuit breaker): trigger=%r %s", trigger_preview, e)
         write_error(
-            db, source="cold_pipeline", role="system",
+            db,
+            source="cold_pipeline",
+            role="system",
             error_type="circuit_breaker",
             message=str(e),
             details={"trigger_preview": trigger_preview},
@@ -346,7 +360,12 @@ def run_cold_pipeline(
         )
     except (RuntimeError, OSError, TimeoutError, ConnectionError, ValueError, LlmError) as e:
         # Spec section 13: failed role calls leave jobs pending for retry
-        log.warning("cold_pipeline pending (role failure): trigger=%r %s: %s", trigger_preview, type(e).__name__, e)
+        log.warning(
+            "cold_pipeline pending (role failure): trigger=%r %s: %s",
+            trigger_preview,
+            type(e).__name__,
+            e,
+        )
         if isinstance(e, TimeoutError):
             error_type = "timeout"
         elif isinstance(e, ConnectionError):
@@ -360,7 +379,9 @@ def run_cold_pipeline(
         else:
             error_type = "runtime"
         write_error(
-            db, source="cold_pipeline", role="system",
+            db,
+            source="cold_pipeline",
+            role="system",
             error_type=error_type,
             message=f"{type(e).__name__}: {e}",
             details={"trigger_preview": trigger_preview},
@@ -422,9 +443,18 @@ def _run_cold_pipeline_inner(
             return result
 
         split_results = _handle_split_required(
-            db, llm, rule_data, role_models, default_model,
-            transcript_ref, source_origin, idf_stats, global_adversarial_cases,
-            role_max_tokens, role_timeouts, project_id,
+            db,
+            llm,
+            rule_data,
+            role_models,
+            default_model,
+            transcript_ref,
+            source_origin,
+            idf_stats,
+            global_adversarial_cases,
+            role_max_tokens,
+            role_timeouts,
+            project_id,
         )
         if split_results:
             return split_results[0]
@@ -441,8 +471,6 @@ def _run_cold_pipeline_inner(
 # ---------------------------------------------------------------------------
 # Stage implementations (legacy — kept for split handler)
 # ---------------------------------------------------------------------------
-
-
 
 
 def _handle_split_required(
@@ -475,11 +503,13 @@ def _handle_split_required(
         "This rule has been flagged as containing multiple independent triggers/actions. "
         "Split it into separate, focused rules. Each must have its own trigger, action, "
         "required_concept_groups, and excluded_contexts. "
-        "Output strict JSON: {\"split_rules\": [{...}, {...}]} matching rule_rewriter schema per sub-rule."
+        'Output strict JSON: {"split_rules": [{...}, {...}]} matching rule_rewriter schema per sub-rule.'
     )
 
     rule_text = _prompt_text(json.dumps(rule_data, ensure_ascii=False, indent=2))
-    user_prompt = f"<rule_to_split>\n{rule_text}\n</rule_to_split>\n\nSplit into independent sub-rules."
+    user_prompt = (
+        f"<rule_to_split>\n{rule_text}\n</rule_to_split>\n\nSplit into independent sub-rules."
+    )
 
     def _validate_split_response(raw: str) -> None:
         parsed = json.loads(raw)
@@ -491,8 +521,12 @@ def _handle_split_required(
 
     try:
         response = _call_llm_role(
-            db, llm, role="rule_rewriter", model_id=rewriter_model,
-            system=system_prompt, user=user_prompt,
+            db,
+            llm,
+            role="rule_rewriter",
+            model_id=rewriter_model,
+            system=system_prompt,
+            user=user_prompt,
             max_tokens=_role_max_tokens("rule_rewriter", role_max_tokens),
             timeout=_role_timeout("rule_rewriter", role_timeouts),
             validate_response=_validate_split_response,
@@ -525,10 +559,16 @@ def _handle_split_required(
             "file_or_path_patterns": sub_rule.get("scope", {}).get("file_or_path_patterns", []),
         }
         result = run_cold_pipeline(
-            db, llm, transcript_ref, sub_extractor,
-            role_models=role_models, default_model=default_model,
-            role_max_tokens=role_max_tokens, role_timeouts=role_timeouts,
-            idf_stats=idf_stats, global_adversarial_cases=global_adversarial_cases,
+            db,
+            llm,
+            transcript_ref,
+            sub_extractor,
+            role_models=role_models,
+            default_model=default_model,
+            role_max_tokens=role_max_tokens,
+            role_timeouts=role_timeouts,
+            idf_stats=idf_stats,
+            global_adversarial_cases=global_adversarial_cases,
             source_origin=source_origin,
             project_id=project_id,
         )
@@ -541,8 +581,6 @@ def _build_idf_stats_from_db(db: Db) -> IdfPoolStats:
     """Build IDF stats from current active+trusted rule pool."""
     from ..db import row_to_rule
 
-    rows = db.fetchall(
-        "SELECT * FROM rules WHERE status IN ('active', 'trusted')"
-    )
+    rows = db.fetchall("SELECT * FROM rules WHERE status IN ('active', 'trusted')")
     rules = [row_to_rule(row) for row in rows]
     return build_idf_stats(rules)

@@ -9,11 +9,18 @@ from ..search.embedding import index_rule_if_enabled
 from ..utils.text import split_csv
 from ..utils.time import now_iso
 
-_EDITABLE_COLUMNS = frozenset({
-    "trigger_canonical", "action_instruction", "status",
-    "severity", "archived_reason", "replacement_id",
-    "trigger_variants", "search_terms",
-})
+_EDITABLE_COLUMNS = frozenset(
+    {
+        "trigger_canonical",
+        "action_instruction",
+        "status",
+        "severity",
+        "archived_reason",
+        "replacement_id",
+        "trigger_variants",
+        "search_terms",
+    }
+)
 
 
 def run(args: argparse.Namespace, cfg: Config) -> int:
@@ -50,9 +57,7 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
                 "archived": set(),
             }
             if new_status not in allowed.get(rule.status, set()):
-                raise NokoriError(
-                    f"invalid status transition {rule.status!r} -> {new_status!r}"
-                )
+                raise NokoriError(f"invalid status transition {rule.status!r} -> {new_status!r}")
             updates.append(("status", new_status))
             if new_status == "archived":
                 updates.append(("archived_reason", "manual_edit"))
@@ -84,7 +89,9 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
             )
         print(f"updated {rule.short_id}: {', '.join(c for c, _ in updates)}")
         reindex_cols = {
-            "trigger_canonical", "trigger_variants", "search_terms",
+            "trigger_canonical",
+            "trigger_variants",
+            "search_terms",
             "action_instruction",
         }
         if reindex_cols & {col for col, _ in updates}:

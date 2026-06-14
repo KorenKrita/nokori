@@ -5,6 +5,7 @@
 | `is_session_open` | `ended_at` unset — used by status command to count open sessions |
 | `list_active_sessions` | open + activity within `session_idle_seconds` — status UI |
 """
+
 from __future__ import annotations
 
 import json
@@ -176,11 +177,7 @@ def list_active_sessions(
     idle = idle_seconds if idle_seconds is not None else cfg.session_idle_seconds
     now = local_now()
     rows = records if records is not None else list_session_records(cfg)
-    active = [
-        d
-        for d in rows
-        if is_active_record(d, idle_seconds=idle, now=now)
-    ]
+    active = [d for d in rows if is_active_record(d, idle_seconds=idle, now=now)]
     active.sort(key=lambda r: r.get("last_activity") or "", reverse=True)
     return active
 

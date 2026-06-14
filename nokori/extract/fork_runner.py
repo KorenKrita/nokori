@@ -8,6 +8,7 @@ Offset-aware: reads the transcript to find the last extracted byte offset,
 then provides an anchor user message so the forked model only extracts from
 new content. Skips fork if compression occurred after the offset.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -24,7 +25,7 @@ from ..extract.jobs import delete_job, find_project_id_for_transcript
 from ..extract.lock import acquire as extract_lock
 from ..extract.process import process_candidates
 from ..lifecycle.hot_cache import load_last_byte_offset, mark_extracted
-from ..llm.prompts import EXTRACT_SYSTEM, UNTRUSTED_OPEN, UNTRUSTED_CLOSE
+from ..llm.prompts import EXTRACT_SYSTEM, UNTRUSTED_CLOSE, UNTRUSTED_OPEN
 from ..utils.logging import get_logger
 
 log = get_logger("nokori.extract.fork_runner")
@@ -165,8 +166,9 @@ def _write_event_safe(cfg: Config, session_id: str, outcome: str, details: dict)
     try:
         db = open_db(cfg.db_path)
         try:
-            write_event(db, source="fork_extract", session_id=session_id,
-                        outcome=outcome, details=details)
+            write_event(
+                db, source="fork_extract", session_id=session_id, outcome=outcome, details=details
+            )
         finally:
             db.close()
     except Exception as exc:
@@ -234,13 +236,22 @@ def _drain_pending_jobs(cfg: Config, *, exclude_job: Path | None = None) -> None
 
                 project_id = find_project_id_for_transcript(cfg, t_path)
                 rules_created, all_ok = process_candidates(
-                    candidates, t_path, project_id, cfg, transcript_text=text,
+                    candidates,
+                    t_path,
+                    project_id,
+                    cfg,
+                    transcript_text=text,
                 )
                 if all_ok:
                     _mark_extracted_safe(cfg, t_path)
                     delete_job(jp)
                 consecutive_failures = 0
-                log.info("drain job done: %s candidates=%d rules=%d", jp.name, len(candidates), rules_created)
+                log.info(
+                    "drain job done: %s candidates=%d rules=%d",
+                    jp.name,
+                    len(candidates),
+                    rules_created,
+                )
             except (json.JSONDecodeError, KeyError) as exc:
                 log.warning("drain job corrupt, quarantining: %s %s", jp.name, exc)
                 job_io.quarantine_corrupt_job(jp, cfg)
@@ -257,6 +268,7 @@ def run(session_id: str, transcript_path: str | None = None, job_path: str | Non
         return 0
 
     from ..utils.logging import configure
+
     configure(cfg.logs_dir, level=cfg.log_level)
 
     with extract_lock(cfg) as locked:
@@ -280,17 +292,28 @@ def run(session_id: str, transcript_path: str | None = None, job_path: str | Non
 
             if byte_offset > 0:
                 if _has_compact_after_offset(t_path, byte_offset):
-                    log.info("compression detected after offset, skipping fork for session=%s", session_id)
-                    _write_event_safe(cfg, session_id, "fork_extract_skipped_compressed", {
-                        "byte_offset": byte_offset,
-                    })
+                    log.info(
+                        "compression detected after offset, skipping fork for session=%s",
+                        session_id,
+                    )
+                    _write_event_safe(
+                        cfg,
+                        session_id,
+                        "fork_extract_skipped_compressed",
+                        {
+                            "byte_offset": byte_offset,
+                        },
+                    )
                     _drain_pending_jobs(cfg, exclude_job=j_path)
                     return 1
 
                 anchor_text = _read_anchor_user_message(t_path, byte_offset)
                 if anchor_text:
-                    log.info("incremental fork extract from offset=%d anchor=%s...",
-                             byte_offset, anchor_text[:40])
+                    log.info(
+                        "incremental fork extract from offset=%d anchor=%s...",
+                        byte_offset,
+                        anchor_text[:40],
+                    )
 
         # --- Get candidates via fork (the ONLY difference from normal path) ---
         prompt = _build_extraction_prompt(anchor_text)
@@ -304,7 +327,9 @@ def run(session_id: str, transcript_path: str | None = None, job_path: str | Non
         candidates, parse_ok = _parse_candidates(raw)
         if not parse_ok:
             log.warning("fork extract parse failed for session=%s", session_id)
-            _write_event_safe(cfg, session_id, "fork_extract_parse_failed", {"raw_preview": raw[:200]})
+            _write_event_safe(
+                cfg, session_id, "fork_extract_parse_failed", {"raw_preview": raw[:200]}
+            )
             _drain_pending_jobs(cfg, exclude_job=j_path)
             return 1
 
@@ -323,7 +348,10 @@ def run(session_id: str, transcript_path: str | None = None, job_path: str | Non
 
         try:
             rules_created, all_ok = process_candidates(
-                candidates, t_path or Path(f"fork:{session_id}"), project_id, cfg,
+                candidates,
+                t_path or Path(f"fork:{session_id}"),
+                project_id,
+                cfg,
             )
         except Exception as exc:
             log.error("process_candidates crashed: %s", exc)
@@ -340,14 +368,24 @@ def run(session_id: str, transcript_path: str | None = None, job_path: str | Non
         else:
             log.warning("fork extract partial, offset not advanced: session=%s", session_id)
 
-        _write_event_safe(cfg, session_id, "fork_extract_ok", {
-            "candidates": len(candidates),
-            "rules_created": rules_created,
-            "all_ok": all_ok,
-            "incremental": anchor_text is not None,
-        })
-        log.info("fork extract complete: session=%s candidates=%d rules=%d all_ok=%s",
-                 session_id, len(candidates), rules_created, all_ok)
+        _write_event_safe(
+            cfg,
+            session_id,
+            "fork_extract_ok",
+            {
+                "candidates": len(candidates),
+                "rules_created": rules_created,
+                "all_ok": all_ok,
+                "incremental": anchor_text is not None,
+            },
+        )
+        log.info(
+            "fork extract complete: session=%s candidates=%d rules=%d all_ok=%s",
+            session_id,
+            len(candidates),
+            rules_created,
+            all_ok,
+        )
 
         _drain_pending_jobs(cfg, exclude_job=j_path)
         return 0

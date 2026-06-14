@@ -19,7 +19,6 @@ import re
 from collections.abc import Callable
 from typing import Any
 
-
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
@@ -97,8 +96,12 @@ def compute_event_window(
         turn = turns[i]
 
         if _is_topic_shift(
-            turn, injection_tokens, window_turns, rule_tool_tags,
-            embedding_fn=embedding_fn, injection_embedding=injection_embedding,
+            turn,
+            injection_tokens,
+            window_turns,
+            rule_tool_tags,
+            embedding_fn=embedding_fn,
+            injection_embedding=injection_embedding,
         ):
             break
 

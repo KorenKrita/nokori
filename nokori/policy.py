@@ -9,7 +9,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-
 # ---------------------------------------------------------------------------
 # Version strings
 # ---------------------------------------------------------------------------
@@ -105,19 +104,23 @@ MergeOperation = Literal[
 # False-positive event classification (section 3.4)
 # ---------------------------------------------------------------------------
 
-FALSE_POSITIVE_REASON_CODES: frozenset[PosthocReasonCode] = frozenset((
-    "irrelevant_not_applicable",
-    "harmful_wrong_scope",
-    "harmful_blocked_valid_action",
-    "harmful_distracted",
-))
+FALSE_POSITIVE_REASON_CODES: frozenset[PosthocReasonCode] = frozenset(
+    (
+        "irrelevant_not_applicable",
+        "harmful_wrong_scope",
+        "harmful_blocked_valid_action",
+        "harmful_distracted",
+    )
+)
 
-EVALUATED_LABELS: frozenset[PosthocLabel] = frozenset((
-    "observed_useful",
-    "plausible_useful",
-    "irrelevant",
-    "harmful",
-))
+EVALUATED_LABELS: frozenset[PosthocLabel] = frozenset(
+    (
+        "observed_useful",
+        "plausible_useful",
+        "irrelevant",
+        "harmful",
+    )
+)
 
 # ---------------------------------------------------------------------------
 # State transition thresholds (section 3.3)
@@ -224,7 +227,6 @@ TRUSTED_TO_ACTIVE = TrustedToActiveThresholds()
 TRUSTED_TO_SUPPRESSED = TrustedToSuppressedThresholds()
 SUPPRESSED_TO_ACTIVE = SuppressedToActiveThresholds()
 SUPPRESSED_TO_ARCHIVED = SuppressedToArchivedThresholds()
-
 
 
 # ---------------------------------------------------------------------------
