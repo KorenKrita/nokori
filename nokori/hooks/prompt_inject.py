@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from ..config import Config
-from ..db import Db, fetch_rules, fetch_shadow_rules
+from ..db import Db, fetch_rules
 from ..events.fire import create_fire_event
 from ..events.shadow import (
     compute_context_fingerprint,
@@ -54,9 +54,9 @@ def _fetch_formal_and_shadow(db: Db, cfg: Config, project_id: str | None) -> tup
         formal_rules = fetch_rules(db, statuses=("active", "trusted"), project_id=project_id)
     if cfg.promotion_enabled:
         if project_id is None:
-            shadow_rules = fetch_shadow_rules(db, project_id=None, global_only=True)
+            shadow_rules = fetch_rules(db, statuses=("candidate", "suppressed"), global_only=True)
         else:
-            shadow_rules = fetch_shadow_rules(db, project_id=project_id)
+            shadow_rules = fetch_rules(db, statuses=("candidate", "suppressed"), project_id=project_id)
     else:
         shadow_rules = []
     return formal_rules, shadow_rules

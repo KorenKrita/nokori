@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 
 from nokori.config import Config
-from nokori.db import open_db, fetch_shadow_rules
+from nokori.db import open_db, fetch_rules
 from nokori.utils.host import Host
 
 
@@ -43,7 +43,7 @@ class TestFetchShadowRules:
         try:
             _make_rule(db, id_="rule-cand", status="candidate", project_id="my-proj")
             _make_rule(db, id_="rule-active", status="active", project_id="my-proj")
-            results = fetch_shadow_rules(db, project_id="my-proj")
+            results = fetch_rules(db, statuses=("candidate", "suppressed"), project_id="my-proj")
             ids = [r.id for r in results]
             assert "rule-cand" in ids
             assert "rule-active" not in ids
@@ -57,7 +57,7 @@ class TestFetchShadowRules:
         db = open_db(cfg.db_path)
         try:
             _make_rule(db, id_="rule-supp", status="suppressed", project_id="my-proj")
-            results = fetch_shadow_rules(db, project_id="my-proj")
+            results = fetch_rules(db, statuses=("candidate", "suppressed"), project_id="my-proj")
             ids = [r.id for r in results]
             assert "rule-supp" in ids
         finally:
@@ -70,7 +70,7 @@ class TestFetchShadowRules:
         db = open_db(cfg.db_path)
         try:
             _make_rule(db, id_="rule-active", status="active", project_id="my-proj")
-            results = fetch_shadow_rules(db, project_id="my-proj")
+            results = fetch_rules(db, statuses=("candidate", "suppressed"), project_id="my-proj")
             assert len(results) == 0
         finally:
             db.close()
@@ -82,7 +82,7 @@ class TestFetchShadowRules:
         db = open_db(cfg.db_path)
         try:
             _make_rule(db, id_="rule-arch", status="archived", project_id="my-proj")
-            results = fetch_shadow_rules(db, project_id="my-proj")
+            results = fetch_rules(db, statuses=("candidate", "suppressed"), project_id="my-proj")
             assert len(results) == 0
         finally:
             db.close()
@@ -94,7 +94,7 @@ class TestFetchShadowRules:
         db = open_db(cfg.db_path)
         try:
             _make_rule(db, id_="rule-x", status="candidate", project_id="proj-x")
-            results = fetch_shadow_rules(db, project_id=None)
+            results = fetch_rules(db, statuses=("candidate", "suppressed"))
             # project_id=None returns all candidate/suppressed regardless of project
             ids = [r.id for r in results]
             assert "rule-x" in ids

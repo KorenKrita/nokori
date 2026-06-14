@@ -579,8 +579,7 @@ def _handle_split_required(
 
 def _build_idf_stats_from_db(db: Db) -> IdfPoolStats:
     """Build IDF stats from current active+trusted rule pool."""
-    from ..db import row_to_rule
+    from ..db import fetch_rules
 
-    rows = db.fetchall("SELECT * FROM rules WHERE status IN ('active', 'trusted')")
-    rules = [row_to_rule(row) for row in rows]
+    rules = fetch_rules(db, statuses=("active", "trusted"))
     return build_idf_stats(rules)

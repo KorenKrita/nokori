@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 
 from nokori.config import Config
 from nokori.db import open_db
-from nokori.db import fetch_rules, fetch_shadow_rules
+from nokori.db import fetch_rules
 from nokori.search import embedding as embedding_search
 from nokori.search.engine import RetrievalEngine
 
@@ -68,7 +68,7 @@ def test_retrieve_formal_and_shadow_splits_pools(monkeypatch, tmp_path):
         formal_rules = fetch_rules(
             db, statuses=("active",), project_id="my-proj"
         )
-        shadow_rules = fetch_shadow_rules(db, project_id="my-proj")
+        shadow_rules = fetch_rules(db, statuses=("candidate", "suppressed"), project_id="my-proj")
         engine = RetrievalEngine(cfg, db)
         result = engine.retrieve(
             "git push --force to remote",
@@ -190,7 +190,7 @@ def test_formal_shadow_pool_size_for_embed(monkeypatch, tmp_path):
             short_id="loc001",
         )
         formal = fetch_rules(db, statuses=("active", "trusted"), project_id="my-proj")
-        shadow = fetch_shadow_rules(db, project_id="my-proj")
+        shadow = fetch_rules(db, statuses=("candidate", "suppressed"), project_id="my-proj")
         checked: list[int] = []
 
         def fake_auto(c, n):

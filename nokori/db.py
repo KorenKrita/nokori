@@ -608,30 +608,16 @@ def fetch_short_ids(db: "Db") -> set[str]:
     return {r["short_id"] for r in rows}
 
 
-def fetch_shadow_rules(db: "Db", *, project_id: str | None, global_only: bool = False) -> list:
-    """Fetch shadow pool: candidate and suppressed rules for shadow matching."""
-    if global_only:
-        rows = db.fetchall(
-            f"SELECT {RULE_COLUMNS} FROM rules "
-            "WHERE status IN ('candidate','suppressed') "
-            "AND project_scope = 'global' "
-            "ORDER BY updated_at DESC",
-        )
-    elif project_id is None:
-        rows = db.fetchall(
-            f"SELECT {RULE_COLUMNS} FROM rules "
-            "WHERE status IN ('candidate','suppressed') "
-            "ORDER BY updated_at DESC",
-        )
-    else:
-        rows = db.fetchall(
-            f"SELECT {RULE_COLUMNS} FROM rules "
-            "WHERE status IN ('candidate','suppressed') "
-            "AND (project_scope = 'global' OR project_id = ?) "
-            "ORDER BY updated_at DESC",
-            (project_id,),
-        )
-    return [row_to_rule(r) for r in rows]
+def fetch_rule_ids(db: "Db", *, statuses: tuple[str, ...]) -> list[str]:
+    """Fetch only rule IDs matching the given statuses (lightweight)."""
+    if not statuses:
+        return []
+    placeholders = ",".join("?" * len(statuses))
+    rows = db.fetchall(
+        f"SELECT id FROM rules WHERE status IN ({placeholders})",
+        statuses,
+    )
+    return [r["id"] for r in rows]
 
 
 def find_rule_id_by_injection(

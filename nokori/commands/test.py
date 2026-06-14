@@ -4,7 +4,7 @@ import argparse
 import os
 
 from ..config import Config
-from ..db import fetch_rules, fetch_shadow_rules, open_db
+from ..db import fetch_rules, open_db
 from ..events.fire import count_evaluated_fire_events
 from ..gate.blocker import select_gate_rules
 from ..runtime.applicability import evaluate_applicability
@@ -92,7 +92,7 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
         else:
             formal_rules = fetch_rules(db, statuses=("active", "trusted"), project_id=project_id)
         shadow_rules = (
-            fetch_shadow_rules(db, project_id=project_id)
+            fetch_rules(db, statuses=("candidate", "suppressed"), project_id=project_id)
             if project_id and cfg.promotion_enabled
             else []
         )

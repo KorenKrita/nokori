@@ -301,15 +301,15 @@ def _barriers_suppressed_to_active(
 
 def run_all_pending_transitions(db: Db) -> list[TransitionResult]:
     """Iterate rules by status, evaluate each, return results."""
+    from ..db import fetch_rule_ids
+
     results: list[TransitionResult] = []
-    rows = db.fetchall(
-        "SELECT id FROM rules WHERE status IN ('candidate','active','trusted','suppressed')"
-    )
-    for row in rows:
+    rule_ids = fetch_rule_ids(db, statuses=("candidate", "active", "trusted", "suppressed"))
+    for rule_id in rule_ids:
         try:
-            result = evaluate_transitions(db, row["id"])
+            result = evaluate_transitions(db, rule_id)
         except Exception as exc:
-            log.exception("evaluate_transitions failed for rule=%s: %s", row["id"], exc)
+            log.exception("evaluate_transitions failed for rule=%s: %s", rule_id, exc)
             continue
         results.append(result)
     return results
