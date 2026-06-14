@@ -25,7 +25,13 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     sub = p.add_subparsers(dest="command", required=False, metavar="<command>")
 
-    sp_add = sub.add_parser("add", help="add a rule manually")
+    sp_add = sub.add_parser(
+        "add",
+        help="add a rule manually",
+        description="Create a new rule from trigger and action text.",
+        epilog="Examples:\n  nokori add --trigger 'When writing tests' --action 'Use pytest fixtures'",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     sp_add.add_argument("--trigger", required=True, help="trigger scenario (English canonical)")
     sp_add.add_argument("--action", required=True, help="correct behavior")
     sp_add.add_argument("--severity", default="reminder", choices=("reminder", "high_risk"))
@@ -34,7 +40,13 @@ def _build_parser() -> argparse.ArgumentParser:
     sp_add.add_argument("--terms-zh", default=None, help="comma-separated Chinese search terms")
     sp_add.add_argument("--project-id", default=None, help="restrict to a specific project_id")
 
-    sp_list = sub.add_parser("list", help="list rules")
+    sp_list = sub.add_parser(
+        "list",
+        help="list rules",
+        description="Display all active rules in a table format.",
+        epilog="Examples:\n  nokori list\n  nokori list --all --project myproj",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     sp_list.add_argument(
         "--all",
         action="store_true",
@@ -47,13 +59,31 @@ def _build_parser() -> argparse.ArgumentParser:
         help="show only trusted project-scoped rules approaching cross-project promotion",
     )
 
-    sp_show = sub.add_parser("show", help="show a rule by short id")
+    sp_show = sub.add_parser(
+        "show",
+        help="show a rule by short id",
+        description="Display full details of a rule including trigger, action, and metadata.",
+        epilog="Examples:\n  nokori show abc123",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     sp_show.add_argument("short_id")
 
-    sp_dismiss = sub.add_parser("dismiss", help="archive a rule by short id")
+    sp_dismiss = sub.add_parser(
+        "dismiss",
+        help="archive a rule by short id",
+        description="Archive (dismiss) a rule so it is no longer injected.",
+        epilog="Examples:\n  nokori dismiss abc123",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     sp_dismiss.add_argument("short_id")
 
-    sp_edit = sub.add_parser("edit", help="edit a rule by short id")
+    sp_edit = sub.add_parser(
+        "edit",
+        help="edit a rule by short id",
+        description="Modify fields of an existing rule.",
+        epilog="Examples:\n  nokori edit abc123 --trigger 'New trigger text'\n  nokori edit abc123 --severity high_risk",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     sp_edit.add_argument("short_id")
     sp_edit.add_argument("--trigger", default=None, help="replace trigger_text")
     sp_edit.add_argument("--action", default=None)
@@ -64,7 +94,13 @@ def _build_parser() -> argparse.ArgumentParser:
     sp_edit.add_argument("--severity", default=None, choices=("reminder", "high_risk"))
     sp_edit.add_argument("--status", default=None, choices=("archived",))
 
-    sp_test = sub.add_parser("test", help="simulate retrieval for a prompt")
+    sp_test = sub.add_parser(
+        "test",
+        help="simulate retrieval for a prompt",
+        description="Simulate rule retrieval for a given prompt without injecting.",
+        epilog="Examples:\n  nokori test 'Write a React component'\n  nokori test 'deploy to prod' --project myproj",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     sp_test.add_argument("prompt", help="user prompt to simulate")
     sp_test.add_argument(
         "--project",
@@ -72,7 +108,13 @@ def _build_parser() -> argparse.ArgumentParser:
         help="project_id filter (default: cwd via git root hash, same as hooks)",
     )
 
-    sp_search = sub.add_parser("search", help="search rules by prompt (compact table output)")
+    sp_search = sub.add_parser(
+        "search",
+        help="search rules by prompt (compact table output)",
+        description="Search rules by prompt text with relevance scoring.",
+        epilog="Examples:\n  nokori search 'how to handle errors'\n  nokori search 'testing' --project myproj",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     sp_search.add_argument("prompt", help="text to search against")
     sp_search.add_argument(
         "--project",
@@ -80,7 +122,13 @@ def _build_parser() -> argparse.ArgumentParser:
         help="project_id filter (default: cwd via git root hash)",
     )
 
-    sp_extract = sub.add_parser("extract", help="run the extraction pipeline")
+    sp_extract = sub.add_parser(
+        "extract",
+        help="run the extraction pipeline",
+        description="Extract rules from conversation transcripts.",
+        epilog="Examples:\n  nokori extract\n  nokori extract --session ~/transcripts/chat.jsonl --dry-run",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     sp_extract.add_argument("--session", default=None, help="explicit transcript path")
     sp_extract.add_argument(
         "--project",
@@ -97,10 +145,25 @@ def _build_parser() -> argparse.ArgumentParser:
     sub.add_parser(
         "health",
         help="connectivity checks: db, hooks, LLM, embedding readiness",
+        description="Run connectivity checks for database, hooks, LLM, and embeddings.",
+        epilog="Examples:\n  nokori health",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    sub.add_parser("maintain", help="run maintenance jobs now")
+    sub.add_parser(
+        "maintain",
+        help="run maintenance jobs now",
+        description="Run scheduled maintenance tasks immediately (pruning, promotion, etc.).",
+        epilog="Examples:\n  nokori maintain",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
 
-    sp_report = sub.add_parser("report", help="AI-friendly system status report")
+    sp_report = sub.add_parser(
+        "report",
+        help="AI-friendly system status report",
+        description="Generate a status report summarizing rules, sessions, and events.",
+        epilog="Examples:\n  nokori report\n  nokori report --since 2024-01-01 --json",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     sp_report.add_argument(
         "--since", default=None, help="ISO timestamp start (default: 7 days ago)"
     )

@@ -295,8 +295,9 @@ def _find_related_fingerprint(db: Db, trigger_canonical: str, action_instruction
 
     if not candidates:
         return None
-    # Highest priority (user=2 > system=1 > replacement=0), then highest score
-    candidates.sort(key=lambda x: (x[0], x[1]), reverse=True)
+    # Highest priority (user=2 > system=1 > replacement=0), then highest score,
+    # then fingerprint id as deterministic tiebreaker
+    candidates.sort(key=lambda x: (x[0], x[1], x[2]["id"]), reverse=True)
     return candidates[0][2]
 
 

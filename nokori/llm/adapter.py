@@ -125,6 +125,8 @@ class LLMAdapter:
             content = data["choices"][0]["message"]["content"]
             if content is None:
                 raise LlmError("LLM returned null content")
+            if not isinstance(content, str):
+                raise LlmError(f"LLM returned non-string content: {type(content).__name__}")
             return content.strip()
         except (KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError) as e:
             log.warning("LLM response unparseable: %s", type(e).__name__)

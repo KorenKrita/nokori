@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import re
 from datetime import timedelta
 
@@ -92,6 +93,11 @@ def _update_gate_marker(cfg: Config, session_id: str, prompt: str, hot, ph: str)
 
 def handle(payload: dict, cfg: Config, *, host: Host) -> dict:  # type: ignore[return]
     session_id = effective_session_id(payload)
+    turn_index = payload.get("turn_index")
+    extra: dict[str, object] = {"session_id": session_id}
+    if turn_index is not None:
+        extra["turn_index"] = turn_index
+    ctx_log = logging.LoggerAdapter(log, extra)
     prompt = payload.get("prompt") or ""
     normalized_prompt = normalize_prompt_for_hash(prompt)
     ph_for_ack = prompt_hash(normalized_prompt) if normalized_prompt else ""
@@ -107,7 +113,7 @@ def handle(payload: dict, cfg: Config, *, host: Host) -> dict:  # type: ignore[r
     with HotPathContext(payload, cfg, host=host, session_id=session_id) as ctx:
         db = ctx.db
         if db is None:
-            log.warning("db unavailable, skip injection session=%s", session_id)
+            ctx_log.warning("db unavailable, skip injection")
             if cfg.gate_enabled:
                 marker_io.delete_session(cfg, session_id)
             return {"continue": True}
@@ -124,7 +130,7 @@ def handle(payload: dict, cfg: Config, *, host: Host) -> dict:  # type: ignore[r
                 turn_index=payload.get("turn_index"),
             )
         except RetrieveFailed as e:
-            log.warning("retrieve failed (%s); continuing without rules", e)
+            ctx_log.warning("retrieve failed (%s); continuing without rules", e)
             ctx.add_error("retrieval", ErrorCategory.DEGRADED, str(e), e)
             if cfg.gate_enabled:
                 marker_io.delete_session(cfg, session_id)
@@ -210,18 +216,16 @@ def handle(payload: dict, cfg: Config, *, host: Host) -> dict:  # type: ignore[r
             },
         )
 
-        log.info(
-            "injected hot=%d warm=%d shadow_hot=%d shadow_warm=%d session=%s",
+        ctx_log.info(
+            "injected hot=%d warm=%d shadow_hot=%d shadow_warm=%d",
             len(hot),
             len(warm),
             len(shadow_hot),
             len(shadow_warm),
-            session_id,
         )
         if host == Host.CURSOR and text:
-            log.info(
+            ctx_log.info(
                 "cursor beforeSubmitPrompt injection (best-effort; "
-                "official schema is continue/user_message only) session=%s",
-                session_id,
+                "official schema is continue/user_message only)",
             )
         return user_prompt_submit_response(host, text or None)
