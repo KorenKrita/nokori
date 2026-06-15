@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from nokori.runtime.applicability import ApplicabilityResult, evaluate_applicability
+from nokori.search.applicability import ApplicabilityResult, evaluate_applicability
 from nokori.search.embedding_profiles import (
     CHECKED_IN_PROFILES,
     REQUIRED_BUCKETS,
@@ -13,7 +13,6 @@ from nokori.search.embedding_profiles import (
     is_known_profile,
     load_profile,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures / helpers

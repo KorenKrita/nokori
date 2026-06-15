@@ -25,31 +25,6 @@ log = get_logger("nokori.extract.process")
 _EVIDENCE_QUOTE_MAX = 500
 
 
-class _ColdLLMAdapter:
-    """Adapts LLMAdapter to the cold pipeline's llm.call() interface."""
-
-    def __init__(self, llm: LLMAdapter):
-        self._llm = llm
-
-    def call(
-        self,
-        model: str,
-        system: str,
-        user: str,
-        max_tokens: int = 2000,
-        timeout: int = 30,
-    ) -> str:
-        if self._llm.configured():
-            result = self._llm._call_openai_compatible(
-                system, user, max_tokens, timeout, model_id=model
-            )
-        else:
-            result = self._llm._fallback_claude_cli(system, user, timeout)
-        if result is None:
-            raise RuntimeError("LLM call returned None")
-        return result
-
-
 def _segment_hash(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
 
@@ -116,7 +91,6 @@ def process_candidates(
     db = open_db(cfg.db_path)
     try:
         llm = LLMAdapter(cfg)
-        cold_llm = _ColdLLMAdapter(llm)
         rules_created = 0
         all_ok = True
         transcript_ref = str(transcript_path)
@@ -180,7 +154,7 @@ def process_candidates(
             try:
                 result = run_cold_pipeline(
                     db,
-                    cold_llm,
+                    llm,
                     transcript_ref=transcript_ref,
                     extractor_output=extractor_output,
                     role_models=cfg.role_models,

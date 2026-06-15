@@ -18,7 +18,7 @@ from typing import Any
 from ..matcher.compiler import COMPILER_VERSION as MATCHER_COMPILER_VERSION, CompiledMatcher
 from ..matcher.runtime import MatchResult, evaluate_match
 from ..policy import RUNTIME_POLICY_VERSION
-from ..runtime.applicability import ApplicabilityDecision, evaluate_applicability
+from ..search.applicability import ApplicabilityDecision, evaluate_applicability
 from ..search.idf_stats import TOKENIZER_VERSION, IdfPoolStats, compute_trigger_idf_sum
 from ..utils.time import now_iso
 

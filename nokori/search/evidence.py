@@ -14,35 +14,10 @@ from ..matcher.compiler import CompilationError, compile_rule
 from ..matcher.runtime import evaluate_match
 from ..models import Rule, ScoredResult
 from ..policy import RUNTIME_POLICY_VERSION
-from ..runtime.applicability import evaluate_applicability, meets_min_evidence
+from .applicability import evaluate_applicability, meets_min_evidence
 from .idf_stats import IdfPoolStats, compute_trigger_idf_sum
+from .selector import compute_base_utility
 from .tokenizer import tokenize
-
-
-def compute_base_utility(
-    *,
-    trigger_idf_sum: float,
-    strong_variant_phrase_hit: bool,
-    rule_status: str,
-    observed_usefulness_score: float,
-    false_positive_score: float,
-    eligible: bool,
-) -> float:
-    """Per-rule utility without cross-result MMR penalty.
-
-    May return negative values when false_positive_score outweighs other terms.
-    """
-    if not eligible:
-        return 0.0
-    variant_phrase_bonus = 1.0 if strong_variant_phrase_hit else 0.0
-    if rule_status == "trusted":
-        trust_bonus = 1.5
-    elif observed_usefulness_score > 0:
-        trust_bonus = 0.5
-    else:
-        trust_bonus = 0.0
-    fp_penalty = false_positive_score * 2.0
-    return trigger_idf_sum + variant_phrase_bonus + trust_bonus - fp_penalty
 
 
 def _legacy_pass_result(

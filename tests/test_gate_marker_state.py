@@ -17,12 +17,12 @@ from nokori.gate import marker as marker_io
 from nokori.gate.engine import GateEngine, _batch_check_eligibility, is_gate_eligible_rule
 from nokori.gate.marker import (
     MarkerRule,
+    MarkerState,
     PromptHashResolver,
     prompt_hash,
     read_latest_marker,
     write as write_marker,
 )
-from nokori.gate.state import MarkerState
 from nokori.hooks.pre_tool_use import handle
 from nokori.policy import RUNTIME_POLICY_VERSION
 from nokori.utils.host import Host

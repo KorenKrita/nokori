@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import asdict, dataclass
+from enum import Enum
 from pathlib import Path
 
 from ..config import Config
@@ -12,6 +13,15 @@ from ..utils.logging import get_logger
 from ..utils.time import local_now, now_iso, parse_iso
 
 log = get_logger("nokori.gate.marker")
+
+
+class MarkerState(str, Enum):
+    consumed = "consumed"  # marker matched, tool blocked
+    expired = "expired"  # TTL exceeded at check time
+    ineligible = "ineligible"  # all rules failed eligibility/evidence/exclusion checks
+    hash_mismatch = "hash_mismatch"  # marker for different prompt turn
+    empty = "empty"  # zero rules in marker
+    error = "error"  # exception during processing
 
 
 def prompt_hash(prompt: str) -> str:

@@ -450,7 +450,7 @@ def evaluate_applicability(
                             trigger_evidence_passed=True,
                             penalties=penalties,
                         )
-                    # Tool input available but evidence did not pass -> fall to HOT
+                    # Tool input available but evidence did not pass -> fall through to HOT below
                 else:
                     # Prompt-only gate (no tool input exists yet)
                     return ApplicabilityResult(
@@ -462,7 +462,9 @@ def evaluate_applicability(
                     )
 
         # HOT for trusted: spec says trusted "can WARM/HOT" without strong-evidence requirement
-        # (unlike active which requires strong evidence for HOT)
+        # (unlike active which requires strong evidence for HOT).
+        # Trusted + excluded_context_hit + override still allows HOT here because the override
+        # only blocks Gate (see gate_eligible branch above); WARM/HOT injection is the override's intended use case.
         # However, significant recent noise (false_positive_score > 0.3) downgrades to WARM.
         if false_positive_score > 0.3:
             penalties.append(f"recent_fp_penalty={false_positive_score:.2f}")

@@ -36,7 +36,7 @@ def _make_llm_mock(responses: dict[str, str | Exception]) -> MagicMock:
                 return resp
         raise ValueError(f"No mock response: {system[:80]}")
 
-    mock.call = MagicMock(side_effect=_call)
+    mock.call_raw = MagicMock(side_effect=_call)
     return mock
 
 
@@ -207,7 +207,7 @@ class TestAdmissionStage:
         assert isinstance(result, ColdPipelineResult)
         assert result.status == "rejected"
         assert result.rejection_reason == "no_transcript_evidence"
-        llm.call.assert_not_called()
+        llm.call_raw.assert_not_called()
 
     def test_revise_decision_returns_context(self, db: Db):
         from nokori.cold.stages import CandidateContext, PipelineConfig, run_admission
@@ -307,7 +307,7 @@ class TestBuildRuleDataStage:
         assert result.rule_data["trigger_canonical"] == "When using pytest parametrize"
         assert result.rule_data["action_instruction"] == "Use indirect=True"
         assert "variants" in result.rule_data
-        llm.call.assert_not_called()
+        llm.call_raw.assert_not_called()
 
     def test_revise_path_calls_rewriter(self, db: Db):
         from nokori.cold.stages import CandidateContext, PipelineConfig, run_build_rule_data

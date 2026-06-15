@@ -93,7 +93,7 @@ def call_llm_role(
     last_error: Exception | None = None
     for attempt in range(_MAX_IMMEDIATE_RETRIES):
         try:
-            response = llm.call(
+            response = llm.call_raw(
                 model=model_id,
                 system=system,
                 user=user,

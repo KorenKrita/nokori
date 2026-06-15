@@ -1,10 +1,9 @@
 from datetime import datetime, timezone
 
-from nokori.models import Rule
-from nokori.models import ScoredResult
-from nokori.runtime.applicability import meets_min_evidence
+from nokori.models import Rule, ScoredResult
+from nokori.search import bm25, scorer as ranker
+from nokori.search.applicability import meets_min_evidence
 from nokori.search.selector import select_injection
-from nokori.search import bm25, ranker
 
 
 def _rule(short, trigger, *, variants=(), terms_zh=(), action="do x", status="active",

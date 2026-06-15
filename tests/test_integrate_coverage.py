@@ -68,7 +68,7 @@ class TestRunMergePlanner:
         existing = [{"id": "existing-1", "trigger_canonical": "avoid force push", "status": "active"}]
 
         llm = MagicMock()
-        llm.call.return_value = json.dumps({
+        llm.call_raw.return_value = json.dumps({
             "relation_shape": "new_narrower",
             "new_rule_safety": "safe",
             "operation_safety": "safe",
@@ -82,7 +82,7 @@ class TestRunMergePlanner:
         with patch("nokori.cold.integrate.find_merge_neighbors", return_value=existing):
             op, info = _run_merge_planner(db, llm, rule_data, "model-1")
         assert op == "keep_both"
-        assert llm.call.called
+        assert llm.call_raw.called
         assert "merge_rationale" in info
         assert info.get("relation_shape") == "new_narrower"
 

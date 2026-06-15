@@ -16,7 +16,32 @@ from ..policy import (
     SMALL_POOL_THRESHOLD,
     WARM_HARD_MAX,
 )
-from .evidence import compute_base_utility
+
+
+def compute_base_utility(
+    *,
+    trigger_idf_sum: float,
+    strong_variant_phrase_hit: bool,
+    rule_status: str,
+    observed_usefulness_score: float,
+    false_positive_score: float,
+    eligible: bool,
+) -> float:
+    """Per-rule utility without cross-result MMR penalty.
+
+    May return negative values when false_positive_score outweighs other terms.
+    """
+    if not eligible:
+        return 0.0
+    variant_phrase_bonus = 1.0 if strong_variant_phrase_hit else 0.0
+    if rule_status == "trusted":
+        trust_bonus = 1.5
+    elif observed_usefulness_score > 0:
+        trust_bonus = 0.5
+    else:
+        trust_bonus = 0.0
+    fp_penalty = false_positive_score * 2.0
+    return trigger_idf_sum + variant_phrase_bonus + trust_bonus - fp_penalty
 
 
 @dataclass(frozen=True)

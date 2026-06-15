@@ -72,7 +72,7 @@ def _make_llm_mock(responses: dict[str, str | Exception]) -> MagicMock:
                 return resp
         raise ValueError(f"No mock response matched system prompt: {system[:80]}")
 
-    mock.call = MagicMock(side_effect=_call)
+    mock.call_raw = MagicMock(side_effect=_call)
     return mock
 
 
@@ -307,7 +307,7 @@ class TestFailedRoleNoDurableRules:
             def __init__(self):
                 self.calls = 0
 
-            def call(self, **_kwargs):
+            def call_raw(self, **_kwargs):
                 self.calls += 1
                 # Both attempts return invalid (missing scores)
                 return json.dumps({"decision": "accept"})
@@ -396,7 +396,7 @@ class TestImmediateRetry:
             def __init__(self):
                 self.calls = 0
 
-            def call(self, **_kwargs):
+            def call_raw(self, **_kwargs):
                 self.calls += 1
                 if self.calls == 1:
                     return json.dumps({"decision": "accept"})
@@ -1385,7 +1385,7 @@ class TestSplitRequired:
             raise ValueError(f"No mock matched: {system[:80]}")
 
         llm = MagicMock()
-        llm.call = MagicMock(side_effect=_dynamic_call)
+        llm.call_raw = MagicMock(side_effect=_dynamic_call)
 
         with patch(
             "nokori.cold.stages.check_fingerprint_block", return_value=None

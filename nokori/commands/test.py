@@ -7,7 +7,7 @@ from ..config import Config
 from ..db import fetch_rules, open_db
 from ..events.fire import count_evaluated_fire_events
 from ..gate.blocker import select_gate_rules
-from ..runtime.applicability import evaluate_applicability
+from ..search.applicability import evaluate_applicability
 from ..search.engine import RetrievalEngine
 from ..utils.project import resolve_project_id
 

@@ -22,7 +22,7 @@ from nokori.matcher.compiler import (
     CompiledMatcher,
     CompiledVariant,
 )
-from nokori.runtime.applicability import (
+from nokori.search.applicability import (
     _strong_trigger_evidence,
     _trigger_evidence_passes,
 )
@@ -597,7 +597,7 @@ def evaluate_match(
 # ---------------------------------------------------------------------------
 # Trigger evidence pass/fail evaluation (spec section 9.3)
 #
-# Canonical implementations live in nokori.runtime.applicability. The adapters
+# Canonical implementations live in nokori.search.applicability. The adapters
 # below translate the idf_stats dict interface used by evaluate_match into the
 # scalar parameters expected by the canonical functions.
 #

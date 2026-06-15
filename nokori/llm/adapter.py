@@ -35,6 +35,29 @@ class LLMAdapter:
         """Single user message (legacy). Prefer complete_messages for extract/merge."""
         return self.complete_messages(None, prompt, max_tokens=max_tokens, timeout=timeout)
 
+    def call_raw(
+        self,
+        model: str,
+        system: str,
+        user: str,
+        max_tokens: int = 2000,
+        timeout: int = 30,
+    ) -> str:
+        """Direct LLM call with explicit model. Raises on failure.
+
+        Note: when llm_base_url is not configured, falls back to claude CLI
+        which uses a hardcoded model; the `model` parameter is ignored in that path.
+        """
+        if self.cfg.llm_base_url:
+            result = self._call_openai_compatible(
+                system, user, max_tokens, timeout, model_id=model
+            )
+        else:
+            result = self._fallback_claude_cli(system, user, timeout)
+        if result is None:
+            raise LlmError("LLM call returned None")
+        return result
+
     def complete_role(
         self,
         role: str,

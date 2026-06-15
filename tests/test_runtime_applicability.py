@@ -1,4 +1,4 @@
-"""Tests for nokori.runtime.applicability hard eligibility engine.
+"""Tests for nokori.search.applicability hard eligibility engine.
 
 Covers sections 9.4-9.5 of the autonomous rule quality flywheel plan:
 state permissions, trigger evidence paths, severity constraints.
@@ -9,8 +9,7 @@ from nokori.policy import (
     DYNAMIC_IDF_SMALL_POOL,
     SMALL_POOL_THRESHOLD,
 )
-from nokori.runtime.applicability import evaluate_applicability
-
+from nokori.search.applicability import evaluate_applicability
 
 # ---------------------------------------------------------------------------
 # Helpers

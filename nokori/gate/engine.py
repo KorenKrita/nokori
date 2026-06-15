@@ -19,8 +19,7 @@ from ..policy import RUNTIME_POLICY_VERSION
 from ..utils.logging import get_logger
 from ..utils.time import local_now, parse_iso
 from . import marker as marker_io
-from .marker import MarkerRule
-from .state import MarkerState
+from .marker import MarkerRule, MarkerState
 
 log = get_logger("nokori.gate.engine")
 

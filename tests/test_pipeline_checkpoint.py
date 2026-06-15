@@ -31,7 +31,7 @@ class _FakeLlm:
     def __init__(self, responses: dict[str, str]):
         self._responses = responses
 
-    def call(self, model, system, user, max_tokens, timeout):
+    def call_raw(self, model, system, user, max_tokens, timeout):
         for key, val in self._responses.items():
             if key.lower() in system.lower():
                 return val
