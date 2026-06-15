@@ -10,27 +10,13 @@ from ..constants import TRANSCRIPT_MTIME_EPSILON_SEC
 from ..db import open_db
 from ..events.observability import write_event
 from ..extract import jobs as job_io
-from ..extract.compressor import compress
-from ..extract.extractor import extract as extract_candidates
 from ..extract.lock import acquire as extract_lock
-from ..extract.process import process_candidates
-from ..extract.reader import read_after, read_tail_user_turns
-from ..lifecycle.hot_cache import load_last_byte_offset, mark_extracted
+from ..extract.process import LlmUnavailableError, extract_transcript
 from ..llm.adapter import LLMAdapter
 from ..utils.logging import get_logger
 from ..utils.project import resolve_project_id
 
 log = get_logger("nokori.commands.extract")
-
-
-_CONTEXT_TURNS = 3
-
-
-def _safe_mtime(path: Path) -> float:
-    try:
-        return path.stat().st_mtime
-    except OSError:
-        return 0.0
 
 
 def _process_path(
@@ -42,63 +28,42 @@ def _process_path(
     """
     db = open_db(cfg.db_path)
     try:
-        prev_offset = load_last_byte_offset(db, path)
-        turns, new_offset = read_after(path, prev_offset)
-
-        if prev_offset > 0 and new_offset > prev_offset:
-            context = read_tail_user_turns(path, _CONTEXT_TURNS, end_offset=prev_offset)
-            turns = context + turns
-
-        text = compress(turns)
-        if not text.strip():
-            if not dry_run:
-                mark_extracted(db, path, _safe_mtime(path), new_offset)
-            return (0, 0, True)
-
         llm = LLMAdapter(cfg)
-        candidates, llm_ok = extract_candidates(text, llm)
-        if not llm_ok:
+        try:
+            cands, rules_created, all_ok = extract_transcript(
+                path, project_id, cfg, db, llm=llm, dry_run=dry_run
+            )
+        except LlmUnavailableError:
             log.warning("extract failed (llm): %s", path)
+            if not dry_run:
+                write_event(
+                    db,
+                    source="cli_extract",
+                    outcome="llm_failure",
+                    details={"transcript": path.name, "project_id": project_id},
+                )
+            return (0, 0, False)
+
+        if not dry_run and cands > 0:
+            if not all_ok:
+                log.warning(
+                    "extract incomplete (cold pipeline errors), transcript not marked: %s", path
+                )
             write_event(
                 db,
                 source="cli_extract",
-                outcome="llm_failure",
-                details={"transcript": path.name, "project_id": project_id},
+                outcome="ok" if all_ok else "partial_failure",
+                details={
+                    "transcript": path.name,
+                    "candidates_found": cands,
+                    "rules_created": rules_created,
+                    "all_ok": all_ok,
+                    "project_id": project_id,
+                },
             )
-            return (0, 0, False)
-        if dry_run:
-            return (len(candidates), 0, False)
-
-        rules_created, all_ok = process_candidates(
-            candidates,
-            path,
-            project_id,
-            cfg,
-            transcript_text=text,
-        )
-
-        if all_ok:
-            mark_extracted(db, path, _safe_mtime(path), new_offset)
-        else:
-            log.warning(
-                "extract incomplete (cold pipeline errors), transcript not marked: %s", path
-            )
-
-        write_event(
-            db,
-            source="cli_extract",
-            outcome="ok" if all_ok else "partial_failure",
-            details={
-                "transcript": path.name,
-                "candidates_found": len(candidates),
-                "rules_created": rules_created,
-                "all_ok": all_ok,
-                "project_id": project_id,
-            },
-        )
     finally:
         db.close()
-    return (len(candidates), rules_created, all_ok)
+    return (cands, rules_created, all_ok)
 
 
 def run(args: argparse.Namespace, cfg: Config) -> int:

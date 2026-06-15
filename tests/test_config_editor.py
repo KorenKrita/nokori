@@ -3,8 +3,7 @@ import os
 import pytest
 
 from nokori.config import Config
-from nokori.config_editor import get_editor_state, save_editor
-from nokori.config_file import config_path, load_document
+from nokori.config_editor import config_path, get_editor_state, load_document, save_editor
 from nokori.errors import ConfigError
 
 

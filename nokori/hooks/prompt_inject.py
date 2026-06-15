@@ -18,7 +18,7 @@ from ..events.shadow import (
     is_duplicate_shadow_context,
 )
 from ..gate.blocker import format_injection
-from ..gate.marker import prompt_hash
+from ..gate.marker import MarkerRule, prompt_hash
 from ..search.engine import RetrievalEngine
 from ..utils.logging import get_logger
 from ..utils.prompt_text import normalize_prompt_for_hash
@@ -287,6 +287,27 @@ def record_injection_events(
 # ---------------------------------------------------------------------------
 # Combined entry point (backward-compatible)
 # ---------------------------------------------------------------------------
+
+
+def marker_rules_from_scored(scored: list) -> list[MarkerRule]:
+    """Build MarkerRule list from scored gate results (ScoredResult objects)."""
+    return [
+        MarkerRule(
+            short_id=r.rule.short_id,
+            action=r.rule.action_instruction,
+            trigger=r.rule.trigger_canonical,
+            source_type=r.rule.source_origin,
+            rule_id=r.rule.id,
+            status=r.rule.status,
+            severity=r.rule.severity,
+            rule_version=r.rule.rule_version,
+            runtime_policy_version=r.runtime_policy_version,
+            trigger_idf_pool_version=r.trigger_idf_pool_version,
+            embedding_profile_version=r.embedding_profile_version,
+            decision_features=build_decision_features(r),
+        )
+        for r in scored
+    ]
 
 
 def inject_for_prompt(

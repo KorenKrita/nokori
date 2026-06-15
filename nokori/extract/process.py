@@ -3,7 +3,9 @@
 Both the normal extract path (commands/extract.py) and the fork path
 (extract/fork_runner.py) produce a list of Candidate objects via different
 means. This module provides the single shared function that takes those
-candidates and routes them through the cold pipeline.
+candidates and routes them through the cold pipeline, and a higher-level
+``extract_transcript`` helper that covers the read→compress→extract→process
+flow shared by both callers.
 """
 
 from __future__ import annotations
@@ -15,12 +17,95 @@ from ..cold.jobs import enqueue_transcript_ingest, expire_stale_ingest_jobs, mar
 from ..cold.pipeline import run_cold_pipeline
 from ..cold.roles import PROMPT_VERSIONS
 from ..config import Config
-from ..db import open_db
-from ..extract.extractor import Candidate
+from ..db import Db, open_db
+from ..extract.compressor import compress
+from ..extract.extractor import Candidate, extract as extract_candidates
+from ..extract.reader import read_after, read_tail_user_turns
+from ..lifecycle.hot_cache import load_last_byte_offset, mark_extracted
 from ..llm.adapter import LLMAdapter
 from ..utils.logging import get_logger
 
 log = get_logger("nokori.extract.process")
+
+_CONTEXT_TURNS = 3
+
+
+class LlmUnavailableError(OSError):
+    """Raised by extract_transcript when the LLM backend is unreachable."""
+
+
+def extract_transcript(
+    path: Path,
+    project_id: str | None,
+    cfg: Config,
+    db: Db,
+    *,
+    llm: LLMAdapter | None = None,
+    dry_run: bool = False,
+) -> tuple[int, int, bool]:
+    """Read transcript, compress, extract candidates, and process through cold pipeline.
+
+    The caller is responsible for opening/closing *db*. This function covers the
+    read→compress→extract→process flow shared by commands/extract._process_path and
+    fork_runner._drain_pending_jobs.
+
+    Args:
+        dry_run: If True, stop after extraction (don't process or mark).
+
+    Returns (candidates_found, rules_created, all_ok).
+    ``all_ok=True`` with 0 candidates means the transcript was empty after
+    compression — the caller should mark it as extracted.
+
+    Raises:
+        LlmUnavailableError: When the LLM backend is unreachable.
+    """
+    prev_offset = load_last_byte_offset(db, path)
+    turns, new_offset = read_after(path, prev_offset)
+
+    if prev_offset > 0 and new_offset > prev_offset:
+        context = read_tail_user_turns(path, _CONTEXT_TURNS, end_offset=prev_offset)
+        turns = context + turns
+
+    text = compress(turns)
+    if not text.strip():
+        if not dry_run:
+            mark_extracted(db, path, _safe_mtime(path), new_offset)
+        return (0, 0, True)
+
+    if llm is None:
+        llm = LLMAdapter(cfg)
+    candidates, llm_ok = extract_candidates(text, llm)
+    if not llm_ok:
+        raise LlmUnavailableError("LLM backend unreachable during extraction")
+    if not candidates:
+        if not dry_run:
+            mark_extracted(db, path, _safe_mtime(path), new_offset)
+        return (0, 0, True)
+
+    if dry_run:
+        return (len(candidates), 0, False)
+
+    rules_created, all_ok = process_candidates(
+        candidates,
+        path,
+        project_id,
+        cfg,
+        transcript_text=text,
+        db=db,
+    )
+
+    if all_ok:
+        mark_extracted(db, path, _safe_mtime(path), new_offset)
+
+    return (len(candidates), rules_created, all_ok)
+
+
+def _safe_mtime(path: Path) -> float:
+    try:
+        return path.stat().st_mtime
+    except OSError:
+        return 0.0
+
 
 _EVIDENCE_QUOTE_MAX = 500
 
@@ -74,6 +159,8 @@ def process_candidates(
     cfg: Config,
     *,
     transcript_text: str | None = None,
+    db: Db | None = None,
+    llm: LLMAdapter | None = None,
 ) -> tuple[int, bool]:
     """Route extracted candidates through the cold pipeline.
 
@@ -84,13 +171,19 @@ def process_candidates(
         cfg: Config instance.
         transcript_text: If available, used to verify evidence_quotes against
             actual transcript content. Fork path does not have this.
+        db: Optional database connection. If provided, caller owns the lifecycle;
+            otherwise a new connection is opened and closed internally.
+        llm: Optional LLM adapter. If provided, reused; otherwise created internally.
 
     Returns:
         (rules_created, all_ok)
     """
-    db = open_db(cfg.db_path)
+    owns_db = db is None
+    if owns_db:
+        db = open_db(cfg.db_path)
     try:
-        llm = LLMAdapter(cfg)
+        if llm is None:
+            llm = LLMAdapter(cfg)
         rules_created = 0
         all_ok = True
         transcript_ref = str(transcript_path)
@@ -173,6 +266,7 @@ def process_candidates(
                 )
                 all_ok = False
     finally:
-        db.close()
+        if owns_db:
+            db.close()
 
     return (rules_created, all_ok)

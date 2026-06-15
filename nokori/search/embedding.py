@@ -472,6 +472,49 @@ def use_local(cfg: Config) -> bool:
     return _sentence_transformers_available()
 
 
+def search_auto(
+    query: str,
+    rules: Sequence[Rule],
+    db: Db,
+    cfg: Config,
+    *,
+    top_k: int = 10,
+    timeout: int | float | None = None,
+    interaction: str = "cli",
+    pool_size: int | None = None,
+) -> tuple[list[ScoredResult], str]:
+    """Unified embedding search entry point that selects local/remote automatically.
+
+    *timeout* defaults are mode-aware: if ``None``, the function picks
+    ``cfg.embed_hook_timeout_seconds`` for hook interactions or 30/10 s for
+    cli depending on local/remote mode.
+
+    Returns (results, mode_string) where mode_string is "local", "remote", or "off".
+    """
+    effective_pool = pool_size if pool_size is not None else len(rules)
+    if not auto_enabled(cfg, effective_pool):
+        return [], "off"
+
+    if use_local(cfg):
+        if timeout is None:
+            timeout = cfg.embed_hook_timeout_seconds if interaction == "hook" else 30
+        return search_local_shared(
+            query,
+            rules,
+            db,
+            cfg,
+            top_k=top_k,
+            timeout=float(timeout),
+            interaction=interaction,
+        )
+
+    if timeout is None:
+        timeout = cfg.embed_hook_timeout_seconds if interaction == "hook" else 10
+    client = EmbeddingClient(cfg)
+    results = search(query, rules, db, client, top_k=top_k, timeout=int(timeout))
+    return results, "remote"
+
+
 def index_rule_if_enabled(db: Db, rule: Rule, cfg: Config) -> None:
     """Index a rule's embedding if embedding is enabled. Best-effort, logs on failure."""
     try:

@@ -182,10 +182,7 @@ def _drain_pending_jobs(cfg: Config, *, exclude_job: Path | None = None) -> None
     pick up jobs that were deferred by other fork_runners that found the lock busy.
     """
     from ..extract import jobs as job_io
-    from ..extract.compressor import compress
-    from ..extract.extractor import extract as extract_candidates
-    from ..extract.reader import read_after, read_tail_user_turns
-    from ..llm.adapter import LLMAdapter
+    from ..extract.process import LlmUnavailableError, extract_transcript
 
     pending = job_io.list_jobs(cfg)
     if not pending:
@@ -213,45 +210,22 @@ def _drain_pending_jobs(cfg: Config, *, exclude_job: Path | None = None) -> None
                 delete_job(jp)
                 continue
             try:
-                prev_offset = load_last_byte_offset(db, t_path)
-                turns, new_offset = read_after(t_path, prev_offset)
-                if prev_offset > 0 and new_offset > prev_offset:
-                    context = read_tail_user_turns(t_path, 3, end_offset=prev_offset)
-                    turns = context + turns
-                text = compress(turns)
-                if not text.strip():
-                    mark_extracted(db, t_path, t_path.stat().st_mtime, new_offset)
-                    delete_job(jp)
-                    continue
-
-                llm = LLMAdapter(cfg)
-                candidates, llm_ok = extract_candidates(text, llm)
-                if not llm_ok:
-                    log.warning("drain: LLM unavailable, stopping drain early")
-                    return
-                if not candidates:
-                    _mark_extracted_safe(cfg, t_path)
-                    delete_job(jp)
-                    continue
-
                 project_id = find_project_id_for_transcript(cfg, t_path)
-                rules_created, all_ok = process_candidates(
-                    candidates,
-                    t_path,
-                    project_id,
-                    cfg,
-                    transcript_text=text,
+                cands, rules_created, all_ok = extract_transcript(
+                    t_path, project_id, cfg, db
                 )
                 if all_ok:
-                    _mark_extracted_safe(cfg, t_path)
                     delete_job(jp)
                 consecutive_failures = 0
                 log.info(
                     "drain job done: %s candidates=%d rules=%d",
                     jp.name,
-                    len(candidates),
+                    cands,
                     rules_created,
                 )
+            except LlmUnavailableError:
+                log.warning("drain: LLM unavailable, stopping drain early")
+                return
             except (json.JSONDecodeError, KeyError) as exc:
                 log.warning("drain job corrupt, quarantining: %s %s", jp.name, exc)
                 job_io.quarantine_corrupt_job(jp, cfg)

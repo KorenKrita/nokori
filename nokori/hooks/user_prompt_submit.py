@@ -13,7 +13,7 @@ from ..db import (
 )
 from ..gate import marker as marker_io, prompt_ack
 from ..gate.blocker import select_gate_rules
-from ..gate.marker import MarkerRule, prompt_hash
+from ..gate.marker import prompt_hash
 from ..utils import sessions
 from ..utils.hook_response import user_prompt_submit_response
 from ..utils.host import Host, effective_session_id
@@ -21,7 +21,11 @@ from ..utils.logging import get_logger
 from ..utils.prompt_text import normalize_prompt_for_hash
 from ..utils.time import iso_of, local_now, now_iso
 from .context import ErrorCategory, HotPathContext
-from .prompt_inject import RetrieveFailed, build_decision_features, inject_for_prompt
+from .prompt_inject import (
+    RetrieveFailed,
+    inject_for_prompt,
+    marker_rules_from_scored,
+)
 
 log = get_logger("nokori.hooks.user_prompt_submit")
 
@@ -67,23 +71,7 @@ def _update_gate_marker(cfg: Config, session_id: str, prompt: str, hot, ph: str)
             cfg,
             session_id,
             prompt,
-            [
-                MarkerRule(
-                    short_id=r.rule.short_id,
-                    action=r.rule.action_instruction,
-                    trigger=r.rule.trigger_canonical,
-                    source_type=r.rule.source_origin,
-                    rule_id=r.rule.id,
-                    status=r.rule.status,
-                    severity=r.rule.severity,
-                    rule_version=r.rule.rule_version,
-                    runtime_policy_version=r.runtime_policy_version,
-                    trigger_idf_pool_version=r.trigger_idf_pool_version,
-                    embedding_profile_version=r.embedding_profile_version,
-                    decision_features=build_decision_features(r),
-                )
-                for r in gate_rules
-            ],
+            marker_rules_from_scored(gate_rules),
             ph=ph,
         )
         marker_io.prune_stale_markers(cfg, session_id, ph)
