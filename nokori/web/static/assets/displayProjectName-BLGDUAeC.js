@@ -1,0 +1,1 @@
+var e=/-[a-f0-9]{8}$/;function t(t){return e.test(t)?t.slice(0,-9):t}export{t};
