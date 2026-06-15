@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-# SQLite default max bound variables per statement.
-SQLITE_MAX_VARIABLES = 999
 DEFAULT_BATCH_SIZE = 900
 
 

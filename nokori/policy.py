@@ -46,12 +46,6 @@ ActivationOrigin = Literal[
 ]
 
 # ---------------------------------------------------------------------------
-# Archive strength literals (section 3.5 / 11)
-# ---------------------------------------------------------------------------
-
-ArchiveStrength = Literal["user", "system", "replacement"]
-
-# ---------------------------------------------------------------------------
 # Posthoc label literals (section 10.2)
 # ---------------------------------------------------------------------------
 
@@ -78,12 +72,6 @@ PosthocReasonCode = Literal[
     "harmful_wrong_scope",
     "harmful_blocked_valid_action",
 ]
-
-# ---------------------------------------------------------------------------
-# Injection level literals (section 9.4 / 9.5)
-# ---------------------------------------------------------------------------
-
-InjectionLevel = Literal["hot", "warm", "gate"]
 
 # ---------------------------------------------------------------------------
 # Merge operation literals (section 8.2 / 8.4)
