@@ -49,4 +49,5 @@ web/node_modules
 .codex/
 .cursor/
 .memsearch/
+.hive/
 .DS_Store
