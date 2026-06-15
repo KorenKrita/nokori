@@ -2,8 +2,8 @@
 
 import argparse
 
-from nokori.config import Config
 from nokori.commands import maintain
+from nokori.config import Config
 
 
 class _FakeDb:

@@ -2,7 +2,6 @@ import dataclasses
 import json
 from types import SimpleNamespace
 
-
 from nokori.config import Config
 from nokori.extract.compressor import compress
 from nokori.extract.extractor import extract
@@ -499,10 +498,11 @@ def test_batch_extract_consumes_job_on_cold_pipeline_failure(monkeypatch, tmp_pa
             required_concepts=["trigger xyz"],
         )
     ]})
+    import argparse
+
     from nokori.commands import extract as extract_cmd
     from nokori.db import open_db
     from nokori.utils.time import now_iso
-    import argparse
 
     class SeqLLM:
         def __init__(self):
@@ -594,8 +594,9 @@ def test_batch_extract_keeps_job_on_llm_failure(monkeypatch, tmp_path):
         def complete_messages(self, *a, **k):
             raise RuntimeError("llm down")
 
-    from nokori.commands import extract as extract_cmd
     import argparse
+
+    from nokori.commands import extract as extract_cmd
 
     monkeypatch.setattr(extract_cmd, "LLMAdapter", lambda cfg: FailLLM())
     args = argparse.Namespace(session=None, dry_run=False)
@@ -620,8 +621,9 @@ def test_extract_refreshes_job_when_transcript_mtime_changes(monkeypatch, tmp_pa
     new_mtime = path.stat().st_mtime
     assert new_mtime != mtime_old
 
-    from nokori.commands import extract as extract_cmd
     import argparse
+
+    from nokori.commands import extract as extract_cmd
 
     class NoOpLLM:
         def complete(self, *a, **k):

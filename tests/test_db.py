@@ -1,6 +1,6 @@
 import pytest
 
-from nokori.db import open_db, SCHEMA_VERSION
+from nokori.db import SCHEMA_VERSION, open_db
 from nokori.errors import DbError
 
 

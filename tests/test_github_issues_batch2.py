@@ -5,7 +5,7 @@ from nokori.config import Config
 from nokori.extract.extractor import _parse_candidates
 from nokori.extract.jobs import transcript_hash
 from nokori.gate.blocker import format_injection
-from nokori.gate.marker import is_expired, strip_short_id_from_all_markers, Marker, MarkerRule
+from nokori.gate.marker import Marker, MarkerRule, is_expired, strip_short_id_from_all_markers
 from nokori.lifecycle.maintenance import _days_since_iso
 from nokori.models import Rule, ScoredResult
 from nokori.search.selector import select_injection

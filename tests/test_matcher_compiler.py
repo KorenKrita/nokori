@@ -12,7 +12,6 @@ import pytest
 from nokori.matcher.compiler import CompilationError, compile_rule
 from nokori.matcher.runtime import evaluate_match
 
-
 # ---------------------------------------------------------------------------
 # Helpers: minimal valid rule data builders
 # ---------------------------------------------------------------------------

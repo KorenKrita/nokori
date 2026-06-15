@@ -9,6 +9,7 @@ from nokori.db import open_db
 from nokori.gate import marker as marker_io
 from nokori.gate.marker import MarkerRule, prompt_hash
 
+
 def test_import_rolls_back_on_failure(tmp_path):
     data = tmp_path / "data"
     out = tmp_path / "bad_batch.json"

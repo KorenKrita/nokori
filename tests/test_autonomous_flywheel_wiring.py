@@ -1,8 +1,8 @@
 """End-to-end regressions for v6 autonomous flywheel wiring."""
 from __future__ import annotations
 
-import os
 import json
+import os
 import subprocess
 import sys
 import uuid
@@ -11,9 +11,9 @@ from pathlib import Path
 
 from nokori.config import Config
 from nokori.db import SCHEMA_VERSION, dumps_json, fetch_rules, open_db
+from nokori.hooks.prompt_inject import inject_for_prompt
 from nokori.policy import RUNTIME_POLICY_VERSION
 from nokori.search.engine import RetrievalEngine
-from nokori.hooks.prompt_inject import inject_for_prompt
 
 
 def _now() -> str:

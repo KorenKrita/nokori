@@ -18,7 +18,7 @@ Covers:
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -42,7 +42,6 @@ from nokori.cold.pipeline import (
 )
 from nokori.db import SCHEMA_VERSION, Db, open_db
 from nokori.policy import COLD_FAST_LANE, RUNTIME_POLICY_VERSION
-
 
 # ---------------------------------------------------------------------------
 # Fixtures

@@ -17,7 +17,7 @@ from nokori.events.observability import (
     write_error,
     write_event,
 )
-from nokori.lifecycle.maintenance import run_observability_cleanup, _set_last_run
+from nokori.lifecycle.maintenance import _set_last_run, run_observability_cleanup
 from nokori.utils.time import iso_of
 
 
@@ -350,6 +350,7 @@ class TestSchemaMigration:
 
     def test_v5_db_raises_error(self, tmp_path):
         import sqlite3
+
         from nokori.errors import DbError
 
         db_path = tmp_path / "v5.db"

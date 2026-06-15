@@ -8,9 +8,9 @@ import uuid
 
 import pytest
 
+from nokori import policy
 from nokori.db import SCHEMA_VERSION, open_db
 from nokori.errors import DbError
-from nokori import policy
 
 
 @pytest.fixture()

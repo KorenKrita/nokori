@@ -7,7 +7,7 @@ directly, without needing loads_json().
 import pytest
 
 from nokori.config import Config
-from nokori.db import open_db, row_to_rule, dumps_json
+from nokori.db import dumps_json, open_db, row_to_rule
 
 
 @pytest.fixture

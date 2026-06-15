@@ -6,11 +6,9 @@ import zipfile
 from pathlib import Path
 
 import pytest
-
 from setuptools import Distribution
 
 from nokori._packaging import InstallWithPrefetch
-
 
 
 def test_wheel_includes_web_static(tmp_path: Path) -> None:

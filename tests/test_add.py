@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from nokori.commands.add import run, _manual_trigger_structure
+from nokori.commands.add import _manual_trigger_structure, run
 from nokori.config import Config
 from nokori.db import open_db
 from nokori.errors import NokoriError

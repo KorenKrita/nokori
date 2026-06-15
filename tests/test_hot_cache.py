@@ -7,7 +7,6 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-
 from nokori.db import open_db
 from nokori.lifecycle.hot_cache import (
     _recent_trusted_rules_summary,

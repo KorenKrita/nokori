@@ -6,16 +6,12 @@ from pathlib import Path
 from nokori.config import Config
 from nokori.constants import CURSOR_GATE_MATCHER, DEFAULT_GATE_MATCHER
 from nokori.extract.reader import read
-from nokori.gate.engine import tool_matches_gate
 from nokori.gate import prompt_ack
+from nokori.gate.engine import tool_matches_gate
 from nokori.utils.hook_response import (
     pre_tool_deny_response,
     session_start_response,
     user_prompt_submit_response,
-)
-from nokori.utils.transcript import (
-    resolve_transcript_path,
-    transcript_resolve_failure_reason,
 )
 from nokori.utils.host import (
     Host,
@@ -24,7 +20,11 @@ from nokori.utils.host import (
     effective_gate_matcher,
     effective_session_id,
 )
-from nokori.utils.transcript import is_path_allowed
+from nokori.utils.transcript import (
+    is_path_allowed,
+    resolve_transcript_path,
+    transcript_resolve_failure_reason,
+)
 
 
 def test_detect_host_from_cursor_transcript_path():

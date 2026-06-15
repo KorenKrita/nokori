@@ -9,12 +9,12 @@ import pytest
 from nokori.cold._result import ColdPipelineResult
 from nokori.cold.pipeline import (
     _CHECKPOINT_PIPELINE_VERSION,
+    STAGE_CHAIN,
     _load_checkpoint,
     _run_pipeline_staged,
     _stage_index,
     _write_checkpoint,
     run_cold_pipeline,
-    STAGE_CHAIN,
 )
 from nokori.cold.stages import CandidateContext, PipelineConfig
 from nokori.db import Db, open_db

@@ -138,8 +138,8 @@ class TestGateBlocks:
         assert not decision.blocked
 
     def test_gate_consumes_marker_on_block(self, gate_env):
-        from nokori.gate.engine import GateEngine
         from nokori.gate import marker as marker_io
+        from nokori.gate.engine import GateEngine
 
         cfg, db = gate_env
         ph = "abcdef1234567890"

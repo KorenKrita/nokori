@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-
 from nokori.posthoc.windowing import (
-    _preceded_by_tool_sequence,
     _LARGE_TURN_GAP,
+    _preceded_by_tool_sequence,
     compute_event_window,
     extract_window_content,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers

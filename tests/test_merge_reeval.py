@@ -37,7 +37,7 @@ def _insert_active_rule(db: Db, rule_id: str, trigger: str = "test trigger"):
 
 class TestApplyMergeWithReeval:
     def test_returns_success_when_no_fields_changed(self, db: Db):
-        from nokori.cold.integrate import apply_merge_with_reeval, MergeRevalOutcome
+        from nokori.cold.integrate import MergeRevalOutcome, apply_merge_with_reeval
 
         _insert_active_rule(db, "target-1")
         rule_data = {"trigger_canonical": "test"}
@@ -58,7 +58,7 @@ class TestApplyMergeWithReeval:
         assert result.rule_id == "target-1"
 
     def test_returns_failure_when_recompilation_fails(self, db: Db):
-        from nokori.cold.integrate import apply_merge_with_reeval, MergeRevalOutcome
+        from nokori.cold.integrate import MergeRevalOutcome, apply_merge_with_reeval
         from nokori.matcher.compiler import CompilationError
 
         _insert_active_rule(db, "target-2")

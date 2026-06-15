@@ -5,6 +5,7 @@ import time
 from dataclasses import replace
 from datetime import datetime, timezone
 
+
 def _set_rule_lifecycle(
     tmp_path,
     short_id: str,

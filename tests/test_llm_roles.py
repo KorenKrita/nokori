@@ -13,7 +13,6 @@ from nokori.config import Config
 from nokori.llm.adapter import LLMAdapter
 from nokori.llm.prompts import EXTRACT_SYSTEM, UNTRUSTED_OPEN, wrap_untrusted
 
-
 # --- Helpers ---
 
 

@@ -375,7 +375,7 @@ class TestBuildExtractionPrompt:
         assert "INCREMENTAL EXTRACTION" in prompt
         assert "the anchor user message content" in prompt
         assert "already been extracted" in prompt
-        from nokori.llm.prompts import UNTRUSTED_OPEN, UNTRUSTED_CLOSE
+        from nokori.llm.prompts import UNTRUSTED_CLOSE, UNTRUSTED_OPEN
         assert UNTRUSTED_OPEN in prompt
         assert UNTRUSTED_CLOSE in prompt
 

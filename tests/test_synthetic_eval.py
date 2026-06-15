@@ -33,7 +33,7 @@ from nokori.matcher.compiler import (
     compile_rule,
 )
 from nokori.policy import RUNTIME_POLICY_VERSION
-from nokori.search.idf_stats import IdfPoolStats, TOKENIZER_VERSION
+from nokori.search.idf_stats import TOKENIZER_VERSION, IdfPoolStats
 
 # ---------------------------------------------------------------------------
 # Helpers: build mock compiled matchers and IDF stats

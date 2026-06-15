@@ -12,8 +12,9 @@ from nokori.utils.time import now_iso
 
 @pytest.fixture
 def db(tmp_path):
-    from nokori.config import Config
     from dataclasses import replace
+
+    from nokori.config import Config
 
     cfg = replace(Config.from_env(), data_dir=tmp_path)
     database = open_db(cfg.db_path)

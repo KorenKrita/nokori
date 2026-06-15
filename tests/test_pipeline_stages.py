@@ -154,8 +154,8 @@ class TestAdmissionStage:
         assert result.admission_scores["overall_quality"] == 0.92
 
     def test_reject_returns_pipeline_result(self, db: Db):
-        from nokori.cold.stages import CandidateContext, PipelineConfig, run_admission
         from nokori.cold.pipeline import ColdPipelineResult
+        from nokori.cold.stages import CandidateContext, PipelineConfig, run_admission
 
         llm = _make_llm_mock({
             "admission judge": _admission_json("reject", overall=0.3, evidence=0.4),
@@ -183,8 +183,8 @@ class TestAdmissionStage:
         assert result.rejection_reason == "admission_judge_rejected"
 
     def test_no_evidence_quotes_rejects_before_llm_call(self, db: Db):
-        from nokori.cold.stages import CandidateContext, PipelineConfig, run_admission
         from nokori.cold.pipeline import ColdPipelineResult
+        from nokori.cold.stages import CandidateContext, PipelineConfig, run_admission
 
         llm = _make_llm_mock({})  # Should not be called
         config = PipelineConfig(
@@ -397,8 +397,8 @@ class TestFinalJudgeStage:
         assert result.target_status == "active"
 
     def test_reject_returns_pipeline_result(self, db: Db):
-        from nokori.cold.stages import CandidateContext, PipelineConfig, run_final_judge
         from nokori.cold.pipeline import ColdPipelineResult
+        from nokori.cold.stages import CandidateContext, PipelineConfig, run_final_judge
 
         llm = _make_llm_mock({"final judge": _final_judge_json("reject")})
         config = PipelineConfig(
@@ -483,8 +483,9 @@ class TestMergePlannerStage:
 
     def test_reject_new_returns_pipeline_result(self, db: Db):
         from unittest.mock import patch
-        from nokori.cold.stages import CandidateContext, PipelineConfig, run_merge_planner
+
         from nokori.cold.pipeline import ColdPipelineResult
+        from nokori.cold.stages import CandidateContext, PipelineConfig, run_merge_planner
 
         config = PipelineConfig(
             role_models=None, default_model="test-model",
@@ -594,8 +595,8 @@ class TestStagedPipelineIntegration:
 
     def test_rejection_short_circuits(self, db: Db):
         """Early rejection: admission rejects -> pipeline terminates."""
-        from nokori.cold.stages import CandidateContext, PipelineConfig, run_admission
         from nokori.cold.pipeline import ColdPipelineResult
+        from nokori.cold.stages import CandidateContext, PipelineConfig, run_admission
 
         llm = _make_llm_mock({
             "admission judge": _admission_json("reject", overall=0.3, evidence=0.4),

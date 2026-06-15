@@ -9,7 +9,6 @@ from nokori.search.evidence import evaluate_evidence
 from nokori.search.idf_stats import IdfPoolStats, build_idf_stats
 from nokori.search.selector import compute_utility, select_injection
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------

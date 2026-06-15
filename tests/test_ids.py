@@ -1,4 +1,4 @@
-from nokori.utils.ids import new_uuid, short_id_for, MIN_SHORT_LEN
+from nokori.utils.ids import MIN_SHORT_LEN, new_uuid, short_id_for
 
 
 def test_new_uuid_unique():

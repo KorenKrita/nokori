@@ -2,8 +2,7 @@
 from datetime import datetime, timezone
 
 from nokori.config import Config
-from nokori.db import open_db
-from nokori.db import fetch_rules
+from nokori.db import fetch_rules, open_db
 from nokori.search import embedding as embedding_search
 from nokori.search.engine import RetrievalEngine
 

@@ -28,7 +28,6 @@ from nokori.config import Config
 from nokori.db import open_db
 from nokori.web.app import create_app
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------

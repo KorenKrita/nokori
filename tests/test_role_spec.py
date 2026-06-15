@@ -27,6 +27,7 @@ class TestRoleSpec:
 
     def test_spec_is_frozen(self):
         import pytest
+
         from nokori.cold.roles import ROLE_SPECS
 
         spec = ROLE_SPECS["admission_judge"]

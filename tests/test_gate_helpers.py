@@ -15,7 +15,6 @@ from nokori.gate.engine import (
 from nokori.gate.marker import MarkerRule
 from nokori.policy import RUNTIME_POLICY_VERSION
 
-
 # ---------------------------------------------------------------------------
 # DB fixtures
 # ---------------------------------------------------------------------------

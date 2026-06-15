@@ -2,9 +2,8 @@
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
-
 from nokori.config import Config
-from nokori.db import open_db, fetch_rules
+from nokori.db import fetch_rules, open_db
 from nokori.utils.host import Host
 
 

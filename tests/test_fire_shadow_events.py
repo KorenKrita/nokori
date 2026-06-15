@@ -2,11 +2,10 @@
 
 import json
 import uuid
-from datetime import datetime, timedelta, timezone
 from dataclasses import replace
+from datetime import datetime, timedelta, timezone
 
-
-from nokori.db import open_db, dumps_json
+from nokori.db import dumps_json, open_db
 from nokori.events.fire import (
     count_evaluated_fire_events,
     create_fire_event,

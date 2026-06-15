@@ -3,9 +3,8 @@ import json
 import subprocess
 import sys
 
-
-from nokori.config import Config
 from nokori.commands.health import _probe_openai_post
+from nokori.config import Config
 from nokori.db import open_db
 from nokori.models import Rule
 from nokori.search import embedding
