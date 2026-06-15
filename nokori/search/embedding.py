@@ -475,9 +475,10 @@ def use_local(cfg: Config) -> bool:
 def index_rule_if_enabled(db: Db, rule: Rule, cfg: Config) -> None:
     """Index a rule's embedding if embedding is enabled. Best-effort, logs on failure."""
     try:
-        from ..db import total_rule_count
+        from ..db import retrieval_pool_count, total_rule_count
 
-        if not auto_enabled(cfg, total_rule_count(db)):
+        pool = retrieval_pool_count(db) if cfg.promotion_enabled else total_rule_count(db)
+        if not auto_enabled(cfg, pool):
             return
         if use_local(cfg):
             from . import embed_ipc

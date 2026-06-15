@@ -598,6 +598,14 @@ def total_rule_count(db: "Db") -> int:
     return int(row["n"]) if row else 0
 
 
+def retrieval_pool_count(db: "Db") -> int:
+    """Rules visible to retrieval (formal + shadow pool, i.e. all non-archived)."""
+    row = db.fetchone(
+        "SELECT COUNT(*) AS n FROM rules WHERE status != 'archived'"
+    )
+    return int(row["n"]) if row else 0
+
+
 def fetch_rules(
     db: "Db",
     *,

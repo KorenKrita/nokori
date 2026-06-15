@@ -27,8 +27,11 @@ Two thresholds both called "20" — they count different sets of rules:
 
 | Scenario | What it counts | What it decides |
 |----------|----------------|-----------------|
-| **SessionStart** embed kickstart | The whole DB's `active + trusted` total | Whether to spin up an embed server in the background |
+| **SessionStart** embed kickstart | All non-archived rules when `promotion_enabled` (else `active + trusted`) | Whether to spin up an embed server in the background |
+| **Indexing** (rule creation/update) | All non-archived rules when `promotion_enabled` (else `active + trusted`) | Whether to compute and store the rule's embedding vector |
 | **UserPromptSubmit** retrieval | This pass's `formal ∪ shadow` pool size | Whether this prompt goes through embedding RRF |
+
+When `promotion_enabled=True` (the default), the indexing and kickstart thresholds use the same pool definition as retrieval (all non-archived rules including candidates and suppressed). This prevents a chicken-and-egg problem where embedding never activates for indexing due to low active rule counts even though the retrieval pool is large enough.
 
 ### Remote API mode
 

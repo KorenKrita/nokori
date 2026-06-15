@@ -129,3 +129,104 @@ def test_search_skips_when_not_configured(monkeypatch, tmp_path):
         assert embedding.search("anything", [], db, client) == []
     finally:
         db.close()
+
+
+def _seed_rules(db, now):
+    """Insert 5 active + 18 candidate rules for pool count tests."""
+    with db.transaction() as tx:
+        for i in range(5):
+            tx.execute(
+                "INSERT INTO rules (id, short_id, schema_version, rule_version, "
+                "runtime_policy_version, status, severity, trigger_canonical, "
+                "action_instruction, concepts, required_concept_groups, "
+                "trigger_variants, search_terms, source_origin, "
+                "project_scope, created_at, updated_at) "
+                "VALUES (?, ?, 7, 1, '1.0.0', 'active', 'reminder', ?, ?, "
+                "'[]', '[]', '[]', '{}', 'transcript_extraction', 'global', ?, ?)",
+                (f"rule-active-{i}", f"ra{i:04d}", f"trigger {i}", f"action {i}", now, now),
+            )
+        for i in range(18):
+            tx.execute(
+                "INSERT INTO rules (id, short_id, schema_version, rule_version, "
+                "runtime_policy_version, status, severity, trigger_canonical, "
+                "action_instruction, concepts, required_concept_groups, "
+                "trigger_variants, search_terms, source_origin, "
+                "project_scope, created_at, updated_at) "
+                "VALUES (?, ?, 7, 1, '1.0.0', 'candidate', 'reminder', ?, ?, "
+                "'[]', '[]', '[]', '{}', 'transcript_extraction', 'global', ?, ?)",
+                (f"rule-cand-{i}", f"rc{i:04d}", f"trigger cand {i}", f"action cand {i}", now, now),
+            )
+
+
+def _make_test_rule():
+    from nokori.models import Rule
+
+    return Rule(
+        id="rule-active-0",
+        short_id="ra0000",
+        schema_version=7,
+        rule_version=1,
+        created_by_pipeline_version=None,
+        runtime_policy_version="1.0.0",
+        last_rewritten_by_role=None,
+        status="active",
+        severity="reminder",
+        trigger_canonical="trigger 0",
+        action_instruction="action 0",
+    )
+
+
+def test_index_rule_if_enabled_uses_retrieval_pool_when_promotion_enabled(monkeypatch, tmp_path):
+    """When promotion_enabled=True and candidate rules push pool >= 20 but active+trusted < 20,
+    index_rule_if_enabled should still proceed (not short-circuit)."""
+    from unittest.mock import patch
+
+    from nokori.db import retrieval_pool_count, total_rule_count
+    from nokori.utils.time import now_iso
+
+    cfg = _cfg(monkeypatch, tmp_path, NOKORI_PROMOTION_ENABLED="1")
+    db = open_db(cfg.db_path)
+    now = now_iso()
+    try:
+        _seed_rules(db, now)
+
+        assert total_rule_count(db) == 5
+        assert retrieval_pool_count(db) == 23
+
+        with patch("nokori.search.embedding.store_rule_embedding") as mock_store:
+            embedding.index_rule_if_enabled(db, _make_test_rule(), cfg)
+            assert mock_store.called, (
+                "index_rule_if_enabled should proceed when retrieval_pool_count >= 20 "
+                "even though total_rule_count < 20"
+            )
+
+    finally:
+        db.close()
+
+
+def test_index_rule_if_enabled_uses_total_count_when_promotion_disabled(monkeypatch, tmp_path):
+    """When promotion_enabled=False, index_rule_if_enabled uses total_rule_count (active+trusted).
+    With only 5 active rules and 18 candidates, it should NOT proceed."""
+    from unittest.mock import patch
+
+    from nokori.db import retrieval_pool_count, total_rule_count
+    from nokori.utils.time import now_iso
+
+    cfg = _cfg(monkeypatch, tmp_path, NOKORI_PROMOTION_ENABLED="0")
+    db = open_db(cfg.db_path)
+    now = now_iso()
+    try:
+        _seed_rules(db, now)
+
+        assert total_rule_count(db) == 5
+        assert retrieval_pool_count(db) == 23
+
+        with patch("nokori.search.embedding.store_rule_embedding") as mock_store:
+            embedding.index_rule_if_enabled(db, _make_test_rule(), cfg)
+            assert not mock_store.called, (
+                "index_rule_if_enabled should NOT proceed when promotion_enabled=False "
+                "and total_rule_count < 20"
+            )
+
+    finally:
+        db.close()

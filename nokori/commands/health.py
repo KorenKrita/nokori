@@ -7,7 +7,7 @@ import urllib.parse
 import urllib.request
 
 from ..config import Config
-from ..db import open_db, total_rule_count
+from ..db import open_db, retrieval_pool_count, total_rule_count
 from ..search import embedding as embedding_search
 
 RULE_COUNT_EMBED_WARN = 500
@@ -181,23 +181,32 @@ def _check_embedding_index_gaps(cfg: Config) -> tuple[str, str]:
     except Exception as e:
         return ("fail", str(e))
     try:
-        count = total_rule_count(db)
+        count = retrieval_pool_count(db) if cfg.promotion_enabled else total_rule_count(db)
         if not embedding_search.auto_enabled(cfg, count):
             return ("skip", "embedding not enabled for this library size")
-        row = db.fetchone(
-            "SELECT COUNT(*) AS n FROM rules r "
-            "WHERE r.status IN ('active', 'trusted') "
-            "AND NOT EXISTS (SELECT 1 FROM rule_embeddings e WHERE e.rule_id = r.id)"
-        )
+        if cfg.promotion_enabled:
+            sql = (
+                "SELECT COUNT(*) AS n FROM rules r "
+                "WHERE r.status != 'archived' "
+                "AND NOT EXISTS (SELECT 1 FROM rule_embeddings e WHERE e.rule_id = r.id)"
+            )
+        else:
+            sql = (
+                "SELECT COUNT(*) AS n FROM rules r "
+                "WHERE r.status IN ('active', 'trusted') "
+                "AND NOT EXISTS (SELECT 1 FROM rule_embeddings e WHERE e.rule_id = r.id)"
+            )
+        row = db.fetchone(sql)
         missing = int(row["n"]) if row else 0
     except Exception as e:
         return ("fail", str(e))
     finally:
         db.close()
     if missing:
+        scope = "in retrieval pool" if cfg.promotion_enabled else "active/trusted"
         return (
             "warn",
-            f"{missing} active/trusted rule(s) have no embedding rows — "
+            f"{missing} {scope} rule(s) have no embedding rows — "
             "RRF uses BM25-only for those; run nokori extract or nokori edit to refresh",
         )
     return ("ok", "all searchable rules have embedding rows")

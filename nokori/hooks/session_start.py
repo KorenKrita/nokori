@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 
 from ..config import Config
-from ..db import total_rule_count
+from ..db import retrieval_pool_count, total_rule_count
 from ..lifecycle import hot_cache, maintenance
 from ..lifecycle.maintenance import cold_eval_due, mark_cold_eval_run
 from ..search import embed_ipc, embedding as embedding_search
@@ -21,7 +21,7 @@ COLD_EVAL_INTERVAL_DAYS = 1
 
 def _maybe_kickstart_embed(cfg: Config, db) -> str:
     """Attempt embed server kickstart. Returns status string for observability."""
-    rule_count = total_rule_count(db)
+    rule_count = retrieval_pool_count(db) if cfg.promotion_enabled else total_rule_count(db)
     if not embedding_search.embedding_active(cfg, rule_count):
         return "skipped_threshold"
     if not embedding_search.use_local_config(cfg):
@@ -163,7 +163,7 @@ def handle(payload: dict, cfg: Config, *, host: Host) -> dict:
 
         rule_count = 0
         try:
-            rule_count = total_rule_count(db)
+            rule_count = retrieval_pool_count(db) if cfg.promotion_enabled else total_rule_count(db)
         except Exception as e:
             ctx.add_error("rule_count", ErrorCategory.DEGRADED, str(e), e)
 
