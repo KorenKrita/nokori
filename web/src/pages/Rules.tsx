@@ -25,25 +25,31 @@ const STATUS_FILTERS = [
 export function Rules() {
   const [statusFilter, setStatusFilter] = useState('active,trusted')
   const [scopeFilter, setScopeFilter] = useState('')
-  const params: Record<string, string> = { status: statusFilter }
-  if (scopeFilter === 'global') {
-    params.scope = 'global'
-  } else if (scopeFilter) {
-    params.project = scopeFilter
-  }
-  const { data, isLoading } = useApi<{ data: Rule[]; meta: Meta }>(
-    '/rules',
-    params
-  )
 
-  const allRulesData = useApi<{ data: Rule[]; meta: Meta }>('/rules', { status: '' })
+  const { data: statusData, isLoading } = useApi<{ data: Rule[]; meta: Meta }>('/rules', { status: statusFilter })
+
   const projectIds = useMemo(() => {
     const ids = new Set<string>()
-    for (const rule of allRulesData.data?.data ?? []) {
+    for (const rule of statusData?.data ?? []) {
       if (rule.project_id) ids.add(rule.project_id)
     }
     return Array.from(ids).sort()
-  }, [allRulesData.data])
+  }, [statusData])
+
+  // ponytail: scopeFilter state preserved intentionally — switching back to a tab where the project exists restores the selection
+  const effectiveScopeFilter = scopeFilter === 'global' || scopeFilter === '' || projectIds.includes(scopeFilter)
+    ? scopeFilter
+    : ''
+
+  const data = useMemo(() => {
+    if (!statusData) return null
+    if (!effectiveScopeFilter) return statusData
+    const filtered = statusData.data.filter((r) => {
+      if (effectiveScopeFilter === 'global') return r.project_scope === 'global'
+      return r.project_id === effectiveScopeFilter
+    })
+    return { data: filtered, meta: { ...statusData.meta, total: filtered.length } }
+  }, [statusData, effectiveScopeFilter])
 
   if (isLoading) return <PageSkeleton />
 
@@ -78,19 +84,19 @@ export function Rules() {
 
       <div className="flex gap-2 overflow-x-auto scrollbar-none scroll-fade-x pb-1">
         <FilterPill
-          active={scopeFilter === ''}
+          active={effectiveScopeFilter === ''}
           label={t('rules.filter.all')}
           onClick={() => setScopeFilter('')}
         />
         <FilterPill
-          active={scopeFilter === 'global'}
+          active={effectiveScopeFilter === 'global'}
           label={t('rules.scope.global')}
           onClick={() => setScopeFilter('global')}
         />
         {projectIds.map((pid) => (
           <span key={pid} title={pid}>
             <FilterPill
-              active={scopeFilter === pid}
+              active={effectiveScopeFilter === pid}
               label={displayProjectName(pid)}
               onClick={() => setScopeFilter(pid)}
             />
