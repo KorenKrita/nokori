@@ -6,7 +6,7 @@ import { PageSkeleton } from '@/components/PageSkeleton'
 import { useApi } from '@/hooks/useApi'
 import { fetchApi } from '@/lib/api'
 import { formatDateTime } from '@/lib/formatDateTime'
-import { maintenanceJobLabel, t, lz } from '@/lib/i18n'
+import { barrierLabel, maintenanceJobLabel, statusLabel, t, lz } from '@/lib/i18n'
 
 interface PromotionData {
   data: {
@@ -82,9 +82,9 @@ function BarriersPanel({ state, onRetry }: { state: BarriersState; onRetry: () =
   return (
     <div className="mt-3 space-y-1.5">
       <div className="flex items-center gap-2 text-xs text-text-tertiary">
-        <span>{t('lifecycle.target')}: <span className="font-mono text-text-secondary">{target_state}</span></span>
+        <span>{t('lifecycle.target')}: <span className="font-mono text-text-secondary">{statusLabel(target_state)}</span></span>
         {blocking && (
-          <span className="text-amber-400">{t('lifecycle.blocking')}: <span className="font-mono">{blocking}</span></span>
+          <span className="text-amber-400">{t('lifecycle.blocking')}: <span className="font-mono">{barrierLabel(blocking)}</span></span>
         )}
       </div>
       {(thresholds ?? []).map((th) => {
@@ -108,7 +108,7 @@ function BarriersPanel({ state, onRetry }: { state: BarriersState; onRetry: () =
         return (
           <div key={th.name} className="flex items-center gap-2">
             <span className={`text-xs font-mono w-56 truncate shrink-0 ${labelColor}`}>
-              {th.name}
+              {barrierLabel(th.name)}
             </span>
             <div className="flex-1 h-1.5 rounded-full bg-[var(--color-bg-elevated)] overflow-hidden">
               <motion.div

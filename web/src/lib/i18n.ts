@@ -200,6 +200,21 @@ const translations: Record<Locale, Record<string, string>> = {
     'lifecycle.global_eligible': '全局提升候选',
     'lifecycle.no_global_eligible': '暂无接近跨项目提升的规则',
     'lifecycle.global_eligible_projects': '项目',
+    // Lifecycle barriers
+    'lifecycle.barrier.shadow_strong_match_count': '强影子匹配数',
+    'lifecycle.barrier.evaluated_shadow_match_count': '已评估影子匹配数',
+    'lifecycle.barrier.distinct_shadow_sessions': '独立影子会话数',
+    'lifecycle.barrier.counterfactual_would_help_high': '反事实高帮助率',
+    'lifecycle.barrier.risky_or_near_miss_shadow_count': '风险/近似误匹配数',
+    'lifecycle.barrier.shadow_false_positive_rate': '影子误报率',
+    'lifecycle.barrier.observed_useful_count': '已观测有用次数',
+    'lifecycle.barrier.evaluated_fire_count': '已评估触发次数',
+    'lifecycle.barrier.distinct_observed_useful_sessions': '独立有用会话数',
+    'lifecycle.barrier.harmful_count': '有害次数',
+    'lifecycle.barrier.recent_false_positive_rate': '近期误报率',
+    'lifecycle.barrier.shadow_recovery_would_help_high': '恢复期高帮助率',
+    'lifecycle.barrier.distinct_recovery_sessions': '独立恢复会话数',
+    'lifecycle.barrier.recent_harmful_count': '近期有害次数',
     // Config
     'config.title': '配置与健康',
     'config.health': '健康检查',
@@ -465,6 +480,21 @@ const translations: Record<Locale, Record<string, string>> = {
     'lifecycle.global_eligible': 'Global Eligible',
     'lifecycle.no_global_eligible': 'No rules approaching cross-project promotion',
     'lifecycle.global_eligible_projects': 'projects',
+    // Lifecycle barriers
+    'lifecycle.barrier.shadow_strong_match_count': 'Strong shadow matches',
+    'lifecycle.barrier.evaluated_shadow_match_count': 'Evaluated shadow matches',
+    'lifecycle.barrier.distinct_shadow_sessions': 'Distinct shadow sessions',
+    'lifecycle.barrier.counterfactual_would_help_high': 'Counterfactual high-help',
+    'lifecycle.barrier.risky_or_near_miss_shadow_count': 'Risky or near-miss shadows',
+    'lifecycle.barrier.shadow_false_positive_rate': 'Shadow false-positive rate',
+    'lifecycle.barrier.observed_useful_count': 'Observed useful count',
+    'lifecycle.barrier.evaluated_fire_count': 'Evaluated fire count',
+    'lifecycle.barrier.distinct_observed_useful_sessions': 'Distinct useful sessions',
+    'lifecycle.barrier.harmful_count': 'Harmful count',
+    'lifecycle.barrier.recent_false_positive_rate': 'Recent false-positive rate',
+    'lifecycle.barrier.shadow_recovery_would_help_high': 'Recovery high-help',
+    'lifecycle.barrier.distinct_recovery_sessions': 'Distinct recovery sessions',
+    'lifecycle.barrier.recent_harmful_count': 'Recent harmful count',
     // Config
     'config.title': 'Config & Health',
     'config.health': 'Health Checks',
@@ -730,6 +760,21 @@ const translations: Record<Locale, Record<string, string>> = {
     'lifecycle.global_eligible': 'グローバル昇格候補',
     'lifecycle.no_global_eligible': 'クロスプロジェクト昇格に近いルールなし',
     'lifecycle.global_eligible_projects': 'プロジェクト',
+    // Lifecycle barriers
+    'lifecycle.barrier.shadow_strong_match_count': '強シャドウマッチ数',
+    'lifecycle.barrier.evaluated_shadow_match_count': '評価済みシャドウマッチ数',
+    'lifecycle.barrier.distinct_shadow_sessions': '独立シャドウセッション数',
+    'lifecycle.barrier.counterfactual_would_help_high': '反事実高有用率',
+    'lifecycle.barrier.risky_or_near_miss_shadow_count': 'リスク/ニアミスシャドウ数',
+    'lifecycle.barrier.shadow_false_positive_rate': 'シャドウ誤検出率',
+    'lifecycle.barrier.observed_useful_count': '観測済み有用回数',
+    'lifecycle.barrier.evaluated_fire_count': '評価済み発火回数',
+    'lifecycle.barrier.distinct_observed_useful_sessions': '独立有用セッション数',
+    'lifecycle.barrier.harmful_count': '有害回数',
+    'lifecycle.barrier.recent_false_positive_rate': '近期誤検出率',
+    'lifecycle.barrier.shadow_recovery_would_help_high': '回復期高有用率',
+    'lifecycle.barrier.distinct_recovery_sessions': '独立回復セッション数',
+    'lifecycle.barrier.recent_harmful_count': '近期有害回数',
     // Config
     'config.title': '設定とヘルスチェック',
     'config.health': 'ヘルスチェック',
@@ -831,6 +876,20 @@ export function maintenanceJobLabel(jobKey: string): string {
   const i18nKey = `lifecycle.job.${jobKey}`
   const label = t(i18nKey)
   return label === i18nKey ? jobKey : label
+}
+
+/** Localized barrier name; falls back to raw identifier if unknown. */
+export function barrierLabel(name: string): string {
+  const key = `lifecycle.barrier.${name}`
+  const label = t(key)
+  return label === key ? name : label
+}
+
+/** Localized status name; falls back to raw value if unknown. */
+export function statusLabel(status: string): string {
+  const key = `dashboard.status.${status}`
+  const label = t(key)
+  return label === key ? status : label
 }
 
 export function lz(en: string | null | undefined, zh: string | null | undefined): string {
