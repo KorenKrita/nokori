@@ -482,6 +482,7 @@ def search_auto(
     timeout: int | float | None = None,
     interaction: str = "cli",
     pool_size: int | None = None,
+    embed_enabled: bool | None = None,
 ) -> tuple[list[ScoredResult], str]:
     """Unified embedding search entry point that selects local/remote automatically.
 
@@ -489,10 +490,15 @@ def search_auto(
     ``cfg.embed_hook_timeout_seconds`` for hook interactions or 30/10 s for
     cli depending on local/remote mode.
 
+    *embed_enabled* — pre-computed result of ``auto_enabled(cfg, pool_size)``.
+    When provided, skips the ``auto_enabled()`` filesystem check entirely.
+
     Returns (results, mode_string) where mode_string is "local", "remote", or "off".
     """
-    effective_pool = pool_size if pool_size is not None else len(rules)
-    if not auto_enabled(cfg, effective_pool):
+    if embed_enabled is None:
+        effective_pool = pool_size if pool_size is not None else len(rules)
+        embed_enabled = auto_enabled(cfg, effective_pool)
+    if not embed_enabled:
         return [], "off"
 
     if use_local(cfg):

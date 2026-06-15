@@ -13,6 +13,7 @@ from typing import Literal
 from ..config import Config
 from ..db import Db
 from ..models import Rule, ScoredResult
+from . import embedding as _embedding
 from .evidence import evaluate_evidence
 from .idf_stats import IdfPoolStats, build_idf_stats, store_idf_stats
 from .scorer import SearchScorer
@@ -53,6 +54,8 @@ class RetrievalEngine:
         self._db = db
         self._scorer = SearchScorer(cfg, db)
         self._last_stored_pool_version: str | None = None
+        self._embed_enabled: bool | None = None
+        self._embed_cached_pool: int = -1
 
     @property
     def cfg(self) -> Config:
@@ -117,12 +120,18 @@ class RetrievalEngine:
         if not rules:
             return TierResult([], [], 0, "off")
 
+        effective_pool = pool_size if pool_size is not None else len(rules)
+        if self._embed_enabled is None or self._embed_cached_pool != effective_pool:
+            self._embed_enabled = _embedding.auto_enabled(self._cfg, effective_pool)
+            self._embed_cached_pool = effective_pool
+
         fused = self._scorer.score(
             prompt,
             rules,
             top_k=top_k,
             interaction=interaction,
             pool_size=pool_size,
+            embed_enabled=self._embed_enabled,
         )
 
         idf_stats = self._build_idf_stats(rules, background_idf_rules)

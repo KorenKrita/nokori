@@ -13,7 +13,7 @@ K1 = 1.2
 B = 0.75
 
 # Reuse IDF/doc index when BM25-relevant fields are unchanged (not updated_at).
-_INDEX_CACHE: OrderedDict[tuple, tuple] = OrderedDict()
+_INDEX_CACHE: OrderedDict[frozenset, tuple] = OrderedDict()
 _INDEX_CACHE_MAX = 64
 
 
@@ -107,7 +107,7 @@ def _build_fielded_doc(rule: Rule) -> _FieldedDoc:
     )
 
 
-def _index_key(rules_list: list[Rule]) -> tuple:
+def _index_key(rules_list: list[Rule]) -> frozenset:
     def _rule_key(r: Rule) -> tuple:
         terms = tuple((lang, tuple(sorted(vals))) for lang, vals in sorted(r.search_terms.items()))
         return (
@@ -121,7 +121,7 @@ def _index_key(rules_list: list[Rule]) -> tuple:
             r.action_instruction_zh,
         )
 
-    return tuple(_rule_key(r) for r in sorted(rules_list, key=lambda r: r.id))
+    return frozenset(_rule_key(r) for r in rules_list)
 
 
 def _build_index(rules_list: list[Rule]):

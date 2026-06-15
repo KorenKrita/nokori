@@ -253,6 +253,42 @@ def _enum_val(
 
 _GATE_MATCHER_MAX_LEN = 512
 
+_LOCALHOST_HOSTS = frozenset(("localhost", "127.0.0.1", "::1"))
+
+
+def _config_log():
+    import logging
+
+    return logging.getLogger("nokori.config")
+
+
+def _validate_url_scheme(url: str | None, field_name: str) -> str | None:
+    """Validate URL scheme is http or https.
+
+    Returns None (disables the feature) if scheme is unsupported.
+    Warns but allows http on non-localhost hosts.
+    """
+    if not url:
+        return None
+    import urllib.parse
+
+    parsed = urllib.parse.urlparse(url)
+    scheme = parsed.scheme.lower()
+    if scheme not in ("http", "https"):
+        _config_log().warning(
+            "%s: unsupported scheme %r (only http/https allowed); disabling",
+            field_name,
+            scheme or "<missing>",
+        )
+        return None
+    if scheme == "http" and parsed.hostname and parsed.hostname not in _LOCALHOST_HOSTS:
+        _config_log().warning(
+            "%s: using plaintext HTTP to %s — API keys may be exposed; consider HTTPS",
+            field_name,
+            parsed.hostname,
+        )
+    return url
+
 
 def _value_explicitly_set(name: str, file_values: dict[str, str]) -> bool:
     """True when env or config.toml provides a non-empty value (matches _int_val)."""
@@ -326,11 +362,15 @@ class Config:
             ),
             extract_defer_when_active=_bool_val("NOKORI_EXTRACT_DEFER_ACTIVE", False, file_values),
             extract_fork_cache=_bool_val("NOKORI_EXTRACT_FORK_CACHE", False, file_values),
-            llm_base_url=_str_or_none_val("NOKORI_LLM_BASE_URL", file_values),
+            llm_base_url=_validate_url_scheme(
+                _str_or_none_val("NOKORI_LLM_BASE_URL", file_values), "NOKORI_LLM_BASE_URL"
+            ),
             llm_model=_str_or_none_val("NOKORI_LLM_MODEL", file_values),
             llm_api_key=_str_or_none_val("NOKORI_LLM_API_KEY", file_values),
             embed_enabled=_bool_val("NOKORI_EMBED_ENABLED", False, file_values),
-            embed_base_url=_str_or_none_val("NOKORI_EMBED_BASE_URL", file_values),
+            embed_base_url=_validate_url_scheme(
+                _str_or_none_val("NOKORI_EMBED_BASE_URL", file_values), "NOKORI_EMBED_BASE_URL"
+            ),
             embed_model=_str_or_none_val("NOKORI_EMBED_MODEL", file_values),
             embed_api_key=_str_or_none_val("NOKORI_EMBED_API_KEY", file_values),
             embed_dimensions=_int_val("NOKORI_EMBED_DIMENSIONS", 0, file_values, min_value=0),

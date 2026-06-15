@@ -82,6 +82,7 @@ class SearchScorer:
         top_k: int = 10,
         interaction: InteractionKind = "cli",
         pool_size: int | None = None,
+        embed_enabled: bool | None = None,
     ) -> list[ScoredResult]:
         if not rules:
             self.last_embed_mode = "off"
@@ -97,6 +98,7 @@ class SearchScorer:
             top_k=top_k,
             interaction=interaction,
             pool_size=pool_size,
+            embed_enabled=embed_enabled,
         )
 
         return rrf_fuse(bm25_results, embed_results)

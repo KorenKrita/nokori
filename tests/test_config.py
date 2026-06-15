@@ -1,3 +1,4 @@
+import logging
 import os
 
 import pytest
@@ -156,3 +157,94 @@ def test_missing_config_toml_is_fine(monkeypatch, tmp_path):
     monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
     cfg = Config.from_env()
     assert cfg.llm_base_url is None
+
+
+# --- URL scheme validation tests ---
+
+
+class TestUrlSchemeValidation:
+    """Tests for _validate_url_scheme applied at Config load time."""
+
+    def test_https_url_passes(self, monkeypatch, tmp_path):
+        _clear_env(monkeypatch)
+        monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+        monkeypatch.setenv("NOKORI_LLM_BASE_URL", "https://api.openai.com/v1")
+        cfg = Config.from_env()
+        assert cfg.llm_base_url == "https://api.openai.com/v1"
+
+    def test_http_localhost_passes_no_warning(self, monkeypatch, tmp_path, caplog):
+        _clear_env(monkeypatch)
+        monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+        monkeypatch.setenv("NOKORI_LLM_BASE_URL", "http://localhost:11434/v1")
+        cfg = Config.from_env()
+        assert cfg.llm_base_url == "http://localhost:11434/v1"
+        assert "plaintext HTTP" not in caplog.text
+
+    def test_http_127_0_0_1_passes_no_warning(self, monkeypatch, tmp_path, caplog):
+        _clear_env(monkeypatch)
+        monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+        monkeypatch.setenv("NOKORI_EMBED_BASE_URL", "http://127.0.0.1:11434/v1")
+        cfg = Config.from_env()
+        assert cfg.embed_base_url == "http://127.0.0.1:11434/v1"
+        assert "plaintext HTTP" not in caplog.text
+
+    def test_http_ipv6_loopback_passes_no_warning(self, monkeypatch, tmp_path, caplog):
+        _clear_env(monkeypatch)
+        monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+        monkeypatch.setenv("NOKORI_LLM_BASE_URL", "http://[::1]:11434/v1")
+        cfg = Config.from_env()
+        assert cfg.llm_base_url == "http://[::1]:11434/v1"
+        assert "plaintext HTTP" not in caplog.text
+
+    def test_http_remote_warns_but_allows(self, monkeypatch, tmp_path, caplog):
+        _clear_env(monkeypatch)
+        monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+        monkeypatch.setenv("NOKORI_LLM_BASE_URL", "http://my-server.internal:8080/v1")
+        with caplog.at_level(logging.WARNING, logger="nokori.config"):
+            cfg = Config.from_env()
+        assert cfg.llm_base_url == "http://my-server.internal:8080/v1"
+        assert "plaintext HTTP" in caplog.text
+        assert "my-server.internal" in caplog.text
+
+    def test_file_scheme_rejected(self, monkeypatch, tmp_path, caplog):
+        _clear_env(monkeypatch)
+        monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+        monkeypatch.setenv("NOKORI_LLM_BASE_URL", "file:///etc/passwd")
+        with caplog.at_level(logging.WARNING, logger="nokori.config"):
+            cfg = Config.from_env()
+        assert cfg.llm_base_url is None
+        assert "unsupported scheme" in caplog.text
+
+    def test_gopher_scheme_rejected(self, monkeypatch, tmp_path, caplog):
+        _clear_env(monkeypatch)
+        monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+        monkeypatch.setenv("NOKORI_EMBED_BASE_URL", "gopher://evil.com")
+        with caplog.at_level(logging.WARNING, logger="nokori.config"):
+            cfg = Config.from_env()
+        assert cfg.embed_base_url is None
+        assert "unsupported scheme" in caplog.text
+
+    def test_missing_scheme_rejected(self, monkeypatch, tmp_path, caplog):
+        _clear_env(monkeypatch)
+        monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+        monkeypatch.setenv("NOKORI_LLM_BASE_URL", "no-scheme-here")
+        with caplog.at_level(logging.WARNING, logger="nokori.config"):
+            cfg = Config.from_env()
+        assert cfg.llm_base_url is None
+        assert "unsupported scheme" in caplog.text
+
+    def test_none_url_stays_none(self, monkeypatch, tmp_path):
+        _clear_env(monkeypatch)
+        monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+        cfg = Config.from_env()
+        assert cfg.llm_base_url is None
+        assert cfg.embed_base_url is None
+
+    def test_ftp_scheme_rejected(self, monkeypatch, tmp_path, caplog):
+        _clear_env(monkeypatch)
+        monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+        monkeypatch.setenv("NOKORI_LLM_BASE_URL", "ftp://files.example.com/data")
+        with caplog.at_level(logging.WARNING, logger="nokori.config"):
+            cfg = Config.from_env()
+        assert cfg.llm_base_url is None
+        assert "unsupported scheme" in caplog.text

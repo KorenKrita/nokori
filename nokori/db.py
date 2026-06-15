@@ -260,6 +260,7 @@ CREATE INDEX IF NOT EXISTS idx_archived_fp_signature ON archived_fingerprints(si
 CREATE INDEX IF NOT EXISTS idx_llm_jobs_status ON llm_jobs(status, next_retry_at);
 CREATE INDEX IF NOT EXISTS idx_posthoc_jobs_status ON posthoc_jobs(status);
 CREATE INDEX IF NOT EXISTS idx_posthoc_jobs_fire ON posthoc_jobs(fire_event_id);
+CREATE INDEX IF NOT EXISTS idx_rule_embeddings_model ON rule_embeddings(model_version, rule_id);
 
 CREATE TABLE IF NOT EXISTS hook_events (
     id TEXT PRIMARY KEY,
@@ -450,6 +451,7 @@ def _migrate(conn: sqlite3.Connection) -> None:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_fire_events_rule_project ON rule_fire_events(rule_id, posthoc_label, project_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_synthetic_evals_rule ON rule_synthetic_evals(rule_id, rule_version, created_at)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_reviews_rule ON rule_reviews(rule_id, decision, created_at)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_rule_embeddings_model ON rule_embeddings(model_version, rule_id)")
         return
     elif current == 7:
         script = (
@@ -466,17 +468,20 @@ def _migrate(conn: sqlite3.Connection) -> None:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_fire_events_rule_project ON rule_fire_events(rule_id, posthoc_label, project_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_synthetic_evals_rule ON rule_synthetic_evals(rule_id, rule_version, created_at)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_reviews_rule ON rule_reviews(rule_id, decision, created_at)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_rule_embeddings_model ON rule_embeddings(model_version, rule_id)")
         return
     elif current == 8:
         _add_column_if_missing(conn, "rule_fire_events", "project_id", "TEXT")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_fire_events_rule_project ON rule_fire_events(rule_id, posthoc_label, project_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_synthetic_evals_rule ON rule_synthetic_evals(rule_id, rule_version, created_at)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_reviews_rule ON rule_reviews(rule_id, decision, created_at)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_rule_embeddings_model ON rule_embeddings(model_version, rule_id)")
         conn.execute(f"PRAGMA user_version = {int(SCHEMA_VERSION)}")
         return
     elif current == 9:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_synthetic_evals_rule ON rule_synthetic_evals(rule_id, rule_version, created_at)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_reviews_rule ON rule_reviews(rule_id, decision, created_at)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_rule_embeddings_model ON rule_embeddings(model_version, rule_id)")
         conn.execute(f"PRAGMA user_version = {int(SCHEMA_VERSION)}")
         return
     else:
