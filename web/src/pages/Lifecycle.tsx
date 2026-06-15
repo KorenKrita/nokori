@@ -7,6 +7,7 @@ import { useApi } from '@/hooks/useApi'
 import { fetchApi } from '@/lib/api'
 import { formatDateTime } from '@/lib/formatDateTime'
 import { barrierLabel, maintenanceJobLabel, statusLabel, t, lz } from '@/lib/i18n'
+import { displayProjectName } from '@/lib/displayProjectName'
 
 interface PromotionData {
   data: {
@@ -137,12 +138,19 @@ function GlobalEligibleList({ data }: { data: GlobalEligibleData['data'] }) {
       {data.map((r) => (
         <div key={r.short_id} className="border-b border-[var(--color-border-subtle)] py-3 last:border-0">
           <div className="flex items-center justify-between gap-3">
-            <Link
-              to={`/rules/${r.short_id}`}
-              className="font-mono text-xs text-accent-sky hover:underline"
-            >
-              {r.short_id}
-            </Link>
+            <div className="flex items-center gap-2">
+              <Link
+                to={`/rules/${r.short_id}`}
+                className="font-mono text-xs text-accent-sky hover:underline"
+              >
+                {r.short_id}
+              </Link>
+              {r.project_id && (
+                <span title={r.project_id} className="text-xs text-text-tertiary font-mono truncate max-w-[10rem]">
+                  {displayProjectName(r.project_id)}
+                </span>
+              )}
+            </div>
             <span className="text-xs font-mono text-emerald-400">
               {r.distinct_projects}/{r.target} {t('lifecycle.global_eligible_projects')}
             </span>
@@ -218,12 +226,19 @@ export function Lifecycle() {
         {promo?.data.candidates.map((c) => (
           <div key={c.short_id} className="border-b border-[var(--color-border-subtle)] py-3 last:border-0">
             <div className="flex items-center justify-between gap-3">
-              <Link
-                to={`/rules/${c.short_id}`}
-                className="font-mono text-xs text-accent-sky hover:underline"
-              >
-                {c.short_id}
-              </Link>
+              <div className="flex items-center gap-2">
+                <Link
+                  to={`/rules/${c.short_id}`}
+                  className="font-mono text-xs text-accent-sky hover:underline"
+                >
+                  {c.short_id}
+                </Link>
+                {c.project_id && (
+                  <span title={c.project_id} className="text-xs text-text-tertiary font-mono truncate max-w-[10rem]">
+                    {displayProjectName(c.project_id)}
+                  </span>
+                )}
+              </div>
               <button
                 type="button"
                 onClick={() => setExpandedId(expandedId === c.short_id ? null : c.short_id)}

@@ -8,6 +8,7 @@ import { EmptyState } from '@/components/EmptyState'
 import { PageSkeleton } from '@/components/PageSkeleton'
 import { useApi } from '@/hooks/useApi'
 import { t, lz } from '@/lib/i18n'
+import { displayProjectName } from '@/lib/displayProjectName'
 import { ruleSource, ruleTrigger, ruleTriggerZh } from '@/lib/ruleDisplay'
 import type { Meta, Rule } from '@/lib/types'
 
@@ -87,12 +88,13 @@ export function Rules() {
           onClick={() => setScopeFilter('global')}
         />
         {projectIds.map((pid) => (
-          <FilterPill
-            key={pid}
-            active={scopeFilter === pid}
-            label={pid}
-            onClick={() => setScopeFilter(pid)}
-          />
+          <span key={pid} title={pid}>
+            <FilterPill
+              active={scopeFilter === pid}
+              label={displayProjectName(pid)}
+              onClick={() => setScopeFilter(pid)}
+            />
+          </span>
         ))}
       </div>
 
@@ -142,7 +144,9 @@ export function Rules() {
                   <td className="py-3 px-2 text-text-secondary truncate">{lz(ruleTrigger(rule), ruleTriggerZh(rule))}</td>
                   <td className="py-3 pl-2 pr-6 text-right font-mono tabular-nums text-text-tertiary">{rule.fire_count ?? 0}</td>
                   <td className="py-3 pl-6 pr-2 text-text-tertiary text-xs font-mono truncate">
-                    {rule.project_scope === 'global' ? t('rules.scope.global') : rule.project_id ?? '-'}
+                    {rule.project_scope === 'global'
+                      ? t('rules.scope.global')
+                      : <span title={rule.project_id ?? undefined}>{displayProjectName(rule.project_id ?? '-')}</span>}
                   </td>
                 </tr>
               ))}
