@@ -79,8 +79,7 @@ def _pair_tools_and_results(sections: list[str]) -> list:
 
     def flush() -> None:
         nonlocal pending_tools, paired
-        for tool_line in pending_tools:
-            paired.append((tool_line, "[no result]", False))
+        paired.extend((tool_line, "[no result]", False) for tool_line in pending_tools)
         pending_tools = []
         if paired:
             out.append(paired)
@@ -163,15 +162,7 @@ def _collapse_tool_runs(sections: list[str]) -> str:
         tool_counts: dict[str, int] = {}
 
         for tool_line, result, is_error in item:
-            if is_error:
-                if tool_counts:
-                    parts = [f"{n} x{c}" if c > 1 else n for n, c in tool_counts.items()]
-                    out.append(f"[Tools OK] {', '.join(parts)}")
-                    tool_counts = {}
-                out.append(tool_line)
-                if result:
-                    out.append(result)
-            elif _extract_tool_name(tool_line).lower() in ("bash", "shell"):
+            if is_error or _extract_tool_name(tool_line).lower() in ("bash", "shell"):
                 if tool_counts:
                     parts = [f"{n} x{c}" if c > 1 else n for n, c in tool_counts.items()]
                     out.append(f"[Tools OK] {', '.join(parts)}")

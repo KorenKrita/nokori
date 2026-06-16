@@ -31,8 +31,10 @@ def test_cross_module_imports_resolve():
         tree = ast.parse(f.read_text())
         for node in ast.walk(tree):
             if isinstance(node, ast.ImportFrom) and node.level >= 1 and node.module:
-                for alias in node.names:
-                    imports.append((f.name, node.level, node.module, alias.name))
+                imports.extend(
+                    (f.name, node.level, node.module, alias.name)
+                    for alias in node.names
+                )
 
     # nokori.hooks is the base; level 1 = nokori.hooks.{module},
     # level 2 = nokori.{module}, etc.

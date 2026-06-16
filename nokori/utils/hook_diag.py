@@ -94,9 +94,7 @@ def payload_summary(payload: dict) -> str:
         val = payload[key]
         if key in ("prompt", "user_message", "message", "content"):
             slim[key] = _trunc(val, _MAX_PROMPT)
-        elif key in ("tool_input", "input", "arguments"):
-            slim[key] = _trunc(val)
-        elif isinstance(val, (dict, list)) and len(repr(val)) > _MAX_FIELD:
+        elif key in ("tool_input", "input", "arguments") or (isinstance(val, (dict, list)) and len(repr(val)) > _MAX_FIELD):
             slim[key] = _trunc(val)
         else:
             slim[key] = val

@@ -1,7 +1,7 @@
 """Gate marker prompt_hash validation."""
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from nokori.config import Config
 from nokori.db import open_db
@@ -12,7 +12,7 @@ from nokori.utils.host import Host
 
 
 def _utcnow_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+    return datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
 def _insert_rule(

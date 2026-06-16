@@ -173,9 +173,7 @@ def read_tail_user_turns(
             except json.JSONDecodeError:
                 pass
             else:
-                for turn in _parse_multi(entry):
-                    if turn.role == "human":
-                        human.append(turn)
+                human.extend(turn for turn in _parse_multi(entry) if turn.role == "human")
     human.reverse()
     return human[-limit:]
 

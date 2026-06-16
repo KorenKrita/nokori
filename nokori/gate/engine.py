@@ -233,10 +233,9 @@ def _batch_check_eligibility(
                 continue
             marker_version = getattr(rule, "rule_version", None)
             db_version = row["rule_version"]
-            if marker_version is not None:
-                if db_version is None or int(db_version) != marker_version:
-                    results.append((rule, False, None))
-                    continue
+            if marker_version is not None and (db_version is None or int(db_version) != marker_version):
+                results.append((rule, False, None))
+                continue
             marker_policy = getattr(rule, "runtime_policy_version", None)
             if marker_policy and marker_policy != row["runtime_policy_version"]:
                 results.append((rule, False, None))

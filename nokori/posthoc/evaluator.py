@@ -202,12 +202,12 @@ def parse_posthoc_output(raw_json: str) -> dict:
     text = raw_json.strip()
     try:
         data = json.loads(text)
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as exc:
         data = parse_json_payload(text)
         if data is None:
             raise ValueError(
                 "posthoc_evaluator: invalid JSON: could not extract JSON from response"
-            )
+            ) from exc
 
     if not isinstance(data, dict):
         raise ValueError(f"posthoc_evaluator: expected JSON object, got {type(data).__name__}")

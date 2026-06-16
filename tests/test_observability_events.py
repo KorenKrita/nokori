@@ -6,7 +6,7 @@ maintenance cleanup, and schema v6->v7 migration.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -237,14 +237,14 @@ class TestQueryErrors:
         assert results[0]["count"] == 1
 
     def test_query_errors_with_since_filter(self, db):
-        old_time = iso_of(datetime.now(timezone.utc) - timedelta(days=10))
+        old_time = iso_of(datetime.now(UTC) - timedelta(days=10))
         db.conn.execute(
             "INSERT INTO error_events (id, source, role, error_type, message, created_at) "
             "VALUES ('old-1', 'cold', 'extractor', 'timeout', 't', ?)",
             (old_time,),
         )
         write_error(db, source="cold", role="judge", error_type="json_parse", message="j")
-        since = iso_of(datetime.now(timezone.utc) - timedelta(days=1))
+        since = iso_of(datetime.now(UTC) - timedelta(days=1))
         results = query_errors(db, group_by="role", since=since)
         assert len(results) == 1
         assert results[0]["role"] == "judge"
@@ -258,7 +258,7 @@ class TestQueryErrors:
 
 class TestObservabilityCleanup:
     def test_deletes_old_events(self, db):
-        old_time = iso_of(datetime.now(timezone.utc) - timedelta(days=31))
+        old_time = iso_of(datetime.now(UTC) - timedelta(days=31))
 
         db.conn.execute(
             "INSERT INTO hook_events (id, source, outcome, created_at) VALUES (?, ?, ?, ?)",

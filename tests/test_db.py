@@ -65,7 +65,7 @@ def test_check_constraints(tmp_path):
                     "'NOT_VALID_STATUS', 'reminder', 'project', "
                     "'2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')"
                 )
-            assert False, "expected CHECK violation"
+            raise AssertionError("expected CHECK violation")
         except sqlite3.IntegrityError:
             pass
     finally:
@@ -84,7 +84,7 @@ def test_wal_mode(tmp_path):
 def test_nested_transaction_rejected(tmp_path):
     db = open_db(tmp_path / "rules.db")
     try:
-        with db.transaction():
+        with db.transaction():  # noqa: SIM117
             with pytest.raises(DbError, match="nested"):
                 with db.transaction():
                     pass

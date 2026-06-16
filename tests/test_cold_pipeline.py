@@ -18,7 +18,7 @@ Covers:
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -669,7 +669,7 @@ class TestReviseRoutesRewriter:
 
 
 def test_non_destructive_merge_reeval_uses_synthetic_eval_signature(db: Db):
-    now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace(
+    now = datetime.now(UTC).isoformat(timespec="seconds").replace(
         "+00:00", "Z"
     )
     existing_rule_id = "existing-merge-rule"
@@ -778,7 +778,7 @@ def test_non_destructive_merge_reeval_uses_synthetic_eval_signature(db: Db):
 def test_non_destructive_merge_reeval_runs_global_adversarial_without_local_cases(
     db: Db,
 ):
-    now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace(
+    now = datetime.now(UTC).isoformat(timespec="seconds").replace(
         "+00:00", "Z"
     )
     existing_rule_id = "existing-global-adv-rule"
@@ -878,7 +878,7 @@ def test_non_destructive_merge_reeval_runs_global_adversarial_without_local_case
 
 
 def test_non_destructive_merge_failed_reeval_revert_uses_full_cas(db: Db):
-    now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace(
+    now = datetime.now(UTC).isoformat(timespec="seconds").replace(
         "+00:00", "Z"
     )
     existing_rule_id = "existing-revert-cas-rule"

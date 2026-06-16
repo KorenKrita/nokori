@@ -1270,13 +1270,12 @@ def _evaluate_trusted(evidence: EvidenceSnapshot) -> TransitionDecision:
     # Cross-project promotion (ADR 0002: default on).
     # Uses lifetime count (no time window) — a rule that helped across 3+ projects
     # at any point in its history has proven cross-project value.
-    if evidence.project_scope == "project":
-        if evidence.distinct_useful_projects >= CROSS_PROJECT_PROMOTION_THRESHOLD:
-            return TransitionDecision(
-                new_status=None,
-                reason="cross_project_promotion",
-                metadata={"distinct_project_count": evidence.distinct_useful_projects},
-            )
+    if evidence.project_scope == "project" and evidence.distinct_useful_projects >= CROSS_PROJECT_PROMOTION_THRESHOLD:
+        return TransitionDecision(
+            new_status=None,
+            reason="cross_project_promotion",
+            metadata={"distinct_project_count": evidence.distinct_useful_projects},
+        )
 
     return TransitionDecision(new_status=None, reason="no transition triggered")
 

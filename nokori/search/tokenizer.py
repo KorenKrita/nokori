@@ -32,8 +32,7 @@ def _flush_cjk(buf: str, out: list[str]) -> None:
     if len(buf) == 1:
         out.append(buf)
         return
-    for i in range(len(buf) - 1):
-        out.append(buf[i : i + 2])
+    out.extend(buf[i : i + 2] for i in range(len(buf) - 1))
 
 
 def tokenize(text: str) -> list[str]:

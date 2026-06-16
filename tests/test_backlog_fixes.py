@@ -2,6 +2,7 @@
 import json
 import subprocess
 import sys
+from datetime import UTC, datetime
 from types import SimpleNamespace
 
 from nokori.config import Config
@@ -61,8 +62,6 @@ def test_dismiss_strips_gate_marker(tmp_path, monkeypatch):
         env=env,
         capture_output=True,
     )
-    from datetime import datetime, timezone
-
     db = open_db(cfg.db_path)
     try:
         rule = db.fetchone("SELECT id, short_id FROM rules LIMIT 1")
@@ -74,7 +73,7 @@ def test_dismiss_strips_gate_marker(tmp_path, monkeypatch):
             [MarkerRule(rule["short_id"], "use lease", "correction")],
             ph=ph,
         )
-        now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+        now = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
         with db.transaction() as tx:
             tx.execute(
                 "INSERT INTO rule_fire_events (id, rule_id, session_id, prompt_hash, level, created_at) "

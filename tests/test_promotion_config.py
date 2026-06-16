@@ -1,4 +1,5 @@
 import hashlib
+from datetime import UTC, datetime
 
 from nokori.config import Config
 from nokori.db import open_db
@@ -8,8 +9,7 @@ from nokori.utils.project import resolve_project_id
 
 
 def _utcnow_iso() -> str:
-    from datetime import datetime, timezone
-    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+    return datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
 def _insert(db, *, id_, trigger, status="candidate", project_id="other-proj"):

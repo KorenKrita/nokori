@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
 import tomllib
@@ -343,7 +344,7 @@ class Config:
     log_level: str
 
     @classmethod
-    def from_env(cls) -> "Config":
+    def from_env(cls) -> Config:
         data_dir_raw = os.environ.get("NOKORI_DATA_DIR") or "~/.nokori"
         file_values, raw_toml = _resolve_file_values(data_dir_raw)
         data_dir = _expand_path(_str_val("NOKORI_DATA_DIR", "~/.nokori", file_values))
@@ -431,13 +432,9 @@ class Config:
     def ensure_dirs(self) -> None:
         for p in (self.data_dir, self.logs_dir, self.jobs_dir, self.sessions_dir):
             p.mkdir(parents=True, exist_ok=True, mode=0o700)
-            try:
+            with contextlib.suppress(OSError):
                 p.chmod(0o700)
-            except OSError:
-                pass
         config_path = self.data_dir / _CONFIG_FILE_NAME
         if config_path.exists():
-            try:
+            with contextlib.suppress(OSError):
                 config_path.chmod(0o600)
-            except OSError:
-                pass

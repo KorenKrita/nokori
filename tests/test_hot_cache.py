@@ -4,7 +4,7 @@ from __future__ import annotations
 import os
 import time
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from nokori.db import open_db
@@ -23,7 +23,7 @@ def _make_db(tmp_path: Path):
 def _insert_rule(db, *, rule_id=None, status="trusted", trigger="trigger", action="action"):
     rule_id = rule_id or uuid.uuid4().hex
     short_id = rule_id[:6]
-    now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+    now = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
     with db.transaction() as tx:
         tx.execute(
             "INSERT INTO rules (id, short_id, schema_version, rule_version, "
@@ -39,7 +39,7 @@ def _insert_rule(db, *, rule_id=None, status="trusted", trigger="trigger", actio
 def _insert_fire_event(db, rule_id: str, *, created_at: str | None = None):
     event_id = uuid.uuid4().hex
     if created_at is None:
-        created_at = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+        created_at = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
     with db.transaction() as tx:
         tx.execute(
             "INSERT INTO rule_fire_events (id, rule_id, created_at) VALUES (?, ?, ?)",
@@ -49,7 +49,7 @@ def _insert_fire_event(db, rule_id: str, *, created_at: str | None = None):
 
 
 def _iso_days_ago(days: int) -> str:
-    dt = datetime.now(timezone.utc) - timedelta(days=days)
+    dt = datetime.now(UTC) - timedelta(days=days)
     return dt.isoformat(timespec="seconds").replace("+00:00", "Z")
 
 

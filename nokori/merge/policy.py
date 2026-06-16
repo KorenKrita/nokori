@@ -294,10 +294,7 @@ def check_trusted_replacement(
         return False
 
     # Existing usefulness must be weak or stale.
-    if not _existing_usefulness_weak_or_stale(existing_rule):
-        return False
-
-    return True
+    return _existing_usefulness_weak_or_stale(existing_rule)
 
 
 # ---------------------------------------------------------------------------
@@ -598,10 +595,7 @@ def validate_merge_transaction(
     if not matcher_compiled:
         return False
 
-    if not final_admission_passed:
-        return False
-
-    return True
+    return final_admission_passed
 
 
 # ---------------------------------------------------------------------------
@@ -745,4 +739,4 @@ def _tokenize(text: str) -> set[str]:
 
 def _row_to_dict(row: sqlite3.Row) -> dict:
     """Convert a sqlite3.Row to a plain dict."""
-    return {key: row[key] for key in row.keys()}
+    return {key: row[key] for key in row.keys()}  # noqa: SIM118 - sqlite3.Row iterates values, not keys

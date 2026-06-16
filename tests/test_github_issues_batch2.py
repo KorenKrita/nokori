@@ -53,28 +53,27 @@ def test_strip_short_id_from_all_markers(tmp_path, monkeypatch):
 
 def test_format_injection_truncation_logs_subset():
     now = "2026-01-01T00:00:00Z"
-    rules = []
-    for i in range(5):
-        rules.append(
-            ScoredResult(
-                rule=Rule(
-                    id=f"id{i}",
-                    short_id=f"sid{i:02d}",
-                    schema_version=1,
-                    rule_version=1,
-                    created_by_pipeline_version="test",
-                    runtime_policy_version="test",
-                    last_rewritten_by_role=None,
-                    status="active",
-                    severity="reminder",
-                    trigger_canonical=f"trigger {i}",
-                    action_instruction=f"action {i}" * 20,
-                    created_at=now,
-                    updated_at=now,
-                ),
-                rrf_score=0.5 - i * 0.01,
-            )
+    rules = [
+        ScoredResult(
+            rule=Rule(
+                id=f"id{i}",
+                short_id=f"sid{i:02d}",
+                schema_version=1,
+                rule_version=1,
+                created_by_pipeline_version="test",
+                runtime_policy_version="test",
+                last_rewritten_by_role=None,
+                status="active",
+                severity="reminder",
+                trigger_canonical=f"trigger {i}",
+                action_instruction=f"action {i}" * 20,
+                created_at=now,
+                updated_at=now,
+            ),
+            rrf_score=0.5 - i * 0.01,
         )
+        for i in range(5)
+    ]
     text, logged = format_injection(rules[:1], rules[1:], max_chars=400)
     assert text
     assert len(logged) < len(rules)

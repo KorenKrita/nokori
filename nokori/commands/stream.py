@@ -7,6 +7,7 @@ Designed for AI agent consumption, not human viewing.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import time
 
@@ -109,10 +110,8 @@ def _print_event(event: dict, *, verbose: bool) -> None:
         out = event
         details = event.get("details")
         if isinstance(details, str):
-            try:
+            with contextlib.suppress(json.JSONDecodeError, TypeError):
                 out = {**event, "details": json.loads(details)}
-            except (json.JSONDecodeError, TypeError):
-                pass
         print(json.dumps(out, ensure_ascii=False))
     else:
         ts = event.get("created_at", "")

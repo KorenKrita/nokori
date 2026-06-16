@@ -412,10 +412,7 @@ def _rewriter_broadened_scope(original: dict[str, Any], rewritten: dict[str, Any
     rewritten_tags = set(rewritten.get("scope", {}).get("domain_tags", []))
 
     # Rewritten has tags not present in original = broader scope
-    if rewritten_tags - original_tags:
-        return True
-
-    return False
+    return bool(rewritten_tags - original_tags)
 
 
 def _candidate_to_rule_data(candidate: dict[str, Any]) -> dict[str, Any]:

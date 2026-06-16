@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import uuid
 
 from ..config import Config
@@ -83,10 +84,8 @@ def _maybe_spawn_cold_eval(db: Db, cfg: Config) -> bool:
     cfg.ensure_dirs()
     err_log = cfg.logs_dir / "cold-eval.log"
     err_file = None
-    try:
+    with contextlib.suppress(OSError):
         err_file = open(err_log, "a", encoding="utf-8")
-    except OSError:
-        pass
 
     try:
         subprocess.Popen(
@@ -104,10 +103,8 @@ def _maybe_spawn_cold_eval(db: Db, cfg: Config) -> bool:
         return False
     finally:
         if err_file is not None:
-            try:
+            with contextlib.suppress(OSError):
                 err_file.close()
-            except OSError:
-                pass
 
 
 def handle(payload: dict, cfg: Config, *, host: Host) -> dict:

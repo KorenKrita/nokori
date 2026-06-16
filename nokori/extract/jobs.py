@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import os
@@ -12,7 +13,7 @@ from ..utils.transcript import transcript_key
 
 
 def transcript_hash(path: Path, mtime: float) -> str:
-    raw = f"{path.resolve()}::{mtime:.6f}".encode("utf-8")
+    raw = f"{path.resolve()}::{mtime:.6f}".encode()
     return hashlib.sha256(raw).hexdigest()[:16]
 
 
@@ -42,10 +43,8 @@ def quarantine_corrupt_job(path: Path, cfg: Config) -> None:
     try:
         os.replace(path, dest)
     except OSError:
-        try:
+        with contextlib.suppress(OSError):
             path.unlink()
-        except OSError:
-            pass
 
 
 def quarantine_corrupt_jobs(cfg: Config) -> int:

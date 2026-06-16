@@ -12,7 +12,6 @@ from __future__ import annotations
 import math
 import re
 from dataclasses import dataclass
-from typing import Optional
 
 from nokori.matcher.compiler import (
     CompiledAlias,
@@ -83,7 +82,7 @@ def _check_neighbor_present(
     neighbors: tuple[str, ...],
     text_lower: str,
     prompt_tokens: frozenset[str],
-    tool_name_lower: Optional[str],
+    tool_name_lower: str | None,
     path_hints_lower: tuple[str, ...],
     project_tags_lower: frozenset[str],
 ) -> bool:
@@ -111,8 +110,8 @@ def _evaluate_alias(
     match_mode: str,
     text_lower: str,
     prompt_tokens: frozenset[str],
-    tool_name_lower: Optional[str],
-    tool_input_lower: Optional[str],
+    tool_name_lower: str | None,
+    tool_input_lower: str | None,
     path_hints_lower: tuple[str, ...],
     project_tags_lower: frozenset[str],
 ) -> bool:
@@ -126,38 +125,30 @@ def _evaluate_alias(
         if tool_name_lower and alias.text_lower in tool_name_lower:
             return True
         # Also check tool input
-        if tool_input_lower and alias.text_lower in tool_input_lower:
-            return True
-        return False
+        return bool(tool_input_lower and alias.text_lower in tool_input_lower)
 
     if match_mode == "regex":
         if alias.compiled_pattern and alias.compiled_pattern.search(text_lower):
             return True
-        if (
+        return bool(
             tool_input_lower
             and alias.compiled_pattern
             and alias.compiled_pattern.search(tool_input_lower)
-        ):
-            return True
-        return False
+        )
 
     if match_mode == "all_terms":
         # All tokens in the alias must appear in the prompt tokens
-        if alias.tokens and all(t in prompt_tokens for t in alias.tokens):
-            return True
-        return False
+        return bool(alias.tokens and all(t in prompt_tokens for t in alias.tokens))
 
     if match_mode in ("any_alias", "phrase"):
         # Substring match
         if alias.compiled_pattern and alias.compiled_pattern.search(text_lower):
             return True
-        if (
+        return bool(
             tool_input_lower
             and alias.compiled_pattern
             and alias.compiled_pattern.search(tool_input_lower)
-        ):
-            return True
-        return False
+        )
 
     return False
 
@@ -166,8 +157,8 @@ def _evaluate_concept(
     concept: CompiledConcept,
     text_lower: str,
     prompt_tokens: frozenset[str],
-    tool_name_lower: Optional[str],
-    tool_input_lower: Optional[str],
+    tool_name_lower: str | None,
+    tool_input_lower: str | None,
     path_hints_lower: tuple[str, ...],
     project_tags_lower: frozenset[str],
 ) -> bool:
@@ -234,7 +225,7 @@ def _evaluate_concept_groups(
 def _evaluate_variant(
     variant: CompiledVariant,
     text_lower: str,
-    tool_input_lower: Optional[str],
+    tool_input_lower: str | None,
 ) -> bool:
     """Check if a variant phrase is present in text."""
     if variant.compiled_pattern:
@@ -248,7 +239,7 @@ def _evaluate_variant(
 def _evaluate_excluded_context(
     ctx: CompiledExcludedContext,
     text_lower: str,
-    tool_input_lower: Optional[str],
+    tool_input_lower: str | None,
     prompt_only_lower: str,
     *,
     trigger_anchor_tokens: frozenset[str],
@@ -285,11 +276,7 @@ def _evaluate_excluded_context(
 
 def _excluded_context_matches(ctx: CompiledExcludedContext, search_text: str) -> bool:
     # Match based on mode
-    if ctx.match_mode == "regex":
-        for pattern in ctx.compiled_patterns:
-            if pattern.search(search_text):
-                return True
-    elif ctx.match_mode in ("phrase", "negative_context_detector"):
+    if ctx.match_mode in ("regex", "phrase", "negative_context_detector"):
         for pattern in ctx.compiled_patterns:
             if pattern.search(search_text):
                 return True
@@ -390,11 +377,11 @@ def _compute_trigger_coverage(
 def evaluate_match(
     matcher: CompiledMatcher,
     prompt_text: str,
-    tool_name: Optional[str] = None,
-    tool_input: Optional[str] = None,
-    path_hints: Optional[list[str]] = None,
-    project_tags: Optional[list[str]] = None,
-    idf_stats: Optional[dict] = None,
+    tool_name: str | None = None,
+    tool_input: str | None = None,
+    path_hints: list[str] | None = None,
+    project_tags: list[str] | None = None,
+    idf_stats: dict | None = None,
 ) -> MatchResult:
     """Evaluate a compiled matcher against prompt/tool context.
 
@@ -510,7 +497,7 @@ def evaluate_match(
     # search_only: search terms match but no trigger evidence
     # (We check if any search terms appear in text but trigger evidence is absent)
     search_term_hit = False
-    for _lang, terms in matcher.search_terms.items():
+    for terms in matcher.search_terms.values():
         for term in terms:
             if term.lower() in combined_lower:
                 search_term_hit = True
@@ -615,7 +602,7 @@ def _evaluate_trigger_evidence(
     trigger_idf_sum: float,
     trigger_coverage: float,
     distinct_trigger_terms: int,
-    idf_stats: Optional[dict],
+    idf_stats: dict | None,
 ) -> bool:
     """Adapter: delegates to applicability._trigger_evidence_passes."""
     if idf_stats is None:
@@ -646,7 +633,7 @@ def _evaluate_strong_trigger_evidence(
     trigger_idf_sum: float,
     trigger_coverage: float,
     distinct_trigger_terms: int,
-    idf_stats: Optional[dict],
+    idf_stats: dict | None,
 ) -> bool:
     """Adapter: delegates to applicability._strong_trigger_evidence."""
     if idf_stats is None:

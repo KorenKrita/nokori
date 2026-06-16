@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import json
 from pathlib import Path
 
@@ -90,8 +91,8 @@ def handle(payload: dict, cfg: Config, *, host: Host) -> dict:
 
 
 def _enqueue_extract_job_from_path(
-    transcript_path: "Path | None", payload: dict, cfg: Config
-) -> "Path | None":
+    transcript_path: Path | None, payload: dict, cfg: Config
+) -> Path | None:
     """Write an extract job file for the session's transcript (spec cold-path trigger).
 
     Returns the job file path if successfully enqueued, None otherwise.
@@ -172,10 +173,8 @@ def _populate_transcript_windows(
         # Get rule's tool tags for relevance-based windowing
         tool_tags = None
         if row["tool_tags"]:
-            try:
+            with contextlib.suppress(json.JSONDecodeError, TypeError):
                 tool_tags = json.loads(row["tool_tags"])
-            except (json.JSONDecodeError, TypeError):
-                pass
 
         # Compute bounded window using topic shift detection
         window_turns = compute_event_window(
@@ -194,8 +193,8 @@ def _populate_transcript_windows(
 def _try_fork_extract(
     session_id: str,
     cfg: Config,
-    transcript_path: "Path | None" = None,
-    job_path: "Path | None" = None,
+    transcript_path: Path | None = None,
+    job_path: Path | None = None,
 ) -> bool:
     """Attempt fork-based extraction. Returns True if successfully spawned."""
     import os
@@ -231,10 +230,8 @@ def _try_fork_extract(
     cfg.ensure_dirs()
     err_log = cfg.logs_dir / "fork-extract.log"
     err_file = None
-    try:
+    with contextlib.suppress(OSError):
         err_file = open(err_log, "a", encoding="utf-8")
-    except OSError:
-        pass
 
     try:
         subprocess.Popen(
@@ -251,10 +248,8 @@ def _try_fork_extract(
         return False
     finally:
         if err_file is not None:
-            try:
+            with contextlib.suppress(OSError):
                 err_file.close()
-            except OSError:
-                pass
 
 
 def _spawn_async_extract(cfg: Config) -> None:
@@ -295,7 +290,5 @@ def _spawn_async_extract(cfg: Config) -> None:
         log.warning("async extract spawn failed: %s", e)
     finally:
         if err_file is not None:
-            try:
+            with contextlib.suppress(OSError):
                 err_file.close()
-            except OSError:
-                pass

@@ -312,19 +312,18 @@ def promotion_progress() -> dict:
     finally:
         db.close()
 
-    candidates = []
-    for row in rows:
-        candidates.append(
-            {
-                "short_id": row["short_id"],
-                "project_id": row["project_id"],
-                "trigger_canonical": row["trigger_canonical"],
-                "trigger_canonical_zh": row["trigger_canonical_zh"],
-                "status": row["status"],
-                "rule_version": row["rule_version"],
-                "quality_score": row["quality_score"],
-            }
-        )
+    candidates = [
+        {
+            "short_id": row["short_id"],
+            "project_id": row["project_id"],
+            "trigger_canonical": row["trigger_canonical"],
+            "trigger_canonical_zh": row["trigger_canonical_zh"],
+            "status": row["status"],
+            "rule_version": row["rule_version"],
+            "quality_score": row["quality_score"],
+        }
+        for row in rows
+    ]
     return {"data": {"enabled": True, "candidates": candidates}}
 
 

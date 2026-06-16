@@ -3,7 +3,7 @@
 import json
 import uuid
 from dataclasses import replace
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from nokori.db import dumps_json, open_db
 from nokori.events.fire import (
@@ -24,7 +24,7 @@ from nokori.models import Rule
 
 
 def _utcnow_iso(delta_days: int = 0) -> str:
-    dt = datetime.now(timezone.utc) + timedelta(days=delta_days)
+    dt = datetime.now(UTC) + timedelta(days=delta_days)
     return dt.isoformat(timespec="seconds").replace("+00:00", "Z")
 
 

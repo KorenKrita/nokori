@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import os
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 
 
-class Host(str, Enum):
+class Host(StrEnum):
     CLAUDE = "claude"
     CURSOR = "cursor"
     UNKNOWN = "unknown"

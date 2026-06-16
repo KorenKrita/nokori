@@ -35,7 +35,7 @@ def dumps_json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True)
 
 
-def row_to_rule(row: sqlite3.Row) -> "Rule":
+def row_to_rule(row: sqlite3.Row) -> Rule:
     from ..models import Rule
 
     return Rule(
@@ -112,13 +112,13 @@ RULE_COLUMNS = (
 )
 
 
-def total_rule_count(db: "Db") -> int:
+def total_rule_count(db: Db) -> int:
     """Rules in injection pool (active + trusted)."""
     row = db.fetchone("SELECT COUNT(*) AS n FROM rules WHERE status IN ('active', 'trusted')")
     return int(row["n"]) if row else 0
 
 
-def retrieval_pool_count(db: "Db") -> int:
+def retrieval_pool_count(db: Db) -> int:
     """Rules visible to retrieval (formal + shadow pool, i.e. all non-archived)."""
     row = db.fetchone(
         "SELECT COUNT(*) AS n FROM rules WHERE status != 'archived'"
@@ -127,7 +127,7 @@ def retrieval_pool_count(db: "Db") -> int:
 
 
 def fetch_rules(
-    db: "Db",
+    db: Db,
     *,
     statuses: tuple[str, ...] | None = None,
     project_id: str | None = None,
@@ -135,7 +135,7 @@ def fetch_rules(
     project_scope_exact: bool = False,
     source_origins: tuple[str, ...] | None = None,
     severities: tuple[str, ...] | None = None,
-) -> "list[Rule]":
+) -> list[Rule]:
     where = []
     params: list = []
     if statuses:
@@ -165,17 +165,17 @@ def fetch_rules(
     return [row_to_rule(r) for r in db.fetchall(sql, tuple(params))]
 
 
-def fetch_rule_by_short_id(db: "Db", short_id: str) -> "Rule | None":
+def fetch_rule_by_short_id(db: Db, short_id: str) -> Rule | None:
     row = db.fetchone(f"SELECT {RULE_COLUMNS} FROM rules WHERE short_id = ?", (short_id,))
     return row_to_rule(row) if row else None
 
 
-def fetch_short_ids(db: "Db") -> set[str]:
+def fetch_short_ids(db: Db) -> set[str]:
     rows = db.fetchall("SELECT short_id FROM rules")
     return {r["short_id"] for r in rows}
 
 
-def fetch_rule_ids(db: "Db", *, statuses: tuple[str, ...]) -> list[str]:
+def fetch_rule_ids(db: Db, *, statuses: tuple[str, ...]) -> list[str]:
     """Fetch only rule IDs matching the given statuses (lightweight)."""
     if not statuses:
         return []
@@ -188,7 +188,7 @@ def fetch_rule_ids(db: "Db", *, statuses: tuple[str, ...]) -> list[str]:
 
 
 def find_rule_id_by_injection(
-    db: "Db", short_id: str, since_iso: str, *, session_id: str | None = None
+    db: Db, short_id: str, since_iso: str, *, session_id: str | None = None
 ) -> str | None:
     """Find rule by short_id fired since cutoff, optionally scoped to session."""
     if session_id is not None:
@@ -209,16 +209,16 @@ def find_rule_id_by_injection(
 
 
 def find_rule_id_by_recent_injection(
-    db: "Db", session_id: str, short_id: str, since_iso: str
+    db: Db, session_id: str, short_id: str, since_iso: str
 ) -> str | None:
     return find_rule_id_by_injection(db, short_id, since_iso, session_id=session_id)
 
 
-def find_rule_id_injected_since(db: "Db", short_id: str, since_iso: str) -> str | None:
+def find_rule_id_injected_since(db: Db, short_id: str, since_iso: str) -> str | None:
     return find_rule_id_by_injection(db, short_id, since_iso)
 
 
-def archive_rule(db: "Db", rule_id: str, reason: str, now: str, *, strength: str = "user") -> None:
+def archive_rule(db: Db, rule_id: str, reason: str, now: str, *, strength: str = "user") -> None:
     # Read rule data before archiving for fingerprint creation
     rule_row = db.fetchone(
         "SELECT trigger_canonical, action_instruction, domain_tags FROM rules WHERE id = ?",

@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass, field
-from typing import Any, Literal, Optional
+from typing import Any, Literal
 
 logger = logging.getLogger(__name__)
 
@@ -230,7 +230,7 @@ class CompiledAlias:
     strength: AliasStrength
     requires_neighbor: tuple[str, ...] = ()
     # Pre-compiled pattern for the alias based on parent concept match_mode
-    compiled_pattern: Optional[re.Pattern[str]] = field(default=None, repr=False)
+    compiled_pattern: re.Pattern[str] | None = field(default=None, repr=False)
     # For all_terms mode: pre-split tokens
     tokens: tuple[str, ...] = ()
 
@@ -257,7 +257,7 @@ class CompiledVariant:
     kind: VariantKind
     requires_concepts: tuple[str, ...]
     # Pre-compiled phrase pattern for matching
-    compiled_pattern: Optional[re.Pattern[str]] = field(default=None, repr=False)
+    compiled_pattern: re.Pattern[str] | None = field(default=None, repr=False)
     tokens: tuple[str, ...] = ()
 
 
@@ -360,12 +360,11 @@ def _compile_alias(alias_data: dict[str, Any], match_mode: ConceptMatchMode) -> 
     if strength == "weak" and not requires_neighbor:
         raise CompilationError(f"Weak alias '{text}' must have non-empty requires_neighbor")
 
-    if strength == "strong" and match_mode in ("any_alias", "phrase"):
-        if _is_single_generic_token(text):
-            raise CompilationError(f"Strong alias '{text}' cannot be a single generic token")
+    if strength == "strong" and match_mode in ("any_alias", "phrase") and _is_single_generic_token(text):
+        raise CompilationError(f"Strong alias '{text}' cannot be a single generic token")
 
     text_lower = text.lower()
-    compiled_pattern: Optional[re.Pattern[str]] = None
+    compiled_pattern: re.Pattern[str] | None = None
     tokens: tuple[str, ...] = ()
 
     if match_mode == "phrase":
@@ -562,8 +561,8 @@ def _build_trigger_anchors(
 
 def compile_rule(
     trigger_data: dict[str, Any],
-    action_data: Optional[dict[str, Any]] = None,
-    search_terms: Optional[dict[str, Any]] = None,
+    action_data: dict[str, Any] | None = None,
+    search_terms: dict[str, Any] | None = None,
 ) -> CompiledMatcher:
     """Compile rule trigger/action/search data into a deterministic CompiledMatcher.
 

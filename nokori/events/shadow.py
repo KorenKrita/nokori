@@ -34,7 +34,7 @@ def compute_context_fingerprint(
 
 def create_shadow_event(
     db: Db,
-    rule: "Rule",
+    rule: Rule,
     session_id: str,
     status_at_match: str,
     shadow_type: str,
@@ -238,7 +238,7 @@ def _compute_task_deduped_count(deduped_rows: list[dict]) -> int:
 
     total_tasks = 0
 
-    for _sid, session_rows in by_session.items():
+    for session_rows in by_session.values():
         # Sort by created_at for consecutive-event grouping (proxy for turn order)
         session_rows.sort(key=lambda r: r.get("created_at") or "")
         # Track which rows have been assigned to a task group

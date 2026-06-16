@@ -3,7 +3,7 @@ import subprocess
 import sys
 import time
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 
 def _set_rule_lifecycle(
@@ -18,7 +18,7 @@ def _set_rule_lifecycle(
 
     db = open_db(tmp_path / "rules.db")
     try:
-        now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace(
+        now = datetime.now(UTC).isoformat(timespec="seconds").replace(
             "+00:00", "Z"
         )
         updates = ["status = ?", "updated_at = ?"]
@@ -201,8 +201,6 @@ def test_marker_ttl_zero_never_expires(tmp_path):
 
 
 def test_dismiss_cli(tmp_path, monkeypatch):
-    from datetime import datetime, timezone
-
     from nokori.config import Config
     from nokori.db import open_db
 
@@ -212,7 +210,7 @@ def test_dismiss_cli(tmp_path, monkeypatch):
     cfg = Config.from_env()
     db = open_db(cfg.db_path)
     try:
-        now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace(
+        now = datetime.now(UTC).isoformat(timespec="seconds").replace(
             "+00:00", "Z",
         )
         row = db.fetchone("SELECT id FROM rules WHERE short_id = ?", (short,))

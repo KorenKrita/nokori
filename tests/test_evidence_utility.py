@@ -67,12 +67,12 @@ def _make_rule(
 def _make_scored_result(rule: Rule | None = None, **overrides) -> ScoredResult:
     if rule is None:
         rule = _make_rule()
-    defaults = dict(
-        rule=rule,
-        bm25_score=5.0,
-        matched_trigger_tokens=frozenset({"deploy", "database", "migration"}),
-        matched_variant_tokens=frozenset({"deploy", "database"}),
-    )
+    defaults = {
+        "rule": rule,
+        "bm25_score": 5.0,
+        "matched_trigger_tokens": frozenset({"deploy", "database", "migration"}),
+        "matched_variant_tokens": frozenset({"deploy", "database"}),
+    }
     defaults.update(overrides)
     return ScoredResult(**defaults)
 

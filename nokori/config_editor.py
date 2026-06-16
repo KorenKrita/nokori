@@ -5,6 +5,7 @@ Also hosts the low-level config.toml read/write utilities (formerly config_file.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import tomllib
 from pathlib import Path
@@ -125,9 +126,11 @@ def _format_toml_value(value: Any) -> str:
 
 def write_document(path: Path, doc: dict[str, Any]) -> None:
     lines: list[str] = []
-    for key in _TOP_LEVEL_ORDER:
-        if key in doc:
-            lines.append(f"{key} = {_format_toml_value(doc[key])}")
+    lines.extend(
+        f"{key} = {_format_toml_value(doc[key])}"
+        for key in _TOP_LEVEL_ORDER
+        if key in doc
+    )
     for extra in sorted(doc.keys()):
         if extra in _TOP_LEVEL_ORDER or extra in _SECTION_ORDER:
             continue
@@ -184,10 +187,8 @@ def write_document(path: Path, doc: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     text = "\n".join(lines).strip() + "\n"
     path.write_text(text, encoding="utf-8")
-    try:
+    with contextlib.suppress(OSError):
         path.chmod(0o600)
-    except OSError:
-        pass
 
 
 def apply_patch(
@@ -478,9 +479,7 @@ def save_editor(
     def _skip_for_embed_mode(field: FieldDef) -> bool:
         if embed_mode == "local" and field.id in _REMOTE_CLEAR:
             return True
-        if embed_mode == "remote" and field.id in _LOCAL_CLEAR:
-            return True
-        return False
+        return embed_mode == "remote" and field.id in _LOCAL_CLEAR
 
     for field in FIELDS:
         if field.read_only or field.id not in values:

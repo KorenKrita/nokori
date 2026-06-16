@@ -1,6 +1,7 @@
 """Tests for nokori.merge.policy -- deterministic merge policy (section 8.4)."""
 
 import json
+from datetime import UTC
 
 import pytest
 
@@ -495,9 +496,9 @@ def _insert_rule(
     project_id=None,
 ):
     """Insert a minimal rule into the DB for neighbor retrieval tests."""
-    from datetime import datetime, timezone
+    from datetime import datetime
 
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     with db.transaction() as tx:
         tx.execute(
             "INSERT INTO rules (id, short_id, schema_version, rule_version, "

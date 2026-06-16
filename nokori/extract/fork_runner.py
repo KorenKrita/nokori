@@ -116,10 +116,7 @@ def _read_anchor_user_message(transcript_path: Path, byte_offset: int) -> str | 
         if obj.get("type") not in ("user", "human"):
             continue
         msg = obj.get("message", {})
-        if isinstance(msg, dict):
-            content = msg.get("content", "")
-        else:
-            content = obj.get("content", "")
+        content = msg.get("content", "") if isinstance(msg, dict) else obj.get("content", "")
         text = _extract_text_content(content)
         if text and len(text) > 10:
             user_messages.append(text)

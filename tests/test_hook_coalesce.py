@@ -66,9 +66,11 @@ def test_dispatch_suppresses_duplicate_session_start(cfg, monkeypatch):
     assert key
     try_claim(cfg, key, cli_event="session-start")
 
-    with patch("sys.stdin", io.StringIO(stdin)):
-        with patch("sys.stdout", new_callable=io.StringIO) as out:
-            rc = dispatch("session-start", cfg)
+    with (
+        patch("sys.stdin", io.StringIO(stdin)),
+        patch("sys.stdout", new_callable=io.StringIO) as out,
+    ):
+        rc = dispatch("session-start", cfg)
     assert rc == 0
     body = json.loads(out.getvalue())
     assert body  # passthrough response

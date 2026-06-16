@@ -34,17 +34,17 @@ def gate_env(tmp_path, monkeypatch):
 
 
 def _marker_rule(short_id="gate01", **kwargs):
-    defaults = dict(
-        short_id=short_id,
-        action="use lease instead",
-        trigger="force push shared branch",
-        source_type="transcript_extraction",
-        rule_id="gate-rule-1",
-        status="trusted",
-        severity="gate_eligible",
-        rule_version=1,
-        runtime_policy_version=RUNTIME_POLICY_VERSION,
-    )
+    defaults = {
+        "short_id": short_id,
+        "action": "use lease instead",
+        "trigger": "force push shared branch",
+        "source_type": "transcript_extraction",
+        "rule_id": "gate-rule-1",
+        "status": "trusted",
+        "severity": "gate_eligible",
+        "rule_version": 1,
+        "runtime_policy_version": RUNTIME_POLICY_VERSION,
+    }
     defaults.update(kwargs)
     return MarkerRule(**defaults)
 

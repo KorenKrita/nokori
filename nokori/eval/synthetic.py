@@ -223,13 +223,10 @@ def run_synthetic_eval(
 
     # Add global adversarial cases with case_type marker
     if global_adversarial_cases:
-        for adv_case in global_adversarial_cases:
-            all_cases.append(
-                {
-                    **adv_case,
-                    "case_type": "global_adversarial",
-                }
-            )
+        all_cases.extend(
+            {**adv_case, "case_type": "global_adversarial"}
+            for adv_case in global_adversarial_cases
+        )
 
     results: list[dict[str, Any]] = []
     overall_passed = True
@@ -245,15 +242,15 @@ def run_synthetic_eval(
     for result in results:
         case_type = result["case_type"]
         actual = result["actual_decision"]
-        if case_type in ("near_miss", "negative", "global_adversarial"):
-            if DECISION_RANK.get(actual, 0) >= DECISION_RANK["warm"]:
-                overall_passed = False
+        if (
+            case_type in ("near_miss", "negative", "global_adversarial")
+            and DECISION_RANK.get(actual, 0) >= DECISION_RANK["warm"]
+        ):
+            overall_passed = False
 
     # Check that at least one positive case exists and passes
     positive_cases = [r for r in results if r["case_type"] == "positive"]
-    if not positive_cases:
-        overall_passed = False
-    elif not all(r["case_passed"] for r in positive_cases):
+    if not positive_cases or not all(r["case_passed"] for r in positive_cases):
         overall_passed = False
 
     return SyntheticEvalResult(
@@ -266,7 +263,7 @@ def run_synthetic_eval(
         embedding_profile_version=EMBEDDING_PROFILE_VERSION,
         trigger_idf_pool_version=idf_stats.pool_version,
         benchmark_version=BENCHMARK_VERSION,
-        cases=[{k: v for k, v in c.items()} for c in all_cases],
+        cases=[dict(c.items()) for c in all_cases],
         results=results,
         passed=overall_passed,
     )

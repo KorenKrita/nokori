@@ -1,5 +1,5 @@
 """Tests for shadow pool, async extract, and local embedding features."""
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
 
 from nokori.config import Config
@@ -9,7 +9,7 @@ from nokori.utils.host import Host
 
 def _utcnow_iso(delta_days: int = 0) -> str:
     from datetime import timedelta
-    dt = datetime.now(timezone.utc) + timedelta(days=delta_days)
+    dt = datetime.now(UTC) + timedelta(days=delta_days)
     return dt.isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
@@ -300,11 +300,12 @@ class TestLocalEmbedding:
         monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
         cfg = Config.from_env()
 
-        with patch("nokori.search.embedding.local_embed_package_available",
-                   return_value=False):
-            with patch("nokori.search.embedding.local_model_cached", return_value=False):
-                from nokori.search.embedding import auto_enabled
-                assert auto_enabled(cfg, 20) is False
+        with (
+            patch("nokori.search.embedding.local_embed_package_available", return_value=False),
+            patch("nokori.search.embedding.local_model_cached", return_value=False),
+        ):
+            from nokori.search.embedding import auto_enabled
+            assert auto_enabled(cfg, 20) is False
 
     def test_auto_enabled_prefers_remote(self, monkeypatch, tmp_path):
         monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))

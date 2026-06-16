@@ -1,3 +1,4 @@
+import contextlib
 import json
 import socket
 import threading
@@ -10,10 +11,8 @@ from nokori.search import embed_ipc
 def _run_fake_server(sock_path: Path, stop_event: threading.Event) -> None:
     srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     sock_path.parent.mkdir(parents=True, exist_ok=True)
-    try:
+    with contextlib.suppress(FileNotFoundError):
         sock_path.unlink()
-    except FileNotFoundError:
-        pass
     srv.bind(str(sock_path))
     srv.listen(4)
 
@@ -22,7 +21,7 @@ def _run_fake_server(sock_path: Path, stop_event: threading.Event) -> None:
             srv.settimeout(0.3)
             try:
                 conn, _ = srv.accept()
-            except socket.timeout:
+            except TimeoutError:
                 continue
             with conn:
                 buf = b""

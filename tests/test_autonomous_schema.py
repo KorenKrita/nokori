@@ -68,9 +68,8 @@ class TestRulesStatusConstraint:
 
     @pytest.mark.parametrize("invalid_status", ["merged", "dormant", "draft", "", "extracted", "quarantined"])
     def test_invalid_statuses_rejected(self, db, invalid_status):
-        with pytest.raises(sqlite3.IntegrityError):
-            with db.transaction() as conn:
-                _insert_rule(conn, status=invalid_status)
+        with pytest.raises(sqlite3.IntegrityError), db.transaction() as conn:
+            _insert_rule(conn, status=invalid_status)
 
 
 # ---------------------------------------------------------------------------
@@ -104,9 +103,8 @@ class TestRulesVersioningFields:
         assert row["source_origin"] == "external_source_material"
 
     def test_invalid_source_origin_rejected(self, db):
-        with pytest.raises(sqlite3.IntegrityError):
-            with db.transaction() as conn:
-                _insert_rule(conn, source_origin="invented")
+        with pytest.raises(sqlite3.IntegrityError), db.transaction() as conn:
+            _insert_rule(conn, source_origin="invented")
 
     def test_stores_activation_origin(self, db):
         with db.transaction() as conn:
@@ -161,13 +159,12 @@ class TestRuleFireEvents:
     def test_level_check_constraint(self, db):
         with db.transaction() as conn:
             rid = _insert_rule(conn)
-        with pytest.raises(sqlite3.IntegrityError):
-            with db.transaction() as conn:
-                conn.execute(
-                    "INSERT INTO rule_fire_events (id, rule_id, level, created_at) "
-                    "VALUES (?,?,?,?)",
-                    (str(uuid.uuid4()), rid, "invalid_level", _now()),
-                )
+        with pytest.raises(sqlite3.IntegrityError), db.transaction() as conn:
+            conn.execute(
+                "INSERT INTO rule_fire_events (id, rule_id, level, created_at) "
+                "VALUES (?,?,?,?)",
+                (str(uuid.uuid4()), rid, "invalid_level", _now()),
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -210,24 +207,22 @@ class TestRuleShadowEvents:
     def test_status_at_match_check(self, db):
         with db.transaction() as conn:
             rid = _insert_rule(conn)
-        with pytest.raises(sqlite3.IntegrityError):
-            with db.transaction() as conn:
-                conn.execute(
-                    "INSERT INTO rule_shadow_events "
-                    "(id, rule_id, status_at_match, created_at) VALUES (?,?,?,?)",
-                    (str(uuid.uuid4()), rid, "active", _now()),
-                )
+        with pytest.raises(sqlite3.IntegrityError), db.transaction() as conn:
+            conn.execute(
+                "INSERT INTO rule_shadow_events "
+                "(id, rule_id, status_at_match, created_at) VALUES (?,?,?,?)",
+                (str(uuid.uuid4()), rid, "active", _now()),
+            )
 
     def test_shadow_type_check(self, db):
         with db.transaction() as conn:
             rid = _insert_rule(conn)
-        with pytest.raises(sqlite3.IntegrityError):
-            with db.transaction() as conn:
-                conn.execute(
-                    "INSERT INTO rule_shadow_events "
-                    "(id, rule_id, shadow_type, created_at) VALUES (?,?,?,?)",
-                    (str(uuid.uuid4()), rid, "invalid_type", _now()),
-                )
+        with pytest.raises(sqlite3.IntegrityError), db.transaction() as conn:
+            conn.execute(
+                "INSERT INTO rule_shadow_events "
+                "(id, rule_id, shadow_type, created_at) VALUES (?,?,?,?)",
+                (str(uuid.uuid4()), rid, "invalid_type", _now()),
+            )
 
 
 # ---------------------------------------------------------------------------

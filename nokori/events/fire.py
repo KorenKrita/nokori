@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 
 def create_fire_event(
     db: Db,
-    rule: "Rule",
+    rule: Rule,
     session_id: str,
     prompt_hash: str,
     level: str,

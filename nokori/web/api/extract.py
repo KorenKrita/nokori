@@ -193,17 +193,16 @@ def transcript_events(transcript_path: str = Query(...)) -> dict:
             "ORDER BY created_at",
             (transcript_path,),
         )
-        result = []
-        for ev in events:
-            result.append(
-                {
-                    "id": ev["id"],
-                    "source": ev["source"],
-                    "outcome": ev["outcome"],
-                    "details": _parse_details(ev["details"]),
-                    "created_at": ev["created_at"],
-                }
-            )
+        result = [
+            {
+                "id": ev["id"],
+                "source": ev["source"],
+                "outcome": ev["outcome"],
+                "details": _parse_details(ev["details"]),
+                "created_at": ev["created_at"],
+            }
+            for ev in events
+        ]
     finally:
         db.close()
     return {"events": result}

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 
 def _nokori(tmp_path, *args):
@@ -119,7 +119,7 @@ def test_global_eligible_shows_eligible_rules(tmp_path, monkeypatch):
     from nokori.db import open_db
 
     cfg = Config.from_env()
-    now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+    now = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
     db = open_db(cfg.db_path)
     try:
         _seed_rules_and_events(db, now)
@@ -155,7 +155,7 @@ def test_global_eligible_api_endpoint(tmp_path, monkeypatch):
     from nokori.db import open_db
 
     cfg = Config.from_env()
-    now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+    now = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
     db = open_db(cfg.db_path)
     try:
         _seed_rules_and_events(db, now)

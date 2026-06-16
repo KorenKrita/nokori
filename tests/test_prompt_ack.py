@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -221,7 +221,7 @@ def test_prune_stale_drops_old_ack_files(cfg):
     prompt_ack.record(cfg, "sess-old", ph)
     safe_sess = cfg._safe_session_id("sess-old")
     path = cfg.data_dir / "prompt_submit_ack" / safe_sess / f"{ph}.json"
-    old = (datetime.now(timezone.utc) - timedelta(hours=48)).isoformat().replace("+00:00", "Z")
+    old = (datetime.now(UTC) - timedelta(hours=48)).isoformat().replace("+00:00", "Z")
     path.write_text(
         json.dumps({"session_id": "sess-old", "prompt_hash": ph, "recorded_at": old}),
         encoding="utf-8",

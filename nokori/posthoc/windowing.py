@@ -206,10 +206,9 @@ def _is_topic_shift(
     if rule_tool_tags and turn.get("tool_name"):
         tool = turn["tool_name"].lower()
         tool_relevant = any(tag.lower() in tool for tag in rule_tool_tags)
-        if not tool_relevant and turn.get("role") == "assistant":
+        if not tool_relevant and turn.get("role") == "assistant" and len(window_so_far) >= 3:
             # Unrelated tool after injection — possible shift
-            if len(window_so_far) >= 3:
-                return True
+            return True
 
     return False
 
@@ -233,7 +232,7 @@ def _cosine_similarity(a: list[float], b: list[float]) -> float:
     """Compute cosine similarity between two embedding vectors."""
     if not a or not b or len(a) != len(b):
         return 0.0
-    dot = sum(x * y for x, y in zip(a, b))
+    dot = sum(x * y for x, y in zip(a, b, strict=False))
     na = sum(x * x for x in a) ** 0.5
     nb = sum(y * y for y in b) ** 0.5
     if na == 0.0 or nb == 0.0:

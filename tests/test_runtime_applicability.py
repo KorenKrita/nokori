@@ -16,25 +16,25 @@ from nokori.search.applicability import evaluate_applicability
 # ---------------------------------------------------------------------------
 
 # Baseline kwargs that pass trigger evidence (Path A: strong_variant + concepts).
-PASS_BASELINE = dict(
-    rule_status="active",
-    rule_severity="reminder",
-    rule_first_observed_useful_at="2025-01-01T00:00:00Z",
-    trigger_idf_sum=0.0,
-    trigger_coverage=0.0,
-    distinct_trigger_terms=0,
-    strong_variant_phrase_hit=True,
-    required_concepts_match=True,
-    excluded_context_hit=False,
-    action_only_match=False,
-    search_only_match=False,
-    embedding_only_match=False,
-    idf_stats_available=False,
-    pool_size=0,
-    has_tool_input=False,
-    tool_evidence_passed=False,
-    false_positive_score=0.0,
-)
+PASS_BASELINE = {
+    "rule_status": "active",
+    "rule_severity": "reminder",
+    "rule_first_observed_useful_at": "2025-01-01T00:00:00Z",
+    "trigger_idf_sum": 0.0,
+    "trigger_coverage": 0.0,
+    "distinct_trigger_terms": 0,
+    "strong_variant_phrase_hit": True,
+    "required_concepts_match": True,
+    "excluded_context_hit": False,
+    "action_only_match": False,
+    "search_only_match": False,
+    "embedding_only_match": False,
+    "idf_stats_available": False,
+    "pool_size": 0,
+    "has_tool_input": False,
+    "tool_evidence_passed": False,
+    "false_positive_score": 0.0,
+}
 
 
 def _eval(**overrides):

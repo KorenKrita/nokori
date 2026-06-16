@@ -187,7 +187,7 @@ def select_injection(
                 selected_tokens.append(sr.matched_trigger_tokens)
                 break
 
-    hot_set = set(id(sr) for sr in hot)
+    hot_set = {id(sr) for sr in hot}
     chars_used = 0
 
     prev_warm_utility: float | None = None
@@ -228,7 +228,7 @@ def select_injection(
         chars_used += cost
         prev_warm_utility = u
 
-    selected_ids = hot_set | set(id(sr) for sr in warm) | set(id(sr) for sr in shadow_matches)
+    selected_ids = hot_set | {id(sr) for sr in warm} | {id(sr) for sr in shadow_matches}
     for _u, sr in scored_with_utility:
         if id(sr) not in selected_ids:
             shadow_matches.append(sr)

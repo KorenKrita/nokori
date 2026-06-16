@@ -5,7 +5,7 @@ import os
 import subprocess
 import urllib.error
 import urllib.request
-from typing import Callable
+from collections.abc import Callable
 
 from ..config import Config
 from ..constants import MAX_CLAUDE_CLI_INPUT_CHARS
@@ -109,8 +109,10 @@ class LLMAdapter:
         timeout: int,
         *,
         model_id: str | None = None,
-        response_format: dict | None = {"type": "json_object"},
+        response_format: dict | None = None,
     ) -> str | None:
+        if response_format is None:
+            response_format = {"type": "json_object"}
         messages: list[dict[str, str]] = []
         if system:
             messages.append({"role": "system", "content": system})

@@ -75,10 +75,7 @@ def _check_cold_fast_lane(
         return False
 
     # Merge operation must not require split/rewrite (spec 3.3 condition 9)
-    if merge_op in thresholds.merge_operation_must_not_require:
-        return False
-
-    return True
+    return merge_op not in thresholds.merge_operation_must_not_require
 
 
 # ---------------------------------------------------------------------------

@@ -1,4 +1,6 @@
 """Dismiss phrase matching in UserPromptSubmit."""
+from datetime import UTC, datetime
+
 from nokori.config import Config
 from nokori.db import open_db
 from nokori.hooks.user_prompt_submit import _run_dismiss
@@ -9,9 +11,7 @@ def test_dismiss_basic(monkeypatch, tmp_path):
     cfg = Config.from_env()
     db = open_db(cfg.db_path)
     try:
-        from datetime import datetime, timezone
-
-        now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+        now = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
         with db.transaction() as tx:
             tx.execute(
                 "INSERT INTO rules (id, short_id, schema_version, rule_version, "
@@ -44,9 +44,7 @@ def test_dismiss_uppercase_short_id(monkeypatch, tmp_path):
     cfg = Config.from_env()
     db = open_db(cfg.db_path)
     try:
-        from datetime import datetime, timezone
-
-        now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+        now = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
         with db.transaction() as tx:
             tx.execute(
                 "INSERT INTO rules (id, short_id, schema_version, rule_version, "

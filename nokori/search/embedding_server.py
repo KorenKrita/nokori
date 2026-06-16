@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import signal
@@ -59,20 +60,16 @@ def _handle_connection(
             else:
                 _reply(conn, {"ok": False, "error": f"unknown op: {op!r}"})
     except (OSError, json.JSONDecodeError, ValueError) as e:
-        try:
+        with contextlib.suppress(OSError):
             _reply(conn, {"ok": False, "error": str(e)})
-        except OSError:
-            pass
     return True
 
 
 def _cleanup(sock: socket.socket, sock_path: Path, cfg: Config) -> None:
     sock.close()
     embed_ipc._clear_pid(cfg)
-    try:
+    with contextlib.suppress(FileNotFoundError):
         sock_path.unlink()
-    except FileNotFoundError:
-        pass
 
 
 def run_server(cfg: Config) -> int:
@@ -80,10 +77,8 @@ def run_server(cfg: Config) -> int:
     embed_ipc.cleanup_stale(cfg)
     sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     sock_path = embed_ipc.socket_path(cfg)
-    try:
+    with contextlib.suppress(FileNotFoundError):
         sock_path.unlink()
-    except FileNotFoundError:
-        pass
     sock.bind(str(sock_path))
     try:
         os.chmod(sock_path, 0o600)
@@ -119,7 +114,7 @@ def run_server(cfg: Config) -> int:
             sock.settimeout(1.0)
             try:
                 conn, _ = sock.accept()
-            except socket.timeout:
+            except TimeoutError:
                 if time.monotonic() - last_activity >= idle_limit:
                     log.info("embed server idle timeout (%ss)", int(idle_limit))
                     break

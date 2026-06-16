@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -128,10 +129,8 @@ def _prune_json_tree(root: Path, cutoff: datetime) -> int:
                 pass
     for session_dir in root.iterdir():
         if session_dir.is_dir() and not any(session_dir.glob("*.json")):
-            try:
+            with contextlib.suppress(OSError):
                 session_dir.rmdir()
-            except OSError:
-                pass
     return removed
 
 
@@ -149,10 +148,8 @@ def cleanup_session(cfg: Config, session_id: str) -> int:
                 removed += 1
             except OSError:
                 pass
-        try:
+        with contextlib.suppress(OSError):
             root.rmdir()
-        except OSError:
-            pass
     return removed
 
 

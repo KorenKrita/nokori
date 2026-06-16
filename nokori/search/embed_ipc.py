@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import signal
@@ -46,10 +47,8 @@ def _write_pid(cfg: Config, pid: int) -> None:
 
 
 def _clear_pid(cfg: Config) -> None:
-    try:
+    with contextlib.suppress(FileNotFoundError):
         pid_path(cfg).unlink()
-    except FileNotFoundError:
-        pass
 
 
 def _pid_alive(pid: int) -> bool:
@@ -71,10 +70,8 @@ def cleanup_stale(cfg: Config) -> None:
     if pid is not None:
         _clear_pid(cfg)
     sock = socket_path(cfg)
-    try:
+    with contextlib.suppress(FileNotFoundError):
         sock.unlink()
-    except FileNotFoundError:
-        pass
 
 
 def request(cfg: Config, payload: dict[str, Any], *, timeout: float = 5.0) -> dict[str, Any]:
@@ -127,14 +124,12 @@ def spawn_server(cfg: Config) -> None:
 
     cfg.ensure_dirs()
     err_log = cfg.logs_dir / "embed-server.log"
-    err_file = None
-    try:
-        err_file = open(err_log, "a", encoding="utf-8")
-    except OSError:
-        pass
     env = os.environ.copy()
     env["NOKORI_DATA_DIR"] = str(cfg.data_dir)
+    err_file = None
     try:
+        with contextlib.suppress(OSError):
+            err_file = open(err_log, "a", encoding="utf-8")  # noqa: SIM115
         subprocess.Popen(
             [sys.executable, "-m", "nokori", "embed", "serve"],
             env=env,
@@ -145,10 +140,8 @@ def spawn_server(cfg: Config) -> None:
         )
     finally:
         if err_file is not None:
-            try:
+            with contextlib.suppress(OSError):
                 err_file.close()
-            except OSError:
-                pass
 
 
 def kickstart_server(cfg: Config) -> bool:
@@ -194,10 +187,8 @@ def stop_server(cfg: Config) -> bool:
             pass
     pid = _read_pid(cfg)
     if pid is not None and _pid_alive(pid):
-        try:
+        with contextlib.suppress(OSError):
             os.kill(pid, signal.SIGTERM)
-        except OSError:
-            pass
         for _ in range(30):
             if not _pid_alive(pid):
                 break

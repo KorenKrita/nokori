@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import io
 import time
 from pathlib import Path
@@ -46,7 +47,7 @@ async def logs_ws(ws: WebSocket) -> None:
         try:
             msg = await asyncio.wait_for(ws.receive_json(), timeout=2.0)
             level_filter = msg.get("level")
-        except (asyncio.TimeoutError, WebSocketDisconnect):
+        except (TimeoutError, WebSocketDisconnect):
             pass
 
         log_files = _find_log_files(logs_dir)
@@ -71,8 +72,9 @@ async def logs_ws(ws: WebSocket) -> None:
             try:
                 lines = lf.read_text().splitlines()[-30:]
                 mtime = lf.stat().st_mtime
-                for line in lines:
-                    all_lines.append((mtime, f"[{lf.stem}] {line}", line))
+                all_lines.extend(
+                    (mtime, f"[{lf.stem}] {line}", line) for line in lines
+                )
             except OSError:
                 continue
 
@@ -85,7 +87,7 @@ async def logs_ws(ws: WebSocket) -> None:
         # Tail all files
         for lf in log_files:
             try:
-                f = open(lf, "r")
+                f = open(lf)
                 f.seek(0, 2)
                 file_handles.append((lf.stem, f))
             except OSError:
@@ -118,7 +120,5 @@ async def logs_ws(ws: WebSocket) -> None:
     finally:
         _active_log_ws_connections = max(0, _active_log_ws_connections - 1)
         for _, f in file_handles:
-            try:
+            with contextlib.suppress(Exception):
                 f.close()
-            except Exception:
-                pass

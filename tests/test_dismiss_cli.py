@@ -1,6 +1,6 @@
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from nokori.config import Config
 from nokori.db import open_db
@@ -59,7 +59,7 @@ def test_cli_dismiss_after_fire_event(tmp_path, monkeypatch):
     cfg = Config.from_env()
     db = open_db(cfg.db_path)
     try:
-        now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace(
+        now = datetime.now(UTC).isoformat(timespec="seconds").replace(
             "+00:00", "Z",
         )
         row = db.fetchone("SELECT id FROM rules WHERE short_id = ?", (short,))

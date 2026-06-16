@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from nokori.models import Rule, ScoredResult
 from nokori.search import bm25, scorer as ranker
@@ -8,7 +8,7 @@ from nokori.search.selector import select_injection
 
 def _rule(short, trigger, *, variants=(), terms_zh=(), action="do x", status="active",
           trigger_canonical_zh=None, action_instruction_zh=None):
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     return Rule(
         id=f"id-{short}",
         short_id=short,
@@ -138,15 +138,14 @@ def test_chinese_query():
 def test_perf_500_rules_under_50ms():
     import time
 
-    rules = []
-    for i in range(500):
-        rules.append(
-            _rule(
-                f"r{i:04x}",
-                f"trigger number {i} unique words alpha{i} beta{i}",
-                action=f"action {i}",
-            )
+    rules = [
+        _rule(
+            f"r{i:04x}",
+            f"trigger number {i} unique words alpha{i} beta{i}",
+            action=f"action {i}",
         )
+        for i in range(500)
+    ]
     rules.append(
         _rule("hit001", "force push to main branch",
               variants=("git push --force",), action="use lease")

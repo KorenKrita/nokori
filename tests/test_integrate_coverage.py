@@ -29,23 +29,23 @@ def db(tmp_path):
 
 
 def _insert_rule(db: Db, rule_id: str, **overrides) -> None:
-    defaults = dict(
-        id=rule_id,
-        short_id=rule_id[:8],
-        schema_version=SCHEMA_VERSION,
-        rule_version=1,
-        status="active",
-        severity="reminder",
-        trigger_canonical="avoid force push",
-        action_instruction="use lease instead",
-        runtime_policy_version=RUNTIME_POLICY_VERSION,
-        created_by_pipeline_version="1.0.0",
-        source_origin="transcript_extraction",
-        project_scope="global",
-        domain_tags=json.dumps(["git"]),
-        created_at="2026-01-01T00:00:00Z",
-        updated_at="2026-01-01T00:00:00Z",
-    )
+    defaults = {
+        "id": rule_id,
+        "short_id": rule_id[:8],
+        "schema_version": SCHEMA_VERSION,
+        "rule_version": 1,
+        "status": "active",
+        "severity": "reminder",
+        "trigger_canonical": "avoid force push",
+        "action_instruction": "use lease instead",
+        "runtime_policy_version": RUNTIME_POLICY_VERSION,
+        "created_by_pipeline_version": "1.0.0",
+        "source_origin": "transcript_extraction",
+        "project_scope": "global",
+        "domain_tags": json.dumps(["git"]),
+        "created_at": "2026-01-01T00:00:00Z",
+        "updated_at": "2026-01-01T00:00:00Z",
+    }
     defaults.update(overrides)
     cols = ", ".join(defaults.keys())
     placeholders = ", ".join(["?"] * len(defaults))
@@ -94,9 +94,9 @@ class TestRunMergePlanner:
         with (
             patch("nokori.cold.integrate.find_merge_neighbors", return_value=existing),
             patch("nokori.cold.integrate._call_llm_role", side_effect=CircuitBreakerOpenError("open")),
+            pytest.raises(CircuitBreakerOpenError),
         ):
-            with pytest.raises(CircuitBreakerOpenError):
-                _run_merge_planner(db, MagicMock(), rule_data, "model-1")
+            _run_merge_planner(db, MagicMock(), rule_data, "model-1")
 
 
 class TestApplyMergeSideEffects:

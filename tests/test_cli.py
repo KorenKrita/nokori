@@ -1,6 +1,7 @@
 import json
 import subprocess
 import sys
+from datetime import UTC
 
 from nokori import __version__
 
@@ -68,7 +69,7 @@ def test_status_claude_disabled_flag(tmp_path, monkeypatch):
 
 def test_status_shows_rule_counts(tmp_path, monkeypatch):
     """Status shows rule counts after inserting a rule."""
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
     from nokori.config import Config
@@ -77,7 +78,7 @@ def test_status_shows_rule_counts(tmp_path, monkeypatch):
     cfg = Config.from_env()
     db = open_db(cfg.db_path)
     try:
-        now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+        now = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
         with db.transaction() as tx:
             tx.execute(
                 "INSERT INTO rules (id, short_id, schema_version, rule_version, "
@@ -104,7 +105,7 @@ def test_status_shows_rule_counts(tmp_path, monkeypatch):
 
 def test_edit_rejects_manual_gate_eligible_severity(tmp_path, monkeypatch):
     """CLI edit must not manually make rules Gate-capable."""
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
     from nokori.config import Config
@@ -113,7 +114,7 @@ def test_edit_rejects_manual_gate_eligible_severity(tmp_path, monkeypatch):
     cfg = Config.from_env()
     db = open_db(cfg.db_path)
     try:
-        now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace(
+        now = datetime.now(UTC).isoformat(timespec="seconds").replace(
             "+00:00", "Z"
         )
         with db.transaction() as tx:

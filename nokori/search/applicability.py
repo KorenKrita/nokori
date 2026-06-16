@@ -81,12 +81,7 @@ def meets_min_evidence(r: ScoredResult) -> bool:
         return False
 
     # Fallback: at least 1 trigger token + some other signal.
-    if len(r.matched_trigger_tokens) >= 1 and (
-        len(r.matched_action_tokens) >= 1 or len(r.matched_search_tokens) >= 1
-    ):
-        return True
-
-    return False
+    return len(r.matched_trigger_tokens) >= 1 and (len(r.matched_action_tokens) >= 1 or len(r.matched_search_tokens) >= 1)
 
 
 # ---------------------------------------------------------------------------
@@ -142,14 +137,11 @@ def _trigger_evidence_passes(
         return True
 
     # Path C (relaxed coverage, stricter IDF)
-    if (
+    return (
         trigger_idf_sum >= 1.5 * trigger_info_min
         and required_concepts_match
         and distinct_trigger_terms >= distinct_min
-    ):
-        return True
-
-    return False
+    )
 
 
 def _strong_trigger_evidence(
@@ -180,15 +172,12 @@ def _strong_trigger_evidence(
     distinct_min = policy.distinct_trigger_terms_min
 
     # Strong requires meeting Path B fully (coverage + IDF + distinct + concepts)
-    if (
+    return (
         trigger_idf_sum >= trigger_info_min
         and trigger_coverage >= coverage_min
         and required_concepts_match
         and distinct_trigger_terms >= distinct_min
-    ):
-        return True
-
-    return False
+    )
 
 
 def _high_risk_strong_evidence(
@@ -218,15 +207,12 @@ def _high_risk_strong_evidence(
     distinct_min = policy.distinct_trigger_terms_min
 
     # High-risk requires 1.5x IDF threshold AND full coverage
-    if (
+    return (
         trigger_idf_sum >= 1.5 * trigger_info_min
         and trigger_coverage >= coverage_min
         and required_concepts_match
         and distinct_trigger_terms >= distinct_min
-    ):
-        return True
-
-    return False
+    )
 
 
 def _trigger_info_min(

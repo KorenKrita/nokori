@@ -326,7 +326,9 @@ def _is_narrower_scope(
 
     # Structural narrowness: new has domain_tags that old's scope_summary lacks
     scope_summary = (
-        fingerprint_row["scope_summary"] if "scope_summary" in fingerprint_row.keys() else ""
+        fingerprint_row["scope_summary"]
+        if "scope_summary" in fingerprint_row.keys()  # noqa: SIM118 - sqlite3.Row.__contains__ checks values, not keys
+        else ""
     ) or ""
     has_structural_narrowing = bool(
         new_domain_tags

@@ -64,8 +64,8 @@ target-version = "py311"
 line-length = 100
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I"]
-ignore = ["E501"]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "C4", "PERF"]
+ignore = ["E501", "SIM115"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["nokori"]

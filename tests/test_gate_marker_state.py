@@ -5,7 +5,7 @@ observability events, batch eligibility, PromptHashResolver, and deferral detect
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
 import pytest
@@ -29,11 +29,11 @@ from nokori.utils.host import Host
 
 
 def _utcnow_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+    return datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
 def _old_iso(seconds_ago: float) -> str:
-    dt = datetime.now(timezone.utc) - timedelta(seconds=seconds_ago)
+    dt = datetime.now(UTC) - timedelta(seconds=seconds_ago)
     return dt.isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
@@ -64,17 +64,17 @@ def gate_env(tmp_path, monkeypatch):
 
 
 def _marker_rule(short_id="gate01", **kwargs):
-    defaults = dict(
-        short_id=short_id,
-        action="use lease instead",
-        trigger="force push shared branch",
-        source_type="transcript_extraction",
-        rule_id="gate-rule-1",
-        status="trusted",
-        severity="gate_eligible",
-        rule_version=1,
-        runtime_policy_version=RUNTIME_POLICY_VERSION,
-    )
+    defaults = {
+        "short_id": short_id,
+        "action": "use lease instead",
+        "trigger": "force push shared branch",
+        "source_type": "transcript_extraction",
+        "rule_id": "gate-rule-1",
+        "status": "trusted",
+        "severity": "gate_eligible",
+        "rule_version": 1,
+        "runtime_policy_version": RUNTIME_POLICY_VERSION,
+    }
     defaults.update(kwargs)
     return MarkerRule(**defaults)
 

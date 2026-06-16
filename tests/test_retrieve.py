@@ -1,5 +1,5 @@
 """Tests for shared retrieval (formal + shadow pools)."""
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from nokori.config import Config
 from nokori.db import fetch_rules, open_db
@@ -8,7 +8,7 @@ from nokori.search.engine import RetrievalEngine
 
 
 def _utcnow_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+    return datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
 def _insert_rule(db, *, id_, trigger, project_id="other-proj", short_id=None,

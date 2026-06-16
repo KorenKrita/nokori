@@ -6,6 +6,7 @@ All configuration is accepted as plain dicts/strings.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import logging
@@ -437,9 +438,11 @@ def _validate_type(value: Any, schema: dict[str, Any], path: str, _depth: int = 
     if expected_type == "object":
         if not isinstance(value, dict):
             return [f"{path}: expected object, got {type(value).__name__}"]
-        for req in schema.get("required", []):
-            if req not in value:
-                errors.append(f"{path}.{req}: required field missing")
+        errors.extend(
+            f"{path}.{req}: required field missing"
+            for req in schema.get("required", [])
+            if req not in value
+        )
         props = schema.get("properties", {})
         for key, prop_schema in props.items():
             if key in value:
@@ -488,10 +491,10 @@ def validate_role_output(role: str, raw_json_str: str) -> dict[str, Any]:
 
     try:
         data = json.loads(raw_json_str)
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as exc:
         data = parse_json_payload(raw_json_str)
         if data is None:
-            raise ValueError(f"{role}: invalid JSON: could not extract JSON from response")
+            raise ValueError(f"{role}: invalid JSON: could not extract JSON from response") from exc
 
     if not isinstance(data, dict):
         raise ValueError(f"{role}: expected JSON object at top level, got {type(data).__name__}")
@@ -542,10 +545,8 @@ def _normalize_role_output(role: str, data: dict[str, Any]) -> dict[str, Any]:
         if isinstance(data.get("scores"), dict):
             for k, v in data["scores"].items():
                 if isinstance(v, str):
-                    try:
+                    with contextlib.suppress(ValueError):
                         data["scores"][k] = float(v)
-                    except ValueError:
-                        pass
         # Fix 3: normalize reasoning alias (required field)
         if "reasoning" not in data:
             for alias in ("rationale", "reason", "explanation"):

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import json
 
 from fastapi import APIRouter, HTTPException, Query
@@ -52,10 +53,8 @@ def get_timeline(
 
         for event in events:
             if event.get("details") and isinstance(event["details"], str):
-                try:
+                with contextlib.suppress(json.JSONDecodeError, TypeError):
                     event["details"] = json.loads(event["details"])
-                except (json.JSONDecodeError, TypeError):
-                    pass
         return {"events": events, "count": len(events), "has_more": has_more}
     finally:
         db.close()

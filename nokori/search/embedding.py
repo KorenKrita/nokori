@@ -52,7 +52,7 @@ def _deserialize(blob: bytes) -> list[float]:
 def _cosine(a: Sequence[float], b: Sequence[float]) -> float:
     if not a or not b or len(a) != len(b):
         return 0.0
-    dot = sum(x * y for x, y in zip(a, b))
+    dot = sum(x * y for x, y in zip(a, b, strict=False))
     na = sum(x * x for x in a) ** 0.5
     nb = sum(y * y for y in b) ** 0.5
     if na == 0 or nb == 0:
@@ -64,7 +64,7 @@ def _cosine_with_norm(a_norm: float, a: Sequence[float], b: Sequence[float]) -> 
     """Cosine similarity when caller already knows ||a||."""
     if a_norm == 0 or not b:
         return 0.0
-    dot = sum(x * y for x, y in zip(a, b))
+    dot = sum(x * y for x, y in zip(a, b, strict=False))
     nb = sum(y * y for y in b) ** 0.5
     if nb == 0:
         return 0.0
@@ -104,10 +104,7 @@ def _rule_text(rule: Rule) -> str:
         else rule.trigger_variants
     )
     for variant in variants:
-        if isinstance(variant, dict):
-            text = str(variant.get("text") or "")
-        else:
-            text = str(variant)
+        text = str(variant.get("text") or "") if isinstance(variant, dict) else str(variant)
         if text:
             parts.append(text)
     parts.extend(rule.trigger_variants_zh)
@@ -132,10 +129,7 @@ class EmbeddingClient:
             chunk_size=self.cfg.embed_chunk_size,
             chunk_count=self.cfg.embed_chunk_count,
         )
-        vectors: list[list[float]] = []
-        for chunk in chunks:
-            vectors.append(self._embed_one(chunk, timeout))
-        return vectors
+        return [self._embed_one(chunk, timeout) for chunk in chunks]
 
     def _embed_one(self, text: str, timeout: int) -> list[float]:
         payload: dict = {"model": self.cfg.embed_model, "input": text}
@@ -455,9 +449,7 @@ def search_local_shared(
         if not embed_ipc.kickstart_server(cfg):
             log.info("embed skipped on hook (server not ready; BM25-only this turn)")
             return [], "off"
-    elif not _sentence_transformers_available():
-        return [], "off"
-    elif not embed_ipc.ensure_running(cfg, max_wait=15.0):
+    elif not _sentence_transformers_available() or not embed_ipc.ensure_running(cfg, max_wait=15.0):
         return [], "off"
 
     qvecs = embed_ipc.embed_text(cfg, query, timeout=timeout, auto_start=False, kind="query")

@@ -211,13 +211,14 @@ class TestLargeTurnGap:
         # Build a window of _LARGE_TURN_GAP turns with drifting content
         injection = _turn("user", "implement the database migration handler for postgres", 0)
         turns = [injection]
-        for i in range(1, _LARGE_TURN_GAP + 2):
-            # Content drifts away completely from injection
-            turns.append(_turn(
+        turns.extend(
+            _turn(
                 "assistant" if i % 2 else "user",
                 f"completely random xyz purple elephant {i} circus performance tonight",
                 i,
-            ))
+            )
+            for i in range(1, _LARGE_TURN_GAP + 2)
+        )
 
         window = compute_event_window(turns, 0)
         # Window should terminate before reaching all turns due to low overlap
@@ -226,12 +227,14 @@ class TestLargeTurnGap:
     def test_window_continues_if_content_stays_relevant(self):
         injection = _turn("user", "implement the database migration handler for postgres", 0)
         turns = [injection]
-        for i in range(1, _LARGE_TURN_GAP + 2):
-            turns.append(_turn(
+        turns.extend(
+            _turn(
                 "assistant" if i % 2 else "user",
                 "continuing work on the database migration handler for postgres",
                 i,
-            ))
+            )
+            for i in range(1, _LARGE_TURN_GAP + 2)
+        )
 
         window = compute_event_window(turns, 0)
         assert len(window) == len(turns)

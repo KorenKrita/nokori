@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import copy
 import difflib
 import json
@@ -326,10 +327,8 @@ def _write_json_file(path: Path, data: dict) -> None:
         tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         os.replace(tmp, path)
     except OSError as e:
-        try:
+        with contextlib.suppress(OSError):
             tmp.unlink(missing_ok=True)
-        except OSError:
-            pass
         raise ValueError(f"cannot write {path}: {e}") from e
 
 

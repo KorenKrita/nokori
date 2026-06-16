@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from nokori.config import Config
 from nokori.db import open_db
@@ -11,10 +11,10 @@ def test_injection_cleanup_deletes_old_rows(monkeypatch, tmp_path):
     cfg = Config.from_env()
     db = open_db(cfg.db_path)
     try:
-        old = (datetime.now(timezone.utc) - timedelta(days=40)).isoformat(
+        old = (datetime.now(UTC) - timedelta(days=40)).isoformat(
             timespec="seconds"
         ).replace("+00:00", "Z")
-        new = datetime.now(timezone.utc).isoformat(timespec="seconds").replace(
+        new = datetime.now(UTC).isoformat(timespec="seconds").replace(
             "+00:00", "Z"
         )
         with db.transaction() as tx:

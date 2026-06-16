@@ -179,7 +179,7 @@ def _run_pipeline_staged(
             )
             log.info("checkpoint resume: stage=%s start_idx=%d", checkpoint_stage, start_idx)
 
-    for i, (name, stage_fn, should_checkpoint) in enumerate(
+    for _i, (name, stage_fn, should_checkpoint) in enumerate(
         STAGE_CHAIN[start_idx:], start=start_idx
     ):
         t0 = time.monotonic()

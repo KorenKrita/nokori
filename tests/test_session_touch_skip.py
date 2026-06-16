@@ -56,9 +56,11 @@ def test_touch_writes_after_interval_elapsed(cfg):
     os.utime(p, (known_mtime, known_mtime))
     content_before = p.read_text(encoding="utf-8")
 
-    with patch("nokori.utils.sessions.time.time", return_value=known_mtime + _TOUCH_INTERVAL_SECONDS + 1):
-        with patch("nokori.utils.sessions.now_iso", return_value="2099-01-01 00:00:00"):
-            sessions.touch(cfg, "sess-3")
+    with (
+        patch("nokori.utils.sessions.time.time", return_value=known_mtime + _TOUCH_INTERVAL_SECONDS + 1),
+        patch("nokori.utils.sessions.now_iso", return_value="2099-01-01 00:00:00"),
+    ):
+        sessions.touch(cfg, "sess-3")
 
     content_after = p.read_text(encoding="utf-8")
     assert content_after != content_before
@@ -74,9 +76,11 @@ def test_touch_writes_at_exact_boundary(cfg):
     os.utime(p, (known_mtime, known_mtime))
     content_before = p.read_text(encoding="utf-8")
 
-    with patch("nokori.utils.sessions.time.time", return_value=known_mtime + _TOUCH_INTERVAL_SECONDS):
-        with patch("nokori.utils.sessions.now_iso", return_value="2099-01-01 00:00:00"):
-            sessions.touch(cfg, "sess-boundary")
+    with (
+        patch("nokori.utils.sessions.time.time", return_value=known_mtime + _TOUCH_INTERVAL_SECONDS),
+        patch("nokori.utils.sessions.now_iso", return_value="2099-01-01 00:00:00"),
+    ):
+        sessions.touch(cfg, "sess-boundary")
 
     content_after = p.read_text(encoding="utf-8")
     assert content_after != content_before

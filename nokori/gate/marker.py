@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 from dataclasses import asdict, dataclass
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 
 from ..config import Config
@@ -15,7 +16,7 @@ from ..utils.time import local_now, now_iso, parse_iso
 log = get_logger("nokori.gate.marker")
 
 
-class MarkerState(str, Enum):
+class MarkerState(StrEnum):
     consumed = "consumed"  # marker matched, tool blocked
     expired = "expired"  # TTL exceeded at check time
     ineligible = "ineligible"  # all rules failed eligibility/evidence/exclusion checks
@@ -81,10 +82,8 @@ def _load_marker_file(path: Path, session_id: str) -> Marker | None:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as e:
         log.warning("malformed marker at %s: %s", path, e)
-        try:
+        with contextlib.suppress(OSError):
             path.unlink()
-        except OSError:
-            pass
         return None
     rules: list[MarkerRule] = []
     for r in data.get("rules", []):
@@ -108,10 +107,8 @@ def prune_stale_markers(cfg: Config, session_id: str, current_ph: str) -> None:
     if mdir.is_dir():
         for path in mdir.glob("*.json"):
             if path.stem != current_ph:
-                try:
+                with contextlib.suppress(OSError):
                     path.unlink()
-                except OSError:
-                    pass
 
 
 def read(
@@ -193,10 +190,8 @@ def strip_short_id_from_all_markers(cfg: Config, short_id: str) -> int:
                 continue
             touched += 1
             if not kept:
-                try:
+                with contextlib.suppress(OSError):
                     path.unlink()
-                except OSError:
-                    pass
                 continue
             payload = {
                 "session_id": marker.session_id,
@@ -214,14 +209,10 @@ def delete_session(cfg: Config, session_id: str) -> None:
     if not mdir.is_dir():
         return
     for path in mdir.glob("*.json"):
-        try:
+        with contextlib.suppress(OSError):
             path.unlink()
-        except OSError:
-            pass
-    try:
+    with contextlib.suppress(OSError):
         mdir.rmdir()
-    except OSError:
-        pass
 
 
 def read_latest_marker(cfg: Config, session_id: str) -> Marker | None:
@@ -247,7 +238,7 @@ class PromptHashResolver:
         self._session_id = session_id
         self._db = db
 
-    def resolve(self, payload: dict, on_disk_marker: "Marker | None") -> tuple[str | None, str]:
+    def resolve(self, payload: dict, on_disk_marker: Marker | None) -> tuple[str | None, str]:
         """Returns (prompt_hash, source_layer).
 
         source_layer: "payload" | "disk_marker" | "fire_events" | "none"

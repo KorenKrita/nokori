@@ -4,7 +4,7 @@ import errno
 import os
 import sys
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 
 from ..config import Config
 from ..utils.logging import get_logger
@@ -32,17 +32,13 @@ def _unlock(fd: int) -> None:
     if sys.platform == "win32":
         import msvcrt
 
-        try:
+        with suppress(OSError):
             msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
-        except OSError:
-            pass
     else:
         import fcntl
 
-        try:
+        with suppress(OSError):
             fcntl.flock(fd, fcntl.LOCK_UN)
-        except OSError:
-            pass
 
 
 def is_locked(cfg: Config) -> bool:
@@ -84,8 +80,6 @@ def acquire(cfg: Config) -> Iterator[bool]:
         yield True
     finally:
         if acquired:
-            try:
+            with suppress(OSError):
                 _unlock(fd)
-            except OSError:
-                pass
         os.close(fd)

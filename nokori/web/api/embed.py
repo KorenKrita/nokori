@@ -56,9 +56,9 @@ def embed_start() -> dict:
     if not local_model_cached(cfg):
         try:
             prefetch_local_model(cfg)
-        except Exception:
+        except Exception as exc:
             log.exception("model download failed")
-            raise HTTPException(500, detail="model download failed")
+            raise HTTPException(500, detail="model download failed") from exc
 
     from nokori.search.embed_ipc import kickstart_server
 
