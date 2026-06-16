@@ -65,7 +65,7 @@ line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I"]
-ignore = ["E501", "F401"]
+ignore = ["E501"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["nokori"]

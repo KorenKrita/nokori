@@ -313,7 +313,6 @@ def record_lineage(
     reason: str,
 ) -> None:
     """Insert a record into rule_lineage table."""
-    from datetime import datetime
 
     from nokori.utils.time import now_iso
 

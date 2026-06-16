@@ -24,6 +24,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from nokori.cold._constants import PIPELINE_VERSION
 from nokori.cold.jobs import (
     CIRCUIT_BREAKER_SAMPLE_SIZE,
     SCHEMA_PARSE_FAILURE_CONSECUTIVE_MAX,
@@ -35,11 +36,8 @@ from nokori.cold.jobs import (
     mark_job_complete,
     mark_job_failed,
 )
-from nokori.cold.pipeline import (
-    PIPELINE_VERSION,
-    _run_admission_judge,
-    run_cold_pipeline,
-)
+from nokori.cold.pipeline import run_cold_pipeline
+from nokori.cold.qualify import _run_admission_judge
 from nokori.db import SCHEMA_VERSION, Db, open_db
 from nokori.policy import COLD_FAST_LANE, RUNTIME_POLICY_VERSION
 

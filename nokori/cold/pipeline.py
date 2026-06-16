@@ -17,31 +17,19 @@ from __future__ import annotations
 import hashlib
 import json
 import time
-import uuid
 from dataclasses import replace
-from datetime import datetime, timezone
 from typing import Any
 
-from ..archive.fingerprints import check_fingerprint_block
 from ..db import Db, dumps_json
 from ..errors import LlmError
-from ..eval.synthetic import SyntheticEvalResult, run_synthetic_eval
 from ..events.observability import write_error, write_event
-from ..matcher.compiler import CompilationError, CompiledMatcher, compile_rule
-from ..merge.policy import (
-    MergeDecision,
-    record_lineage,
-    validate_merge_transaction,
-)
 from ..policy import (
-    RUNTIME_POLICY_VERSION,
-    ActivationOrigin,
     SourceOrigin,
 )
 from ..search.idf_stats import IdfPoolStats, build_idf_stats
 from ..utils.logging import get_logger
 from ..utils.time import now_iso
-from ._constants import _MAX_SPLIT_DEPTH, DESTRUCTIVE_MERGE_OPS, PIPELINE_VERSION
+from ._constants import _MAX_SPLIT_DEPTH
 from ._llm_call import (
     CircuitBreakerOpenError,
     call_llm_role as _call_llm_role,
@@ -49,32 +37,8 @@ from ._llm_call import (
     role_max_tokens as _role_max_tokens,
     role_timeout as _role_timeout,
 )
-from .integrate import (
-    _apply_merge_side_effects,
-    _apply_non_destructive_merge,
-    _build_trigger_data,
-    _get_existing_rules_for_merge,
-    _get_rule_data_for_fingerprint,
-    _operation_to_relation_shape,
-    _run_merge_planner,
-    insert_rule_from_pipeline,
-)
-from .qualify import (
-    _candidate_to_rule_data,
-    _draft_concept_groups,
-    _draft_concepts,
-    _draft_excluded_contexts,
-    _draft_variants,
-    _enforce_admission_policy,
-    _ensure_rule_data_variants,
-    _run_admission_judge,
-    _run_final_judge,
-    _run_rewriter,
-)
 from .roles import (
-    PROMPT_VERSIONS,
     resolve_model_id,
-    validate_role_output,
 )
 from .stages import (
     CandidateContext,
@@ -88,10 +52,6 @@ from .stages import (
     run_insert_or_merge,
     run_merge_planner,
     run_synthetic_eval as run_synthetic_eval_stage,
-)
-from .verify import (
-    _check_cold_fast_lane,
-    _generate_eval_cases,
 )
 
 log = get_logger("nokori.cold.pipeline")

@@ -5,7 +5,7 @@ import pytest
 from nokori.config import Config
 from nokori.db import open_db
 from nokori.models import Rule
-from nokori.search.engine import RetrievalEngine, RetrievalResult
+from nokori.search.engine import RetrievalEngine
 
 
 def _make_rule(

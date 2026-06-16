@@ -6,7 +6,7 @@ to add the corresponding schema entry (or vice versa).
 import dataclasses
 
 from nokori.config import Config
-from nokori.config_schema import FIELD_BY_ID, FIELDS
+from nokori.config_schema import FIELDS
 
 # Config fields that are computed/internal and intentionally have no
 # direct schema entry. Each must have a comment justifying exclusion.

@@ -4,7 +4,7 @@ import pytest
 
 from nokori.config import Config
 from nokori.db import open_db
-from nokori.models import Rule, ScoredResult
+from nokori.models import Rule
 from nokori.search.scorer import SearchScorer
 
 

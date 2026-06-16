@@ -12,7 +12,6 @@ from nokori.config import Config
 from nokori.extract.fork import (
     _FORK_TASK_PREAMBLE,
     _build_env,
-    _claude_cli_available,
     _valid_session_id,
     fork_extract,
 )

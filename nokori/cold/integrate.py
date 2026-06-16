@@ -5,18 +5,15 @@ from __future__ import annotations
 import json
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from typing import Any
 
 from ..db import SCHEMA_VERSION, Db, dumps_json
 from ..eval.synthetic import SyntheticEvalResult
 from ..matcher.compiler import CompilationError, CompiledMatcher, compile_rule
 from ..merge.policy import (
-    MergeDecision,
     apply_merge_policy,
     find_merge_neighbors,
     record_lineage,
-    validate_merge_transaction,
 )
 from ..policy import RUNTIME_POLICY_VERSION, ActivationOrigin, SourceOrigin
 from ..utils.logging import get_logger

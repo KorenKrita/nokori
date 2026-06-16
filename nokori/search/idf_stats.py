@@ -11,7 +11,6 @@ import math
 from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import datetime
 
 from ..db import Db, loads_json
 from ..models import Rule

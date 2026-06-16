@@ -7,7 +7,7 @@ import pytest
 from nokori.config import Config
 from nokori.db import open_db
 from nokori.hooks import session_start
-from nokori.hooks.session_start import COLD_EVAL_INTERVAL_DAYS, _maybe_spawn_cold_eval
+from nokori.hooks.session_start import _maybe_spawn_cold_eval
 from nokori.lifecycle.maintenance import cold_eval_due, mark_cold_eval_run
 
 

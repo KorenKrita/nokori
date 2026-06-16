@@ -453,7 +453,7 @@ def run_insert_or_merge(ctx: CandidateContext, db: Db, llm: Any) -> ColdPipeline
     Always returns ColdPipelineResult (terminal stage).
     """
     from ..merge.policy import MergeDecision, record_lineage, validate_merge_transaction
-    from ..policy import RUNTIME_POLICY_VERSION, ActivationOrigin, MergeOperation
+    from ..policy import ActivationOrigin, MergeOperation
     from ._constants import DESTRUCTIVE_MERGE_OPS
     from .integrate import (
         _apply_merge_side_effects,

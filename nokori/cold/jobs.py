@@ -8,7 +8,7 @@ input_hash for deduplication and caching.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 
 from nokori.db import Db
 from nokori.utils.time import iso_of as _iso_of, local_now, now_iso as _shared_now_iso, parse_iso

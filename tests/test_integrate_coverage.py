@@ -16,7 +16,6 @@ from nokori.cold.integrate import (
     _apply_non_destructive_merge,
     _get_rule_data_for_fingerprint,
     _run_merge_planner,
-    insert_rule_from_pipeline,
 )
 from nokori.db import SCHEMA_VERSION, Db, open_db
 from nokori.policy import RUNTIME_POLICY_VERSION
