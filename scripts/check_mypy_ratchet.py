@@ -10,25 +10,7 @@ import sys
 import tomllib
 from pathlib import Path
 
-KNOWN_LOOSE = {
-    "nokori.runtime.*",
-    "nokori.gate.*",
-    "nokori.cold.*",
-    "nokori.web.*",
-    "nokori.search.*",
-    "nokori.hooks.*",
-    "nokori.llm.*",
-    "nokori.events.*",
-    "nokori.lifecycle.*",
-    "nokori.posthoc.*",
-    "nokori.extract.*",
-    "nokori.commands.*",
-    "nokori.archive.*",
-    "nokori.merge.*",
-    "nokori.config",
-    "nokori.config_editor",
-    "nokori.utils.*",
-}
+KNOWN_LOOSE: set[str] = set()
 
 
 def main() -> int:
