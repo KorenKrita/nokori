@@ -505,7 +505,7 @@ def validate_role_output(role: str, raw_json_str: str) -> dict[str, Any]:
     return data
 
 
-def _pop_first(data: dict, *keys, default=None):
+def _pop_first(data: dict, *keys: str, default: Any = None) -> Any:
     """Pop and return the first matching key from data."""
     for k in keys:
         if k in data:
@@ -627,7 +627,8 @@ def _normalize_role_output(role: str, data: dict[str, Any]) -> dict[str, Any]:
             elif isinstance(st, list):
                 # LLM returned multiple dicts: merge them
                 if st and all(isinstance(item, dict) for item in st):
-                    en_merged, zh_merged = [], []
+                    en_merged: list[Any] = []
+                    zh_merged: list[Any] = []
                     for item in st:
                         en_val = item.get("en", [])
                         zh_val = item.get("zh", [])

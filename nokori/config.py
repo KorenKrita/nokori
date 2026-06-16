@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import tomllib
 from dataclasses import dataclass
@@ -56,7 +57,7 @@ _TOML_TO_ENV = {
 }
 
 
-def _get_nested(doc: dict, path: tuple[str, ...]):
+def _get_nested(doc: dict, path: tuple[str, ...]) -> object:
     """Traverse nested dict by key path. Returns None if any key is missing."""
     cur = doc
     for key in path:
@@ -256,9 +257,7 @@ _GATE_MATCHER_MAX_LEN = 512
 _LOCALHOST_HOSTS = frozenset(("localhost", "127.0.0.1", "::1"))
 
 
-def _config_log():
-    import logging
-
+def _config_log() -> logging.Logger:
     return logging.getLogger("nokori.config")
 
 

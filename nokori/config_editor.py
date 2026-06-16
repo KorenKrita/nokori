@@ -241,8 +241,8 @@ def _field_to_api(field: FieldDef, locale: Locale) -> dict[str, Any]:
         "read_only": field.read_only,
         "exclusive_group": field.exclusive_group,
         "exclusive_variant": field.exclusive_variant,
-        "label": field.label.get(locale) or field.label.get("en") or field.id,
-        "description": field.description.get(locale) or field.description.get("en") or "",
+        "label": (field.label or {}).get(locale) or (field.label or {}).get("en") or field.id,
+        "description": (field.description or {}).get(locale) or (field.description or {}).get("en") or "",
     }
 
 
@@ -455,7 +455,7 @@ def _coerce_field(field: FieldDef, raw: Any) -> Any:
 def _values_equal(field: FieldDef, a: Any, b: Any) -> bool:
     if field.field_type in ("string", "secret", "enum"):
         return str(a or "").strip() == str(b or "").strip()
-    return a == b
+    return bool(a == b)
 
 
 def save_editor(

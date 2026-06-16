@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from ..config import Config
+from ..db import Db
 from ..extract.jobs import write_job as write_extract_job
 from ..gate import prompt_ack
 from ..posthoc import enqueue_posthoc_for_session
@@ -141,7 +142,7 @@ def _extract_session_turns(payload: dict) -> list[dict]:
 
 
 def _populate_transcript_windows(
-    db, session_id: str, session_turns: list[dict], cfg: Config | None = None
+    db: Db, session_id: str, session_turns: list[dict], cfg: Config | None = None
 ) -> None:
     """Store bounded transcript window content for each pending posthoc job.
 
@@ -229,9 +230,9 @@ def _try_fork_extract(
 
     cfg.ensure_dirs()
     err_log = cfg.logs_dir / "fork-extract.log"
-    err_fh = subprocess.DEVNULL
+    err_file = None
     try:
-        err_fh = open(err_log, "a", encoding="utf-8")
+        err_file = open(err_log, "a", encoding="utf-8")
     except OSError:
         pass
 
@@ -240,7 +241,7 @@ def _try_fork_extract(
             cmd,
             env=env,
             stdout=subprocess.DEVNULL,
-            stderr=err_fh,
+            stderr=err_file if err_file is not None else subprocess.DEVNULL,
             start_new_session=True,
         )
         log.info("fork extract spawned for session=%s", session_id)
@@ -249,9 +250,9 @@ def _try_fork_extract(
         log.warning("fork extract spawn failed: %s", e)
         return False
     finally:
-        if err_fh is not subprocess.DEVNULL:
+        if err_file is not None:
             try:
-                err_fh.close()
+                err_file.close()
             except OSError:
                 pass
 
@@ -277,9 +278,9 @@ def _spawn_async_extract(cfg: Config) -> None:
     env["NOKORI_DATA_DIR"] = str(cfg.data_dir)
     cfg.ensure_dirs()
     err_log = cfg.logs_dir / "async-extract.log"
-    err_fh = subprocess.DEVNULL
+    err_file = None
     try:
-        err_fh = open(err_log, "a", encoding="utf-8")
+        err_file = open(err_log, "a", encoding="utf-8")
     except OSError as e:
         log.warning("async extract log open failed: %s", e)
     try:
@@ -287,14 +288,14 @@ def _spawn_async_extract(cfg: Config) -> None:
             [sys.executable, "-m", "nokori", "extract"],
             env=env,
             stdout=subprocess.DEVNULL,
-            stderr=err_fh,
+            stderr=err_file if err_file is not None else subprocess.DEVNULL,
             start_new_session=True,
         )
     except Exception as e:
         log.warning("async extract spawn failed: %s", e)
     finally:
-        if err_fh is not subprocess.DEVNULL:
+        if err_file is not None:
             try:
-                err_fh.close()
+                err_file.close()
             except OSError:
                 pass

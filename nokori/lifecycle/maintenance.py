@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from typing import Any
 
 from ..db import Db, _delete_rule_cascade_tx
 from ..events.observability import write_event
@@ -171,7 +172,7 @@ def mark_cold_eval_run(db: Db) -> None:
     _set_last_run(db, "cold_eval_spawn")
 
 
-def run_maintenance(db: Db, cfg=None) -> dict:
+def run_maintenance(db: Db, cfg: Any = None) -> dict:
     """Run all due maintenance tasks, delegating transitions to lifecycle.transitions."""
     from .transitions import run_all_pending_transitions
 
@@ -186,7 +187,7 @@ def run_maintenance(db: Db, cfg=None) -> dict:
     return run_due_jobs(db, cfg, transition_results)
 
 
-def run_session_file_cleanup(cfg) -> int:
+def run_session_file_cleanup(cfg: Any) -> int:
     from ..utils import sessions
 
     return sessions.prune_ended_session_files(cfg)
@@ -219,7 +220,7 @@ def run_observability_cleanup(db: Db, *, force: bool = False) -> dict:
     return {"hook_events_deleted": hook_deleted, "error_events_deleted": error_deleted}
 
 
-def run_due_jobs(db: Db, cfg=None, transition_results=None) -> dict:
+def run_due_jobs(db: Db, cfg: Any = None, transition_results: list | None = None) -> dict:
     session_cleanup = 0
     coalesce_cleanup = 0
     prompt_ack_cleanup = 0

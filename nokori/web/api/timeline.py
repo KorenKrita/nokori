@@ -4,7 +4,7 @@ import json
 
 from fastapi import APIRouter, HTTPException, Query
 
-from nokori.db import open_db
+from nokori.db import Db, open_db
 from nokori.events.observability import query_events, query_events_latest
 from nokori.web.deps import get_config
 
@@ -18,7 +18,7 @@ def get_timeline(
     source: str | None = Query(None),
     latest: bool = Query(False),
     limit: int = Query(50, ge=1, le=200),
-):
+) -> dict:
     if latest and after_id is not None:
         raise HTTPException(400, detail="Cannot use 'latest' and 'after_id' together")
     cfg = get_config()
@@ -61,7 +61,7 @@ def get_timeline(
         db.close()
 
 
-def _find_related_pipeline_events(db, session_id: str, limit: int) -> list[dict]:
+def _find_related_pipeline_events(db: Db, session_id: str, limit: int) -> list[dict]:
     """Find cold_pipeline/cli_extract events related to a session.
 
     Strategy: find the session's time range, then get pipeline events
@@ -88,7 +88,7 @@ def _find_related_pipeline_events(db, session_id: str, limit: int) -> list[dict]
 
 
 @router.get("/timeline/sessions")
-def get_timeline_sessions(limit: int = Query(50, ge=1, le=200)):
+def get_timeline_sessions(limit: int = Query(50, ge=1, le=200)) -> dict:
     cfg = get_config()
     db = open_db(cfg.db_path)
     try:

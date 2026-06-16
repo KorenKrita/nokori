@@ -168,10 +168,10 @@ def run(_args: argparse.Namespace, cfg: Config) -> int:
     active = sessions.list_active_sessions(cfg, records=session_records)
     print(f"sessions.open     {len(open_sess)} (no SessionEnd)")
     print(f"sessions.active   {len(active)} (open + idle window)")
-    for row in active[:5]:
+    for sess in active[:5]:
         print(
-            f"  {row.get('session_id', '?')[:24]}  "
-            f"project={row.get('project_id') or '-'}  "
-            f"last={row.get('last_activity', '-')}"
+            f"  {sess.get('session_id', '?')[:24]}  "
+            f"project={sess.get('project_id') or '-'}  "
+            f"last={sess.get('last_activity', '-')}"
         )
     return 0

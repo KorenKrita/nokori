@@ -77,7 +77,7 @@ def _pair_tools_and_results(sections: list[str]) -> list:
     paired: list[tuple[str, str, bool]] = []
     i = 0
 
-    def flush():
+    def flush() -> None:
         nonlocal pending_tools, paired
         for tool_line in pending_tools:
             paired.append((tool_line, "[no result]", False))

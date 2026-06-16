@@ -37,7 +37,7 @@ def _fire_event_to_out(row: dict) -> dict:
             features_data = (
                 json.loads(raw_features) if isinstance(raw_features, str) else raw_features
             )
-            decision_features = DecisionFeaturesOut(**features_data).model_dump()
+            decision_features = DecisionFeaturesOut(**features_data)
         except (json.JSONDecodeError, TypeError, ValueError):
             decision_features = None
 
@@ -77,7 +77,7 @@ def _fire_event_to_out(row: dict) -> dict:
 def rule_fire_events(
     short_id: str,
     limit: int = Query(50, ge=1, le=200),
-):
+) -> dict:
     """Return fire event history for a rule (most recent first)."""
     cfg = get_config()
     db = open_db(cfg.db_path)
@@ -100,7 +100,7 @@ def rule_fire_events(
 def rule_shadow_events(
     short_id: str,
     limit: int = Query(50, ge=1, le=200),
-):
+) -> dict:
     """Return shadow event history for a rule (most recent first)."""
     cfg = get_config()
     db = open_db(cfg.db_path)
@@ -117,18 +117,19 @@ def rule_shadow_events(
 
     events = []
     for row in rows:
+        d = dict(row)
         events.append(
             ShadowEventOut(
-                id=row["id"],
-                rule_id=row["rule_id"],
-                session_id=row["session_id"],
-                shadow_rule_version=row.get("shadow_rule_version"),
-                prompt_hash=row.get("prompt_hash"),
-                shadow_label=row.get("shadow_label"),
-                shadow_type=row.get("shadow_type"),
-                context_fingerprint=row.get("context_fingerprint"),
-                status_at_match=row.get("status_at_match"),
-                created_at=row["created_at"],
+                id=d["id"],
+                rule_id=d["rule_id"],
+                session_id=d["session_id"],
+                shadow_rule_version=d.get("shadow_rule_version"),
+                prompt_hash=d.get("prompt_hash"),
+                shadow_label=d.get("shadow_label"),
+                shadow_type=d.get("shadow_type"),
+                context_fingerprint=d.get("context_fingerprint"),
+                status_at_match=d.get("status_at_match"),
+                created_at=d["created_at"],
             ).model_dump()
         )
     return {"data": events}
@@ -143,7 +144,7 @@ def rule_shadow_events(
 def rule_posthoc_summary(
     short_id: str,
     window_days: int = Query(30, ge=1, le=365),
-):
+) -> dict:
     """Return posthoc evaluation summary for a rule within a time window."""
     cfg = get_config()
     db = open_db(cfg.db_path)
@@ -176,7 +177,7 @@ def rule_posthoc_summary(
 
 
 @router.get("/lifecycle/rules/{short_id}/synthetic-eval")
-def rule_synthetic_eval(short_id: str):
+def rule_synthetic_eval(short_id: str) -> dict:
     """Return latest synthetic eval result summary for a rule."""
     cfg = get_config()
     db = open_db(cfg.db_path)
@@ -194,9 +195,10 @@ def rule_synthetic_eval(short_id: str):
     if row is None:
         return {"data": None}
 
+    d = dict(row)
     # Parse results to compute summary counts
     eval_results = []
-    raw_results = row.get("eval_results")
+    raw_results = d.get("eval_results")
     if raw_results:
         try:
             eval_results = json.loads(raw_results) if isinstance(raw_results, str) else raw_results
@@ -208,13 +210,13 @@ def rule_synthetic_eval(short_id: str):
     negative_results = [r for r in eval_results if r.get("case_type") == "negative"]
 
     summary = SyntheticEvalSummary(
-        rule_id=row["rule_id"],
-        rule_version=row["rule_version"] or 0,
-        passed=bool(row["passed"]),
-        runtime_policy_version=row.get("runtime_policy_version"),
-        tokenizer_version=row.get("tokenizer_version"),
-        matcher_compiler_version=row.get("matcher_compiler_version"),
-        benchmark_version=row.get("benchmark_version"),
+        rule_id=d["rule_id"],
+        rule_version=d["rule_version"] or 0,
+        passed=bool(d["passed"]),
+        runtime_policy_version=d.get("runtime_policy_version"),
+        tokenizer_version=d.get("tokenizer_version"),
+        matcher_compiler_version=d.get("matcher_compiler_version"),
+        benchmark_version=d.get("benchmark_version"),
         total_cases=len(eval_results),
         positive_passed=sum(1 for r in positive_results if r.get("case_passed")),
         positive_total=len(positive_results),
@@ -222,7 +224,7 @@ def rule_synthetic_eval(short_id: str):
         near_miss_total=len(near_miss_results),
         negative_passed=sum(1 for r in negative_results if r.get("case_passed")),
         negative_total=len(negative_results),
-        created_at=row.get("created_at"),
+        created_at=d.get("created_at"),
     )
     return {"data": summary.model_dump()}
 
@@ -236,7 +238,7 @@ def rule_synthetic_eval(short_id: str):
 def rule_transitions(
     short_id: str,
     limit: int = Query(50, ge=1, le=200),
-):
+) -> dict:
     """Return transition event history for a rule (if tracked in DB)."""
     cfg = get_config()
     db = open_db(cfg.db_path)
@@ -268,7 +270,7 @@ def rule_transitions(
 
 
 @router.get("/lifecycle/rules/{short_id}/barriers")
-def get_promotion_barriers(short_id: str):
+def get_promotion_barriers(short_id: str) -> dict:
     """Return per-criterion promotion barrier data for a rule."""
     cfg = get_config()
     db = open_db(cfg.db_path)
@@ -290,7 +292,7 @@ def get_promotion_barriers(short_id: str):
 
 
 @router.get("/lifecycle/promotion")
-def promotion_progress():
+def promotion_progress() -> dict:
     """Shadow promotion progress overview (read-only)."""
     cfg = get_config()
     if not cfg.promotion_enabled:
@@ -332,7 +334,7 @@ def promotion_progress():
 
 
 @router.get("/lifecycle/maintenance")
-def maintenance_status():
+def maintenance_status() -> dict:
     cfg = get_config()
     db = open_db(cfg.db_path)
     try:
@@ -348,7 +350,7 @@ def maintenance_status():
 
 
 @router.get("/lifecycle/global-eligible")
-def global_eligible_rules():
+def global_eligible_rules() -> dict:
     """Return trusted project-scoped rules approaching cross-project promotion threshold."""
     cfg = get_config()
     db = open_db(cfg.db_path)

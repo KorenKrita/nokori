@@ -17,7 +17,7 @@ router = APIRouter()
 
 
 @router.get("/config")
-def show_config():
+def show_config() -> dict:
     cfg = get_config()
     return {
         "data": {
@@ -44,7 +44,7 @@ def show_config():
 
 
 @router.get("/config/editor")
-def config_editor_get(locale: str | None = Query(None)):
+def config_editor_get(locale: str | None = Query(None)) -> dict:
     cfg = get_config()
     return {"data": get_editor_state(cfg, locale)}
 
@@ -56,7 +56,7 @@ class ConfigEditorSave(BaseModel):
 
 
 @router.put("/config/editor", dependencies=[Depends(require_write_auth)])
-def config_editor_put(body: ConfigEditorSave):
+def config_editor_put(body: ConfigEditorSave) -> dict:
     cfg = get_config()
     try:
         result = save_editor(

@@ -16,7 +16,7 @@ def get_monitor_overview(
     session_id: str | None = Query(None),
     since: str | None = Query(None),
     until: str | None = Query(None),
-):
+) -> dict:
     cfg = get_config()
     db = open_db(cfg.db_path)
     try:
@@ -89,7 +89,7 @@ def get_monitor_errors(
     session_id: str | None = Query(None),
     since: str | None = Query(None),
     until: str | None = Query(None),
-):
+) -> dict:
     cfg = get_config()
     db = open_db(cfg.db_path)
     try:
@@ -106,7 +106,7 @@ def get_error_trend(
     since: str | None = Query(None),
     until: str | None = Query(None),
     session_id: str | None = Query(None),
-):
+) -> dict:
     cfg = get_config()
     db = open_db(cfg.db_path)
     try:

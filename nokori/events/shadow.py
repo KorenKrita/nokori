@@ -5,7 +5,7 @@ import json
 import logging
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from ..db import Db, dumps_json, loads_json
 from ..events.observability import write_event
@@ -193,7 +193,7 @@ def count_shadow_evidence(
 
     # Best single-session's context diversity (for single-session exception)
     best_session_id = (
-        max(per_session_strong, key=per_session_strong.get) if per_session_strong else None
+        max(per_session_strong, key=lambda k: per_session_strong[k]) if per_session_strong else None
     )
     best_single_session_contexts = (
         len(per_session_contexts.get(best_session_id, set())) if best_session_id else 0
@@ -314,7 +314,7 @@ def get_unlabeled_shadow_events(db: Db, limit: int = 20) -> list[dict]:
     return [dict(r) for r in rows]
 
 
-def run_shadow_counterfactual_evaluation(db: Db, llm, *, limit: int = 20) -> dict[str, int]:
+def run_shadow_counterfactual_evaluation(db: Db, llm: Any, *, limit: int = 20) -> dict[str, int]:
     """Evaluate unlabeled shadow events via LLM counterfactual analysis.
 
     For each shadow event, determines whether the rule would have helped

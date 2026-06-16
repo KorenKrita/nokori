@@ -34,7 +34,7 @@ def _now_iso() -> str:
 
 def _retry_backoff_seconds(retries: int) -> int:
     """Exponential backoff capped at 15 minutes."""
-    return min(30 * (2**retries), 900)
+    return int(min(30 * (2**retries), 900))
 
 
 # --- LLM Job Functions ---
@@ -62,7 +62,7 @@ def enqueue_job(
             (role, model_id, prompt_version, input_hash),
         ).fetchone()
         if existing is not None:
-            return existing["id"]
+            return str(existing["id"])
         tx.execute(
             "INSERT INTO llm_jobs (id, role, model_id, prompt_version, input_hash, "
             "status, retries, created_at, updated_at) "
@@ -88,7 +88,8 @@ def get_cached_output(
     )
     if row is None:
         return None
-    return row["output_json"]
+    val = row["output_json"]
+    return str(val) if val is not None else None
 
 
 def mark_job_complete(db: Db, job_id: str, output_json: str) -> None:
@@ -242,7 +243,7 @@ def enqueue_transcript_ingest(
             (segment_hash, extractor_prompt_version),
         ).fetchone()
         if existing is not None:
-            return existing["id"]
+            return str(existing["id"])
         tx.execute(
             "INSERT INTO transcript_ingest_jobs "
             "(id, transcript_segment_ref, segment_hash, status, "

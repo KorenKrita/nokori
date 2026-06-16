@@ -78,8 +78,8 @@ def _tokenize_variants(rule: Rule) -> tuple[list[str], list[list[str]]]:
         pieces.extend(toks)
         if toks:
             phrases.append(toks)
-    for v in rule.trigger_variants_zh:
-        toks = tokenize(v)
+    for zh_v in rule.trigger_variants_zh:
+        toks = tokenize(zh_v)
         pieces.extend(toks)
         if toks:
             phrases.append(toks)
@@ -124,7 +124,7 @@ def _index_key(rules_list: list[Rule]) -> frozenset:
     return frozenset(_rule_key(r) for r in rules_list)
 
 
-def _build_index(rules_list: list[Rule]):
+def _build_index(rules_list: list[Rule]) -> tuple[list[_FieldedDoc], Mapping[str, float], float]:
     fielded_docs = [_build_fielded_doc(rule) for rule in rules_list]
     n_docs = len(fielded_docs)
     avgdl = sum(d.doc_len for d in fielded_docs) / max(n_docs, 1)
@@ -137,7 +137,7 @@ def _build_index(rules_list: list[Rule]):
     return fielded_docs, idf, avgdl
 
 
-def _cached_index(rules_list: list[Rule]):
+def _cached_index(rules_list: list[Rule]) -> tuple[list[_FieldedDoc], Mapping[str, float], float]:
     key = _index_key(rules_list)
     if key in _INDEX_CACHE:
         _INDEX_CACHE.move_to_end(key)

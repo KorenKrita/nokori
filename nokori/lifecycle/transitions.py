@@ -7,8 +7,10 @@ CAS-style updates to prevent stale-state races.
 from __future__ import annotations
 
 import json
+import sqlite3
 from dataclasses import dataclass, field
 from datetime import timedelta
+from typing import cast
 
 from ..db import Db
 from ..events.fire import batch_count_distinct_useful_projects, count_distinct_useful_projects
@@ -701,14 +703,14 @@ def _compute_fire_counts(recent_rows: list) -> dict:
     for r in recent_rows:
         label = r["posthoc_label"]
         if label in counts and label != "total_evaluated":
-            counts[label] = int(counts[label]) + 1
+            counts[label] = cast(int, counts[label]) + 1
         rc = r["posthoc_reason_code"]
         if rc:
             reason_counts[rc] = reason_counts.get(rc, 0) + 1
         if label == "observed_useful" and r["session_id"]:
             attribution_weight = r["posthoc_score"]
             if attribution_weight is None or attribution_weight > 0.5:
-                counts["observed_useful_strong"] = int(counts["observed_useful_strong"]) + 1
+                counts["observed_useful_strong"] = cast(int, counts["observed_useful_strong"]) + 1
                 strong_useful_sessions.add(r["session_id"])
 
     counts["reason_counts"] = reason_counts
@@ -728,7 +730,7 @@ def _compute_fire_counts(recent_rows: list) -> dict:
 # ---------------------------------------------------------------------------
 
 
-def _gather_candidate_evidence(db: Db, row, rule_version: int) -> EvidenceSnapshot:
+def _gather_candidate_evidence(db: Db, row: sqlite3.Row | dict, rule_version: int) -> EvidenceSnapshot:
     """Gather all evidence needed for candidate evaluation."""
     rule_id = row["id"]
 
@@ -793,7 +795,7 @@ def _gather_candidate_evidence(db: Db, row, rule_version: int) -> EvidenceSnapsh
     )
 
 
-def _gather_active_evidence(db: Db, row, rule_version: int) -> EvidenceSnapshot:
+def _gather_active_evidence(db: Db, row: sqlite3.Row | dict, rule_version: int) -> EvidenceSnapshot:
     """Gather all evidence needed for active evaluation."""
     rule_id = row["id"]
     fire = _aggregate_fire_evidence(db, rule_id, window_days=RECENT_TIME_WINDOW_DAYS)
@@ -811,7 +813,7 @@ def _gather_active_evidence(db: Db, row, rule_version: int) -> EvidenceSnapshot:
     )
 
 
-def _gather_trusted_evidence(db: Db, row, rule_version: int) -> EvidenceSnapshot:
+def _gather_trusted_evidence(db: Db, row: sqlite3.Row | dict, rule_version: int) -> EvidenceSnapshot:
     """Gather all evidence needed for trusted evaluation."""
     rule_id = row["id"]
     fire = _aggregate_fire_evidence(db, rule_id, window_days=RECENT_TIME_WINDOW_DAYS)
@@ -836,7 +838,7 @@ def _gather_trusted_evidence(db: Db, row, rule_version: int) -> EvidenceSnapshot
     )
 
 
-def _gather_suppressed_evidence(db: Db, row, rule_version: int) -> EvidenceSnapshot:
+def _gather_suppressed_evidence(db: Db, row: sqlite3.Row | dict, rule_version: int) -> EvidenceSnapshot:
     """Gather all evidence needed for suppressed evaluation."""
     rule_id = row["id"]
     suppressed_at_iso = row["suppressed_at"]
@@ -913,7 +915,7 @@ def _aggregate_fire_evidence(db: Db, rule_id: str, window_days: int = 30) -> dic
         (rule_id, cutoff, RECENT_EVENT_WINDOW),
     )
 
-    counts: dict[str, int | float] = {
+    counts: dict[str, int | float | dict[str, int]] = {
         "observed_useful": 0,
         "observed_useful_strong": 0,
         "plausible_useful": 0,
@@ -929,7 +931,7 @@ def _aggregate_fire_evidence(db: Db, rule_id: str, window_days: int = 30) -> dic
     for r in recent_rows:
         label = r["posthoc_label"]
         if label in counts and label != "total_evaluated":
-            counts[label] = int(counts[label]) + 1
+            counts[label] = cast(int, counts[label]) + 1
         rc = r["posthoc_reason_code"]
         if rc:
             reason_counts[rc] = reason_counts.get(rc, 0) + 1
@@ -941,7 +943,7 @@ def _aggregate_fire_evidence(db: Db, rule_id: str, window_days: int = 30) -> dic
             # <= 0.5 = weak/redundant attribution -> excluded from promotion count.
             attribution_weight = r["posthoc_score"]
             if attribution_weight is None or attribution_weight > 0.5:
-                counts["observed_useful_strong"] = int(counts["observed_useful_strong"]) + 1
+                counts["observed_useful_strong"] = cast(int, counts["observed_useful_strong"]) + 1
                 strong_useful_sessions.add(r["session_id"])
 
     counts["reason_counts"] = reason_counts
@@ -997,10 +999,10 @@ def compute_false_positive_rate(events: dict) -> float:
                 + harmful_blocked_valid_action + harmful_distracted
     denominator = total_evaluated (unclear already excluded by query)
     """
-    reason_counts = events.get("reason_counts", {})
+    reason_counts: dict[str, int] = events.get("reason_counts", {})
     fp_events = sum(reason_counts.get(code, 0) for code in FALSE_POSITIVE_REASON_CODES)
 
-    total_evaluated = events.get("total_evaluated", 0)
+    total_evaluated: int = events.get("total_evaluated", 0)
     denominator = total_evaluated
 
     return fp_events / max(1, denominator)

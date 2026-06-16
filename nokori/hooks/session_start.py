@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 
 from ..config import Config
-from ..db import retrieval_pool_count, total_rule_count
+from ..db import Db, retrieval_pool_count, total_rule_count
 from ..lifecycle import hot_cache, maintenance
 from ..lifecycle.maintenance import cold_eval_due, mark_cold_eval_run
 from ..search import embed_ipc, embedding as embedding_search
@@ -19,7 +19,7 @@ log = get_logger("nokori.hooks.session_start")
 COLD_EVAL_INTERVAL_DAYS = 1
 
 
-def _maybe_kickstart_embed(cfg: Config, db) -> str:
+def _maybe_kickstart_embed(cfg: Config, db: Db) -> str:
     """Attempt embed server kickstart. Returns status string for observability."""
     rule_count = retrieval_pool_count(db) if cfg.promotion_enabled else total_rule_count(db)
     if not embedding_search.embedding_active(cfg, rule_count):
@@ -44,7 +44,7 @@ def _maybe_kickstart_embed(cfg: Config, db) -> str:
     return "kickstarted"
 
 
-def _maybe_spawn_cold_eval(db, cfg: Config) -> bool:
+def _maybe_spawn_cold_eval(db: Db, cfg: Config) -> bool:
     """Spawn `nokori maintain` in background if shadow/posthoc eval is due.
 
     Returns True if spawned.
@@ -82,9 +82,9 @@ def _maybe_spawn_cold_eval(db, cfg: Config) -> bool:
 
     cfg.ensure_dirs()
     err_log = cfg.logs_dir / "cold-eval.log"
-    err_fh = subprocess.DEVNULL
+    err_file = None
     try:
-        err_fh = open(err_log, "a", encoding="utf-8")
+        err_file = open(err_log, "a", encoding="utf-8")
     except OSError:
         pass
 
@@ -93,7 +93,7 @@ def _maybe_spawn_cold_eval(db, cfg: Config) -> bool:
             [sys.executable, "-m", "nokori", "maintain"],
             env=env,
             stdout=subprocess.DEVNULL,
-            stderr=err_fh,
+            stderr=err_file if err_file is not None else subprocess.DEVNULL,
             start_new_session=True,
         )
         mark_cold_eval_run(db)
@@ -103,9 +103,9 @@ def _maybe_spawn_cold_eval(db, cfg: Config) -> bool:
         log.warning("cold eval spawn failed: %s", e)
         return False
     finally:
-        if err_fh is not subprocess.DEVNULL:
+        if err_file is not None:
             try:
-                err_fh.close()
+                err_file.close()
             except OSError:
                 pass
 

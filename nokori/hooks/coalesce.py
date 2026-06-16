@@ -10,7 +10,7 @@ from pathlib import Path
 
 from ..config import Config
 from ..gate.marker import prompt_hash
-from ..utils.host import effective_session_id
+from ..utils.host import Host, effective_session_id
 from ..utils.logging import get_logger
 from ..utils.prompt_text import normalize_prompt_for_hash
 from ..utils.time import local_now, now_iso, parse_iso
@@ -113,7 +113,7 @@ def prune_stale_claims(cfg: Config, max_age_hours: int = _DEFAULT_CLAIM_MAX_AGE_
     return removed
 
 
-def duplicate_passthrough(cli_event: str, host) -> dict:
+def duplicate_passthrough(cli_event: str, host: Host) -> dict:
     """Safe empty response when a duplicate hook invocation is suppressed."""
     from ..utils.hook_response import (
         session_start_response,

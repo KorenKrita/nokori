@@ -8,7 +8,7 @@ import urllib.error
 import urllib.request
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from ..config import Config
 from ..db import Db, loads_json
@@ -57,7 +57,7 @@ def _cosine(a: Sequence[float], b: Sequence[float]) -> float:
     nb = sum(y * y for y in b) ** 0.5
     if na == 0 or nb == 0:
         return 0.0
-    return dot / (na * nb)
+    return float(dot / (na * nb))
 
 
 def _cosine_with_norm(a_norm: float, a: Sequence[float], b: Sequence[float]) -> float:
@@ -68,7 +68,7 @@ def _cosine_with_norm(a_norm: float, a: Sequence[float], b: Sequence[float]) -> 
     nb = sum(y * y for y in b) ** 0.5
     if nb == 0:
         return 0.0
-    return dot / (a_norm * nb)
+    return float(dot / (a_norm * nb))
 
 
 def _chunk_text(text: str, chunk_size: int, chunk_count: int) -> list[str]:
@@ -117,7 +117,7 @@ def _rule_text(rule: Rule) -> str:
 
 
 class EmbeddingClient:
-    def __init__(self, cfg: Config, *, http_open=None):
+    def __init__(self, cfg: Config, *, http_open: Any = None):
         self.cfg = cfg
         self._open = http_open or urllib.request.urlopen
 
@@ -144,7 +144,10 @@ class EmbeddingClient:
         headers = {"Content-Type": "application/json"}
         if self.cfg.embed_api_key:
             headers["Authorization"] = f"Bearer {self.cfg.embed_api_key}"
-        url = f"{self.cfg.embed_base_url.rstrip('/')}/embeddings"
+        base_url = self.cfg.embed_base_url
+        if base_url is None:
+            raise EmbeddingError("embed_base_url is not configured")
+        url = f"{base_url.rstrip('/')}/embeddings"
         req = urllib.request.Request(
             url,
             data=json.dumps(payload).encode("utf-8"),
@@ -173,7 +176,10 @@ def store_rule_embedding(db: Db, rule: Rule, client: EmbeddingClient) -> int:
     except EmbeddingError as e:
         log.warning("embed store failed rule=%s err=%s", rule.id, e)
         return 0
-    return _store_impl(db, rule.id, vectors, client.cfg.embed_model)
+    model = client.cfg.embed_model
+    if model is None:
+        return 0
+    return _store_impl(db, rule.id, vectors, model)
 
 
 def _store_impl(db: Db, rule_id: str, vectors: list[list[float]], model_name: str) -> int:
@@ -380,7 +386,7 @@ def _sentence_transformers_available() -> bool:
         return False
 
 
-def _encode_chunks(model, chunks: list[str], *, kind: EmbedKind) -> list[list[float]]:
+def _encode_chunks(model: Any, chunks: list[str], *, kind: EmbedKind) -> list[list[float]]:
     """Encode with Granite R2 retrieval API when available (encode_query / encode_document)."""
     kwargs: dict = {"show_progress_bar": False, "convert_to_numpy": True}
     if kind == "query" and hasattr(model, "encode_query"):
@@ -406,7 +412,7 @@ class LocalEmbeddingClient:
     def available(self) -> bool:
         return _sentence_transformers_available()
 
-    def load_model(self):
+    def load_model(self) -> Any:
         if self._model is not None:
             return self._model
         from sentence_transformers import SentenceTransformer

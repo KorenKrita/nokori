@@ -9,10 +9,12 @@ from __future__ import annotations
 import hashlib
 import math
 from collections import Counter
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 
-from ..db import loads_json
+from ..db import Db, loads_json
+from ..models import Rule
 from ..policy import (
     DYNAMIC_IDF_NORMAL,
     DYNAMIC_IDF_SMALL_POOL,
@@ -184,14 +186,14 @@ _EMPTY_POOL_STATS = IdfPoolStats(
 # ---------------------------------------------------------------------------
 
 
-def compute_eligible_rule_set_hash(rules) -> str:
+def compute_eligible_rule_set_hash(rules: Sequence[Rule]) -> str:
     """Hash of sorted rule IDs in the pool."""
     ids = sorted(r.id for r in rules)
     return hashlib.sha256("|".join(ids).encode()).hexdigest()[:16]
 
 
 def compute_pool_version(
-    rules,
+    rules: Sequence[Rule],
     tokenizer_version: str,
     matcher_compiler_version: str,
     generic_token_policy_version: str,
@@ -210,7 +212,7 @@ def compute_pool_version(
     return hashlib.sha256(composite.encode()).hexdigest()[:16]
 
 
-def _trigger_tokens_for_rule(rule) -> set[str]:
+def _trigger_tokens_for_rule(rule: Rule) -> set[str]:
     """Extract tokens from trigger_canonical + trigger_variants fields only.
 
     Filters out GENERIC_TOKENS to avoid polluting document frequency counts.
@@ -227,8 +229,8 @@ def _trigger_tokens_for_rule(rule) -> set[str]:
     for v in variants:
         text = v.get("text") if isinstance(v, dict) else v
         tokens.update(tokenize(str(text or "")))
-    for v in rule.trigger_variants_zh:
-        text = v.get("text") if isinstance(v, dict) else v
+    for zh_v in rule.trigger_variants_zh:
+        text = zh_v.get("text") if isinstance(zh_v, dict) else zh_v
         tokens.update(tokenize(str(text or "")))
     tokens = {t for t in tokens if t not in GENERIC_TOKENS}
     return tokens
@@ -240,7 +242,7 @@ def _trigger_tokens_for_rule(rule) -> set[str]:
 
 
 def build_idf_stats(
-    rules,
+    rules: Sequence[Rule],
     tokenizer_version: str = TOKENIZER_VERSION,
     matcher_compiler_version: str = "1.0.0",
     concept_compiler_version: str = "1.0.0",
@@ -336,7 +338,7 @@ def compute_trigger_idf_sum(tokens: list[str], idf_stats: IdfPoolStats) -> float
     return total
 
 
-def store_idf_stats(db, idf_stats: IdfPoolStats) -> None:
+def store_idf_stats(db: Db, idf_stats: IdfPoolStats) -> None:
     """Persist a built IDF pool snapshot for event auditability."""
     from ..db import dumps_json
 

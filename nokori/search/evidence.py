@@ -12,7 +12,7 @@ from dataclasses import replace
 from ..db import SCHEMA_VERSION
 from ..matcher.compiler import CompilationError, compile_rule
 from ..matcher.runtime import evaluate_match
-from ..models import Rule, ScoredResult
+from ..models import InjectionLevel, Rule, ScoredResult
 from ..policy import RUNTIME_POLICY_VERSION
 from .applicability import evaluate_applicability, meets_min_evidence
 from .idf_stats import IdfPoolStats, compute_trigger_idf_sum
@@ -25,7 +25,7 @@ def _legacy_pass_result(
     idf_stats: IdfPoolStats,
     embedding_profile_version: str | None,
 ) -> ScoredResult:
-    level = "hot" if result.rule.status == "trusted" else "warm"
+    level: InjectionLevel = "hot" if result.rule.status == "trusted" else "warm"
     # trigger_idf_sum is 0.0 for legacy rules (no IDF computation); intentional —
     # encourages migration to schema_version >= 7 where IDF contributes to ranking.
     ranking_utility = compute_base_utility(

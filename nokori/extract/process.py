@@ -181,6 +181,8 @@ def process_candidates(
     owns_db = db is None
     if owns_db:
         db = open_db(cfg.db_path)
+    if db is None:
+        raise RuntimeError("db must not be None after open_db")
     try:
         if llm is None:
             llm = LLMAdapter(cfg)

@@ -4,8 +4,10 @@ import argparse
 
 import uvicorn
 
+from ..config import Config
 
-def run(args: argparse.Namespace, cfg) -> int:
+
+def run(args: argparse.Namespace, cfg: Config) -> int:
     from .app import create_app
 
     app = create_app(cfg)

@@ -6,6 +6,7 @@ deterministic policy disposes.
 
 from __future__ import annotations
 
+import sqlite3
 from dataclasses import dataclass
 
 from nokori.db import Db
@@ -349,7 +350,7 @@ def find_merge_neighbors(
     """
     from nokori.db import RULE_COLUMNS, loads_json
 
-    def _variant_texts(value) -> set[str]:
+    def _variant_texts(value: object) -> set[str]:
         raw_variants = loads_json(value, []) if isinstance(value, str) else value
         if not isinstance(raw_variants, list):
             return set()
@@ -455,7 +456,7 @@ def find_merge_neighbors(
             _deserialize,
         )
 
-        cfg = Config.load()
+        cfg = Config.from_env()
         if cfg.embed_enabled and cfg.embed_base_url and cfg.embed_model:
             client = EmbeddingClient(cfg)
             query_text = f"{trigger} {action_text}"
@@ -634,7 +635,7 @@ def _new_evidence_improves(existing_rule: dict, new_rule_data: dict) -> bool:
     least one of these dimensions without reducing any other.
     """
 
-    def _len(obj, key: str) -> int:
+    def _len(obj: dict, key: str) -> int:
         val = obj.get(key)
         if isinstance(val, list):
             return len(val)
@@ -743,6 +744,6 @@ def _tokenize(text: str) -> set[str]:
     return {t for t in tokens if len(t) > 1}
 
 
-def _row_to_dict(row) -> dict:
+def _row_to_dict(row: sqlite3.Row) -> dict:
     """Convert a sqlite3.Row to a plain dict."""
     return {key: row[key] for key in row.keys()}

@@ -113,8 +113,9 @@ def _check_embed(cfg: Config, rule_count: int) -> tuple[str, str]:
             payload=payload,
         )
         model = cfg.embed_model or "?"
+        base_url = cfg.embed_base_url or ""
         detail = (
-            f"mode=remote; model={model}; endpoint={cfg.embed_base_url.rstrip('/')}/embeddings; "
+            f"mode=remote; model={model}; endpoint={base_url.rstrip('/')}/embeddings; "
             f"probe={probe_detail}"
         )
         return (probe_status, detail)

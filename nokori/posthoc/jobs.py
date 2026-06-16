@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import uuid
+from typing import Any
 
 from ..db import Db, loads_json
 from ..events.fire import get_fire_events_for_session, update_first_observed_useful
@@ -127,7 +128,7 @@ def mark_posthoc_job_unclear(db: Db, job_id: str) -> None:
     mark_posthoc_job_complete(db, job_id, "unclear", None)
 
 
-def process_pending_posthoc_jobs(db: Db, llm, *, limit: int = 20) -> dict[str, int]:
+def process_pending_posthoc_jobs(db: Db, llm: Any, *, limit: int = 20) -> dict[str, int]:
     """Evaluate pending posthoc jobs, mark done, update scores, trigger transitions."""
     from ..lifecycle.transitions import evaluate_transitions, update_derived_scores
 
@@ -328,7 +329,7 @@ def _load_transcript_window(
         (fire_event_id,),
     )
     if job_row and job_row["redacted_window_json"]:
-        content = job_row["redacted_window_json"]
+        content: str = job_row["redacted_window_json"]
         if content and len(content) > 50:
             return content
 

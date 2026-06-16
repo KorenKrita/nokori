@@ -7,12 +7,13 @@ import os
 import signal
 import socket
 import time
-from typing import Any
+from pathlib import Path
+from typing import Any, cast
 
 from ..config import Config
 from ..utils.logging import get_logger
 from . import embed_ipc
-from .embedding import LocalEmbeddingClient
+from .embedding import EmbedKind, LocalEmbeddingClient
 
 log = get_logger("nokori.search.embedding_server")
 
@@ -50,10 +51,10 @@ def _handle_connection(
                 return False
             elif op == "embed":
                 text = req.get("text") or ""
-                kind = req.get("kind") or "document"
-                if kind not in ("query", "document"):
-                    kind = "document"
-                vectors = client.embed(text, kind=kind)
+                raw_kind = req.get("kind") or "document"
+                if raw_kind not in ("query", "document"):
+                    raw_kind = "document"
+                vectors = client.embed(text, kind=cast(EmbedKind, raw_kind))
                 _reply(conn, {"ok": True, "op": "embed", "vectors": vectors})
             else:
                 _reply(conn, {"ok": False, "error": f"unknown op: {op!r}"})
@@ -65,7 +66,7 @@ def _handle_connection(
     return True
 
 
-def _cleanup(sock: socket.socket, sock_path, cfg: Config) -> None:
+def _cleanup(sock: socket.socket, sock_path: Path, cfg: Config) -> None:
     sock.close()
     embed_ipc._clear_pid(cfg)
     try:
@@ -108,7 +109,7 @@ def run_server(cfg: Config) -> int:
     idle_limit = float(cfg.embed_server_idle_seconds)
     log.info("embed server listening on %s (idle=%ss)", sock_path, int(idle_limit))
 
-    def _terminate(_signum, _frame) -> None:
+    def _terminate(_signum: int, _frame: Any) -> None:
         raise SystemExit(0)
 
     signal.signal(signal.SIGTERM, _terminate)

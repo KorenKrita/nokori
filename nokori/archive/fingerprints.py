@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+import sqlite3
 import uuid
 
 from ..db import Db
@@ -115,7 +116,7 @@ def create_archived_fingerprint_from_data(
                         "WHERE id = ?",
                         (strength, can_be_overridden, now, existing["id"]),
                     )
-                return existing["id"]
+                return str(existing["id"])
     return fp_id
 
 
@@ -184,14 +185,14 @@ def check_fingerprint_block(
 
 
 def _fingerprint_decision(
-    row,
+    row: sqlite3.Row,
     *,
     stronger_evidence: str | None,
     exact_match: bool,
     is_narrower_scope: bool = False,
     synthetic_eval_passed: bool = False,
     admission_judge_cited: bool = False,
-):
+) -> dict | None:
     strength = row["archive_strength"]
 
     # Replacement blocks exact duplicates and weaker replacements only (spec section 11)
@@ -265,7 +266,7 @@ def _fingerprint_decision(
     return None
 
 
-def _find_related_fingerprint(db: Db, trigger_canonical: str, action_instruction: str):
+def _find_related_fingerprint(db: Db, trigger_canonical: str, action_instruction: str) -> sqlite3.Row | None:
     new_tokens = _content_tokens(f"{trigger_canonical} {action_instruction}")
     if not new_tokens:
         return None
@@ -280,7 +281,7 @@ def _find_related_fingerprint(db: Db, trigger_canonical: str, action_instruction
     # Collect all matches that pass their per-strength threshold.
     # Return the strongest match (user > system > replacement).
     _thresholds = {"user": 0.75, "system": 0.75, "replacement": 0.85}
-    candidates: list[tuple[int, float, dict]] = []
+    candidates: list[tuple[int, float, sqlite3.Row]] = []
     for row in rows:
         old_tokens = _content_tokens(f"{row['blocked_trigger_area']} {row['blocked_action_area']}")
         if not old_tokens:
@@ -304,7 +305,7 @@ def _find_related_fingerprint(db: Db, trigger_canonical: str, action_instruction
 def _is_narrower_scope(
     trigger_canonical: str,
     action_instruction: str,
-    fingerprint_row,
+    fingerprint_row: sqlite3.Row,
     *,
     new_domain_tags: list[str] | None = None,
 ) -> bool:

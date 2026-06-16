@@ -9,6 +9,7 @@ from nokori.db import (
     loads_json,
     open_db,
 )
+from nokori.models import Rule
 from nokori.utils.time import now_iso
 from nokori.web.deps import get_config, require_write_auth
 from nokori.web.models import RuleResponse
@@ -17,7 +18,7 @@ router = APIRouter()
 
 
 def _rule_to_response(
-    rule,
+    rule: Rule,
     *,
     fire_count: int = 0,
     fire_last_at: str | None = None,
@@ -31,7 +32,7 @@ def _rule_to_response(
         short_id=rule.short_id,
         schema_version=rule.schema_version,
         rule_version=rule.rule_version,
-        created_by_pipeline_version=rule.created_by_pipeline_version,
+        created_by_pipeline_version=rule.created_by_pipeline_version or "",
         runtime_policy_version=rule.runtime_policy_version or "1.0.0",
         last_rewritten_by_role=rule.last_rewritten_by_role,
         status=rule.status,
@@ -42,7 +43,7 @@ def _rule_to_response(
         required_concept_groups=loads_json(rule.required_concept_groups, []),
         excluded_contexts=loads_json(rule.excluded_contexts, []),
         near_miss_examples=rule.near_miss_examples,
-        trigger_variants=rule.trigger_variants
+        trigger_variants=list(rule.trigger_variants)
         if isinstance(rule.trigger_variants, list)
         else loads_json(rule.trigger_variants, []),
         trigger_variants_zh=rule.trigger_variants_zh
@@ -93,7 +94,7 @@ def list_rules(
     scope: str | None = Query(None),
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=200),
-):
+) -> dict:
     cfg = get_config()
     statuses = tuple(status.split(",")) if status else None
     source_origins = tuple(source_origin.split(",")) if source_origin else None
@@ -136,7 +137,7 @@ def list_rules(
 
 
 @router.get("/rules/{short_id}")
-def show_rule(short_id: str):
+def show_rule(short_id: str) -> dict:
     cfg = get_config()
     db = open_db(cfg.db_path)
     try:
@@ -183,7 +184,7 @@ def show_rule(short_id: str):
 
 
 @router.post("/rules/{short_id}/archive", dependencies=[Depends(require_write_auth)])
-def archive_rule_endpoint(short_id: str):
+def archive_rule_endpoint(short_id: str) -> dict:
     """Archive a rule (user-initiated). No manual promote/trust/suppress allowed."""
     cfg = get_config()
     db = open_db(cfg.db_path)
@@ -195,13 +196,15 @@ def archive_rule_endpoint(short_id: str):
             return {"data": _rule_to_response(rule)}
         archive_rule(db, rule.id, "web_archive", now_iso())
         updated = fetch_rule_by_short_id(db, short_id)
+        if updated is None:
+            raise HTTPException(500, detail="rule disappeared after archive")
         return {"data": _rule_to_response(updated)}
     finally:
         db.close()
 
 
 @router.post("/rules/{short_id}/dismiss", dependencies=[Depends(require_write_auth)])
-def dismiss_rule(short_id: str):
+def dismiss_rule(short_id: str) -> dict:
     """Dismiss a rule (alias for archive with dismiss reason)."""
     cfg = get_config()
     db = open_db(cfg.db_path)
@@ -213,6 +216,8 @@ def dismiss_rule(short_id: str):
             return {"data": _rule_to_response(rule)}
         archive_rule(db, rule.id, "web_dismiss", now_iso())
         updated = fetch_rule_by_short_id(db, short_id)
+        if updated is None:
+            raise HTTPException(500, detail="rule disappeared after dismiss")
         return {"data": _rule_to_response(updated)}
     finally:
         db.close()
@@ -224,7 +229,7 @@ def dismiss_rule(short_id: str):
 
 
 @router.post("/rules/{short_id}/promote")
-def reject_promote(short_id: str):
+def reject_promote(short_id: str) -> dict:
     """Manual promote is not allowed. Lifecycle transitions are autonomous."""
     raise HTTPException(
         403,
@@ -234,7 +239,7 @@ def reject_promote(short_id: str):
 
 
 @router.post("/rules/{short_id}/trust")
-def reject_trust(short_id: str):
+def reject_trust(short_id: str) -> dict:
     """Manual trust is not allowed. Trust is earned through observed usefulness."""
     raise HTTPException(
         403,
@@ -244,7 +249,7 @@ def reject_trust(short_id: str):
 
 
 @router.post("/rules/{short_id}/suppress")
-def reject_suppress(short_id: str):
+def reject_suppress(short_id: str) -> dict:
     """Manual suppress is not allowed. Suppression is evidence-driven."""
     raise HTTPException(
         403,

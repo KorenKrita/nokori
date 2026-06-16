@@ -8,7 +8,7 @@ trigger evidence, state permissions, and severity constraints.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Literal, TypedDict
 
 from ..models import ScoredResult
 from ..policy import (
@@ -25,6 +25,17 @@ from ..policy import (
 # ---------------------------------------------------------------------------
 
 ApplicabilityDecision = Literal["cold", "warm", "hot", "gate"]
+
+
+class _EvidenceKwargs(TypedDict):
+    strong_variant_phrase_hit: bool
+    required_concepts_match: bool
+    trigger_idf_sum: float
+    trigger_coverage: float
+    distinct_trigger_terms: int
+    idf_stats_available: bool
+    pool_size: int
+    dynamic_trigger_info_min: float | None
 
 
 # ---------------------------------------------------------------------------
@@ -325,16 +336,16 @@ def evaluate_applicability(
     # Trigger evidence evaluation
     # ------------------------------------------------------------------
 
-    evidence_kwargs = dict(
-        strong_variant_phrase_hit=strong_variant_phrase_hit,
-        required_concepts_match=required_concepts_match,
-        trigger_idf_sum=trigger_idf_sum,
-        trigger_coverage=trigger_coverage,
-        distinct_trigger_terms=distinct_trigger_terms,
-        idf_stats_available=idf_stats_available,
-        pool_size=pool_size,
-        dynamic_trigger_info_min=dynamic_trigger_info_min,
-    )
+    evidence_kwargs: _EvidenceKwargs = {
+        "strong_variant_phrase_hit": strong_variant_phrase_hit,
+        "required_concepts_match": required_concepts_match,
+        "trigger_idf_sum": trigger_idf_sum,
+        "trigger_coverage": trigger_coverage,
+        "distinct_trigger_terms": distinct_trigger_terms,
+        "idf_stats_available": idf_stats_available,
+        "pool_size": pool_size,
+        "dynamic_trigger_info_min": dynamic_trigger_info_min,
+    }
 
     trigger_passed = _trigger_evidence_passes(**evidence_kwargs)
 

@@ -56,7 +56,7 @@ def llm_input_hash(role: str, system: str, user: str, model_id: str = "") -> str
 
 def call_llm_role(
     db: Db,
-    llm,
+    llm: Any,
     *,
     role: str,
     model_id: str,
@@ -64,7 +64,7 @@ def call_llm_role(
     user: str,
     max_tokens: int,
     timeout: int,
-    validate_response: Callable[[str], None] | None = None,
+    validate_response: Callable[[str], Any] | None = None,
 ) -> str:
     """Call an LLM role through the durable idempotency/circuit-breaker layer."""
     from .roles import compute_prompt_version
@@ -137,9 +137,10 @@ def call_llm_role(
             mark_job_failed(db, job_id, error_info=error_info)
             raise ValueError(f"LLM role {role} returned invalid output: {exc}") from exc
 
-        log.info("role=%s model=%s call OK (response_len=%d)", role, model_id, len(response))
-        mark_job_complete(db, job_id, response)
-        return response
+        response_str: str = response
+        log.info("role=%s model=%s call OK (response_len=%d)", role, model_id, len(response_str))
+        mark_job_complete(db, job_id, response_str)
+        return response_str
 
     raise last_error  # type: ignore[misc]
 

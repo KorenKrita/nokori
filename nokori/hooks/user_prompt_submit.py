@@ -14,6 +14,7 @@ from ..db import (
 from ..gate import marker as marker_io, prompt_ack
 from ..gate.blocker import select_gate_rules
 from ..gate.marker import prompt_hash
+from ..models import ScoredResult
 from ..utils import sessions
 from ..utils.hook_response import user_prompt_submit_response
 from ..utils.host import Host, effective_session_id
@@ -62,7 +63,7 @@ def _run_dismiss(db: Db, prompt: str, session_id: str, cfg: Config) -> int:
     return count
 
 
-def _update_gate_marker(cfg: Config, session_id: str, prompt: str, hot, ph: str) -> None:
+def _update_gate_marker(cfg: Config, session_id: str, prompt: str, hot: list[ScoredResult], ph: str) -> None:
     if not cfg.gate_enabled:
         return
     gate_rules = select_gate_rules(hot)
@@ -79,7 +80,7 @@ def _update_gate_marker(cfg: Config, session_id: str, prompt: str, hot, ph: str)
         marker_io.delete_session(cfg, session_id)
 
 
-def handle(payload: dict, cfg: Config, *, host: Host) -> dict:  # type: ignore[return]
+def handle(payload: dict, cfg: Config, *, host: Host) -> dict:
     session_id = effective_session_id(payload)
     turn_index = payload.get("turn_index")
     extra: dict[str, object] = {"session_id": session_id}

@@ -190,7 +190,7 @@ def _load_checkpoint(
 
 def _run_pipeline_staged(
     db: Db,
-    llm,
+    llm: Any,
     ctx: CandidateContext,
     segment_hash: str | None = None,
 ) -> ColdPipelineResult:
@@ -261,7 +261,7 @@ from ._result import ColdPipelineResult  # noqa: E402
 
 def run_cold_pipeline(
     db: Db,
-    llm,
+    llm: Any,
     transcript_ref: str,
     extractor_output: dict[str, Any],
     *,
@@ -396,7 +396,7 @@ def run_cold_pipeline(
 
 def _run_cold_pipeline_inner(
     db: Db,
-    llm,
+    llm: Any,
     transcript_ref: str,
     extractor_output: dict[str, Any],
     *,
@@ -475,7 +475,7 @@ def _run_cold_pipeline_inner(
 
 def _handle_split_required(
     db: Db,
-    llm,
+    llm: Any,
     rule_data: dict[str, Any],
     role_models: dict[str, str] | None,
     default_model: str | None,

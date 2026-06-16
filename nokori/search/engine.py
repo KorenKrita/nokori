@@ -159,7 +159,7 @@ class RetrievalEngine:
         background_idf_rules: Sequence[Rule] | None,
     ) -> IdfPoolStats:
         idf_pool = background_idf_rules if background_idf_rules is not None else rules
-        idf_stats = build_idf_stats(r for r in idf_pool if r.status in ("active", "trusted"))
+        idf_stats = build_idf_stats([r for r in idf_pool if r.status in ("active", "trusted")])
         if idf_stats.rule_pool_size == 0:
             # Cold start: no active/trusted rules, use all rules (including candidate/draft)
             # as IDF baseline to avoid complete scoring degradation.

@@ -14,7 +14,7 @@ router = APIRouter()
 
 
 @router.get("/embed/status")
-def embed_status():
+def embed_status() -> dict:
     cfg = get_config()
     st = embed_ipc.server_status(cfg)
     from nokori.search.embedding import (
@@ -35,7 +35,7 @@ def embed_status():
 
 
 @router.post("/embed/start", dependencies=[Depends(require_write_auth)])
-def embed_start():
+def embed_start() -> dict:
     cfg = get_config()
     st = embed_ipc.server_status(cfg)
     if st["running"]:
@@ -74,7 +74,7 @@ def embed_start():
 
 
 @router.post("/embed/stop", dependencies=[Depends(require_write_auth)])
-def embed_stop():
+def embed_stop() -> dict:
     cfg = get_config()
     st = embed_ipc.server_status(cfg)
     if not st["running"]:

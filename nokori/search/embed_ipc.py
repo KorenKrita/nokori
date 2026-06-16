@@ -102,7 +102,8 @@ def request(cfg: Config, payload: dict[str, Any], *, timeout: float = 5.0) -> di
     if not chunks:
         raise OSError("embed server closed connection")
     line = b"".join(chunks).split(b"\n", 1)[0].decode("utf-8", errors="replace")
-    return json.loads(line)
+    result: dict[str, Any] = json.loads(line)
+    return result
 
 
 def ping(cfg: Config, *, timeout: float = 0.5) -> bool:
@@ -126,11 +127,11 @@ def spawn_server(cfg: Config) -> None:
 
     cfg.ensure_dirs()
     err_log = cfg.logs_dir / "embed-server.log"
-    err_fh = subprocess.DEVNULL
+    err_file = None
     try:
-        err_fh = open(err_log, "a", encoding="utf-8")
+        err_file = open(err_log, "a", encoding="utf-8")
     except OSError:
-        err_fh = subprocess.DEVNULL
+        pass
     env = os.environ.copy()
     env["NOKORI_DATA_DIR"] = str(cfg.data_dir)
     try:
@@ -139,13 +140,13 @@ def spawn_server(cfg: Config) -> None:
             env=env,
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
-            stderr=err_fh,
+            stderr=err_file if err_file is not None else subprocess.DEVNULL,
             start_new_session=True,
         )
     finally:
-        if err_fh is not subprocess.DEVNULL:
+        if err_file is not None:
             try:
-                err_fh.close()
+                err_file.close()
             except OSError:
                 pass
 

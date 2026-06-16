@@ -10,7 +10,7 @@ router = APIRouter()
 
 
 @router.get("/health")
-def health_check():
+def health_check() -> dict:
     cfg = get_config()
     checks = {}
 

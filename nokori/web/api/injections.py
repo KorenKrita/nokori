@@ -20,7 +20,7 @@ def _fire_event_row_to_dict(row: dict) -> dict:
             features_data = (
                 json.loads(raw_features) if isinstance(raw_features, str) else raw_features
             )
-            decision_features = DecisionFeaturesOut(**features_data).model_dump()
+            decision_features = DecisionFeaturesOut(**features_data)
         except (json.JSONDecodeError, TypeError, ValueError):
             decision_features = None
 
@@ -64,7 +64,7 @@ def list_injections(
     posthoc_label: str | None = Query(None),
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=200),
-):
+) -> dict:
     """List fire events (rule injections), replacing the legacy injections table.
 
     Queries rule_fire_events directly. Supports session-based filtering.

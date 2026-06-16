@@ -20,7 +20,7 @@ class _PosthocLLMAdapter:
     def __init__(self, cfg: Config):
         self._llm = LLMAdapter(cfg)
 
-    def call(self, *, system: str, user: str, role: str):
+    def call(self, *, system: str, user: str, role: str) -> str | None:
         return self._llm.complete_role(role, system, user)
 
 

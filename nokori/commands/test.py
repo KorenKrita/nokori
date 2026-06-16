@@ -4,15 +4,16 @@ import argparse
 import os
 
 from ..config import Config
-from ..db import fetch_rules, open_db
+from ..db import Db, fetch_rules, open_db
 from ..events.fire import count_evaluated_fire_events
 from ..gate.blocker import select_gate_rules
+from ..models import ScoredResult
 from ..search.applicability import evaluate_applicability
 from ..search.engine import RetrievalEngine
 from ..utils.project import resolve_project_id
 
 
-def _format_eligibility(r, pool_size: int) -> str:
+def _format_eligibility(r: ScoredResult, pool_size: int) -> str:
     """Compute hard eligibility result for display."""
     result = evaluate_applicability(
         rule_status=r.rule.status,
@@ -36,7 +37,7 @@ def _format_eligibility(r, pool_size: int) -> str:
     return f"{result.decision.upper()} ({result.reason})"
 
 
-def _format_posthoc_summary(db, rule_id: str) -> str:
+def _format_posthoc_summary(db: Db, rule_id: str) -> str:
     """One-line posthoc history summary."""
     counts = count_evaluated_fire_events(db, rule_id, window_days=30)
     total = counts.get("total_evaluated", 0)
@@ -50,7 +51,7 @@ def _format_posthoc_summary(db, rule_id: str) -> str:
     return f"total={total} " + " ".join(parts)
 
 
-def _print_scored_detail(r, db, pool_size: int) -> None:
+def _print_scored_detail(r: ScoredResult, db: Db, pool_size: int) -> None:
     """Print fielded match details for a scored result."""
     # Fielded match evidence
     print(

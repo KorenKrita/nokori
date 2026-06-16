@@ -19,6 +19,7 @@ from ..events.shadow import (
 )
 from ..gate.blocker import format_injection
 from ..gate.marker import MarkerRule, prompt_hash
+from ..models import ScoredResult
 from ..search.engine import RetrievalEngine
 from ..utils.logging import get_logger
 from ..utils.prompt_text import normalize_prompt_for_hash
@@ -117,7 +118,7 @@ def retrieve_and_format(
 # ---------------------------------------------------------------------------
 
 
-def build_decision_features(r) -> dict:
+def build_decision_features(r: ScoredResult) -> dict:
     """Extract decision features from a ScoredResult for event logging."""
     return {
         "trigger_idf_sum": r.trigger_idf_sum,

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sqlite3
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -67,7 +68,7 @@ def _find_previous_transcript_glob(current: Path) -> Path | None:
     return best
 
 
-def _fetch_extract_state(db: Db, path: Path):
+def _fetch_extract_state(db: Db, path: Path) -> sqlite3.Row | None:
     return db.fetchone(
         "SELECT extracted_at, transcript_mtime, status, last_byte_offset "
         "FROM extract_state WHERE transcript_path = ?",

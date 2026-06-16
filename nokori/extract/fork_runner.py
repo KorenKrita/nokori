@@ -131,7 +131,7 @@ def _read_anchor_user_message(transcript_path: Path, byte_offset: int) -> str | 
     return user_messages[-1]
 
 
-def _extract_text_content(content) -> str:
+def _extract_text_content(content: object) -> str:
     """Extract plain text from message content (string or block list)."""
     if isinstance(content, str):
         return content.strip()

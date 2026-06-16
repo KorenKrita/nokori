@@ -12,7 +12,7 @@ router = APIRouter()
 
 
 @router.get("/dashboard")
-def dashboard():
+def dashboard() -> dict:
     cfg = get_config()
     db = open_db(cfg.db_path)
     try:

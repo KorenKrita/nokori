@@ -36,7 +36,7 @@ log = get_logger("nokori.cold.integrate")
 
 def _run_merge_planner(
     db: Db,
-    llm,
+    llm: Any,
     rule_data: dict[str, Any],
     model_id: str,
     role_max_tokens: dict[str, int] | None = None,
@@ -186,7 +186,7 @@ def apply_merge_with_reeval(
     merge_info: dict[str, Any],
     eval_cases: list,
     global_adversarial_cases: list[dict[str, Any]] | None,
-    idf_stats,
+    idf_stats: Any,
 ) -> MergeRevalOutcome:
     """Apply a non-destructive merge and re-evaluate if variants/excluded_contexts changed.
 
@@ -287,11 +287,11 @@ def apply_merge_with_reeval(
 def _revert_merge(
     db: Db,
     target_id: str,
-    merged_row,
+    merged_row: Any,
     changed_variants: bool,
     changed_excluded: bool,
-    pre_variants,
-    pre_excluded,
+    pre_variants: Any,
+    pre_excluded: Any,
 ) -> None:
     """Revert merged fields via CAS (restore pre-merge values)."""
     from ..policy import RUNTIME_POLICY_VERSION

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from typing import Any
 
@@ -33,7 +34,7 @@ def hook_diag_enabled() -> bool:
     return level == "debug"
 
 
-def log_diag(log, msg: str, *args: Any, **kwargs: Any) -> None:
+def log_diag(log: logging.Logger, msg: str, *args: Any, **kwargs: Any) -> None:
     if hook_diag_enabled():
         log.debug(msg, *args, **kwargs)
 
@@ -103,7 +104,7 @@ def payload_summary(payload: dict) -> str:
 
 
 def log_hook_enter(
-    log,
+    log: logging.Logger,
     *,
     cli_event: str,
     payload: dict,
@@ -130,7 +131,7 @@ def log_hook_enter(
         )
 
 
-def log_hook_exit(log, *, cli_event: str, host: Host, response: dict) -> None:
+def log_hook_exit(log: logging.Logger, *, cli_event: str, host: Host, response: dict) -> None:
     if not hook_diag_enabled():
         return
     top_keys = ",".join(sorted(response.keys())) if response else "-"

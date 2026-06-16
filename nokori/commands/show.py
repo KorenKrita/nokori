@@ -9,10 +9,12 @@ from ..errors import NokoriError
 from ..events.fire import count_evaluated_fire_events
 
 
-def _json_list(raw) -> list:
+def _json_list(raw: object) -> list:
     """Parse a JSON list field, returning [] on failure."""
     if isinstance(raw, list):
         return raw
+    if not isinstance(raw, (str, bytes)):
+        return []
     try:
         val = json.loads(raw) if raw else []
         return val if isinstance(val, list) else []

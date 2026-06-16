@@ -88,7 +88,7 @@ def _check_cold_fast_lane(
 
 def _generate_eval_cases(
     db: Db,
-    llm,
+    llm: Any,
     rule_data: dict[str, Any],
     role_models: dict[str, str] | None,
     default_model: str | None,
@@ -198,7 +198,8 @@ def _generate_eval_cases(
         if isinstance(cases, list):
             return cases
         if isinstance(cases, dict) and "cases" in cases:
-            return cases["cases"]
+            result: list[dict[str, Any]] = cases["cases"]
+            return result
         raise ValueError("synthetic_eval_generator returned no cases")
     except CircuitBreakerOpenError:
         raise

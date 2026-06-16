@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import io
 import time
 from pathlib import Path
 
@@ -27,7 +28,7 @@ def _find_log_files(logs_dir: Path) -> list[Path]:
 
 
 @router.websocket("/logs")
-async def logs_ws(ws: WebSocket):
+async def logs_ws(ws: WebSocket) -> None:
     global _active_log_ws_connections
     if _active_log_ws_connections >= MAX_LOG_WS_CONNECTIONS:
         await ws.accept()
@@ -35,7 +36,7 @@ async def logs_ws(ws: WebSocket):
         return
 
     _active_log_ws_connections += 1
-    file_handles: list[tuple[str, object]] = []
+    file_handles: list[tuple[str, io.TextIOWrapper]] = []
     try:
         await ws.accept()
         cfg = get_config()

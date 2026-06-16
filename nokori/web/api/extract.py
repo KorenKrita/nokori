@@ -10,14 +10,15 @@ from nokori.web.deps import get_config
 router = APIRouter()
 
 
-def _parse_details(raw) -> dict:
+def _parse_details(raw: object) -> dict:
     if isinstance(raw, str):
-        return loads_json(raw, {})
+        result: dict = loads_json(raw, {})
+        return result
     return raw if isinstance(raw, dict) else {}
 
 
 @router.get("/extract/jobs")
-def list_extract_jobs():
+def list_extract_jobs() -> dict:
     cfg = get_config()
     pending = job_io.list_jobs(cfg, status="pending")
     db = open_db(cfg.db_path)
@@ -40,7 +41,7 @@ def list_extract_jobs():
 
 
 @router.get("/extract/state")
-def extract_state():
+def extract_state() -> dict:
     cfg = get_config()
     db = open_db(cfg.db_path)
     try:
@@ -180,7 +181,7 @@ def extract_state():
 
 
 @router.get("/extract/transcript-events")
-def transcript_events(transcript_path: str = Query(...)):
+def transcript_events(transcript_path: str = Query(...)) -> dict:
     """Get cold_pipeline and cli_extract events related to a specific transcript."""
     cfg = get_config()
     db = open_db(cfg.db_path)

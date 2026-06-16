@@ -22,7 +22,7 @@ log = get_logger("nokori.cold.qualify")
 
 def _run_admission_judge(
     db: Db,
-    llm,
+    llm: Any,
     candidate: dict[str, Any],
     model_id: str,
     role_max_tokens: dict[str, int] | None = None,
@@ -193,7 +193,7 @@ def _enforce_admission_policy(decision: str, scores: dict) -> str:
 
 def _run_rewriter(
     db: Db,
-    llm,
+    llm: Any,
     candidate: dict[str, Any],
     judge_feedback: dict,
     model_id: str,
@@ -322,7 +322,7 @@ def _run_rewriter(
 
 def _run_final_judge(
     db: Db,
-    llm,
+    llm: Any,
     rule_data: dict[str, Any],
     original_evidence: list[str],
     model_id: str,
@@ -385,7 +385,7 @@ def _run_final_judge(
             validate_response=lambda raw: validate_role_output("final_judge", raw),
         )
         result = validate_role_output("final_judge", response)
-        decision = result["decision"]
+        decision: str = result["decision"]
         log.info("final_judge: decision=%s", decision)
         return decision
     except CircuitBreakerOpenError:

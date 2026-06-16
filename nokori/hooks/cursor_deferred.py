@@ -108,6 +108,7 @@ def maybe_deferred_pre_tool_use(
                 e,
             )
             return None
+    assert db is not None
     try:
         try:
             outcome = inject_for_prompt(

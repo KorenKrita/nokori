@@ -12,12 +12,13 @@ propagate to the caller (pipeline orchestrator), which handles them as
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from typing import Any
+from typing import Any, cast
 
 from ..archive.fingerprints import check_fingerprint_block
 from ..db import Db
 from ..eval.synthetic import run_synthetic_eval as _run_synth_eval
 from ..matcher.compiler import CompilationError, compile_rule
+from ..policy import SourceOrigin
 from ._result import ColdPipelineResult
 from .integrate import _run_merge_planner
 from .qualify import (
@@ -48,7 +49,7 @@ class CandidateContext:
     # Input (set at creation)
     extractor_output: dict[str, Any]
     transcript_ref: str
-    source_origin: str
+    source_origin: SourceOrigin
     project_id: str | None
     config: PipelineConfig
 
@@ -452,7 +453,7 @@ def run_insert_or_merge(ctx: CandidateContext, db: Db, llm: Any) -> ColdPipeline
     Always returns ColdPipelineResult (terminal stage).
     """
     from ..merge.policy import MergeDecision, record_lineage, validate_merge_transaction
-    from ..policy import RUNTIME_POLICY_VERSION, ActivationOrigin
+    from ..policy import RUNTIME_POLICY_VERSION, ActivationOrigin, MergeOperation
     from ._constants import DESTRUCTIVE_MERGE_OPS
     from .integrate import (
         _apply_merge_side_effects,
@@ -475,7 +476,7 @@ def run_insert_or_merge(ctx: CandidateContext, db: Db, llm: Any) -> ColdPipeline
         )
     if merge_op in DESTRUCTIVE_MERGE_OPS:
         merge_decision = MergeDecision(
-            operation=merge_op,
+            operation=cast("MergeOperation", merge_op),
             target_rule_id=(existing_rule or {}).get("id"),
             reason=merge_info.get("merge_rationale", ""),
             requires_synthetic_reeval=bool(merge_info.get("requires_synthetic_reeval")),

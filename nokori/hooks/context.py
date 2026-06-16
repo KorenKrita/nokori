@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
+from types import TracebackType
 from typing import Any
 
 from ..config import Config
@@ -125,7 +126,7 @@ class HotPathContext:
     def __enter__(self) -> HotPathContext:
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb) -> bool:
+    def __exit__(self, exc_type: type[BaseException] | None, exc_val: BaseException | None, exc_tb: TracebackType | None) -> None:
         if self._db is not None:
             try:
                 self._db.close()
@@ -134,4 +135,3 @@ class HotPathContext:
                 self.add_error("db_close", ErrorCategory.DEGRADED, str(e), e)
             # _db_open_attempted stays True: post-exit ctx.db returns None
             self._db = None
-        return False

@@ -5,6 +5,7 @@ from dataclasses import replace
 from fastapi import APIRouter
 
 from nokori.db import fetch_rules, open_db
+from nokori.models import ScoredResult
 from nokori.search.engine import RetrievalEngine
 from nokori.web.deps import get_config
 from nokori.web.models import RetrieveRequest
@@ -12,7 +13,7 @@ from nokori.web.models import RetrieveRequest
 router = APIRouter()
 
 
-def _scored_to_dict(sr) -> dict:
+def _scored_to_dict(sr: ScoredResult) -> dict:
     """Convert a ScoredResult to a dict with fielded evidence and eligibility."""
     rule = sr.rule
 
@@ -81,7 +82,7 @@ def _scored_to_dict(sr) -> dict:
 
 
 @router.post("/retrieve")
-def retrieve(body: RetrieveRequest):
+def retrieve(body: RetrieveRequest) -> dict:
     cfg = get_config()
 
     if not body.use_embedding:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -16,7 +17,7 @@ def create_app(cfg: Config) -> FastAPI:
     app.state.write_auth_token = new_write_auth_token()
 
     @app.middleware("http")
-    async def write_auth_cookie(request: Request, call_next):
+    async def write_auth_cookie(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
         response = await call_next(request)
         if request.method in {"GET", "HEAD"}:
             response.set_cookie(

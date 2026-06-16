@@ -238,4 +238,4 @@ def _cosine_similarity(a: list[float], b: list[float]) -> float:
     nb = sum(y * y for y in b) ** 0.5
     if na == 0.0 or nb == 0.0:
         return 0.0
-    return dot / (na * nb)
+    return float(dot / (na * nb))

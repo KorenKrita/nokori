@@ -28,7 +28,8 @@ def _read_record(cfg: Config, session_id: str) -> dict | None:
     if not p.exists():
         return None
     try:
-        return json.loads(p.read_text(encoding="utf-8"))
+        data: dict = json.loads(p.read_text(encoding="utf-8"))
+        return data
     except (OSError, json.JSONDecodeError):
         return None
 
@@ -41,7 +42,7 @@ def register(
     project_id_from_git: bool | None = None,
 ) -> None:
     cfg.ensure_dirs()
-    payload = {
+    payload: dict[str, str | bool | None] = {
         "session_id": session_id,
         "project_id": project_id,
         "started_at": now_iso(),

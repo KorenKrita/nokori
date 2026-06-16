@@ -1,8 +1,12 @@
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
+from typing import TYPE_CHECKING
 
 from .marker import MarkerRule
+
+if TYPE_CHECKING:
+    from ..models import ScoredResult
 
 # Keep rule text usable when dismiss_phrase is very long (misconfiguration).
 _INJECTION_BUDGET_FLOOR = 500
@@ -30,7 +34,10 @@ def format_block_reason(rules: Iterable[MarkerRule], dismiss_phrase: str = "dism
 
 
 def format_injection(
-    hot, warm, max_chars: int = 1500, dismiss_phrase: str = "dismiss"
+    hot: Sequence[ScoredResult],
+    warm: Sequence[ScoredResult],
+    max_chars: int = 1500,
+    dismiss_phrase: str = "dismiss",
 ) -> tuple[str, list[tuple[str, str]]]:
     """Build the additionalContext text for UserPromptSubmit.
 
@@ -138,7 +145,7 @@ def format_cursor_agent_delivery(
     return "\n".join(parts)
 
 
-def select_gate_rules(hot):
+def select_gate_rules(hot: Sequence[ScoredResult]) -> list[ScoredResult]:
     """HOT rules that trigger PreToolUse block (not the same as injection).
 
     Injection uses all formal-pool HOT/WARM tiers. Gate is narrower:

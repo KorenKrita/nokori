@@ -10,7 +10,7 @@ import argparse
 import json
 
 from ..config import Config
-from ..db import open_db
+from ..db import Db, open_db
 from ..events.observability import query_errors
 from ..utils.time import local_days_ago, now_iso
 
@@ -43,7 +43,7 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
     return 0
 
 
-def _build_report(db, *, since: str, session_id: str | None) -> dict:
+def _build_report(db: Db, *, since: str, session_id: str | None) -> dict:
     where_parts = ["created_at >= ?"]
     params: list = [since]
     if session_id:
@@ -183,7 +183,7 @@ def _run_metrics(args: argparse.Namespace, cfg: Config) -> int:
     return 0
 
 
-def _build_metrics(db) -> dict:
+def _build_metrics(db: Db) -> dict:
     since_30d = local_days_ago(30)
     since_7d = local_days_ago(7)
 

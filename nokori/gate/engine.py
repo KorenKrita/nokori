@@ -10,6 +10,7 @@ from __future__ import annotations
 import functools
 import json
 import re
+import sqlite3
 import time
 from dataclasses import dataclass
 
@@ -193,8 +194,8 @@ def _batch_check_eligibility(
     ids = [r.rule_id for r in rules if r.rule_id]
     short_ids = [r.short_id for r in rules if r.short_id]
 
-    lookup_by_id: dict[str, dict] = {}
-    lookup_by_short: dict[str, dict] = {}
+    lookup_by_id: dict[str, sqlite3.Row] = {}
+    lookup_by_short: dict[str, sqlite3.Row] = {}
     if ids or short_ids:
         placeholders_parts = []
         params: list[str] = []
@@ -210,13 +211,13 @@ def _batch_check_eligibility(
             "runtime_policy_version, excluded_contexts FROM rules WHERE " + where,
             tuple(params),
         )
-        for row in rows:
-            lookup_by_id[row["id"]] = row
-            lookup_by_short[row["short_id"]] = row
+        for r in rows:
+            lookup_by_id[r["id"]] = r
+            lookup_by_short[r["short_id"]] = r
 
     results: list[tuple[MarkerRule, bool, list | None]] = []
     for rule in rules:
-        row = None
+        row: sqlite3.Row | None = None
         if rule.rule_id and rule.rule_id in lookup_by_id:
             row = lookup_by_id[rule.rule_id]
         if row is None and rule.short_id and rule.short_id in lookup_by_short:

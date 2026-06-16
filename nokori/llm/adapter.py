@@ -115,7 +115,7 @@ class LLMAdapter:
         if system:
             messages.append({"role": "system", "content": system})
         messages.append({"role": "user", "content": user})
-        payload = {
+        payload: dict[str, object] = {
             "model": model_id or self.cfg.llm_model,
             "messages": messages,
             "max_tokens": max_tokens,
@@ -125,7 +125,10 @@ class LLMAdapter:
         headers = {"Content-Type": "application/json"}
         if self.cfg.llm_api_key:
             headers["Authorization"] = f"Bearer {self.cfg.llm_api_key}"
-        url = f"{self.cfg.llm_base_url.rstrip('/')}/chat/completions"
+        base_url = self.cfg.llm_base_url
+        if base_url is None:
+            raise LlmError("llm_base_url is not configured")
+        url = f"{base_url.rstrip('/')}/chat/completions"
         req = urllib.request.Request(
             url,
             data=json.dumps(payload).encode("utf-8"),

@@ -7,7 +7,7 @@ from pathlib import Path
 
 from ..constants import MAX_TRANSCRIPT_BYTES
 from ..errors import NokoriError
-from ..models import Turn
+from ..models import Turn, TurnRole
 from ..utils.logging import get_logger
 
 log = get_logger("nokori.extract.reader")
@@ -259,12 +259,16 @@ def _content_blocks_to_turns(role: str | None, blocks: list) -> list[Turn]:
     return turns
 
 
-def _normalize_role(role: str | None) -> str:
+def _normalize_role(role: str | None) -> TurnRole:
     if role in ("user", "human"):
         return "human"
     if role == "assistant":
         return "assistant"
-    return role or "assistant"
+    if role == "tool_use":
+        return "tool_use"
+    if role == "tool_result":
+        return "tool_result"
+    return "assistant"
 
 
 def _parse_legacy(entry: dict) -> Turn | None:
@@ -314,7 +318,7 @@ _VALUE_CAP = 800
 _RAW_INPUT_MAX = 2000
 
 
-def _summarize_tool_input(tool_name: str, inp) -> str:
+def _summarize_tool_input(tool_name: str, inp: object) -> str:
     """Produce tool input summary.
 
     bash/read: no secondary truncation (values capped at 800 chars, strings at 2000)
@@ -353,7 +357,7 @@ def _summarize_tool_input(tool_name: str, inp) -> str:
     return raw[:_DEFAULT_HEAD] + "\n...\n" + raw[-_DEFAULT_TAIL:]
 
 
-def _coerce_text(value) -> str:
+def _coerce_text(value: object) -> str:
     if value is None:
         return ""
     if isinstance(value, str):

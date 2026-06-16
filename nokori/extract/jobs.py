@@ -92,7 +92,8 @@ def find_project_id_for_transcript(cfg: Config, transcript_path: Path) -> str | 
 
 def read_job(path: Path) -> dict | None:
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        data: dict = json.loads(path.read_text(encoding="utf-8"))
+        return data
     except (OSError, json.JSONDecodeError):
         return None
 
