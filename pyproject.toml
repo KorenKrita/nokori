@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nokori"
-version = "0.5.44"
+version = "0.5.45"
 description = "Local rule memory for Claude Code and Cursor—corrections distilled into lasting guidance, recalled in context, one deliberate gate when stakes are high. 经验留下的痕迹，比记忆更深。"
 readme = "README.md"
 license = "MIT"
