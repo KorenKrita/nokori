@@ -208,6 +208,7 @@ CREATE TABLE IF NOT EXISTS transcript_ingest_jobs (
     extractor_prompt_version TEXT,
     pipeline_checkpoint TEXT,
     retries INTEGER DEFAULT 0,
+    last_error TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
@@ -333,6 +334,8 @@ def _migrate(conn: sqlite3.Connection) -> None:
     if current > SCHEMA_VERSION:
         raise DbError("rules.db was created by a newer nokori; upgrade this installation")
     if current >= SCHEMA_VERSION:
+        # ponytail: remedial — older v10 DBs created before this column was added to the DDL
+        _add_column_if_missing(conn, "transcript_ingest_jobs", "last_error", "TEXT")
         return
     if current == 0:
         script = f"BEGIN;\n{_SCHEMA_DDL}\nPRAGMA user_version = {int(SCHEMA_VERSION)};\nCOMMIT;\n"
@@ -374,6 +377,7 @@ def _migrate(conn: sqlite3.Connection) -> None:
         except Exception as e:
             raise DbError(f"failed to initialize rules.db: {e}") from e
         _add_column_if_missing(conn, "transcript_ingest_jobs", "pipeline_checkpoint", "TEXT")
+        _add_column_if_missing(conn, "transcript_ingest_jobs", "last_error", "TEXT")
         _add_column_if_missing(conn, "rule_fire_events", "project_id", "TEXT")
         _create_index_safe(conn, "CREATE INDEX IF NOT EXISTS idx_fire_events_rule_project ON rule_fire_events(rule_id, posthoc_label, project_id)")
         _create_index_safe(conn, "CREATE INDEX IF NOT EXISTS idx_synthetic_evals_rule ON rule_synthetic_evals(rule_id, rule_version, created_at)")
@@ -391,6 +395,7 @@ def _migrate(conn: sqlite3.Connection) -> None:
         except Exception as e:
             raise DbError(f"failed to migrate rules.db from v7 to v{SCHEMA_VERSION}: {e}") from e
         _add_column_if_missing(conn, "transcript_ingest_jobs", "pipeline_checkpoint", "TEXT")
+        _add_column_if_missing(conn, "transcript_ingest_jobs", "last_error", "TEXT")
         _add_column_if_missing(conn, "rule_fire_events", "project_id", "TEXT")
         _create_index_safe(conn, "CREATE INDEX IF NOT EXISTS idx_fire_events_rule_project ON rule_fire_events(rule_id, posthoc_label, project_id)")
         _create_index_safe(conn, "CREATE INDEX IF NOT EXISTS idx_synthetic_evals_rule ON rule_synthetic_evals(rule_id, rule_version, created_at)")
@@ -398,6 +403,7 @@ def _migrate(conn: sqlite3.Connection) -> None:
         _create_index_safe(conn, "CREATE INDEX IF NOT EXISTS idx_rule_embeddings_model ON rule_embeddings(model_version, rule_id)")
         return
     elif current == 8:
+        _add_column_if_missing(conn, "transcript_ingest_jobs", "last_error", "TEXT")
         _add_column_if_missing(conn, "rule_fire_events", "project_id", "TEXT")
         _create_index_safe(conn, "CREATE INDEX IF NOT EXISTS idx_fire_events_rule_project ON rule_fire_events(rule_id, posthoc_label, project_id)")
         _create_index_safe(conn, "CREATE INDEX IF NOT EXISTS idx_synthetic_evals_rule ON rule_synthetic_evals(rule_id, rule_version, created_at)")
@@ -406,6 +412,7 @@ def _migrate(conn: sqlite3.Connection) -> None:
         conn.execute(f"PRAGMA user_version = {int(SCHEMA_VERSION)}")
         return
     elif current == 9:
+        _add_column_if_missing(conn, "transcript_ingest_jobs", "last_error", "TEXT")
         _create_index_safe(conn, "CREATE INDEX IF NOT EXISTS idx_synthetic_evals_rule ON rule_synthetic_evals(rule_id, rule_version, created_at)")
         _create_index_safe(conn, "CREATE INDEX IF NOT EXISTS idx_reviews_rule ON rule_reviews(rule_id, decision, created_at)")
         _create_index_safe(conn, "CREATE INDEX IF NOT EXISTS idx_rule_embeddings_model ON rule_embeddings(model_version, rule_id)")

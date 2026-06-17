@@ -146,6 +146,23 @@ def _extract_text_content(content: object) -> str:
     return ""
 
 
+def _all_failed_dead_safe(cfg: Config, seg_hashes: list[str]) -> bool:
+    """Check if all failed segments are permanently dead. Fail-safe (returns False on error)."""
+    if not seg_hashes:
+        return False
+    try:
+        db = open_db(cfg.db_path)
+        try:
+            from .process import _all_permanently_failed  # deferred: avoids circular import
+
+            return _all_permanently_failed(db, seg_hashes)
+        finally:
+            db.close()
+    except Exception as exc:
+        log.warning("_all_failed_dead_safe check failed: %s", exc)
+        return False
+
+
 def _mark_extracted_safe(cfg: Config, t_path: Path) -> None:
     """Advance the byte offset to current file size."""
     try:
@@ -318,7 +335,7 @@ def run(session_id: str, transcript_path: str | None = None, job_path: str | Non
         project_id = find_project_id_for_transcript(cfg, t_path) if t_path else None
 
         try:
-            rules_created, all_ok = process_candidates(
+            rules_created, _failed_segs, all_ok = process_candidates(
                 candidates,
                 t_path or Path(f"fork:{session_id}"),
                 project_id,
@@ -331,7 +348,7 @@ def run(session_id: str, transcript_path: str | None = None, job_path: str | Non
             return 1
 
         # --- Post-extraction: mark offset & cleanup job ---
-        if all_ok:
+        if all_ok or _all_failed_dead_safe(cfg, _failed_segs):
             if t_path and t_path.exists():
                 _mark_extracted_safe(cfg, t_path)
             if j_path:

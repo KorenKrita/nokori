@@ -23,6 +23,7 @@ SCHEMA_PARSE_FAILURE_CONSECUTIVE_MAX = 3
 PROVIDER_AUTH_RATE_LIMIT_ERRORS = ("auth_error", "rate_limit", "401", "429")
 PROVIDER_AUTH_SAMPLE_SIZE = 5
 MAX_JOB_RETRIES = 6
+MAX_INGEST_RETRIES = 3  # bounds cold-pipeline retries per segment (independent of LLM job retries)
 
 
 # --- Helpers ---
@@ -239,7 +240,7 @@ def enqueue_transcript_ingest(
         existing = tx.execute(
             "SELECT id FROM transcript_ingest_jobs "
             "WHERE segment_hash = ? AND extractor_prompt_version = ? "
-            "AND status IN ('pending', 'done')",
+            "AND status IN ('pending', 'done', 'dead')",
             (segment_hash, extractor_prompt_version),
         ).fetchone()
         if existing is not None:
@@ -284,3 +285,41 @@ def expire_stale_ingest_jobs(db: Db) -> int:
         )
         changed = cursor.rowcount
     return changed
+
+
+def record_ingest_failure(
+    db: Db, segment_hash: str, extractor_prompt_version: str, error_msg: str
+) -> None:
+    """Bump retries on a pending ingest job; mark dead past the cap."""
+    from ..utils.logging import get_logger
+
+    log = get_logger("nokori.cold.jobs")
+    now = _now_iso()
+    with db.transaction() as tx:
+        row = tx.execute(
+            "SELECT id, retries FROM transcript_ingest_jobs "
+            "WHERE segment_hash = ? AND extractor_prompt_version = ? AND status = 'pending'",
+            (segment_hash, extractor_prompt_version),
+        ).fetchone()
+        if row is None:
+            return
+        new_retries = int(row["retries"] or 0) + 1
+        error_text = error_msg[:500]
+        if new_retries >= MAX_INGEST_RETRIES:
+            tx.execute(
+                "UPDATE transcript_ingest_jobs SET status = 'dead', retries = ?, "
+                "last_error = ?, updated_at = ? WHERE id = ?",
+                (new_retries, error_text, now, row["id"]),
+            )
+            log.warning(
+                "ingest segment permanently failed seg=%s retries=%s err=%s",
+                segment_hash[:8],
+                new_retries,
+                error_text[:200],
+            )
+        else:
+            tx.execute(
+                "UPDATE transcript_ingest_jobs SET retries = ?, "
+                "last_error = ?, updated_at = ? WHERE id = ?",
+                (new_retries, error_text, now, row["id"]),
+            )

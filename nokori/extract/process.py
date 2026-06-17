@@ -13,7 +13,12 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
-from ..cold.jobs import enqueue_transcript_ingest, expire_stale_ingest_jobs, mark_ingest_done
+from ..cold.jobs import (
+    enqueue_transcript_ingest,
+    expire_stale_ingest_jobs,
+    mark_ingest_done,
+    record_ingest_failure,
+)
 from ..cold.pipeline import run_cold_pipeline
 from ..cold.roles import PROMPT_VERSIONS
 from ..config import Config
@@ -85,7 +90,7 @@ def extract_transcript(
     if dry_run:
         return (len(candidates), 0, False)
 
-    rules_created, all_ok = process_candidates(
+    rules_created, failed_segs, all_ok = process_candidates(
         candidates,
         path,
         project_id,
@@ -94,7 +99,7 @@ def extract_transcript(
         db=db,
     )
 
-    if all_ok:
+    if all_ok or _all_permanently_failed(db, failed_segs):
         mark_extracted(db, path, _safe_mtime(path), new_offset)
 
     return (len(candidates), rules_created, all_ok)
@@ -105,6 +110,21 @@ def _safe_mtime(path: Path) -> float:
         return path.stat().st_mtime
     except OSError:
         return 0.0
+
+
+def _all_permanently_failed(db: Db, seg_hashes: list[str]) -> bool:
+    """True if every failed segment has reached dead status (retry cap exhausted)."""
+    if not seg_hashes:
+        return False
+    prompt_ver = PROMPT_VERSIONS["extractor"]
+    placeholders = ",".join("?" * len(seg_hashes))
+    row = db.fetchone(
+        f"SELECT COUNT(*) AS cnt FROM transcript_ingest_jobs "
+        f"WHERE segment_hash IN ({placeholders}) "
+        f"AND extractor_prompt_version = ? AND status = 'dead'",
+        (*seg_hashes, prompt_ver),
+    )
+    return row is not None and row["cnt"] == len(set(seg_hashes))
 
 
 _EVIDENCE_QUOTE_MAX = 500
@@ -161,7 +181,7 @@ def process_candidates(
     transcript_text: str | None = None,
     db: Db | None = None,
     llm: LLMAdapter | None = None,
-) -> tuple[int, bool]:
+) -> tuple[int, list[str], bool]:
     """Route extracted candidates through the cold pipeline.
 
     Args:
@@ -176,7 +196,7 @@ def process_candidates(
         llm: Optional LLM adapter. If provided, reused; otherwise created internally.
 
     Returns:
-        (rules_created, all_ok)
+        (rules_created, failed_seg_hashes, all_ok)
     """
     owns_db = db is None
     if owns_db:
@@ -187,6 +207,7 @@ def process_candidates(
         if llm is None:
             llm = LLMAdapter(cfg)
         rules_created = 0
+        failed_seg_hashes: list[str] = []
         all_ok = True
         transcript_ref = str(transcript_path)
         try:
@@ -266,9 +287,14 @@ def process_candidates(
                 log.warning(
                     "cold pipeline failed for candidate: %s (%s)", (cand.trigger or "")[:60], exc
                 )
+                try:
+                    record_ingest_failure(db, seg_hash, PROMPT_VERSIONS["extractor"], str(exc))
+                except Exception as rec_exc:
+                    log.warning("record_ingest_failure failed for seg=%s: %s", seg_hash[:8], rec_exc)
+                failed_seg_hashes.append(seg_hash)
                 all_ok = False
     finally:
         if owns_db:
             db.close()
 
-    return (rules_created, all_ok)
+    return (rules_created, failed_seg_hashes, all_ok)
