@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nokori"
-version = "0.5.47"
+version = "0.5.48"
 description = "Local rule memory for Claude Code and Cursor—corrections distilled into lasting guidance, recalled in context, one deliberate gate when stakes are high. 经验留下的痕迹，比记忆更深。"
 readme = "README.md"
 license = "MIT"
@@ -35,12 +35,12 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Topic :: Software Development :: Libraries",
 ]
-dependencies = ["fastapi>=0.104", "pydantic>=2.0", "uvicorn[standard]>=0.24", "websockets>=12.0", "json-repair>=0.30"]
+dependencies = ["fastapi>=0.136,<1.0", "pydantic>=2.13,<3", "uvicorn[standard]>=0.49,<1.0", "websockets>=12,<17", "json-repair>=0.30,<1"]
 
 [project.optional-dependencies]
 dev = ["pytest>=7.0", "pytest-xdist>=3.0", "httpx>=0.27", "setuptools>=68.0", "ruff>=0.8", "mypy>=1.13", "pre-commit>=3.0"]
 # >=3.0 required: Granite uses encode_query / encode_document (ST 2.x lacks these).
-local-embed = ["sentence-transformers>=3.0"]
+local-embed = ["sentence-transformers>=3.0,<4"]
 
 [project.urls]
 Homepage = "https://github.com/KorenKrita/nokori"
