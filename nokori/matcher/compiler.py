@@ -650,3 +650,29 @@ def compile_rule(
         trigger_anchors=trigger_anchors,
         search_terms=normalized_search,
     )
+
+
+def validate_rule_compilation(
+    *,
+    concepts: list[dict[str, Any]],
+    required_concept_groups: list[dict[str, Any]],
+    excluded_contexts: list[dict[str, Any]],
+    variants: list[dict[str, Any]],
+    trigger_canonical: str,
+    search_terms: dict[str, Any] | None = None,
+) -> str | None:
+    """Dry-run compile_rule and return error message on failure, None on success."""
+    try:
+        compile_rule(
+            {
+                "concepts": concepts,
+                "required_concept_groups": required_concept_groups,
+                "excluded_contexts": excluded_contexts,
+                "variants": variants,
+                "trigger_canonical": trigger_canonical,
+            },
+            search_terms=search_terms or {},
+        )
+    except (CompilationError, TypeError, AttributeError) as e:
+        return f"matcher compilation failed: {e}"
+    return None

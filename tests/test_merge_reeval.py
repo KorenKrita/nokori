@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from unittest.mock import patch
 
@@ -87,6 +88,127 @@ class TestApplyMergeWithReeval:
         assert isinstance(result, MergeRevalOutcome)
         assert result.success is False
         assert result.rule_id is None
+
+    def test_revert_succeeds_on_synth_failure(self, db: Db):
+        """Synth eval fails → revert restores pre-merge fields, version advances."""
+        from nokori.cold.integrate import MergeRevalOutcome, apply_merge_with_reeval
+
+        _insert_active_rule(db, "target-3", trigger="test trigger three")
+        # Set initial variants/excluded_contexts so we can verify revert
+        with db.transaction() as tx:
+            tx.execute(
+                "UPDATE rules SET trigger_variants = ?, excluded_contexts = ? WHERE id = ?",
+                ('[{"text":"orig","kind":"weak_recall","requires_concepts":[]}]', '[{"id":"ctx_a","pattern":"ctx_a"}]', "target-3"),
+            )
+
+        existing_rule = {
+            "id": "target-3",
+            "trigger_variants": '[{"text":"orig","kind":"weak_recall","requires_concepts":[]}]',
+            "excluded_contexts": '[{"id":"ctx_a","pattern":"ctx_a"}]',
+        }
+        rule_data = {
+            "trigger_canonical": "test trigger three",
+            "variants": [{"text": "new merged", "kind": "weak_recall", "requires_concepts": []}],
+            "excluded_contexts": [{"id": "ctx_b", "pattern": "ctx_b"}],
+        }
+
+        # compile_rule succeeds but synth eval fails
+        with patch("nokori.eval.synthetic.run_synthetic_eval", return_value=None):
+            result = apply_merge_with_reeval(
+                db,
+                target_id="target-3",
+                rule_data=rule_data,
+                merge_op="merge_into_existing",
+                merge_info={"existing_rule": existing_rule},
+                eval_cases=[{"dummy": True}],
+                global_adversarial_cases=None,
+                idf_stats=None,
+            )
+
+        assert isinstance(result, MergeRevalOutcome)
+        assert result.success is False
+        assert result.rule_id is None
+
+        # Verify DB: fields reverted, version advanced
+        row = db.fetchone("SELECT trigger_variants, excluded_contexts, rule_version FROM rules WHERE id = ?", ("target-3",))
+        assert row is not None
+        variants_after = json.loads(row["trigger_variants"])
+        excluded_after = json.loads(row["excluded_contexts"])
+        assert variants_after == [{"text": "orig", "kind": "weak_recall", "requires_concepts": []}]
+        assert excluded_after == [{"id": "ctx_a", "pattern": "ctx_a"}]
+        # rule_version: started at 1, merge bumps +1, revert bumps +1 = 3
+        assert row["rule_version"] == 3
+
+    def test_revert_cas_failure_leaves_merged_state(self, db: Db):
+        """CAS failure (concurrent modification) → rule retains merged state.
+
+        Option A behavior locked: CAS failure = no-op, rule stays merged.
+        See 06-17-revert-cas-test PRD.
+        """
+        from nokori.cold.integrate import MergeRevalOutcome, apply_merge_with_reeval
+
+        _insert_active_rule(db, "target-4", trigger="cas trigger")
+        with db.transaction() as tx:
+            tx.execute(
+                "UPDATE rules SET trigger_variants = ?, excluded_contexts = ? WHERE id = ?",
+                ('[{"text":"orig","kind":"weak_recall","requires_concepts":[]}]', '[{"id":"ctx_orig","pattern":"ctx_orig"}]', "target-4"),
+            )
+
+        existing_rule = {
+            "id": "target-4",
+            "trigger_variants": '[{"text":"orig","kind":"weak_recall","requires_concepts":[]}]',
+            "excluded_contexts": '[{"id":"ctx_orig","pattern":"ctx_orig"}]',
+        }
+        rule_data = {
+            "trigger_canonical": "cas trigger",
+            "variants": [{"text": "merged variant", "kind": "weak_recall", "requires_concepts": []}],
+            "excluded_contexts": [{"id": "ctx_merged", "pattern": "ctx_merged"}],
+        }
+
+        # Simulate concurrent modification: after merge applies but before revert,
+        # bump rule_version so the revert CAS WHERE clause won't match.
+        original_revert = None
+
+        def _intercept_revert(db_arg, target_id, merged_row, *args, **kwargs):
+            # Bump rule_version to simulate concurrent modification
+            with db_arg.transaction() as tx:
+                tx.execute("UPDATE rules SET rule_version = rule_version + 10 WHERE id = ?", (target_id,))
+            # Now call the real _revert_merge — CAS will fail (rowcount=0)
+            return original_revert(db_arg, target_id, merged_row, *args, **kwargs)
+
+        import nokori.cold.integrate as integrate_mod
+        original_revert = integrate_mod._revert_merge
+
+        with patch("nokori.eval.synthetic.run_synthetic_eval", return_value=None), \
+             patch("nokori.cold.integrate._revert_merge", side_effect=_intercept_revert):
+            result = apply_merge_with_reeval(
+                db,
+                target_id="target-4",
+                rule_data=rule_data,
+                merge_op="merge_into_existing",
+                merge_info={"existing_rule": existing_rule},
+                eval_cases=[{"dummy": True}],
+                global_adversarial_cases=None,
+                idf_stats=None,
+            )
+
+        assert isinstance(result, MergeRevalOutcome)
+        assert result.success is False
+
+        # Verify DB: rule retains MERGED state (revert failed, no-op)
+        row = db.fetchone("SELECT trigger_variants, excluded_contexts FROM rules WHERE id = ?", ("target-4",))
+        assert row is not None
+        variants_after = json.loads(row["trigger_variants"])
+        excluded_after = json.loads(row["excluded_contexts"])
+        # Should contain the merged values (NOT reverted to orig)
+        assert variants_after == [
+            {"text": "orig", "kind": "weak_recall", "requires_concepts": []},
+            {"text": "merged variant", "kind": "weak_recall", "requires_concepts": []},
+        ]
+        assert excluded_after == [
+            {"id": "ctx_orig", "pattern": "ctx_orig"},
+            {"id": "ctx_merged", "pattern": "ctx_merged"},
+        ]
 
     def test_interface_returns_dataclass(self):
         from nokori.cold.integrate import MergeRevalOutcome

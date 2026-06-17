@@ -17,7 +17,7 @@ from ..db import (
     open_db,
 )
 from ..errors import NokoriError
-from ..matcher.compiler import CompilationError, compile_rule
+from ..matcher.compiler import validate_rule_compilation
 from ..policy import RUNTIME_POLICY_VERSION
 from ..utils.ids import new_uuid, short_id_for
 from ..utils.time import now_iso
@@ -168,20 +168,14 @@ def _validate_matcher_structure(rec: dict) -> str | None:
         return "excluded_contexts must be a list"
     if not isinstance(variants, list) or not variants:
         return "trigger_variants must be a non-empty list for non-archived imports"
-    try:
-        compile_rule(
-            {
-                "concepts": concepts,
-                "required_concept_groups": groups,
-                "excluded_contexts": excluded_contexts,
-                "variants": _normalize_variants_for_compile(rec),
-                "trigger_canonical": rec.get("trigger_canonical", ""),
-            },
-            search_terms=rec.get("search_terms") or {},
-        )
-    except (CompilationError, TypeError, AttributeError) as e:
-        return f"matcher compilation failed: {e}"
-    return None
+    return validate_rule_compilation(
+        concepts=concepts,
+        required_concept_groups=groups,
+        excluded_contexts=excluded_contexts,
+        variants=_normalize_variants_for_compile(rec),
+        trigger_canonical=rec.get("trigger_canonical", ""),
+        search_terms=rec.get("search_terms") or {},
+    )
 
 
 def _import_status(rec: dict) -> str:

@@ -6,6 +6,7 @@ from ..config import Config
 from ..db import SCHEMA_VERSION, dumps_json, fetch_rule_by_short_id, open_db
 from ..errors import NokoriError
 from ..events.observability import write_event
+from ..matcher.compiler import validate_rule_compilation
 from ..policy import RUNTIME_POLICY_VERSION
 from ..search.embedding import index_rule_if_enabled
 from ..search.tokenizer import tokenize
@@ -97,6 +98,17 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
     activation_origin = None
     severity = getattr(args, "severity", "reminder") or "reminder"
     concepts, groups, variant_entries = _manual_trigger_structure(args.trigger, variants)
+
+    compile_err = validate_rule_compilation(
+        concepts=concepts,
+        required_concept_groups=groups,
+        excluded_contexts=[],
+        variants=variant_entries,
+        trigger_canonical=args.trigger,
+        search_terms=terms,
+    )
+    if compile_err:
+        raise NokoriError(f"trigger structure invalid: {compile_err}")
 
     db = open_db(cfg.db_path)
     try:
