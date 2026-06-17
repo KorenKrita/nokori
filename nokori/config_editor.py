@@ -11,7 +11,7 @@ import tomllib
 from pathlib import Path
 from typing import Any, Literal
 
-from .config import _CONFIG_FILE_NAME, _TOML_TO_ENV, Config
+from .config import _CONFIG_FILE_NAME, Config
 from .config_schema import (
     FIELD_BY_ID,
     FIELDS,
@@ -103,7 +103,10 @@ def list_set_paths(doc: dict[str, Any], prefix: tuple[str, ...] = ()) -> set[str
 
 
 def env_keys_for_path(path: tuple[str, ...]) -> list[str]:
-    return [env for keys, env in _TOML_TO_ENV.items() if keys == path]
+    # Derived from FIELDS (single source of truth) — same mapping the Config
+    # loader uses. Replaces the prior read against the hand-maintained
+    # `_TOML_TO_ENV` literal.
+    return [f.env_name for f in FIELDS if f.path == path and f.env_name]
 
 
 def _format_toml_value(value: Any) -> str:
@@ -279,36 +282,25 @@ def _schema_payload(locale: Locale) -> dict[str, Any]:
 
 
 def _effective_values(cfg: Config) -> dict[str, Any]:
-    return {
-        "data_dir": str(cfg.data_dir),
-        "log_level": cfg.log_level,
-        "max_injection_chars": cfg.max_injection_chars,
-        "disabled": cfg.disabled,
-        "strict": cfg.strict,
-        "dismiss_phrase": cfg.dismiss_phrase,
-        "gate.enabled": cfg.gate_enabled,
-        "gate.ttl_seconds": cfg.gate_ttl_seconds,
-        "gate.matcher": cfg.gate_matcher,
-        "extract.mode": cfg.extract_mode,
-        "extract.defer_when_active": cfg.extract_defer_when_active,
-        "extract.fork_cache": cfg.extract_fork_cache,
-        "llm.base_url": cfg.llm_base_url or "",
-        "llm.model": cfg.llm_model or "",
-        "llm.api_key": "***" if cfg.llm_api_key else "",
-        "embed.enabled": cfg.embed_enabled,
-        "embed.base_url": cfg.embed_base_url or "",
-        "embed.model": cfg.embed_model or "",
-        "embed.api_key": "***" if cfg.embed_api_key else "",
-        "embed.dimensions": cfg.embed_dimensions,
-        "embed.chunk_size": cfg.embed_chunk_size,
-        "embed.chunk_count": cfg.embed_chunk_count,
-        "embed.hook_timeout_seconds": cfg.embed_hook_timeout_seconds,
-        "embed.server_idle_seconds": cfg.embed_server_idle_seconds,
-        "embed.server_auto_start": cfg.embed_server_auto_start,
-        "hot_cache.enabled": cfg.hot_cache_enabled,
-        "session.idle_seconds": cfg.session_idle_seconds,
-        "promotion.enabled": cfg.promotion_enabled,
-        # Per-role model configuration
+    # Derive non-models.* values from FIELDS (single source of truth).
+    out: dict[str, Any] = {}
+    for field in FIELDS:
+        if field.id.startswith("models."):
+            continue
+        attr_name = field.id.replace(".", "_")
+        value = getattr(cfg, attr_name)
+        if isinstance(value, Path):
+            out[field.id] = str(value)
+        elif field.field_type == "secret":
+            out[field.id] = "***" if value else ""
+        elif field.field_type in ("string", "enum"):
+            out[field.id] = value or ""
+        else:
+            # int, bool — use directly
+            out[field.id] = value
+
+    # ponytail: models.* are per-role keyed, not FieldDef-shaped
+    out.update({
         "models.extractor": cfg.role_models.get("extractor", ""),
         "models.admission_judge": cfg.role_models.get("admission_judge", ""),
         "models.rule_rewriter": cfg.role_models.get("rule_rewriter", ""),
@@ -337,8 +329,11 @@ def _effective_values(cfg: Config) -> dict[str, Any]:
         "models.timeouts.synthetic_eval_generator_timeout": cfg.role_timeouts.get(
             "synthetic_eval_generator", 60
         ),
-        "models.timeouts.posthoc_evaluator_timeout": cfg.role_timeouts.get("posthoc_evaluator", 45),
-    }
+        "models.timeouts.posthoc_evaluator_timeout": cfg.role_timeouts.get(
+            "posthoc_evaluator", 45
+        ),
+    })
+    return out
 
 
 def _file_has_remote(doc: dict[str, Any]) -> bool:

@@ -22,6 +22,11 @@ class FieldDef:
     read_only: bool = False
     exclusive_group: str | None = None
     exclusive_variant: Literal["local", "remote"] | None = None
+    # env_name: declared data, NOT derived from path. Several paths map to env
+    # names that don't follow any path-based convention (e.g.
+    # ("embed","hook_timeout_seconds") → NOKORI_HOOK_EMBED_TIMEOUT). Carrying the
+    # env name on the FieldDef lets `_TOML_TO_ENV` be derived from FIELDS.
+    env_name: str | None = None
     label: dict[Locale, str] | None = None
     description: dict[Locale, str] | None = None
 
@@ -30,6 +35,17 @@ class FieldDef:
             object.__setattr__(self, "label", {})
         if self.description is None:
             object.__setattr__(self, "description", {})
+
+
+def derive_env_map() -> dict[tuple[str, ...], str]:
+    """Single-source derivation of the (path_tuple → ENV_NAME) map.
+
+    Replaces the hand-maintained `_TOML_TO_ENV` literal in `nokori.config`.
+    Only fields with a non-None `env_name` participate. The golden-snapshot
+    test in `tests/test_config_schema_coherence.py` asserts this equals the
+    previous literal exactly — if it drifts, derivation is wrong.
+    """
+    return {f.path: f.env_name for f in FIELDS if f.env_name}
 
 
 def _f(
@@ -43,6 +59,7 @@ def _f(
     read_only: bool = False,
     exclusive_group: str | None = None,
     exclusive_variant: Literal["local", "remote"] | None = None,
+    env_name: str | None = None,
     label_zh: str = "",
     label_en: str = "",
     label_ja: str = "",
@@ -60,6 +77,7 @@ def _f(
         read_only=read_only,
         exclusive_group=exclusive_group,
         exclusive_variant=exclusive_variant,
+        env_name=env_name,
         label={"zh": label_zh, "en": label_en, "ja": label_ja},
         description={"zh": desc_zh, "en": desc_en, "ja": desc_ja},
     )
@@ -72,6 +90,7 @@ FIELDS: tuple[FieldDef, ...] = (
         "string",
         "~/.nokori",
         read_only=True,
+        env_name="NOKORI_DATA_DIR",
         label_zh="数据目录",
         label_en="Data directory",
         label_ja="データディレクトリ",
@@ -85,6 +104,7 @@ FIELDS: tuple[FieldDef, ...] = (
         "enum",
         "warn",
         options=("debug", "info", "warn", "error"),
+        env_name="NOKORI_LOG_LEVEL",
         label_zh="日志级别",
         label_en="Log level",
         label_ja="ログレベル",
@@ -98,6 +118,7 @@ FIELDS: tuple[FieldDef, ...] = (
         "int",
         1500,
         min_value=0,
+        env_name="NOKORI_MAX_INJECTION_CHARS",
         label_zh="注入字符上限",
         label_en="Max injection characters",
         label_ja="注入最大文字数",
@@ -110,6 +131,7 @@ FIELDS: tuple[FieldDef, ...] = (
         ("disabled",),
         "bool",
         False,
+        env_name="NOKORI_DISABLED",
         label_zh="禁用 Nokori",
         label_en="Disable Nokori",
         label_ja="Nokori を無効化",
@@ -122,6 +144,7 @@ FIELDS: tuple[FieldDef, ...] = (
         ("strict",),
         "bool",
         False,
+        env_name="NOKORI_STRICT",
         label_zh="严格模式",
         label_en="Strict mode",
         label_ja="厳格モード",
@@ -134,6 +157,7 @@ FIELDS: tuple[FieldDef, ...] = (
         ("dismiss_phrase",),
         "string",
         "dismiss",
+        env_name="NOKORI_DISMISS_PHRASE",
         label_zh="退役口令",
         label_en="Dismiss phrase",
         label_ja="退役フレーズ",
@@ -146,6 +170,7 @@ FIELDS: tuple[FieldDef, ...] = (
         ("gate", "enabled"),
         "bool",
         True,
+        env_name="NOKORI_GATE_ENABLED",
         label_zh="启用 Gate",
         label_en="Gate enabled",
         label_ja="Gate 有効",
@@ -159,6 +184,7 @@ FIELDS: tuple[FieldDef, ...] = (
         "int",
         600,
         min_value=0,
+        env_name="NOKORI_GATE_TTL_SECONDS",
         label_zh="Gate 标记 TTL（秒）",
         label_en="Gate marker TTL (seconds)",
         label_ja="Gate マーカー TTL（秒）",
@@ -171,6 +197,7 @@ FIELDS: tuple[FieldDef, ...] = (
         ("gate", "matcher"),
         "string",
         DEFAULT_GATE_MATCHER,
+        env_name="NOKORI_GATE_MATCHER",
         label_zh="Gate 工具匹配器",
         label_en="Gate tool matcher",
         label_ja="Gate ツールマッチャー",
@@ -184,6 +211,7 @@ FIELDS: tuple[FieldDef, ...] = (
         "enum",
         "manual",
         options=("manual", "async"),
+        env_name="NOKORI_EXTRACT_MODE",
         label_zh="提取模式",
         label_en="Extract mode",
         label_ja="抽出モード",
@@ -196,6 +224,7 @@ FIELDS: tuple[FieldDef, ...] = (
         ("extract", "defer_when_active"),
         "bool",
         False,
+        env_name="NOKORI_EXTRACT_DEFER_ACTIVE",
         label_zh="多会话时推迟提取",
         label_en="Defer extract when other sessions open",
         label_ja="他セッション中は抽出を延期",
@@ -208,6 +237,7 @@ FIELDS: tuple[FieldDef, ...] = (
         ("extract", "fork_cache"),
         "bool",
         False,
+        env_name="NOKORI_EXTRACT_FORK_CACHE",
         label_zh="Fork 缓存提取（Claude Code）",
         label_en="Fork cache extract (Claude Code)",
         label_ja="Fork キャッシュ抽出（Claude Code）",
@@ -220,6 +250,7 @@ FIELDS: tuple[FieldDef, ...] = (
         ("llm", "base_url"),
         "string",
         "",
+        env_name="NOKORI_LLM_BASE_URL",
         label_zh="LLM API 地址",
         label_en="LLM base URL",
         label_ja="LLM ベース URL",
@@ -232,6 +263,7 @@ FIELDS: tuple[FieldDef, ...] = (
         ("llm", "model"),
         "string",
         "",
+        env_name="NOKORI_LLM_MODEL",
         label_zh="LLM 模型",
         label_en="LLM model",
         label_ja="LLM モデル",
@@ -244,6 +276,7 @@ FIELDS: tuple[FieldDef, ...] = (
         ("llm", "api_key"),
         "secret",
         "",
+        env_name="NOKORI_LLM_API_KEY",
         label_zh="LLM API Key",
         label_en="LLM API key",
         label_ja="LLM API キー",
@@ -256,6 +289,7 @@ FIELDS: tuple[FieldDef, ...] = (
         ("embed", "enabled"),
         "bool",
         False,
+        env_name="NOKORI_EMBED_ENABLED",
         label_zh="强制启用向量检索",
         label_en="Force embedding retrieval",
         label_ja="ベクトル検索を強制",
@@ -270,6 +304,7 @@ FIELDS: tuple[FieldDef, ...] = (
         "",
         exclusive_group="embed_backend",
         exclusive_variant="remote",
+        env_name="NOKORI_EMBED_BASE_URL",
         label_zh="Embedding API 地址",
         label_en="Embedding base URL",
         label_ja="Embedding ベース URL",
@@ -284,6 +319,7 @@ FIELDS: tuple[FieldDef, ...] = (
         "",
         exclusive_group="embed_backend",
         exclusive_variant="remote",
+        env_name="NOKORI_EMBED_MODEL",
         label_zh="Embedding 模型",
         label_en="Embedding model",
         label_ja="Embedding モデル",
@@ -298,6 +334,7 @@ FIELDS: tuple[FieldDef, ...] = (
         "",
         exclusive_group="embed_backend",
         exclusive_variant="remote",
+        env_name="NOKORI_EMBED_API_KEY",
         label_zh="Embedding API Key",
         label_en="Embedding API key",
         label_ja="Embedding API キー",
@@ -311,6 +348,7 @@ FIELDS: tuple[FieldDef, ...] = (
         "int",
         0,
         min_value=0,
+        env_name="NOKORI_EMBED_DIMENSIONS",
         label_zh="向量维度",
         label_en="Embedding dimensions",
         label_ja="ベクトル次元",
@@ -324,6 +362,7 @@ FIELDS: tuple[FieldDef, ...] = (
         "int",
         4000,
         min_value=16,
+        env_name="NOKORI_EMBED_CHUNK_SIZE",
         label_zh="分块大小",
         label_en="Chunk size",
         label_ja="チャンクサイズ",
@@ -337,6 +376,7 @@ FIELDS: tuple[FieldDef, ...] = (
         "int",
         2,
         min_value=1,
+        env_name="NOKORI_EMBED_CHUNK_COUNT",
         label_zh="分块数量",
         label_en="Chunk count",
         label_ja="チャンク数",
@@ -352,6 +392,7 @@ FIELDS: tuple[FieldDef, ...] = (
         min_value=1,
         exclusive_group="embed_backend",
         exclusive_variant="local",
+        env_name="NOKORI_HOOK_EMBED_TIMEOUT",
         label_zh="Hook 向量超时（秒）",
         label_en="Hook embed timeout (s)",
         label_ja="Hook ベクトルタイムアウト（秒）",
@@ -367,6 +408,7 @@ FIELDS: tuple[FieldDef, ...] = (
         min_value=60,
         exclusive_group="embed_backend",
         exclusive_variant="local",
+        env_name="NOKORI_EMBED_SERVER_IDLE",
         label_zh="Embed 服务空闲关闭（秒）",
         label_en="Embed server idle shutdown (s)",
         label_ja="Embed サーバーアイドル終了（秒）",
@@ -381,6 +423,7 @@ FIELDS: tuple[FieldDef, ...] = (
         True,
         exclusive_group="embed_backend",
         exclusive_variant="local",
+        env_name="NOKORI_EMBED_SERVER_AUTO_START",
         label_zh="自动启动 Embed 服务",
         label_en="Auto-start embed server",
         label_ja="Embed サーバー自動起動",
@@ -393,6 +436,7 @@ FIELDS: tuple[FieldDef, ...] = (
         ("hot_cache", "enabled"),
         "bool",
         True,
+        env_name="NOKORI_HOT_CACHE",
         label_zh="热缓存",
         label_en="Hot cache",
         label_ja="ホットキャッシュ",
@@ -406,6 +450,7 @@ FIELDS: tuple[FieldDef, ...] = (
         "int",
         1800,
         min_value=60,
+        env_name="NOKORI_SESSION_IDLE_SECONDS",
         label_zh="会话空闲阈值（秒）",
         label_en="Session idle threshold (s)",
         label_ja="セッションアイドル閾値（秒）",
@@ -418,6 +463,7 @@ FIELDS: tuple[FieldDef, ...] = (
         ("promotion", "enabled"),
         "bool",
         True,
+        env_name="NOKORI_PROMOTION_ENABLED",
         label_zh="跨项目提升",
         label_en="Cross-project promotion",
         label_ja="クロスプロジェクト昇格",

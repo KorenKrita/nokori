@@ -7,6 +7,7 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
+from .config_schema import derive_env_map
 from .constants import DEFAULT_GATE_MATCHER
 from .errors import ConfigError
 from .utils.ids import safe_session_id
@@ -25,37 +26,13 @@ def _load_toml(path: Path) -> dict:
 
 
 # --- Config file → flat dict mapping ---
-
-_TOML_TO_ENV = {
-    ("data_dir",): "NOKORI_DATA_DIR",
-    ("max_injection_chars",): "NOKORI_MAX_INJECTION_CHARS",
-    ("gate", "enabled"): "NOKORI_GATE_ENABLED",
-    ("gate", "ttl_seconds"): "NOKORI_GATE_TTL_SECONDS",
-    ("gate", "matcher"): "NOKORI_GATE_MATCHER",
-    ("extract", "mode"): "NOKORI_EXTRACT_MODE",
-    ("extract", "defer_when_active"): "NOKORI_EXTRACT_DEFER_ACTIVE",
-    ("extract", "fork_cache"): "NOKORI_EXTRACT_FORK_CACHE",
-    ("llm", "base_url"): "NOKORI_LLM_BASE_URL",
-    ("llm", "model"): "NOKORI_LLM_MODEL",
-    ("llm", "api_key"): "NOKORI_LLM_API_KEY",
-    ("embed", "enabled"): "NOKORI_EMBED_ENABLED",
-    ("embed", "base_url"): "NOKORI_EMBED_BASE_URL",
-    ("embed", "model"): "NOKORI_EMBED_MODEL",
-    ("embed", "api_key"): "NOKORI_EMBED_API_KEY",
-    ("embed", "dimensions"): "NOKORI_EMBED_DIMENSIONS",
-    ("embed", "chunk_size"): "NOKORI_EMBED_CHUNK_SIZE",
-    ("embed", "chunk_count"): "NOKORI_EMBED_CHUNK_COUNT",
-    ("embed", "hook_timeout_seconds"): "NOKORI_HOOK_EMBED_TIMEOUT",
-    ("embed", "server_idle_seconds"): "NOKORI_EMBED_SERVER_IDLE",
-    ("embed", "server_auto_start"): "NOKORI_EMBED_SERVER_AUTO_START",
-    ("hot_cache", "enabled"): "NOKORI_HOT_CACHE",
-    ("session", "idle_seconds"): "NOKORI_SESSION_IDLE_SECONDS",
-    ("promotion", "enabled"): "NOKORI_PROMOTION_ENABLED",
-    ("strict",): "NOKORI_STRICT",
-    ("disabled",): "NOKORI_DISABLED",
-    ("dismiss_phrase",): "NOKORI_DISMISS_PHRASE",
-    ("log_level",): "NOKORI_LOG_LEVEL",
-}
+#
+# Derived from config_schema.FIELDS (single source of truth). Each FieldDef with
+# a non-None `env_name` contributes one (path_tuple → ENV_NAME) entry. Adding a
+# new config key means editing FIELDS only; this map follows automatically. The
+# golden-snapshot test in tests/test_config_schema_coherence.py guards against
+# drift by asserting derive_env_map() equals the previous hand-maintained literal.
+_TOML_TO_ENV: dict[tuple[str, ...], str] = derive_env_map()
 
 
 def _get_nested(doc: dict, path: tuple[str, ...]) -> object:
@@ -307,6 +284,59 @@ def _expand_path(p: str) -> Path:
     return Path(p).expanduser().resolve()
 
 
+# --- Load-time relation invariants (exclusive_group semantics) ---
+#
+# Authoritative gate for `exclusive_group` relations. Previously these were
+# only checked ad hoc at use sites (embedding.py, merge/policy.py, status.py,
+# health.py); now `Config.from_env` fails loud so the user learns the config is
+# inconsistent at load time rather than via silent mis-routing.
+#
+# Scope: `embed_backend` is the only exclusive_group with a relation invariant
+# today. For it, "remote intent" is signalled by EITHER embed.base_url OR
+# embed.model being set (a user who configures one intends remote). When remote
+# is intended AND embed.enabled is true, BOTH embed.base_url and embed.model
+# must be present (embed.api_key is optional — some providers don't require it).
+# Local-only fields (hook_timeout_seconds, server_idle_seconds, server_auto_start)
+# always have values via defaults, so they can't signal variant intent.
+
+
+def _validate_exclusive_groups(cfg: Config) -> None:
+    """Validate `exclusive_group` relation invariants after env+file resolution.
+
+    For `embed_backend`: if `embed.enabled` is true and the remote variant is
+    intended (at least one of embed.base_url / embed.model is set), then all
+    remote-required fields must be set. Raise ConfigError naming missing field(s).
+    """
+    if not cfg.embed_enabled:
+        return  # embed disabled — no invariant to enforce
+
+    # Detect remote intent: any remote-required field set means user intends remote.
+    # The two remote-required fields are base_url and model; if neither is set,
+    # the user has not opted into remote (local variant is in effect).
+    base_url_set = bool(cfg.embed_base_url)
+    model_set = bool(cfg.embed_model)
+    remote_intended = base_url_set or model_set
+    if not remote_intended:
+        return  # local variant — nothing to require
+
+    missing: list[str] = []
+    if not base_url_set:
+        missing.append("embed.base_url")
+    if not model_set:
+        missing.append("embed.model")
+    if missing:
+        joined = ", ".join(missing)
+        raise ConfigError(
+            f"embed.enabled is true with remote variant intended, "
+            f"but missing required field(s): {joined}",
+            remediation=(
+                "Set both embed.base_url and embed.model in config.toml or via "
+                "NOKORI_EMBED_BASE_URL / NOKORI_EMBED_MODEL, "
+                "or disable embed (embed.enabled = false) for local-only mode."
+            ),
+        )
+
+
 @dataclass(frozen=True)
 class Config:
     data_dir: Path
@@ -349,7 +379,7 @@ class Config:
         file_values, raw_toml = _resolve_file_values(data_dir_raw)
         data_dir = _expand_path(_str_val("NOKORI_DATA_DIR", "~/.nokori", file_values))
 
-        return cls(
+        cfg = cls(
             data_dir=data_dir,
             max_injection_chars=_int_val(
                 "NOKORI_MAX_INJECTION_CHARS", 1500, file_values, min_value=0
@@ -402,6 +432,8 @@ class Config:
             role_timeouts=_resolve_role_timeouts(raw_toml),
             log_level=_log_level_val("NOKORI_LOG_LEVEL", "warn", file_values),
         )
+        _validate_exclusive_groups(cfg)
+        return cfg
 
     @property
     def db_path(self) -> Path:
