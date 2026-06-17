@@ -139,6 +139,16 @@ def test_unsafe_new_rule_safety_rejects():
     assert "unsafe" in result.reason
 
 
+def test_existing_archived_fingerprint_rejects_new():
+    """Archived-fingerprint metadata attached to a merge neighbor blocks re-admission."""
+    planner = _planner(relation="equivalent", quality_winner="new", confidence=0.95)
+    existing = _existing()
+    existing["archived_fingerprints"] = [{"id": "fp-1", "strength": "system"}]
+    result = apply_merge_policy(planner, existing, _new_rule())
+    assert result.operation == "reject_new"
+    assert "archived fingerprint" in result.reason
+
+
 # ---------------------------------------------------------------------------
 # 4. Unsafe operation_safety + safe new rule -> keep_both
 # ---------------------------------------------------------------------------

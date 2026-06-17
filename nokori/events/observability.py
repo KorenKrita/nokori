@@ -11,7 +11,7 @@ from typing import Any
 
 from ..db import Db, dumps_json
 from ..utils.logging import get_logger
-from ..utils.time import now_iso
+from ..utils.time import normalize_db_timestamp, now_iso
 
 log = get_logger("nokori.events.observability")
 
@@ -186,10 +186,10 @@ def query_errors(
         params.append(session_id)
     if since is not None:
         where.append("created_at >= ?")
-        params.append(since)
+        params.append(normalize_db_timestamp(since))
     if until is not None:
         where.append("created_at <= ?")
-        params.append(until)
+        params.append(normalize_db_timestamp(until))
 
     sql = f"SELECT {group_col}, COUNT(*) AS count FROM error_events"
     if where:

@@ -135,14 +135,18 @@ def run_injection_cleanup(db: Db) -> int:
     cutoff = _now() - timedelta(days=INJECTION_RETENTION_DAYS)
     cutoff_iso = iso_of(cutoff)
     with db.transaction() as tx:
-        # Delete posthoc jobs referencing old fire events
+        # Delete posthoc jobs referencing old non-harmful fire events. Harmful
+        # fire events are lifetime evidence for suppression and must not decay
+        # just because the injection history retention window elapsed.
         tx.execute(
             "DELETE FROM posthoc_jobs WHERE fire_event_id IN "
-            "(SELECT id FROM rule_fire_events WHERE created_at < ?)",
+            "(SELECT id FROM rule_fire_events WHERE created_at < ? "
+            "AND (posthoc_label IS NULL OR posthoc_label != 'harmful'))",
             (cutoff_iso,),
         )
         cur = tx.execute(
-            "DELETE FROM rule_fire_events WHERE created_at < ?",
+            "DELETE FROM rule_fire_events WHERE created_at < ? "
+            "AND (posthoc_label IS NULL OR posthoc_label != 'harmful')",
             (cutoff_iso,),
         )
         deleted = cur.rowcount if cur.rowcount is not None else 0

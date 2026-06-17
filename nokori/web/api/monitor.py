@@ -6,6 +6,7 @@ from fastapi import APIRouter, Query
 
 from nokori.db import open_db
 from nokori.events.observability import query_errors
+from nokori.utils.time import normalize_db_timestamp
 from nokori.web.deps import get_config
 
 router = APIRouter()
@@ -18,6 +19,8 @@ def get_monitor_overview(
     until: str | None = Query(None),
 ) -> dict:
     cfg = get_config()
+    since_db = normalize_db_timestamp(since)
+    until_db = normalize_db_timestamp(until)
     db = open_db(cfg.db_path)
     try:
         where_parts = []
@@ -27,10 +30,10 @@ def get_monitor_overview(
             params.append(session_id)
         if since:
             where_parts.append("created_at >= ?")
-            params.append(since)
+            params.append(since_db)
         if until:
             where_parts.append("created_at <= ?")
-            params.append(until)
+            params.append(until_db)
 
         where_clause = (" WHERE " + " AND ".join(where_parts)) if where_parts else ""
 
@@ -56,7 +59,7 @@ def get_monitor_overview(
         )
 
         error_summary = query_errors(
-            db, group_by="role", session_id=session_id, since=since, until=until
+            db, group_by="role", session_id=session_id, since=since_db, until=until_db
         )
 
         # Conversion funnel: cold pipeline events
@@ -91,10 +94,12 @@ def get_monitor_errors(
     until: str | None = Query(None),
 ) -> dict:
     cfg = get_config()
+    since_db = normalize_db_timestamp(since)
+    until_db = normalize_db_timestamp(until)
     db = open_db(cfg.db_path)
     try:
         results = query_errors(
-            db, group_by=group_by, session_id=session_id, since=since, until=until
+            db, group_by=group_by, session_id=session_id, since=since_db, until=until_db
         )
         return {"errors": results, "group_by": group_by}
     finally:
@@ -108,6 +113,8 @@ def get_error_trend(
     session_id: str | None = Query(None),
 ) -> dict:
     cfg = get_config()
+    since_db = normalize_db_timestamp(since)
+    until_db = normalize_db_timestamp(until)
     db = open_db(cfg.db_path)
     try:
         where_parts = []
@@ -117,10 +124,10 @@ def get_error_trend(
             params.append(session_id)
         if since:
             where_parts.append("created_at >= ?")
-            params.append(since)
+            params.append(since_db)
         if until:
             where_parts.append("created_at <= ?")
-            params.append(until)
+            params.append(until_db)
 
         where_clause = (" WHERE " + " AND ".join(where_parts)) if where_parts else ""
 

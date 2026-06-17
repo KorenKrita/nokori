@@ -18,6 +18,7 @@ _FORMAT = "%(asctime)s %(levelname)-7s %(name)s [%(session_id)s] %(message)s"
 _DATEFMT = "%Y-%m-%d %H:%M:%S"
 
 _configured = False
+_configured_logs_dir: Path | None = None
 _lock = Lock()
 
 
@@ -29,13 +30,13 @@ class _SessionFilter(logging.Filter):
 
 
 def configure(logs_dir: Path, level: str = "warn") -> None:
-    global _configured
+    global _configured, _configured_logs_dir
     with _lock:
-        if _configured:
-            return
-        logs_dir.mkdir(parents=True, exist_ok=True)
         root = logging.getLogger("nokori")
         root.setLevel(_LEVELS.get(level.lower(), logging.WARNING))
+        if _configured and _configured_logs_dir == logs_dir:
+            return
+        logs_dir.mkdir(parents=True, exist_ok=True)
         root.propagate = False
         for h in list(root.handlers):
             root.removeHandler(h)
@@ -80,6 +81,7 @@ def configure(logs_dir: Path, level: str = "warn") -> None:
         root.addHandler(pipeline_handler)
 
         _configured = True
+        _configured_logs_dir = logs_dir
 
 
 class _NameStartsWith(logging.Filter):

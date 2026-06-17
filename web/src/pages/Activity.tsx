@@ -273,7 +273,7 @@ function DashboardContent({
       {subTab === 'overview' ? (
         <OverviewTab data={overviewData} />
       ) : (
-        <ErrorsTab since={since} />
+        <ErrorsTab since={since} sessionId={sessionFilter} />
       )}
     </div>
   )

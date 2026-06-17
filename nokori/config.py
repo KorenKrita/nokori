@@ -374,13 +374,19 @@ class Config:
     log_level: str
 
     @classmethod
-    def from_env(cls) -> Config:
-        data_dir_raw = os.environ.get("NOKORI_DATA_DIR") or "~/.nokori"
+    def from_env(cls, data_dir: str | Path | None = None) -> Config:
+        data_dir_raw = (
+            str(data_dir) if data_dir is not None else os.environ.get("NOKORI_DATA_DIR") or "~/.nokori"
+        )
         file_values, raw_toml = _resolve_file_values(data_dir_raw)
-        data_dir = _expand_path(_str_val("NOKORI_DATA_DIR", "~/.nokori", file_values))
+        resolved_data_dir = (
+            _expand_path(str(data_dir))
+            if data_dir is not None
+            else _expand_path(_str_val("NOKORI_DATA_DIR", "~/.nokori", file_values))
+        )
 
         cfg = cls(
-            data_dir=data_dir,
+            data_dir=resolved_data_dir,
             max_injection_chars=_int_val(
                 "NOKORI_MAX_INJECTION_CHARS", 1500, file_values, min_value=0
             ),

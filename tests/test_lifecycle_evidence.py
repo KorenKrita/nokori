@@ -273,10 +273,9 @@ class TestGatherShadowEvidence:
     def test_task_dedup(self, db):
         """Events in same session with same prompt_hash prefix are task-deduped.
 
-        Task dedup groups by: same prompt_hash prefix (first 8 chars) OR
-        within 3 consecutive positions. To isolate prefix grouping, place
-        target events > 3 positions apart within the same session (4 filler
-        events with different prefixes in between).
+        Task dedup groups by same prompt_hash prefix (first 8 chars). Events
+        with different prompt hashes must not be absorbed merely because they
+        are close in session order.
         """
         rid = _insert_rule(db, status="candidate")
         sess1 = str(uuid.uuid4())
@@ -295,12 +294,9 @@ class TestGatherShadowEvidence:
         shadow = gather_shadow_evidence(db, rid, 1, window_days=30)
         # All 6 events have unique fingerprints → all counted in raw
         assert shadow["would_help_high"] == 6
-        # Task dedup: position 0 starts a group with prefix "abcdefgh".
-        # Positions 1-3 are within consecutive range (j-i <= 3) so absorbed.
-        # Position 4 (j-i=4, different prefix) starts a new group.
-        # Position 5 (j-i=5, but same prefix "abcdefgh") is absorbed into group 0.
-        # Result: 2 task groups.
-        assert shadow["task_deduped_count"] == 2
+        # The two target events share a prefix and form one task. The four
+        # fillers have distinct prefixes and count separately.
+        assert shadow["task_deduped_count"] == 5
 
     def test_distinct_sessions(self, db):
         """Counts unique sessions correctly."""

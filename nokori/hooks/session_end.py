@@ -211,7 +211,22 @@ def _try_fork_extract(
         log.warning("fork extract: invalid session_id, skipping")
         return False
 
-    env = os.environ.copy()
+    safe_vars = (
+        "PATH",
+        "HOME",
+        "USER",
+        "LANG",
+        "SHELL",
+        "TERM",
+        "TMPDIR",
+        "XDG_RUNTIME_DIR",
+    )
+    safe_prefixes = ("NOKORI_", "ANTHROPIC_", "CLAUDE_")
+    env = {
+        k: v
+        for k, v in os.environ.items()
+        if k in safe_vars or any(k.startswith(prefix) for prefix in safe_prefixes)
+    }
     env.pop("NOKORI_EXTRACTING", None)
     env["NOKORI_DATA_DIR"] = str(cfg.data_dir)
 

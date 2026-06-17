@@ -60,7 +60,7 @@ def _make_rule_params(
         "pipeline-v3", "policy-v2",
         status, severity,
         trigger,
-        '[{"id": "git", "label": "git", "match_mode": "any_alias", "aliases": [{"text": "git push", "strength": "strong"}]}]',
+        '[{"id": "git", "label": "git", "match_mode": "any_alias", "required": true, "aliases": [{"text": "git push", "strength": "strong"}]}]',
         '[{"id": "git-push", "all_of": ["git"]}]',
         '[]',
         '[{"text": "force push", "kind": "weak_recall", "requires_concepts": []}]',
@@ -211,6 +211,37 @@ class TestEditCommand:
         assert rc == 0
         out = capsys.readouterr().out
         assert "nothing to update" in out
+
+    def test_edit_trigger_rejects_uncompilable_matcher(self, cfg, db_with_rules):
+        from nokori.commands.edit import run
+        from nokori.errors import NokoriError
+
+        with db_with_rules.transaction() as tx:
+            tx.execute(
+                "UPDATE rules SET concepts = ? WHERE short_id = ?",
+                (
+                    '[{"id": "git", "label": "git", "match_mode": "any_alias", "required": false, "aliases": [{"text": "git push", "strength": "strong"}]}]',
+                    "abc123",
+                ),
+            )
+
+        args = argparse.Namespace(
+            short_id="abc123",
+            trigger="never rebase shared branches",
+            action=None,
+            severity=None,
+            status=None,
+            variants=None,
+            terms_en=None,
+            terms_zh=None,
+        )
+        with pytest.raises(NokoriError, match="trigger structure invalid"):
+            run(args, cfg)
+
+        row = db_with_rules.fetchone(
+            "SELECT trigger_canonical FROM rules WHERE short_id = ?", ("abc123",)
+        )
+        assert row["trigger_canonical"] == "never force push to main"
 
 
 # ---------------------------------------------------------------------------

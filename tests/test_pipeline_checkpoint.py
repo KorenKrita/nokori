@@ -75,6 +75,27 @@ def _merge_planner_json(operation="keep_both"):
     })
 
 
+def _synthetic_eval_cases() -> str:
+    return json.dumps({
+        "cases": [
+            {
+                "prompt": "I am writing pytest fixtures",
+                "case_type": "positive",
+                "expected_min_decision": "warm",
+                "expected_max_decision": "hot",
+                "rationale": "Direct match",
+            },
+            {
+                "prompt": "How do I write a bash script?",
+                "case_type": "negative",
+                "expected_min_decision": "cold",
+                "expected_max_decision": "cold",
+                "rationale": "Unrelated",
+            },
+        ]
+    })
+
+
 def _extractor_candidate():
     return {
         "trigger": "When writing tests with pytest fixtures",
@@ -216,6 +237,7 @@ class TestCheckpointResume:
 
         llm = _make_llm_mock({
             "merge planner": _merge_planner_json("keep_both"),
+            "synthetic evaluation case generator": _synthetic_eval_cases(),
         })
 
         config = PipelineConfig(

@@ -11,6 +11,7 @@ from ..config import Config
 from ..db import (
     SCHEMA_VERSION,
     dumps_json,
+    fetch_rule_by_short_id,
     fetch_rules,
     fetch_short_ids,
     loads_json,
@@ -19,6 +20,7 @@ from ..db import (
 from ..errors import NokoriError
 from ..matcher.compiler import validate_rule_compilation
 from ..policy import RUNTIME_POLICY_VERSION
+from ..search.embedding import index_rule_if_enabled
 from ..utils.ids import new_uuid, short_id_for
 from ..utils.time import now_iso
 
@@ -359,6 +361,14 @@ def run_import(args: argparse.Namespace, cfg: Config) -> int:
                         row,
                     )
             inserted = len(pending)
+            for sid in inserted_sids:
+                rule = fetch_rule_by_short_id(db, sid)
+                if rule is None or rule.status == "archived":
+                    continue
+                try:
+                    index_rule_if_enabled(db, rule, cfg)
+                except Exception as exc:
+                    print(f"warning: embedding index failed for {sid}: {exc}")
     finally:
         db.close()
 

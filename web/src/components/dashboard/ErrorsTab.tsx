@@ -23,10 +23,12 @@ interface ErrorGroupItem {
   count: number
 }
 
-export function ErrorsTab({ since }: { since: string }) {
-  const { data: trendData } = useApi<{ trend: ErrorTrendItem[] }>('/monitor/errors/trend', { since })
-  const { data: byRole } = useApi<{ errors: ErrorGroupItem[] }>('/monitor/errors', { group_by: 'role', since })
-  const { data: byModel } = useApi<{ errors: ErrorGroupItem[] }>('/monitor/errors', { group_by: 'model_id', since })
+export function ErrorsTab({ since, sessionId }: { since: string; sessionId?: string }) {
+  const params: Record<string, string> = { since }
+  if (sessionId) params.session_id = sessionId
+  const { data: trendData } = useApi<{ trend: ErrorTrendItem[] }>('/monitor/errors/trend', params)
+  const { data: byRole } = useApi<{ errors: ErrorGroupItem[] }>('/monitor/errors', { ...params, group_by: 'role' })
+  const { data: byModel } = useApi<{ errors: ErrorGroupItem[] }>('/monitor/errors', { ...params, group_by: 'model_id' })
 
   const trend = trendData?.trend ?? []
   const roleErrors = byRole?.errors ?? []

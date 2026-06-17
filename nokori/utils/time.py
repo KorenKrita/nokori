@@ -40,3 +40,11 @@ def parse_iso(iso: str | None) -> datetime | None:
         return datetime.strptime(iso, "%Y-%m-%d %H:%M:%S").astimezone()
     except ValueError:
         return None
+
+
+def normalize_db_timestamp(value: str | None) -> str | None:
+    """Normalize API timestamp input to nokori's local DB timestamp string."""
+    dt = parse_iso(value)
+    if dt is None:
+        return value
+    return iso_of(dt.astimezone())

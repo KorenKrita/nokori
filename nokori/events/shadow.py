@@ -250,6 +250,7 @@ def _compute_task_deduped_count(deduped_rows: list[dict]) -> int:
             # Start a new task group from this row
             assigned[i] = True
             group_prefix = (session_rows[i].get("prompt_hash") or "")[:8]
+            last_assigned_idx = i
 
             for j in range(i + 1, len(session_rows)):
                 if assigned[j]:
@@ -258,11 +259,12 @@ def _compute_task_deduped_count(deduped_rows: list[dict]) -> int:
 
                 # Same task if prompt_hash prefix matches
                 same_prefix = group_prefix and j_prefix and group_prefix == j_prefix
-                # Same task if within 3 consecutive positions from group start
-                consecutive = (j - i) <= 3
+                # If both events lack prompt hashes, fall back to nearby ordering.
+                consecutive_without_hash = not group_prefix and not j_prefix and (j - last_assigned_idx) <= 3
 
-                if same_prefix or consecutive:
+                if same_prefix or consecutive_without_hash:
                     assigned[j] = True
+                    last_assigned_idx = j
 
             total_tasks += 1
 
@@ -444,6 +446,7 @@ def run_shadow_counterfactual_evaluation(db: Db, llm: Any, *, limit: int = 20) -
                 },
             )
             summary["labeled"] += 1
+            summary["failed"] += 1
             summary["processed"] += 1
             continue
         raw_label = data.get("label", "unclear")

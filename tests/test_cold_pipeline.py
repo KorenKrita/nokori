@@ -321,8 +321,8 @@ class TestFailedRoleNoDurableRules:
         assert row["status"] == "failed"
         assert "schema validation failed" in row["output_json"]
 
-    def test_eval_cases_without_positive_passes_through(self, db: Db):
-        """Synthetic eval failure does not block active insertion; LLM issues are non-blocking."""
+    def test_eval_cases_without_positive_stays_pending(self, db: Db):
+        """Synthetic eval generation failure leaves the rule pending for retry."""
         llm = _make_llm_mock({
             "admission judge": _admission_json("accept"),
             "final judge": _final_judge_json("accept_active"),
@@ -351,9 +351,8 @@ class TestFailedRoleNoDurableRules:
                 default_model="test-model",
             )
 
-        # Synthetic eval failed but rule still inserted as active (pass-through)
-        assert result.status == "active"
-        assert result.rule_id is not None
+        assert result.status == "pending"
+        assert result.rule_id is None
         row = db.fetchone(
             "SELECT status, output_json FROM llm_jobs "
             "WHERE role = 'synthetic_eval_generator'"

@@ -16,6 +16,7 @@ from ..merge.policy import (
     record_lineage,
 )
 from ..policy import RUNTIME_POLICY_VERSION, ActivationOrigin, SourceOrigin
+from ..utils.ids import short_id_for
 from ..utils.logging import get_logger
 from ..utils.time import now_iso
 from ._constants import DESTRUCTIVE_MERGE_OPS, PIPELINE_VERSION
@@ -384,7 +385,6 @@ def insert_rule_from_pipeline(
         The new rule's id.
     """
     rule_id = str(uuid.uuid4())
-    short_id = rule_id[:8]
     now = now_iso()
     scores = scores or {}
 
@@ -423,6 +423,8 @@ def insert_rule_from_pipeline(
     project_scope = "project" if project_id else "global"
 
     with db.transaction() as tx:
+        existing_short_ids = {row["short_id"] for row in tx.execute("SELECT short_id FROM rules")}
+        short_id = short_id_for(rule_id, existing_short_ids)
         tx.execute(
             "INSERT INTO rules ("
             "id, short_id, schema_version, rule_version, "
@@ -753,8 +755,8 @@ def _apply_non_destructive_merge(
     new_excluded = new_rule_data.get("excluded_contexts", [])
     if new_excluded:
         current = json.loads(rule_row["excluded_contexts"]) if rule_row["excluded_contexts"] else []
-        current_ids = {e.get("id", "") for e in current}
-        added = [e for e in new_excluded if e.get("id", "") not in current_ids]
+        current_keys = {_excluded_context_key(e) for e in current}
+        added = [e for e in new_excluded if _excluded_context_key(e) not in current_keys]
         if added:
             merged = current + added
             updates.append("excluded_contexts = ?")
@@ -800,3 +802,12 @@ def _apply_non_destructive_merge(
                     target_rule_id,
                     current_version,
                 )
+
+
+def _excluded_context_key(entry: Any) -> tuple[str, str]:
+    if isinstance(entry, dict):
+        entry_id = str(entry.get("id") or "").strip()
+        if entry_id:
+            return ("id", entry_id)
+        return ("body", dumps_json(entry))
+    return ("body", dumps_json(entry))

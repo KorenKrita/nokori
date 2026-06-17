@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import replace
 
 from ..config import Config
 from ..db import dumps_json, fetch_rule_by_short_id, open_db
 from ..errors import NokoriError
+from ..matcher.compiler import validate_rule_compilation
 from ..search.embedding import index_rule_if_enabled
+from ..search.evidence import trigger_data_for_rule
 from ..utils.text import split_csv
 from ..utils.time import now_iso
 
@@ -20,6 +23,10 @@ _EDITABLE_COLUMNS = frozenset(
         "trigger_variants",
         "search_terms",
     }
+)
+
+_MATCHER_REVALIDATE_COLUMNS = frozenset(
+    {"trigger_canonical", "trigger_variants", "search_terms"}
 )
 
 
@@ -79,6 +86,37 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
         for col, _ in updates:
             if col not in _EDITABLE_COLUMNS:
                 raise NokoriError(f"internal error: disallowed column {col!r}")
+        updated_cols = {col for col, _ in updates}
+        if updated_cols & _MATCHER_REVALIDATE_COLUMNS:
+            proposed_values = {col: val for col, val in updates}
+            proposed_rule = replace(
+                rule,
+                trigger_canonical=proposed_values.get(
+                    "trigger_canonical", rule.trigger_canonical
+                ),
+                trigger_variants=split_csv(args.variants)
+                if args.variants is not None
+                else rule.trigger_variants,
+                search_terms=terms
+                if args.terms_en is not None or args.terms_zh is not None
+                else rule.search_terms,
+            )
+            trigger_data = trigger_data_for_rule(proposed_rule)
+            if trigger_data is None:
+                raise NokoriError(
+                    "trigger structure invalid: matcher compilation failed: "
+                    "missing trigger structure"
+                )
+            compile_err = validate_rule_compilation(
+                concepts=trigger_data.get("concepts", []),
+                required_concept_groups=trigger_data.get("required_concept_groups", []),
+                excluded_contexts=trigger_data.get("excluded_contexts", []),
+                variants=trigger_data.get("variants", []),
+                trigger_canonical=proposed_rule.trigger_canonical,
+                search_terms=proposed_rule.search_terms,
+            )
+            if compile_err:
+                raise NokoriError(f"trigger structure invalid: {compile_err}")
         sets = ", ".join(f"{col} = ?" for col, _ in updates)
         params: list = [val for _, val in updates]
         params.extend([now, rule.id])
@@ -94,7 +132,7 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
             "search_terms",
             "action_instruction",
         }
-        if reindex_cols & {col for col, _ in updates}:
+        if reindex_cols & updated_cols:
             updated_rule = fetch_rule_by_short_id(db, args.short_id)
             if updated_rule and updated_rule.status not in ("archived", "suppressed"):
                 index_rule_if_enabled(db, updated_rule, cfg)

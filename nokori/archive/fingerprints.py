@@ -7,7 +7,7 @@ import uuid
 
 from ..db import Db
 
-_STRENGTH_ORDER = ("replacement", "system", "user")
+_STRENGTH_ORDER = ("user", "system", "replacement")
 STRENGTH_RANK = {s: i for i, s in enumerate(_STRENGTH_ORDER)}
 
 

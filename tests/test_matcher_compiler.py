@@ -119,6 +119,28 @@ class TestCompilationConceptGroups:
         with pytest.raises(CompilationError, match="references unknown concept"):
             compile_rule(data)
 
+    def test_group_referencing_optional_concept_raises(self):
+        data = _trigger_data(
+            concepts=[
+                _concept("required", [_alias("sql injection")], required=True),
+                _concept("optional", [_alias("database")], required=False),
+            ],
+            groups=[
+                _group("valid", ["required"]),
+                _group("invalid", ["optional"]),
+            ],
+        )
+        with pytest.raises(CompilationError, match="references optional concept"):
+            compile_rule(data)
+
+    def test_optional_only_group_raises(self):
+        data = _trigger_data(
+            concepts=[_concept("optional", [_alias("sql injection")], required=False)],
+            groups=[_group("g1", ["optional"])],
+        )
+        with pytest.raises(CompilationError, match="references optional concept"):
+            compile_rule(data)
+
     def test_empty_groups_with_required_concepts_compiles_no_gate(self):
         """Empty concept_groups with required=True concepts: no gate enforced at runtime."""
         data = _trigger_data(
@@ -828,5 +850,4 @@ class TestTriggerEvidencePassFail:
         matcher = self._compile_simple_rule()
         result = evaluate_match(matcher, "some other text with different words")
         assert result.trigger_evidence_passed is False
-
 

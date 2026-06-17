@@ -385,14 +385,10 @@ def run_synthetic_eval(
                 ctx.config.role_max_tokens,
                 ctx.config.role_timeouts,
             )
-        except (CircuitBreakerOpenError, ValueError) as exc:
-            from ..utils.logging import get_logger
-
-            log = get_logger("nokori.cold.stages")
-            log.warning("synthetic eval generation failed, passing through: %s", exc)
-            eval_cases = []
-            synthetic_eval_skipped = True
-            synthetic_passed = True
+        except CircuitBreakerOpenError:
+            raise
+        except ValueError as exc:
+            raise ValueError(f"synthetic_eval_generation_failed: {exc}") from exc
 
     if eval_cases:
         eval_rule_data = {

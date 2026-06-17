@@ -279,9 +279,12 @@ def process_candidates(
                     role_max_tokens=cfg.role_max_tokens,
                     role_timeouts=cfg.role_timeouts,
                 )
-                if not result.status.startswith("pending"):
+                if result.status.startswith("pending"):
+                    failed_seg_hashes.append(seg_hash)
+                    all_ok = False
+                else:
                     mark_ingest_done(db, seg_hash, PROMPT_VERSIONS["extractor"])
-                if result.rule_id is not None:
+                if result.rule_id is not None and result.status != "merged":
                     rules_created += 1
             except Exception as exc:
                 log.warning(

@@ -150,6 +150,7 @@ def _record_fire_events(
     *,
     turn_index: int | None = None,
     prompt_text: str | None = None,
+    project_id: str | None = None,
 ) -> None:
     """Create fire events for injected WARM/HOT rules."""
     if prompt_text and len(prompt_text) > 64:
@@ -170,6 +171,7 @@ def _record_fire_events(
                 idf_pool_version=r.trigger_idf_pool_version,
                 embedding_profile_version=r.embedding_profile_version,
                 bounded_window_ref=bounded_ref,
+                project_id=project_id,
             )
         except Exception as e:
             log.info("fire event creation failed rule=%s: %s", r.rule.id, e)
@@ -185,6 +187,7 @@ def _record_rendered_fire_events(
     *,
     turn_index: int | None = None,
     prompt_text: str | None = None,
+    project_id: str | None = None,
 ) -> None:
     results_by_id = {r.rule.id: r for r in [*hot, *warm]}
     for rule_id, level in rendered_entries:
@@ -199,6 +202,7 @@ def _record_rendered_fire_events(
             level,
             turn_index=turn_index,
             prompt_text=prompt_text,
+            project_id=project_id,
         )
 
 
@@ -252,6 +256,7 @@ def record_injection_events(
     prompt_text: str | None = None,
     record_injections: bool = True,
     record_shadow_hits: bool = True,
+    project_id: str | None = None,
 ) -> None:
     """Persist fire and shadow events for a completed injection outcome.
 
@@ -273,6 +278,7 @@ def record_injection_events(
             outcome.rendered_entries,
             turn_index=turn_index,
             prompt_text=prompt_text,
+            project_id=project_id,
         )
 
     if record_shadow_hits:
@@ -345,6 +351,7 @@ def inject_for_prompt(
         prompt_text=prompt,
         record_injections=record_injections,
         record_shadow_hits=record_shadow_hits,
+        project_id=project_id,
     )
 
     return outcome

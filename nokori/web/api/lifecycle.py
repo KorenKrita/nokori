@@ -247,21 +247,39 @@ def rule_transitions(
         if rule is None:
             raise HTTPException(404, detail=f"no rule with short_id {short_id!r}")
 
-        # Check if transition log table exists
-        table_check = db.fetchone(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='rule_transitions'"
-        )
-        if table_check is None:
-            return {"data": []}
-
         rows = db.fetchall(
-            "SELECT * FROM rule_transitions WHERE rule_id = ? ORDER BY created_at DESC LIMIT ?",
-            (rule.id, limit),
+            "SELECT id, outcome, details, created_at FROM hook_events "
+            "WHERE source = 'lifecycle_transition' AND details LIKE ? "
+            "ORDER BY created_at DESC LIMIT ?",
+            (f"%{rule.id}%", limit * 4,),
         )
     finally:
         db.close()
 
-    return {"data": [dict(r) for r in rows]}
+    transitions = []
+    for row in rows:
+        try:
+            details = json.loads(row["details"] or "{}")
+        except (TypeError, json.JSONDecodeError):
+            details = {}
+        if details.get("rule_id") != rule.id:
+            continue
+        transitions.append(
+            {
+                "id": row["id"],
+                "rule_id": rule.id,
+                "outcome": row["outcome"],
+                "old_status": details.get("old_status"),
+                "new_status": details.get("new_status"),
+                "reason": details.get("reason") or details.get("transition_type"),
+                "details": details,
+                "created_at": row["created_at"],
+            }
+        )
+        if len(transitions) >= limit:
+            break
+
+    return {"data": transitions}
 
 
 # ---------------------------------------------------------------------------

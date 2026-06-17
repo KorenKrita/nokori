@@ -597,14 +597,15 @@ def compile_rule(
                     f"Concept group '{group.id}' references unknown concept '{cid}'"
                 )
 
-    # Validate that groups with required concepts are consistent
+    # Validate that groups only promote explicitly required concepts into the gate.
     required_concept_ids = {c.id for c in concepts if c.required}
     if concept_groups:
-        has_valid_group = not required_concept_ids or any(
-            all(cid in required_concept_ids for cid in group.all_of) for group in concept_groups
-        )
-        if not has_valid_group:
-            raise CompilationError("At least one concept group must contain only required concepts")
+        for group in concept_groups:
+            for cid in group.all_of:
+                if cid not in required_concept_ids:
+                    raise CompilationError(
+                        f"Concept group '{group.id}' references optional concept '{cid}'"
+                    )
     elif required_concept_ids:
         logger.warning(
             "Rule has required concepts %s but no concept groups; "

@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from nokori.config import Config
-from nokori.config_editor import get_editor_state, save_editor
+from nokori.config_editor import config_path, get_editor_state, save_editor
 from nokori.errors import ConfigError
 from nokori.web.deps import get_config, require_write_auth, set_config
 
@@ -58,6 +59,8 @@ class ConfigEditorSave(BaseModel):
 @router.put("/config/editor", dependencies=[Depends(require_write_auth)])
 def config_editor_put(body: ConfigEditorSave) -> dict:
     cfg = get_config()
+    config_file = Path(config_path(cfg.data_dir))
+    previous_config = config_file.read_text(encoding="utf-8") if config_file.exists() else None
     try:
         result = save_editor(
             cfg,
@@ -68,8 +71,16 @@ def config_editor_put(body: ConfigEditorSave) -> dict:
     except ConfigError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     try:
-        set_config(Config.from_env())
+        set_config(Config.from_env(data_dir=cfg.data_dir))
     except ConfigError as e:
         log.exception("config reload failed")
+        try:
+            if previous_config is None:
+                config_file.unlink(missing_ok=True)
+            else:
+                config_file.parent.mkdir(parents=True, exist_ok=True)
+                config_file.write_text(previous_config, encoding="utf-8")
+        except OSError:
+            log.exception("config rollback failed")
         raise HTTPException(status_code=500, detail="config reload failed") from e
     return {"data": result}

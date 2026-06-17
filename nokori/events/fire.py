@@ -25,6 +25,7 @@ def create_fire_event(
     runtime_policy_version: str | None = None,
     embedding_profile_version: str | None = None,
     bounded_window_ref: str | None = None,
+    project_id: str | None = None,
 ) -> str:
     """Persist a fire event when a rule is injected into a session."""
     event_id = str(uuid.uuid4())
@@ -59,6 +60,7 @@ def create_fire_event(
         if turn_index is not None
         else f"session:{session_id}"
     )
+    event_project_id = project_id if project_id is not None else rule.project_id
 
     with db.transaction() as tx:
         tx.execute(
@@ -70,9 +72,9 @@ def create_fire_event(
             "embedding_profile_version, "
             "prompt_hash, transcript_window_ref, turn_index, level, "
             "decision_reason, decision_features, "
-            "bounded_window_ref, "
+            "bounded_window_ref, project_id, "
             "created_at) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 event_id,
                 rule.id,
@@ -91,6 +93,7 @@ def create_fire_event(
                 resolved_decision_reason,
                 dumps_json(decision_features),
                 bounded_window_ref,
+                event_project_id,
                 now,
             ),
         )

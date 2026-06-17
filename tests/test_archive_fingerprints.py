@@ -354,26 +354,26 @@ def test_archive_fingerprint_strength_upgrade(db):
     fp = db.fetchone("SELECT archive_strength FROM archived_fingerprints WHERE signature = ?", (sig,))
     assert fp["archive_strength"] == "system"
 
-    # Archive another rule with same content but user strength → upgrades
+    # Archive another rule with same content at replacement strength → upgrades
     _insert_rule(db, rule_id="upgrade-2", trigger="same trigger",
                  action="same action", domain_tags=["x"])
-    archive_rule(db, "upgrade-2", "user_dismissed_prompt", now_iso(), strength="user")
+    archive_rule(db, "upgrade-2", "replacement", now_iso(), strength="replacement")
 
     fp = db.fetchone("SELECT archive_strength FROM archived_fingerprints WHERE signature = ?", (sig,))
-    assert fp["archive_strength"] == "user"
+    assert fp["archive_strength"] == "replacement"
 
 
 def test_archive_fingerprint_no_downgrade(db):
     """Archiving same content with weaker strength does not downgrade the fingerprint."""
     _insert_rule(db, rule_id="rule-down-1", trigger="same trigger2",
                  action="same action2", domain_tags=["y"])
-    archive_rule(db, "rule-down-1", "user_dismissed_prompt", now_iso(), strength="user")
+    archive_rule(db, "rule-down-1", "replacement", now_iso(), strength="replacement")
 
     sig = compute_signature("same trigger2", "same action2", ["y"])
 
     _insert_rule(db, rule_id="nodown-2", trigger="same trigger2",
                  action="same action2", domain_tags=["y"])
-    archive_rule(db, "nodown-2", "system_suppressed", now_iso(), strength="system")
+    archive_rule(db, "nodown-2", "user_dismissed_prompt", now_iso(), strength="user")
 
     fp = db.fetchone("SELECT archive_strength FROM archived_fingerprints WHERE signature = ?", (sig,))
-    assert fp["archive_strength"] == "user"
+    assert fp["archive_strength"] == "replacement"

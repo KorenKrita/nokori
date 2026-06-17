@@ -233,6 +233,7 @@ def run_cold_pipeline(
     global_adversarial_cases: list[dict[str, Any]] | None = None,
     source_origin: SourceOrigin = "transcript_extraction",
     project_id: str | None = None,
+    _split_depth: int = 0,
 ) -> ColdPipelineResult:
     """Run the full cold pipeline for one extractor output candidate.
 
@@ -277,6 +278,7 @@ def run_cold_pipeline(
             global_adversarial_cases=global_adversarial_cases,
             source_origin=source_origin,
             project_id=project_id,
+            _split_depth=_split_depth,
         )
         log.info(
             "cold_pipeline done: trigger=%r status=%s rule_id=%s rejection=%s",
@@ -368,6 +370,7 @@ def _run_cold_pipeline_inner(
     global_adversarial_cases: list[dict[str, Any]] | None = None,
     source_origin: SourceOrigin = "transcript_extraction",
     project_id: str | None = None,
+    _split_depth: int = 0,
 ) -> ColdPipelineResult:
     config = PipelineConfig(
         role_models=role_models,
@@ -415,6 +418,7 @@ def _run_cold_pipeline_inner(
             role_max_tokens,
             role_timeouts,
             project_id,
+            _split_depth=_split_depth,
         )
         if split_results:
             return split_results[0]
@@ -531,6 +535,7 @@ def _handle_split_required(
             global_adversarial_cases=global_adversarial_cases,
             source_origin=source_origin,
             project_id=project_id,
+            _split_depth=_split_depth + 1,
         )
         results.append(result)
 

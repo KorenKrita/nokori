@@ -77,7 +77,9 @@ def apply_merge_policy(
     # --- reject_new gates (checked first) ---
 
     # Archived fingerprint blocks new rule.
-    if new_rule_data.get("archived_fingerprint_conflict"):
+    if new_rule_data.get("archived_fingerprint_conflict") or (
+        existing_rule and existing_rule.get("archived_fingerprints")
+    ):
         return MergeDecision(
             operation="reject_new",
             target_rule_id=target_id,

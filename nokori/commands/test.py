@@ -13,7 +13,9 @@ from ..search.engine import RetrievalEngine
 from ..utils.project import resolve_project_id
 
 
-def _format_eligibility(r: ScoredResult, pool_size: int) -> str:
+def _format_eligibility(
+    r: ScoredResult, pool_size: int, *, idf_stats_available: bool | None = None
+) -> str:
     """Compute hard eligibility result for display."""
     result = evaluate_applicability(
         rule_status=r.rule.status,
@@ -29,7 +31,11 @@ def _format_eligibility(r: ScoredResult, pool_size: int) -> str:
         action_only_match=r.action_only_match,
         search_only_match=r.search_only_match,
         embedding_only_match=r.embedding_only_match,
-        idf_stats_available=True,  # TODO: derive from actual IDF stats availability
+        idf_stats_available=(
+            r.trigger_idf_pool_version is not None and pool_size > 0
+            if idf_stats_available is None
+            else idf_stats_available
+        ),
         pool_size=pool_size,
         has_tool_input=False,
         false_positive_score=r.rule.false_positive_score,
