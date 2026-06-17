@@ -9,6 +9,7 @@ from nokori.db import (
     loads_json,
     open_db,
 )
+from nokori.lifecycle.evidence import rule_fire_stats
 from nokori.models import Rule
 from nokori.utils.time import now_iso
 from nokori.web.deps import get_config, require_write_auth
@@ -115,6 +116,8 @@ def list_rules(
         start = (page - 1) * per_page
         page_rules = rules[start : start + per_page]
 
+        # ponytail: batch fire count for list endpoint stays inline — rule_fire_stats
+        # is per-rule; calling it N times in a list would be N+1 queries.
         fire_counts: dict[str, int] = {}
         if page_rules:
             rule_ids = [r.id for r in page_rules]
@@ -144,39 +147,14 @@ def show_rule(short_id: str) -> dict:
         rule = fetch_rule_by_short_id(db, short_id)
         if rule is None:
             raise HTTPException(404, detail=f"no rule with short_id {short_id!r}")
-        # Aggregate fire event statistics
-        row = db.fetchone(
-            "SELECT COUNT(*) as cnt, MAX(created_at) as last_at FROM rule_fire_events WHERE rule_id = ?",
-            (rule.id,),
-        )
-        fire_count = row["cnt"] if row else 0
-        fire_last_at = row["last_at"] if row else None
-
-        levels_rows = db.fetchall(
-            "SELECT level, COUNT(*) as cnt FROM rule_fire_events WHERE rule_id = ? GROUP BY level",
-            (rule.id,),
-        )
-        fire_levels = {r["level"]: r["cnt"] for r in levels_rows}
-
-        posthoc_rows = db.fetchall(
-            "SELECT posthoc_label, COUNT(*) as cnt FROM rule_fire_events WHERE rule_id = ? AND posthoc_label IS NOT NULL GROUP BY posthoc_label",
-            (rule.id,),
-        )
-        posthoc_labels = {r["posthoc_label"]: r["cnt"] for r in posthoc_rows}
-
-        shadow_row = db.fetchone(
-            "SELECT COUNT(*) as cnt FROM rule_shadow_events WHERE rule_id = ?",
-            (rule.id,),
-        )
-        shadow_count = shadow_row["cnt"] if shadow_row else 0
-
+        stats = rule_fire_stats(db, rule.id)
         data = _rule_to_response(
             rule,
-            fire_count=fire_count,
-            fire_last_at=fire_last_at,
-            fire_levels=fire_levels,
-            posthoc_labels=posthoc_labels,
-            shadow_count=shadow_count,
+            fire_count=stats.total,
+            fire_last_at=stats.last_at,
+            fire_levels=stats.by_level,
+            posthoc_labels=stats.by_label,
+            shadow_count=stats.shadow_count,
         )
     finally:
         db.close()

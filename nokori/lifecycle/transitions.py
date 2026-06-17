@@ -15,7 +15,6 @@ from typing import cast
 from ..db import Db
 from ..events.fire import batch_count_distinct_useful_projects, count_distinct_useful_projects
 from ..events.observability import write_event
-from ..events.shadow import count_shadow_evidence
 from ..policy import (
     ACTIVE_TO_SUPPRESSED,
     ACTIVE_TO_TRUSTED,
@@ -23,7 +22,6 @@ from ..policy import (
     CANDIDATE_TO_ACTIVE_SINGLE_SESSION,
     CANDIDATE_TO_ARCHIVED,
     CROSS_PROJECT_PROMOTION_THRESHOLD,
-    FALSE_POSITIVE_REASON_CODES,
     MINIMUM_RATE_DENOMINATOR,
     RECENT_EVENT_WINDOW,
     RECENT_TIME_WINDOW_DAYS,
@@ -37,7 +35,15 @@ from ..policy import (
 )
 from ..utils.logging import get_logger
 from ..utils.sql_batch import batched
-from ..utils.time import iso_of, local_now, now_iso, parse_iso
+from ..utils.time import local_days_ago, local_now, now_iso, parse_iso
+from .evidence import (
+    candidate_has_miss_evidence,
+    compute_false_positive_rate,
+    count_harmful_since,
+    gather_candidate_extras,
+    gather_fire_evidence,
+    gather_shadow_evidence,
+)
 
 log = get_logger("nokori.lifecycle.transitions")
 
@@ -55,7 +61,7 @@ class EvidenceSnapshot:
     enabling policy functions to be tested without a database.
     """
 
-    # Fire evidence (from _aggregate_fire_evidence)
+    # Fire evidence (from evidence.gather_fire_evidence)
     observed_useful_strong: int = 0
     observed_useful_total: int = 0
     irrelevant_in_last_5: int = 0
@@ -65,7 +71,7 @@ class EvidenceSnapshot:
     fire_total_evaluated: int = 0
     distinct_strong_useful_sessions: int = 0
 
-    # Shadow evidence (from _aggregate_shadow_evidence)
+    # Shadow evidence (from evidence.gather_shadow_evidence)
     shadow_would_help_high: int = 0
     shadow_would_help_low: int = 0
     shadow_irrelevant: int = 0
@@ -196,7 +202,7 @@ def compute_promotion_barriers(
 
 
 def _barriers_candidate_to_active(db: Db, rule_id: str, rule_version: int) -> dict:
-    shadow = _aggregate_shadow_evidence(db, rule_id, rule_version)
+    shadow = gather_shadow_evidence(db, rule_id, rule_version)
     th = CANDIDATE_TO_ACTIVE
 
     strong_count = shadow.get("would_help_high", 0)
@@ -268,7 +274,7 @@ def _barriers_candidate_to_active(db: Db, rule_id: str, rule_version: int) -> di
 
 
 def _barriers_active_to_trusted(db: Db, rule_id: str) -> dict:
-    fire = _aggregate_fire_evidence(db, rule_id, window_days=RECENT_TIME_WINDOW_DAYS)
+    fire = gather_fire_evidence(db, rule_id, window_days=RECENT_TIME_WINDOW_DAYS)
     th = ACTIVE_TO_TRUSTED
 
     observed_useful = fire.get("observed_useful_strong", 0)
@@ -330,7 +336,7 @@ def _barriers_suppressed_to_active(
 ) -> dict | None:
     if suppressed_at is None:
         return None
-    shadow = _aggregate_shadow_evidence(
+    shadow = gather_shadow_evidence(
         db,
         rule_id,
         rule_version,
@@ -343,12 +349,7 @@ def _barriers_suppressed_to_active(
     distinct_sessions = shadow.get("distinct_sessions", 0)
 
     # Recent harmful from fire events after suppression
-    harmful_row = db.fetchone(
-        "SELECT COUNT(*) AS n FROM rule_fire_events "
-        "WHERE rule_id = ? AND posthoc_label = 'harmful' AND created_at >= ?",
-        (rule_id, suppressed_at),
-    )
-    recent_harmful = harmful_row["n"] if harmful_row else 0
+    recent_harmful = count_harmful_since(db, rule_id, suppressed_at)
 
     thresholds = [
         {
@@ -445,12 +446,12 @@ def _batch_candidates(
     """Batch evidence gathering and evaluation for candidate rules."""
     results: list[TransitionResult] = []
 
-    # Batch shadow evidence (still per-rule because count_shadow_evidence does
+    # Batch shadow evidence (still per-rule because gather_shadow_evidence does
     # complex fingerprint dedup + task dedup that doesn't batch simply)
     shadow_by_rule: dict[str, dict] = {}
     for rid in rule_ids:
         meta = rule_meta[rid]
-        shadow_by_rule[rid] = _aggregate_shadow_evidence(db, rid, meta["rule_version"])
+        shadow_by_rule[rid] = gather_shadow_evidence(db, rid, meta["rule_version"])
 
     # Batch synthetic eval: latest passed status per (rule_id, rule_version)
     # Each rule contributes 2 params (rule_id + rule_version), so halve the batch size
@@ -501,7 +502,7 @@ def _batch_candidates(
     miss_evidence: dict[str, bool] = {}
     for rid in rule_ids:
         meta = rule_meta[rid]
-        miss_evidence[rid] = _candidate_has_miss_evidence(db, rid, meta["rule_version"])
+        miss_evidence[rid] = candidate_has_miss_evidence(db, rid, meta["rule_version"])
 
     # Build EvidenceSnapshot and evaluate for each candidate
     for rid in rule_ids:
@@ -562,8 +563,10 @@ def _batch_active_trusted(
     """Batch evidence gathering and evaluation for active/trusted rules."""
     results: list[TransitionResult] = []
 
-    # Batch fire evidence: fetch recent fire events for all rules at once
-    cutoff = _days_ago_iso(RECENT_TIME_WINDOW_DAYS)
+    # Batch fire evidence: fetch recent fire events for all rules at once.
+    # ponytail: batch SQL intentionally stays here — gather_fire_evidence is per-rule;
+    # this batch path uses a single windowed query for N rules (performance).
+    cutoff = local_days_ago(RECENT_TIME_WINDOW_DAYS)
     fire_by_rule: dict[str, dict] = {}
 
     for chunk in batched(rule_ids):
@@ -591,7 +594,7 @@ def _batch_active_trusted(
         for rid, rrows in per_rule_rows.items():
             fire_by_rule[rid] = _compute_fire_counts(rrows)
 
-    # Batch lifetime harmful counts
+    # Batch lifetime harmful counts (batch variant of gather_fire_evidence's lifetime_harmful)
     harmful_by_rule: dict[str, int] = {}
     for chunk in batched(rule_ids):
         placeholders = ",".join("?" * len(chunk))
@@ -734,7 +737,7 @@ def _gather_candidate_evidence(db: Db, row: sqlite3.Row | dict, rule_version: in
     """Gather all evidence needed for candidate evaluation."""
     rule_id = row["id"]
 
-    shadow = _aggregate_shadow_evidence(db, rule_id, rule_version)
+    shadow = gather_shadow_evidence(db, rule_id, rule_version)
 
     # Compute shadow-derived fields
     strong_count = shadow.get("would_help_high", 0)
@@ -749,31 +752,7 @@ def _gather_candidate_evidence(db: Db, row: sqlite3.Row | dict, rule_version: in
         shadow_fp_numerator / max(1, task_deduped_count) if task_deduped_count > 0 else 0.0
     )
 
-    # Check synthetic eval status
-    synth_row = db.fetchone(
-        "SELECT passed FROM rule_synthetic_evals "
-        "WHERE rule_id = ? AND rule_version = ? ORDER BY created_at DESC LIMIT 1",
-        (rule_id, rule_version),
-    )
-    synthetic_eval_passed = synth_row is not None and synth_row["passed"] == 1
-
-    # Get admission quality from rule_reviews
-    quality_row = db.fetchone(
-        "SELECT scores FROM rule_reviews "
-        "WHERE rule_id = ? AND decision = 'accept_active' "
-        "ORDER BY created_at DESC LIMIT 1",
-        (rule_id,),
-    )
-    admission_quality = 0.0
-    if quality_row and quality_row["scores"]:
-        try:
-            scores = json.loads(quality_row["scores"])
-            admission_quality = scores.get("overall_quality", 0.0)
-        except (json.JSONDecodeError, TypeError):
-            pass
-
-    # Check miss evidence
-    has_miss_evidence = _candidate_has_miss_evidence(db, rule_id, rule_version)
+    extras = gather_candidate_extras(db, rule_id, rule_version)
 
     return EvidenceSnapshot(
         shadow_would_help_high=strong_count,
@@ -787,9 +766,9 @@ def _gather_candidate_evidence(db: Db, row: sqlite3.Row | dict, rule_version: in
         shadow_fp_rate=shadow_fp_rate,
         best_single_session_strong=shadow.get("best_single_session_strong", 0),
         best_single_session_contexts=shadow.get("best_single_session_contexts", 0),
-        synthetic_eval_passed=synthetic_eval_passed,
-        admission_quality=admission_quality,
-        has_miss_evidence=has_miss_evidence,
+        synthetic_eval_passed=extras["synthetic_eval_passed"],
+        admission_quality=extras["admission_quality"],
+        has_miss_evidence=extras["has_miss_evidence"],
         has_replacement=row["replacement_id"] is not None,
         rule_version=rule_version,
     )
@@ -798,7 +777,7 @@ def _gather_candidate_evidence(db: Db, row: sqlite3.Row | dict, rule_version: in
 def _gather_active_evidence(db: Db, row: sqlite3.Row | dict, rule_version: int) -> EvidenceSnapshot:
     """Gather all evidence needed for active evaluation."""
     rule_id = row["id"]
-    fire = _aggregate_fire_evidence(db, rule_id, window_days=RECENT_TIME_WINDOW_DAYS)
+    fire = gather_fire_evidence(db, rule_id, window_days=RECENT_TIME_WINDOW_DAYS)
 
     return EvidenceSnapshot(
         observed_useful_strong=fire.get("observed_useful_strong", 0),
@@ -816,7 +795,7 @@ def _gather_active_evidence(db: Db, row: sqlite3.Row | dict, rule_version: int) 
 def _gather_trusted_evidence(db: Db, row: sqlite3.Row | dict, rule_version: int) -> EvidenceSnapshot:
     """Gather all evidence needed for trusted evaluation."""
     rule_id = row["id"]
-    fire = _aggregate_fire_evidence(db, rule_id, window_days=RECENT_TIME_WINDOW_DAYS)
+    fire = gather_fire_evidence(db, rule_id, window_days=RECENT_TIME_WINDOW_DAYS)
 
     # Cross-project promotion check
     distinct_projects = 0
@@ -850,7 +829,7 @@ def _gather_suppressed_evidence(db: Db, row: sqlite3.Row | dict, rule_version: i
             suppressed_at_missing=True,
         )
 
-    shadow = _aggregate_shadow_evidence(
+    shadow = gather_shadow_evidence(
         db,
         rule_id,
         rule_version,
@@ -871,14 +850,7 @@ def _gather_suppressed_evidence(db: Db, row: sqlite3.Row | dict, rule_version: i
     ttl_expired = local_now() > ttl_deadline
 
     # Recent harmful from fire events after suppression
-    recent_harmful = 0
-    harmful_row = db.fetchone(
-        "SELECT COUNT(*) AS n FROM rule_fire_events "
-        "WHERE rule_id = ? AND posthoc_label = 'harmful' AND created_at >= ?",
-        (rule_id, suppressed_at_iso),
-    )
-    if harmful_row:
-        recent_harmful = harmful_row["n"]
+    recent_harmful = count_harmful_since(db, rule_id, suppressed_at_iso)
 
     return EvidenceSnapshot(
         shadow_would_help_high=shadow.get("would_help_high", 0),
@@ -894,119 +866,6 @@ def _gather_suppressed_evidence(db: Db, row: sqlite3.Row | dict, rule_version: i
     )
 
 
-# ---------------------------------------------------------------------------
-# Evidence aggregation (DB access layer)
-# ---------------------------------------------------------------------------
-
-
-def _aggregate_fire_evidence(db: Db, rule_id: str, window_days: int = 30) -> dict:
-    """Count fire event labels using BOTH count window (last 10) AND time window (30 days) per spec 3.4.
-
-    Uses BOTH count window (last 10) AND time window (30 days) per spec 3.4.
-    Harmful events are counted lifetime — they do NOT decay by time alone.
-    """
-    cutoff = _days_ago_iso(window_days)
-    recent_rows = db.fetchall(
-        "SELECT posthoc_label, posthoc_reason_code, posthoc_score, session_id "
-        "FROM rule_fire_events "
-        "WHERE rule_id = ? AND posthoc_label IS NOT NULL AND posthoc_label != 'unclear' "
-        "AND created_at >= ? "
-        "ORDER BY created_at DESC LIMIT ?",
-        (rule_id, cutoff, RECENT_EVENT_WINDOW),
-    )
-
-    counts: dict[str, int | float | dict[str, int]] = {
-        "observed_useful": 0,
-        "observed_useful_strong": 0,
-        "plausible_useful": 0,
-        "irrelevant": 0,
-        "harmful": 0,
-        "unclear": 0,
-        "total_evaluated": len(recent_rows),
-    }
-    reason_counts: dict[str, int] = {}
-    useful_sessions: set[str] = set()
-    strong_useful_sessions: set[str] = set()
-
-    for r in recent_rows:
-        label = r["posthoc_label"]
-        if label in counts and label != "total_evaluated":
-            counts[label] = cast(int, counts[label]) + 1
-        rc = r["posthoc_reason_code"]
-        if rc:
-            reason_counts[rc] = reason_counts.get(rc, 0) + 1
-        if label == "observed_useful" and r["session_id"]:
-            useful_sessions.add(r["session_id"])
-            # Spec 10.2: only strong-attribution events count toward trusted promotion.
-            # NULL = legacy event (pre-attribution system) -> treated as strong for compat.
-            # > 0.5 = new system confirmed strong causal attribution.
-            # <= 0.5 = weak/redundant attribution -> excluded from promotion count.
-            attribution_weight = r["posthoc_score"]
-            if attribution_weight is None or attribution_weight > 0.5:
-                counts["observed_useful_strong"] = cast(int, counts["observed_useful_strong"]) + 1
-                strong_useful_sessions.add(r["session_id"])
-
-    counts["reason_counts"] = reason_counts
-    counts["distinct_observed_useful_sessions"] = len(useful_sessions)
-    counts["distinct_strong_useful_sessions"] = len(strong_useful_sessions)
-    counts["false_positive_rate"] = compute_false_positive_rate(counts)
-
-    # Irrelevant in last 5 evaluated fire events
-    counts["irrelevant_in_last_5"] = sum(
-        1 for r in recent_rows[:5] if r["posthoc_label"] == "irrelevant"
-    )
-
-    # CRITICAL: harmful events do NOT decay by time (section 3.4).
-    # Count ALL lifetime harmful events for suppression decisions.
-    lifetime_harmful_row = db.fetchone(
-        "SELECT COUNT(*) AS n FROM rule_fire_events "
-        "WHERE rule_id = ? AND posthoc_label = 'harmful'",
-        (rule_id,),
-    )
-    counts["lifetime_harmful"] = lifetime_harmful_row["n"] if lifetime_harmful_row else 0
-
-    return counts
-
-
-def _aggregate_shadow_evidence(
-    db: Db,
-    rule_id: str,
-    rule_version: int,
-    window_days: int = 30,
-    shadow_type: str | None = None,
-    since_iso: str | None = None,
-) -> dict:
-    """Count shadow labels with fingerprint dedup, distinct sessions."""
-    return count_shadow_evidence(
-        db,
-        rule_id,
-        rule_version,
-        window_days=window_days,
-        shadow_type=shadow_type,
-        since_iso=since_iso,
-    )
-
-
-# ---------------------------------------------------------------------------
-# False-positive rate computation
-# ---------------------------------------------------------------------------
-
-
-def compute_false_positive_rate(events: dict) -> float:
-    """Compute FP rate from event counts.
-
-    fp_events = irrelevant_not_applicable + harmful_wrong_scope
-                + harmful_blocked_valid_action + harmful_distracted
-    denominator = total_evaluated (unclear already excluded by query)
-    """
-    reason_counts: dict[str, int] = events.get("reason_counts", {})
-    fp_events = sum(reason_counts.get(code, 0) for code in FALSE_POSITIVE_REASON_CODES)
-
-    total_evaluated: int = events.get("total_evaluated", 0)
-    denominator = total_evaluated
-
-    return fp_events / max(1, denominator)
-
 
 # ---------------------------------------------------------------------------
 # Derived score updates
@@ -1015,7 +874,7 @@ def compute_false_positive_rate(events: dict) -> float:
 
 def update_derived_scores(db: Db, rule_id: str) -> None:
     """Recompute derived scores from event counts and persist."""
-    fire = _aggregate_fire_evidence(db, rule_id, window_days=RECENT_TIME_WINDOW_DAYS)
+    fire = gather_fire_evidence(db, rule_id, window_days=RECENT_TIME_WINDOW_DAYS)
 
     total = fire.get("total_evaluated", 0)
     denom = max(1, total)
@@ -1536,45 +1395,3 @@ def _create_system_archive_fingerprint(db: Db, rule_id: str) -> None:
         strength="system",
     )
 
-
-# ---------------------------------------------------------------------------
-# Helper: miss evidence check for candidate single-session exception
-# ---------------------------------------------------------------------------
-
-
-def _candidate_has_miss_evidence(db: Db, rule_id: str, rule_version: int) -> bool:
-    """Check shadow-only observed miss/user correction evidence for a candidate."""
-    rows = db.fetchall(
-        "SELECT decision_features FROM rule_shadow_events "
-        "WHERE rule_id = ? AND shadow_rule_version = ? "
-        "AND shadow_label = 'would_help_high'",
-        (rule_id, rule_version),
-    )
-    for row in rows:
-        try:
-            features = json.loads(row["decision_features"] or "{}")
-        except (json.JSONDecodeError, TypeError):
-            continue
-        if not isinstance(features, dict):
-            continue
-        if features.get("observed_agent_miss") is True:
-            return True
-        if features.get("user_correction") is True:
-            return True
-        if features.get("source") in {"agent_miss", "user_correction"}:
-            return True
-        evidence = features.get("evidence")
-        if isinstance(evidence, list) and (
-            "agent_miss" in evidence or "user_correction" in evidence
-        ):
-            return True
-    return False
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _days_ago_iso(days: int) -> str:
-    return iso_of(local_now() - timedelta(days=days))
