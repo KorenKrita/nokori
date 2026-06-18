@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -248,7 +249,7 @@ def test_excluded_context_merge_keeps_idless_distinct_entries(tmp_path):
             {},
         )
         row = db.fetchone("SELECT excluded_contexts FROM rules WHERE id = 'rule-ctx'")
-        assert [e["pattern"] for e in __import__("json").loads(row["excluded_contexts"])] == [
+        assert [e["pattern"] for e in json.loads(row["excluded_contexts"])] == [
             "explain only",
             "dry run",
         ]

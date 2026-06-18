@@ -19,6 +19,30 @@ from .context import ErrorCategory, HotPathContext
 
 log = get_logger("nokori.hooks.session_end")
 
+# Environment variables passed through to extract subprocesses. Kept consistent
+# across _try_fork_extract and _spawn_async_extract so both inherit proxy/cert
+# config needed by the claude CLI in corporate networks.
+_EXTRACT_SAFE_VARS = (
+    "PATH",
+    "HOME",
+    "USER",
+    "LANG",
+    "SHELL",
+    "TERM",
+    "TMPDIR",
+    "XDG_RUNTIME_DIR",
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "NO_PROXY",
+    "http_proxy",
+    "https_proxy",
+    "no_proxy",
+    "SSL_CERT_FILE",
+    "SSL_CERT_DIR",
+    "NODE_EXTRA_CA_CERTS",
+)
+_EXTRACT_SAFE_PREFIXES = ("NOKORI_", "ANTHROPIC_", "CLAUDE_")
+
 
 def handle(payload: dict, cfg: Config, *, host: Host) -> dict:
     if cfg.disabled:
@@ -211,21 +235,11 @@ def _try_fork_extract(
         log.warning("fork extract: invalid session_id, skipping")
         return False
 
-    safe_vars = (
-        "PATH",
-        "HOME",
-        "USER",
-        "LANG",
-        "SHELL",
-        "TERM",
-        "TMPDIR",
-        "XDG_RUNTIME_DIR",
-    )
-    safe_prefixes = ("NOKORI_", "ANTHROPIC_", "CLAUDE_")
     env = {
         k: v
         for k, v in os.environ.items()
-        if k in safe_vars or any(k.startswith(prefix) for prefix in safe_prefixes)
+        if k in _EXTRACT_SAFE_VARS
+        or any(k.startswith(prefix) for prefix in _EXTRACT_SAFE_PREFIXES)
     }
     env.pop("NOKORI_EXTRACTING", None)
     env["NOKORI_DATA_DIR"] = str(cfg.data_dir)
@@ -273,17 +287,12 @@ def _spawn_async_extract(cfg: Config) -> None:
     import subprocess
     import sys
 
-    _SAFE_VARS = (
-        "PATH",
-        "HOME",
-        "USER",
-        "LANG",
-        "SHELL",
-        "TERM",
-        "TMPDIR",
-        "XDG_RUNTIME_DIR",
-    )
-    env = {k: v for k, v in os.environ.items() if k in _SAFE_VARS or k.startswith("NOKORI_")}
+    env = {
+        k: v
+        for k, v in os.environ.items()
+        if k in _EXTRACT_SAFE_VARS
+        or any(k.startswith(prefix) for prefix in _EXTRACT_SAFE_PREFIXES)
+    }
     env.pop("NOKORI_EXTRACTING", None)
     env["NOKORI_DATA_DIR"] = str(cfg.data_dir)
     cfg.ensure_dirs()

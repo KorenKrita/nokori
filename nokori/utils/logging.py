@@ -40,6 +40,7 @@ def configure(logs_dir: Path, level: str = "warn") -> None:
         root.propagate = False
         for h in list(root.handlers):
             root.removeHandler(h)
+            h.close()
 
         formatter = logging.Formatter(_FORMAT, datefmt=_DATEFMT)
         formatter.converter = time.localtime

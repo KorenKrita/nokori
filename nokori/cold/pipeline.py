@@ -452,14 +452,14 @@ def _handle_split_required(
     project_id: str | None = None,
     _split_depth: int = 0,
 ) -> list[ColdPipelineResult]:
-    if _split_depth >= _MAX_SPLIT_DEPTH:
-        log.warning("split_required recursion depth exceeded; rejecting")
-        return []
     """Handle split_required by invoking rewriter to produce sub-rules, then re-process each.
 
     Spec section 6.7: 'return to rewrite/split if merge operation is split_required'.
     The rewriter is asked to split the rule into independent sub-rules.
     """
+    if _split_depth >= _MAX_SPLIT_DEPTH:
+        log.warning("split_required recursion depth exceeded; rejecting")
+        return []
     rewriter_model = resolve_model_id("rule_rewriter", role_models, default_model)
 
     system_prompt = (

@@ -4,7 +4,8 @@ export function formatDateTime(iso: string | null | undefined): string {
   const trimmed = iso.trim()
   if (!trimmed || trimmed === 'never') return trimmed
 
-  const d = new Date(trimmed.includes(' ') && !trimmed.includes('T') ? trimmed.replace(' ', 'T') : trimmed)
+  const normalized = trimmed.includes(' ') && !trimmed.includes('T') ? trimmed.replace(' ', 'T') : trimmed
+  const d = new Date(normalized)
   if (Number.isNaN(d.getTime())) return trimmed
 
   const pad = (n: number) => String(n).padStart(2, '0')

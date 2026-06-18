@@ -380,7 +380,7 @@ class Config:
         )
         file_values, raw_toml = _resolve_file_values(data_dir_raw)
         resolved_data_dir = (
-            _expand_path(str(data_dir))
+            _expand_path(data_dir_raw)
             if data_dir is not None
             else _expand_path(_str_val("NOKORI_DATA_DIR", "~/.nokori", file_values))
         )

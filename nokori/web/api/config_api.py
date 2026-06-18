@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -59,8 +58,11 @@ class ConfigEditorSave(BaseModel):
 @router.put("/config/editor", dependencies=[Depends(require_write_auth)])
 def config_editor_put(body: ConfigEditorSave) -> dict:
     cfg = get_config()
-    config_file = Path(config_path(cfg.data_dir))
-    previous_config = config_file.read_text(encoding="utf-8") if config_file.exists() else None
+    config_file = config_path(cfg.data_dir)
+    try:
+        previous_config = config_file.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        previous_config = None
     try:
         result = save_editor(
             cfg,
@@ -82,5 +84,13 @@ def config_editor_put(body: ConfigEditorSave) -> dict:
                 config_file.write_text(previous_config, encoding="utf-8")
         except OSError:
             log.exception("config rollback failed")
+        else:
+            # File was restored to its pre-save state; re-sync the in-memory
+            # config so it matches the rolled-back file. A failure here leaves
+            # the prior in-memory cfg in place, which is the best available.
+            try:
+                set_config(Config.from_env(data_dir=cfg.data_dir))
+            except ConfigError:
+                log.exception("config reload after rollback failed; keeping prior cfg")
         raise HTTPException(status_code=500, detail="config reload failed") from e
     return {"data": result}

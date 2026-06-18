@@ -47,4 +47,6 @@ def normalize_db_timestamp(value: str | None) -> str | None:
     dt = parse_iso(value)
     if dt is None:
         return value
+    # Normalize to local tz: parse_iso may return a non-local aware datetime
+    # (e.g. a UTC timestamp parsed from an ISO Z suffix).
     return iso_of(dt.astimezone())

@@ -11,8 +11,8 @@ from ..config import Config
 from ..db import (
     SCHEMA_VERSION,
     dumps_json,
-    fetch_rule_by_short_id,
     fetch_rules,
+    fetch_rules_by_short_ids,
     fetch_short_ids,
     loads_json,
     open_db,
@@ -361,14 +361,12 @@ def run_import(args: argparse.Namespace, cfg: Config) -> int:
                         row,
                     )
             inserted = len(pending)
+            rules_by_sid = fetch_rules_by_short_ids(db, list(inserted_sids))
             for sid in inserted_sids:
-                rule = fetch_rule_by_short_id(db, sid)
+                rule = rules_by_sid.get(sid)
                 if rule is None or rule.status == "archived":
                     continue
-                try:
-                    index_rule_if_enabled(db, rule, cfg)
-                except Exception as exc:
-                    print(f"warning: embedding index failed for {sid}: {exc}")
+                index_rule_if_enabled(db, rule, cfg)
     finally:
         db.close()
 

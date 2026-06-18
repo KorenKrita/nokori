@@ -12,8 +12,11 @@ import pytest
 
 from nokori.config import Config
 from nokori.hooks.session_end import (
+    _EXTRACT_SAFE_PREFIXES,
+    _EXTRACT_SAFE_VARS,
     _enqueue_extract_job_from_path,
     _extract_session_turns,
+    _spawn_async_extract,
     handle,
 )
 from nokori.utils.host import Host
@@ -127,3 +130,62 @@ class TestExtractSessionTurns:
     def test_non_list_messages_returns_empty(self):
         payload = {"messages": "not a list"}
         assert _extract_session_turns(payload) == []
+
+
+class TestExtractSubprocessEnv:
+    """Extract subprocesses must inherit proxy/cert/anthropic env so the claude
+    CLI can reach its API in corporate networks. Guards against silent fork
+    failures from an over-restrictive env whitelist."""
+
+    def test_safe_vars_include_proxy_and_cert(self):
+        for var in (
+            "HTTP_PROXY",
+            "HTTPS_PROXY",
+            "NO_PROXY",
+            "http_proxy",
+            "https_proxy",
+            "no_proxy",
+            "SSL_CERT_FILE",
+            "SSL_CERT_DIR",
+            "NODE_EXTRA_CA_CERTS",
+        ):
+            assert var in _EXTRACT_SAFE_VARS, f"{var} missing from extract env whitelist"
+
+    def test_safe_prefixes_include_anthropic_and_claude(self):
+        assert "NOKORI_" in _EXTRACT_SAFE_PREFIXES
+        assert "ANTHROPIC_" in _EXTRACT_SAFE_PREFIXES
+        assert "CLAUDE_" in _EXTRACT_SAFE_PREFIXES
+
+    def test_spawn_async_extract_passes_through_anthropic_and_proxy(self, session_env):
+        cfg, _ = session_env
+        captured: dict = {}
+
+        class _FakePopen:
+            def __init__(self, cmd, env=None, **kwargs):
+                captured["env"] = env
+
+        with (
+            patch("subprocess.Popen", _FakePopen),
+            patch.dict(
+                "os.environ",
+                {
+                    "ANTHROPIC_API_KEY": "sk-test",
+                    "ANTHROPIC_BASE_URL": "http://custom:8080",
+                    "HTTPS_PROXY": "http://proxy:3128",
+                    "SSL_CERT_FILE": "/etc/ssl/corp.pem",
+                    "RANDOM_USER_VAR": "should-not-leak",
+                },
+                clear=False,
+            ),
+        ):
+            _spawn_async_extract(cfg)
+
+        env = captured["env"]
+        assert env["ANTHROPIC_API_KEY"] == "sk-test"
+        assert env["ANTHROPIC_BASE_URL"] == "http://custom:8080"
+        assert env["HTTPS_PROXY"] == "http://proxy:3128"
+        assert env["SSL_CERT_FILE"] == "/etc/ssl/corp.pem"
+        assert env["NOKORI_DATA_DIR"] == str(cfg.data_dir)
+        # Unlisted vars must NOT leak into the subprocess.
+        assert "RANDOM_USER_VAR" not in env
+        assert env.get("NOKORI_EXTRACTING") is None

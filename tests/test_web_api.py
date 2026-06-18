@@ -318,6 +318,65 @@ class TestConfig:
         resp = client.put("/api/config/editor", json={"values": {}, "set_keys": []})
         assert resp.status_code == 403
 
+    def test_config_editor_put_rolls_back_existing_file_on_reload_failure(
+        self, client, cfg, monkeypatch
+    ):
+        """If Config.from_env fails after save_editor, the previous file content is restored."""
+        from nokori.config_editor import config_path
+
+        path = config_path(cfg.data_dir)
+        original = 'log_level = "debug"\n'
+        path.write_text(original, encoding="utf-8")
+
+        # Authenticate so the write token cookie is set.
+        client.get("/api/config")
+
+        from nokori.errors import ConfigError
+        from nokori.web.api import config_api
+
+        def flaky_from_env(*args, **kwargs):
+            # The reload inside config_editor_put must fail to trigger rollback.
+            raise ConfigError("simulated reload failure")
+
+        monkeypatch.setattr(config_api.Config, "from_env", flaky_from_env)
+
+        resp = client.put(
+            "/api/config/editor",
+            json={"values": {"gate.enabled": False}, "set_keys": ["log_level"]},
+        )
+        assert resp.status_code == 500
+        assert resp.json()["detail"] == "config reload failed"
+        # File must be restored to the exact previous content.
+        assert path.read_text(encoding="utf-8") == original
+
+    def test_config_editor_put_rolls_back_missing_file_on_reload_failure(
+        self, client, cfg, monkeypatch
+    ):
+        """If the config file did not exist before, rollback removes the newly written file."""
+        from nokori.config_editor import config_path
+
+        path = config_path(cfg.data_dir)
+        assert not path.exists()
+
+        client.get("/api/config")
+
+        from nokori.errors import ConfigError
+        from nokori.web.api import config_api
+
+        def flaky_from_env(*args, **kwargs):
+            raise ConfigError("simulated reload failure")
+
+        monkeypatch.setattr(config_api.Config, "from_env", flaky_from_env)
+
+        resp = client.put(
+            "/api/config/editor",
+            json={"values": {"gate.enabled": False}, "set_keys": []},
+        )
+        assert resp.status_code == 500
+        assert resp.json()["detail"] == "config reload failed"
+        # Rollback must delete the file that save_editor just created.
+        assert not path.exists()
+
 
 class TestStaticFiles:
     def test_spa_fallback_rejects_path_traversal(self, client):

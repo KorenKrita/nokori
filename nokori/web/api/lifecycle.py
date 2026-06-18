@@ -249,9 +249,10 @@ def rule_transitions(
 
         rows = db.fetchall(
             "SELECT id, outcome, details, created_at FROM hook_events "
-            "WHERE source = 'lifecycle_transition' AND details LIKE ? "
+            "WHERE source = 'lifecycle_transition' "
+            "AND json_extract(details, '$.rule_id') = ? "
             "ORDER BY created_at DESC LIMIT ?",
-            (f"%{rule.id}%", limit * 4,),
+            (rule.id, limit),
         )
     finally:
         db.close()

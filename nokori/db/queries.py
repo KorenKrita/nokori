@@ -170,6 +170,25 @@ def fetch_rule_by_short_id(db: Db, short_id: str) -> Rule | None:
     return row_to_rule(row) if row else None
 
 
+def fetch_rules_by_short_ids(db: Db, short_ids: list[str]) -> dict[str, Rule]:
+    """Batch-fetch rules keyed by short_id. Avoids N+1 queries on import."""
+    if not short_ids:
+        return {}
+    result: dict[str, Rule] = {}
+    # SQLite limits IN (...) placeholders; chunk to stay well under the bound.
+    for start in range(0, len(short_ids), 500):
+        chunk = short_ids[start : start + 500]
+        placeholders = ",".join("?" * len(chunk))
+        rows = db.fetchall(
+            f"SELECT {RULE_COLUMNS} FROM rules WHERE short_id IN ({placeholders})",
+            tuple(chunk),
+        )
+        for row in rows:
+            rule = row_to_rule(row)
+            result[rule.short_id] = rule
+    return result
+
+
 def fetch_short_ids(db: Db) -> set[str]:
     rows = db.fetchall("SELECT short_id FROM rules")
     return {r["short_id"] for r in rows}

@@ -118,7 +118,7 @@ def query_events(
         params.append(source)
     if since is not None:
         where.append("created_at >= ?")
-        params.append(since)
+        params.append(normalize_db_timestamp(since))
     if after_id is not None:
         where.append("rowid > (SELECT rowid FROM hook_events WHERE id = ?)")
         params.append(after_id)

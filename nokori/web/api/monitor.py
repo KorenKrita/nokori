@@ -59,7 +59,7 @@ def get_monitor_overview(
         )
 
         error_summary = query_errors(
-            db, group_by="role", session_id=session_id, since=since_db, until=until_db
+            db, group_by="role", session_id=session_id, since=since, until=until
         )
 
         # Conversion funnel: cold pipeline events
@@ -94,12 +94,10 @@ def get_monitor_errors(
     until: str | None = Query(None),
 ) -> dict:
     cfg = get_config()
-    since_db = normalize_db_timestamp(since)
-    until_db = normalize_db_timestamp(until)
     db = open_db(cfg.db_path)
     try:
         results = query_errors(
-            db, group_by=group_by, session_id=session_id, since=since_db, until=until_db
+            db, group_by=group_by, session_id=session_id, since=since, until=until
         )
         return {"errors": results, "group_by": group_by}
     finally:
