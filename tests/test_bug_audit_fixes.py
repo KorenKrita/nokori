@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import logging
-from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -78,8 +77,8 @@ def test_synthetic_eval_generation_failure_stays_pending(tmp_path, monkeypatch):
 
 def test_process_candidates_keeps_pending_segments_retryable(tmp_path, monkeypatch):
     from nokori.cold._result import ColdPipelineResult
-    from nokori.extract.extractor import Candidate
     from nokori.extract import process
+    from nokori.extract.extractor import Candidate
 
     cfg = _cfg(tmp_path, monkeypatch)
     db = open_db(cfg.db_path)
@@ -104,8 +103,8 @@ def test_process_candidates_keeps_pending_segments_retryable(tmp_path, monkeypat
 
 def test_process_candidates_does_not_count_merged_as_created(tmp_path, monkeypatch):
     from nokori.cold._result import ColdPipelineResult
-    from nokori.extract.extractor import Candidate
     from nokori.extract import process
+    from nokori.extract.extractor import Candidate
 
     cfg = _cfg(tmp_path, monkeypatch)
     db = open_db(cfg.db_path)

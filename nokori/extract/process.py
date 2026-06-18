@@ -97,6 +97,7 @@ def extract_transcript(
         cfg,
         transcript_text=text,
         db=db,
+        llm=llm,
     )
 
     if all_ok or _all_permanently_failed(db, failed_segs):

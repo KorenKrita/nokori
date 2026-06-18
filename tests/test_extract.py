@@ -480,7 +480,7 @@ def test_process_path_passes_transcript_evidence_and_role_limits(
     assert captured["kwargs"]["role_timeouts"] == cfg.role_timeouts
 
 
-def test_batch_extract_consumes_job_on_cold_pipeline_failure(monkeypatch, tmp_path):
+def test_batch_extract_keeps_job_on_cold_pipeline_role_failure(monkeypatch, tmp_path):
     monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
     cfg = Config.from_env()
     cfg.ensure_dirs()
@@ -523,6 +523,11 @@ def test_batch_extract_consumes_job_on_cold_pipeline_failure(monkeypatch, tmp_pa
         def complete_role(self, role, system, user, *, max_tokens=2000, timeout=30):
             return self.complete(user, max_tokens=max_tokens, timeout=timeout)
 
+        # ponytail: cold pipeline (admission/rewriter/final/merge) uses call_raw;
+        # raise to simulate an LLM role failure → pipeline leaves the job pending.
+        def call_raw(self, model, system, user, *, max_tokens=2000, timeout=30):
+            raise RuntimeError("llm role down")
+
         def _fallback_claude_cli(self, system, user, timeout):
             return self.complete_messages(system, user, max_tokens=2000, timeout=timeout)
 
@@ -546,17 +551,17 @@ def test_batch_extract_consumes_job_on_cold_pipeline_failure(monkeypatch, tmp_pa
 
     args = argparse.Namespace(session=None, dry_run=False)
     assert extract_cmd.run(args, cfg) == 0
-    # In the v6 cold pipeline, LLM failures during merge are handled gracefully
-    # (pipeline returns "rejected" or falls back to keep_both) so jobs are consumed.
-    assert len(job_io.list_jobs(cfg)) == 0
+    # Spec section 13: a cold-pipeline role failure (here admission) leaves the
+    # job pending for retry — it is NOT consumed, and the transcript is not
+    # marked extracted.
+    assert len(job_io.list_jobs(cfg)) == 1
     db = open_db(cfg.db_path)
     try:
         row = db.fetchone(
             "SELECT 1 FROM extract_state WHERE transcript_path = ?",
             (str(path.resolve()),),
         )
-        # Job was processed (consumed), so extract_state is marked done
-        assert row is not None
+        assert row is None
     finally:
         db.close()
 
