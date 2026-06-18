@@ -8,12 +8,14 @@ from ..config import Config
 from ..db import Db
 from ..extract.jobs import write_job as write_extract_job
 from ..gate import prompt_ack
+from ..gate.marker import prompt_hash
 from ..posthoc import enqueue_posthoc_for_session
 from ..posthoc.windowing import compute_event_window, extract_window_content
 from ..utils import sessions
 from ..utils.host import Host, effective_session_id
 from ..utils.logging import get_logger
 from ..utils.project import resolve_project_id
+from ..utils.prompt_text import normalize_prompt_for_hash
 from ..utils.transcript import resolve_transcript_path
 from .context import ErrorCategory, HotPathContext
 
@@ -173,14 +175,59 @@ def _populate_transcript_windows(
 
     Uses windowing module to compute topic-shift-bounded windows per fire event.
     Attempts to use embedding-based topic shift detection if search.embedding is available.
+
+    When a fire event has turn_index=None (Claude Code / Cursor UserPromptSubmit
+    payloads don't carry turn_index), the injection turn is located by matching
+    the fire event's prompt_hash against user turns in session_turns. Previously
+    such events were skipped, leaving redacted_window_json NULL and forcing
+    posthoc to fall back to the (often polluted) bounded_window_ref prompt text.
     """
     # Spec section 10: session_end must only enqueue and return immediately.
     # Embedding-based topic shift is deferred to the posthoc background worker.
     embedding_fn = None
 
+    # Index user turns by their prompt_hash for O(1) lookup when turn_index is
+    # missing. Only user turns can be injection points (rules fire on user
+    # prompt submit).
+    user_turns_by_hash: dict[str, int] = {}
+    for idx, turn in enumerate(session_turns):
+        role = turn.get("role")
+        # Normalize "human" → "user" in place so compute_event_window's
+        # topic-shift / stop conditions (which check role == "user") behave
+        # consistently with the jobs.py re-derivation path.
+        if role == "human":
+            turn = {**turn, "role": "user"}
+            session_turns[idx] = turn
+            role = "user"
+        if role != "user":
+            continue
+        content = turn.get("content", "")
+        if not isinstance(content, str) or not content:
+            continue
+        normalized = normalize_prompt_for_hash(content)
+        # Hash caliber mirrors prompt_inject.py: prompt_hash(normalized or content).
+        # content is guaranteed non-empty by the guard above.
+        ph = prompt_hash(normalized or content)
+        # Store the turn's own turn_index (compute_event_window looks up by
+        # turn.get("turn_index") == injection_turn_index). Coerce string values
+        # (from hook payloads) to int and write back so the lookup matches;
+        # fall back to the list position when no usable value is available.
+        raw_turn_idx = turn.get("turn_index", idx)
+        try:
+            turn_idx = int(raw_turn_idx)
+        except (TypeError, ValueError):
+            turn_idx = idx
+        if turn.get("turn_index") != turn_idx:
+            turn = {**turn, "turn_index": turn_idx}
+            session_turns[idx] = turn
+        # First match wins; later duplicate prompts in the same session are
+        # unlikely and using the earliest keeps the window anchored to the
+        # original injection.
+        user_turns_by_hash.setdefault(ph, turn_idx)
+
     # Get fire events for this session that have pending posthoc jobs
     rows = db.fetchall(
-        "SELECT pj.id AS job_id, fe.turn_index, fe.rule_id, r.tool_tags "
+        "SELECT pj.id AS job_id, fe.turn_index, fe.prompt_hash, fe.rule_id, r.tool_tags "
         "FROM posthoc_jobs pj "
         "JOIN rule_fire_events fe ON fe.id = pj.fire_event_id "
         "JOIN rules r ON r.id = fe.rule_id "
@@ -191,8 +238,48 @@ def _populate_transcript_windows(
 
     for row in rows:
         turn_index = row["turn_index"]
+        ph = row["prompt_hash"]
+        # Validate turn_index whenever present: coerce to int, find the
+        # candidate by field value (turn_index is a field, not a list
+        # position), require it to be a user turn, and (when prompt_hash is
+        # available) cross-check the hash. A stale/mis-offset turn_index must
+        # not anchor the window on the wrong turn — fall back to hash lookup.
+        if turn_index is not None:
+            try:
+                ti = int(turn_index)
+            except (TypeError, ValueError):
+                ti = None
+            cand = (
+                next((t for t in session_turns if t.get("turn_index") == ti), None)
+                if ti is not None
+                else None
+            )
+            if cand is not None and cand.get("role") == "user" and isinstance(
+                cand.get("content"), str
+            ):
+                if ph:
+                    cand_ph = prompt_hash(
+                        normalize_prompt_for_hash(cand["content"]) or cand["content"]
+                    )
+                    # validated — pass the int field value; mismatch falls through to hash lookup
+                    turn_index = ti if cand_ph == ph else None
+                else:
+                    # No hash to cross-check, but still require a valid user
+                    # turn and pass the coerced int field value.
+                    turn_index = ti
+            else:
+                turn_index = None
         if turn_index is None:
-            continue
+            # Locate injection turn by prompt_hash against user turns.
+            if not ph:
+                continue
+            turn_index = user_turns_by_hash.get(ph)
+            if turn_index is None:
+                # session_end payload may not carry the full transcript
+                # (Cursor/Claude messages field is unstable); the posthoc
+                # background worker will re-derive from the transcript file
+                # via _load_transcript_window.
+                continue
 
         # Get rule's tool tags for relevance-based windowing
         tool_tags = None

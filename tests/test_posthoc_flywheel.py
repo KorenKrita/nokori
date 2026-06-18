@@ -7,6 +7,7 @@ import pytest
 
 from nokori.db import open_db
 from nokori.events.fire import create_fire_event
+from nokori.gate.marker import prompt_hash
 from nokori.models import Rule
 from nokori.posthoc.evaluator import (
     ATTRIBUTION_ANSWERS,
@@ -22,11 +23,32 @@ from nokori.posthoc.jobs import (
     mark_posthoc_job_unclear,
     process_pending_posthoc_jobs,
 )
+from nokori.utils.prompt_text import normalize_prompt_for_hash
 from nokori.utils.time import now_iso
 
 
 def _make_db(tmp_path):
     return open_db(tmp_path / "rules.db")
+
+
+@pytest.fixture(autouse=True)
+def _allow_tmp_transcript_roots(tmp_path, monkeypatch):
+    """Permit transcript paths under tmp_path so build_evaluator_input can
+    re-read real transcript files (is_path_allowed checks _allowed_roots).
+
+    Previously fire events stored the raw user_prompt_submit prompt text in
+    bounded_window_ref and posthoc used it directly as the window. That was a
+    bug (see task 06-18-fix-posthoc-window-active-fire-loop): the prompt field
+    frequently contains skill system prompts / task-notifications rather than
+    the real conversation. Posthoc now re-reads the transcript file referenced
+    by bounded_window_ref ("transcript:<path>") and locates the injection turn
+    via prompt_hash. These tests construct real transcript files to exercise
+    that path.
+    """
+    monkeypatch.setattr(
+        "nokori.utils.transcript._allowed_roots",
+        lambda: [tmp_path],
+    )
 
 
 def _insert_rule(db, *, rule_id=None, status="active") -> Rule:
@@ -116,23 +138,60 @@ def _insert_rule(db, *, rule_id=None, status="active") -> Rule:
     )
 
 
-def _create_fire_event_with_window(db, rule, session_id, *, labeled=False):
-    """Create a fire event that has bounded_window_ref populated."""
-    event_id = create_fire_event(
-        db, rule, session_id, "hash_abc", "hot", {"score": 0.9}, turn_index=1
+def _create_fire_event_with_window(db, rule, session_id, tmp_path, *, labeled=False):
+    """Create a fire event backed by a real transcript file.
+
+    Writes a JSONL transcript containing a user turn + assistant turn under
+    tmp_path, then creates a fire event whose prompt_hash matches the user
+    turn (so posthoc can locate the injection turn via prompt_hash) and whose
+    bounded_window_ref is "transcript:<path>" (so posthoc re-reads the real
+    transcript instead of using the polluted prompt text).
+
+    This replaced the old pattern of storing the raw prompt text in
+    bounded_window_ref — see task 06-18-fix-posthoc-window-active-fire-loop.
+    """
+    transcript_dir = tmp_path / "transcripts"
+    transcript_dir.mkdir(parents=True, exist_ok=True)
+    # Unique filename per call so repeated invocations with the same session_id
+    # don't overwrite each other's transcript (prompt_hash matching is
+    # independent of the filename).
+    transcript_path = transcript_dir / f"{session_id}_{uuid.uuid4().hex[:8]}.jsonl"
+
+    user_prompt = (
+        f"User asked about coding patterns in {session_id}. "
+        "Assistant discussed best practices for error handling "
+        "and provided examples of try-catch blocks."
     )
-    # Add bounded_window_ref with inline content (> 64 chars) so build_evaluator_input works
-    window_content = (
-        "User asked about coding patterns. Assistant discussed best practices "
-        "for error handling and provided examples of try-catch blocks."
-    )
-    with db.transaction() as tx:
-        tx.execute(
-            "UPDATE rule_fire_events "
-            "SET bounded_window_ref = ?, transcript_window_ref = ? "
-            "WHERE id = ?",
-            (window_content, window_content, event_id),
+    normalized = normalize_prompt_for_hash(user_prompt)
+    # Hash caliber mirrors prompt_inject.py.
+    ph = prompt_hash(normalized or user_prompt)
+
+    # Write a real transcript: user turn (injection point) + assistant turn.
+    transcript_path.write_text(
+        json.dumps({"role": "user", "content": user_prompt}) + "\n"
+        + json.dumps(
+            {
+                "role": "assistant",
+                "content": "I'll explain error handling best practices with examples.",
+            }
         )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    # turn_index=None (as real UserPromptSubmit payloads carry) so posthoc must
+    # locate the injection turn via prompt_hash — this is the path the bugfix
+    # relies on, and a hash-caliber regression would surface here.
+    event_id = create_fire_event(
+        db,
+        rule,
+        session_id,
+        ph,
+        "hot",
+        {"score": 0.9},
+        turn_index=None,
+        bounded_window_ref=f"transcript:{transcript_path}",
+    )
     if labeled:
         with db.transaction() as tx:
             tx.execute(
@@ -155,10 +214,10 @@ class TestEnqueuePosthocForSession:
             session = "session_1"
 
             # Two unlabeled events
-            _create_fire_event_with_window(db, rule, session)
-            _create_fire_event_with_window(db, rule, session)
+            _create_fire_event_with_window(db, rule, session, tmp_path)
+            _create_fire_event_with_window(db, rule, session, tmp_path)
             # One labeled event
-            _create_fire_event_with_window(db, rule, session, labeled=True)
+            _create_fire_event_with_window(db, rule, session, tmp_path, labeled=True)
 
             count = enqueue_posthoc_for_session(db, session)
             assert count == 2
@@ -173,7 +232,7 @@ class TestEnqueuePosthocForSession:
         try:
             rule = _insert_rule(db)
             session = "session_2"
-            _create_fire_event_with_window(db, rule, session)
+            _create_fire_event_with_window(db, rule, session, tmp_path)
 
             first_count = enqueue_posthoc_for_session(db, session)
             second_count = enqueue_posthoc_for_session(db, session)
@@ -196,9 +255,9 @@ class TestSeparateJobsPerEvent:
             rule = _insert_rule(db)
             session = "session_3"
 
-            eid1 = _create_fire_event_with_window(db, rule, session)
-            eid2 = _create_fire_event_with_window(db, rule, session)
-            eid3 = _create_fire_event_with_window(db, rule, session)
+            eid1 = _create_fire_event_with_window(db, rule, session, tmp_path)
+            eid2 = _create_fire_event_with_window(db, rule, session, tmp_path)
+            eid3 = _create_fire_event_with_window(db, rule, session, tmp_path)
 
             enqueue_posthoc_for_session(db, session)
             jobs = get_pending_posthoc_jobs(db)
@@ -220,7 +279,7 @@ class TestBuildEvaluatorInputPartiallyBlind:
         try:
             rule = _insert_rule(db)
             session = "session_4"
-            eid = _create_fire_event_with_window(db, rule, session)
+            eid = _create_fire_event_with_window(db, rule, session, tmp_path)
 
             row = db.fetchone(
                 "SELECT * FROM rule_fire_events WHERE id = ?", (eid,)
@@ -276,7 +335,7 @@ class TestBuildEvaluatorInputNeutralSuggestion:
         try:
             rule = _insert_rule(db)
             session = "session_6"
-            eid = _create_fire_event_with_window(db, rule, session)
+            eid = _create_fire_event_with_window(db, rule, session, tmp_path)
 
             row = db.fetchone(
                 "SELECT * FROM rule_fire_events WHERE id = ?", (eid,)
@@ -459,7 +518,7 @@ class TestMarkPosthocJobUnclear:
         try:
             rule = _insert_rule(db)
             session = "session_7"
-            eid = _create_fire_event_with_window(db, rule, session)
+            eid = _create_fire_event_with_window(db, rule, session, tmp_path)
 
             enqueue_posthoc_for_session(db, session)
             jobs = get_pending_posthoc_jobs(db)
@@ -496,8 +555,8 @@ class TestPendingJobsRetrievable:
             rule = _insert_rule(db)
             session = "session_8"
 
-            _create_fire_event_with_window(db, rule, session)
-            _create_fire_event_with_window(db, rule, session)
+            _create_fire_event_with_window(db, rule, session, tmp_path)
+            _create_fire_event_with_window(db, rule, session, tmp_path)
 
             enqueue_posthoc_for_session(db, session)
             jobs = get_pending_posthoc_jobs(db, limit=10)
@@ -521,7 +580,7 @@ class TestPendingJobsRetrievable:
             session = "session_9"
 
             for _ in range(5):
-                _create_fire_event_with_window(db, rule, session)
+                _create_fire_event_with_window(db, rule, session, tmp_path)
 
             enqueue_posthoc_for_session(db, session)
             jobs = get_pending_posthoc_jobs(db, limit=2)
@@ -541,7 +600,7 @@ class TestCompletedJobsMarkFireEvents:
         try:
             rule = _insert_rule(db)
             session = "session_10"
-            eid = _create_fire_event_with_window(db, rule, session)
+            eid = _create_fire_event_with_window(db, rule, session, tmp_path)
 
             enqueue_posthoc_for_session(db, session)
             jobs = get_pending_posthoc_jobs(db)
@@ -573,8 +632,8 @@ class TestCompletedJobsMarkFireEvents:
             rule = _insert_rule(db)
             session = "session_11"
 
-            eid1 = _create_fire_event_with_window(db, rule, session)
-            eid2 = _create_fire_event_with_window(db, rule, session)
+            eid1 = _create_fire_event_with_window(db, rule, session, tmp_path)
+            eid2 = _create_fire_event_with_window(db, rule, session, tmp_path)
 
             enqueue_posthoc_for_session(db, session)
             jobs = get_pending_posthoc_jobs(db)
@@ -608,7 +667,7 @@ class TestCompletedJobsMarkFireEvents:
         try:
             rule = _insert_rule(db)
             session = "session_redundant"
-            eid = _create_fire_event_with_window(db, rule, session)
+            eid = _create_fire_event_with_window(db, rule, session, tmp_path)
             enqueue_posthoc_for_session(db, session)
 
             monkeypatch.setattr(
@@ -655,8 +714,8 @@ class TestFullFlywheelLoop:
 
             # Create multiple fire events in a session
             session = "session_flywheel"
-            eid1 = _create_fire_event_with_window(db, rule, session)
-            eid2 = _create_fire_event_with_window(db, rule, session)
+            eid1 = _create_fire_event_with_window(db, rule, session, tmp_path)
+            eid2 = _create_fire_event_with_window(db, rule, session, tmp_path)
 
             # Enqueue posthoc jobs
             count = enqueue_posthoc_for_session(db, session)

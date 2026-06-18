@@ -9,16 +9,25 @@ from __future__ import annotations
 
 import hashlib
 import uuid
+from pathlib import Path
 from typing import Any
 
 from ..db import Db, loads_json
 from ..events.fire import get_fire_events_for_session, update_first_observed_useful
 from ..events.observability import write_event
+from ..extract.reader import read as read_transcript
+from ..gate.marker import prompt_hash
+from ..posthoc.windowing import compute_event_window, extract_window_content
 from ..utils.logging import get_logger
+from ..utils.prompt_text import normalize_prompt_for_hash
 from ..utils.time import now_iso
+from ..utils.transcript import is_path_allowed
 from .evaluator import run_posthoc_evaluation
 
 log = get_logger("nokori.posthoc.jobs")
+
+# Minimum length for a redacted window to count as real content vs a stub/placeholder.
+_MIN_REDACTED_WINDOW_LEN = 50
 
 
 def enqueue_posthoc_for_session(db: Db, session_id: str) -> int:
@@ -254,12 +263,10 @@ def build_evaluator_input(db: Db, fire_event: dict) -> dict | None:
     # Neutral phrasing: "a prior reminder suggested X" (not authoritative rule)
     suggestion_text = action_snapshot if action_snapshot else trigger_snapshot
 
-    # Use bounded_window_ref as injection_context if it contains actual prompt text
-    # (> 64 chars means it's real content, not just a hash reference).
-    if bounded_window_ref and len(bounded_window_ref) > 64:
-        injection_context = bounded_window_ref
-    else:
-        injection_context = trigger_snapshot
+    # injection_context must be clean rule-snapshot data, never the raw
+    # user_prompt_submit prompt text (which may contain skill system prompts /
+    # task-notifications — see task 06-18-fix-posthoc-window-active-fire-loop).
+    injection_context = trigger_snapshot
 
     decision_features = loads_json(fire_event.get("decision_features"), {})
     # Spec 10.2: evaluator must NOT see status-revealing fields or quality scores.
@@ -283,7 +290,14 @@ def build_evaluator_input(db: Db, fire_event: dict) -> dict | None:
 
     # Load actual transcript window content from posthoc_jobs redacted_window_json
     transcript_window_content = _load_transcript_window(
-        db, fire_event_id, bounded_window_ref, transcript_window_ref
+        db,
+        fire_event_id,
+        fire_event.get("session_id"),
+        fire_event.get("prompt_hash"),
+        fire_event.get("turn_index"),
+        bounded_window_ref,
+        transcript_window_ref,
+        fire_event.get("injected_structured_snapshot"),
     )
     if transcript_window_content is None:
         return None
@@ -312,38 +326,190 @@ def build_evaluator_input(db: Db, fire_event: dict) -> dict | None:
 def _load_transcript_window(
     db: Db,
     fire_event_id: str,
+    _session_id: str | None,  # reserved for future logging; not used currently
+    prompt_hash_value: str | None,
+    turn_index: int | None,
     bounded_window_ref: str | None,
-    transcript_window_ref: str | None,
+    _transcript_window_ref: str | None,  # unused in new impl; kept for signature compat
+    injected_structured_snapshot: str | None,
 ) -> str | None:
     """Load actual transcript window content for posthoc evaluation.
 
     Tries in order:
-    1. posthoc_jobs.redacted_window_json for this fire event
-    2. The bounded_window_ref/transcript_window_ref as stored content
+    1. posthoc_jobs.redacted_window_json for this fire event (precomputed at
+       session_end by _populate_transcript_windows).
+    2. Re-derive the window at evaluation time by reading the transcript file
+       referenced by bounded_window_ref ("transcript:<path>") and locating the
+       injection turn via prompt_hash. This handles fire events whose
+       session_end did not populate redacted_window_json (e.g. turn_index was
+       None, or the session_end payload lacked messages).
 
-    Returns None if no actual content is available (not just a hash ref).
+    Returns None when no real transcript window is available — caller then
+    marks the job unclear instead of poisoning the evaluator with the raw
+    user_prompt_submit prompt text (which may be a skill system prompt).
     """
-    # Check if we stored the window payload in posthoc_jobs
+    # 1. Precomputed window stored at session_end
     job_row = db.fetchone(
         "SELECT redacted_window_json FROM posthoc_jobs WHERE fire_event_id = ?",
         (fire_event_id,),
     )
     if job_row and job_row["redacted_window_json"]:
         content: str = job_row["redacted_window_json"]
-        if content and len(content) > 50:
+        if content and len(content) > _MIN_REDACTED_WINDOW_LEN:
             return content
 
-    # The bounded_window_ref may contain inline content (stored during session_end)
-    # or be a reference identifier. Refs that look like hex hashes (16-64 hex chars)
-    # are just IDs without real content — mark as unclear rather than wrapping as fake content.
-    import re as _re
+    # 2. Re-derive from transcript file + prompt_hash.
+    transcript_path = _parse_transcript_ref(bounded_window_ref)
+    if transcript_path is None:
+        # Old-format bounded_window_ref (raw prompt text) or session: ref —
+        # no real transcript window obtainable. Skip rather than poison the
+        # evaluator with the (likely irrelevant) prompt text.
+        return None
 
-    ref = bounded_window_ref or transcript_window_ref
-    if ref:
-        if _re.match(r"^[0-9a-f]{16,64}$", ref):
-            return None
-        if ref.startswith("session:") or len(ref) < 80:
-            return None
-        return ref
+    return _compute_window_from_transcript(
+        transcript_path,
+        prompt_hash_value,
+        turn_index,
+        injected_structured_snapshot,
+    )
 
-    return None
+
+def _parse_transcript_ref(bounded_window_ref: str | None) -> Path | None:
+    """Extract a transcript Path from a "transcript:<path>" bounded_window_ref.
+
+    Returns None for legacy formats (raw prompt text, "session:..." refs, hex
+    hashes). The path is validated against the transcript allowed-roots to
+    prevent path traversal from maliciously crafted refs.
+    """
+    if not bounded_window_ref:
+        return None
+    if not bounded_window_ref.startswith("transcript:"):
+        return None
+    raw = bounded_window_ref[len("transcript:") :]
+    if not raw:
+        return None
+    path = Path(raw).expanduser()
+    # Align with resolve_transcript_path's validation: require .jsonl suffix so
+    # a maliciously crafted ref can't point us at arbitrary allowed-root files
+    # (configs, caches) and feed them to the evaluator.
+    if path.suffix.lower() != ".jsonl":
+        log.warning(
+            "bounded_window_ref transcript path is not a .jsonl file: %s", path
+        )
+        return None
+    if not is_path_allowed(path):
+        log.warning(
+            "bounded_window_ref transcript path outside allowed roots: %s", path
+        )
+        return None
+    if not path.is_file():
+        return None
+    return path
+
+
+def _compute_window_from_transcript(
+    transcript_path: Path,
+    prompt_hash_value: str | None,
+    turn_index: int | None,
+    injected_structured_snapshot: str | None,
+) -> str | None:
+    """Read transcript, locate injection turn, return bounded window content.
+
+    Locates the injection turn by:
+    1. turn_index match (when present and in range).
+    2. prompt_hash match — normalize each user turn's content and hash it,
+       comparing to the fire event's prompt_hash. This handles UserPromptSubmit
+       payloads that lack turn_index (Claude Code / Cursor).
+
+    Returns None when the transcript is missing, unreadable, or no matching
+    injection turn is found — caller skips posthoc rather than guessing.
+    """
+    if not transcript_path.exists():
+        return None
+
+    try:
+        turns = read_transcript(transcript_path)
+    except Exception as e:
+        log.warning("transcript read failed path=%s: %s", transcript_path, e)
+        return None
+    if not turns:
+        return None
+
+    # Build the windowing input shape: list of dicts with turn_index assigned
+    # by position. compute_event_window looks up turns by turn_index.
+    session_turns: list[dict] = []
+    injection_turn_index: int | None = None
+
+    for idx, turn in enumerate(turns):
+        session_turns.append(
+            {
+                # Normalize "human" → "user": compute_event_window's topic-shift
+                # and stop conditions check role == "user", so an unnormalized
+                # "human" would be treated as a non-user turn and skew the window.
+                "role": "user" if turn.role == "human" else turn.role,
+                "content": turn.content,
+                "turn_index": idx,
+                "tool_name": turn.tool_name,
+                "tool_input": turn.input_summary,
+            }
+        )
+
+    # Prefer turn_index when present and within range; tolerate string values
+    # from hook payloads / SQLite rows. When prompt_hash is also available,
+    # validate the candidate turn actually corresponds to the triggering prompt
+    # to avoid selecting a mis-offset window.
+    turn_index_int: int | None = None
+    if turn_index is not None:
+        try:
+            turn_index_int = int(turn_index)
+        except (TypeError, ValueError):
+            turn_index_int = None
+    if turn_index_int is not None and 0 <= turn_index_int < len(session_turns):
+        candidate = session_turns[turn_index_int]
+        # The triggering turn must be a user turn (rules fire on user prompt
+        # submit). A non-user turn (assistant/tool) means the turn_index is
+        # mis-offset — reject and fall through to hash scan.
+        if candidate["role"] != "user":
+            turn_index_int = None
+        elif prompt_hash_value:
+            normalized_cand = normalize_prompt_for_hash(candidate["content"])
+            if prompt_hash(normalized_cand or candidate["content"]) != prompt_hash_value:
+                turn_index_int = None
+        if turn_index_int is not None:
+            injection_turn_index = turn_index_int
+
+    # Fall back to prompt_hash matching against user turns.
+    # Hash caliber mirrors prompt_inject.py: prompt_hash(normalized or content)
+    if injection_turn_index is None and prompt_hash_value:
+        for idx, turn in enumerate(turns):
+            if turn.role != "human":
+                continue
+            normalized = normalize_prompt_for_hash(turn.content)
+            if not normalized and not turn.content:
+                continue
+            if prompt_hash(normalized or turn.content) == prompt_hash_value:
+                injection_turn_index = idx
+                break
+
+    if injection_turn_index is None:
+        return None
+
+    # Extract rule tool_tags from injected_structured_snapshot for relevance
+    # windowing (matches _populate_transcript_windows behavior).
+    tool_tags: list[str] | None = None
+    if injected_structured_snapshot:
+        try:
+            structured = loads_json(injected_structured_snapshot, {})
+            raw_tags = structured.get("tool_tags")
+            if isinstance(raw_tags, list):
+                tool_tags = [str(t) for t in raw_tags if isinstance(t, str)]
+        except Exception:
+            tool_tags = None
+
+    window_turns = compute_event_window(
+        session_turns, injection_turn_index, tool_tags, embedding_fn=None
+    )
+    if not window_turns:
+        return None
+
+    return extract_window_content(window_turns)

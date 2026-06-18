@@ -9,7 +9,10 @@ from nokori.policy import (
     DYNAMIC_IDF_SMALL_POOL,
     SMALL_POOL_THRESHOLD,
 )
-from nokori.search.applicability import evaluate_applicability
+from nokori.search.applicability import (
+    NEWLY_ACTIVE_COVERAGE_MIN,
+    evaluate_applicability,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -184,21 +187,72 @@ class TestTrustedGate:
 
 class TestNewlyPromotedActive:
     def test_no_first_observed_useful_at_is_warm(self):
+        # Newly-promoted active needs coverage >= NEWLY_ACTIVE_COVERAGE_MIN
+        # (0.15) to WARM-inject. PASS_BASELINE has trigger_coverage=0.0 which
+        # now correctly falls to COLD under the coverage floor (Bug1 fix).
         r = _eval(
             rule_status="active",
             rule_first_observed_useful_at=None,
+            trigger_coverage=0.20,
         )
         assert r.decision == "warm"
         assert r.eligible is True
 
     def test_no_first_observed_useful_at_never_hot(self):
+        # Even with strong_variant + concepts, newly-promoted active caps at
+        # WARM (never HOT) when coverage meets the floor.
         r = _eval(
             rule_status="active",
             rule_first_observed_useful_at=None,
             strong_variant_phrase_hit=True,
             required_concepts_match=True,
+            trigger_coverage=0.20,
         )
         assert r.decision == "warm"
+
+    def test_no_first_observed_useful_at_below_coverage_floor_is_cold(self):
+        """Bug1 fix: coverage below NEWLY_ACTIVE_COVERAGE_MIN -> COLD, not WARM.
+
+        Previously newly-promoted active rules WARM-injected on any trigger
+        evidence (Path C does not require coverage), causing weak concept-word
+        hits (observed coverage 0.07) to mis-fire on irrelevant prompts. The
+        coverage floor blocks these while keeping trigger_evidence_passed=True
+        so the rule is still shadow-tracked.
+
+        This case explicitly exercises Path C (strong_variant=False, idf at
+        1.5x threshold, distinct at min) so a regression that only guards
+        Path A is caught.
+        """
+        policy = DYNAMIC_IDF_NORMAL
+        r = _eval(
+            rule_status="active",
+            rule_first_observed_useful_at=None,
+            strong_variant_phrase_hit=False,
+            required_concepts_match=True,
+            trigger_idf_sum=1.5 * policy.absolute_trigger_info_min,
+            trigger_coverage=0.07,
+            distinct_trigger_terms=policy.distinct_trigger_terms_min,
+            idf_stats_available=True,
+            pool_size=SMALL_POOL_THRESHOLD,
+        )
+        assert r.decision == "cold"
+        assert r.eligible is False
+        # Still shadow-tracked: candidate evaluation chain not broken.
+        assert r.trigger_evidence_passed is True
+        assert "coverage" in r.reason
+
+    def test_no_first_observed_useful_at_at_coverage_floor_is_warm(self):
+        """Boundary: coverage exactly at the floor (0.15) still WARM-injects."""
+        # Lock the threshold literal so a regression that changes the constant
+        # value is caught here, not silently carried through.
+        assert NEWLY_ACTIVE_COVERAGE_MIN == 0.15
+        r = _eval(
+            rule_status="active",
+            rule_first_observed_useful_at=None,
+            trigger_coverage=0.15,
+        )
+        assert r.decision == "warm"
+        assert r.eligible is True
 
 
 # ---------------------------------------------------------------------------

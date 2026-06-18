@@ -26,6 +26,14 @@ from ..policy import (
 
 ApplicabilityDecision = Literal["cold", "warm", "hot", "gate"]
 
+# Newly-promoted active rules (first_observed_useful_at is None) get a WARM
+# 引流期 (observation window) to be observed, but still require a minimum
+# trigger_coverage floor to prevent concept-word weak hits from mis-firing on
+# irrelevant prompts. Rationale: observed mis-fires had trigger_coverage
+# 0.07-0.30 with strong_variant_phrase_hit=False; 0.15 blocks the extreme
+# weak hits while preserving reasonable 引流. May be made configurable later.
+NEWLY_ACTIVE_COVERAGE_MIN: float = 0.15
+
 
 class _EvidenceKwargs(TypedDict):
     strong_variant_phrase_hit: bool
@@ -383,8 +391,21 @@ def evaluate_applicability(
     # ------------------------------------------------------------------
 
     if rule_status == "active":
-        # Newly promoted active (no first_observed_useful_at) -> WARM only
+        # Newly promoted active (no first_observed_useful_at) -> WARM only,
+        # but gated by a minimum coverage floor to prevent weak concept-word
+        # hits from mis-firing on irrelevant prompts (Bug1 fix).
         if rule_first_observed_useful_at is None:
+            if trigger_coverage < NEWLY_ACTIVE_COVERAGE_MIN:
+                return ApplicabilityResult(
+                    decision="cold",
+                    eligible=False,
+                    reason=(
+                        f"newly active: coverage {trigger_coverage:.2f} below "
+                        f"floor {NEWLY_ACTIVE_COVERAGE_MIN}"
+                    ),
+                    trigger_evidence_passed=True,
+                    penalties=penalties,
+                )
             return ApplicabilityResult(
                 decision="warm",
                 eligible=True,

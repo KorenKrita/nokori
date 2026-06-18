@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from ..config import Config
 from ..db import Db, open_db
 from ..errors import DbError
@@ -29,7 +31,7 @@ def _prompt_from_transcript(
     *,
     session_id: str,
     tool_name: str | None,
-) -> tuple[str, str] | None:
+) -> tuple[str, str, Path] | None:
     path = resolve_transcript_path(payload)
     if path is None:
         log.warning(
@@ -45,7 +47,7 @@ def _prompt_from_transcript(
     normalized = normalize_prompt_for_hash(turns[0].content)
     if not normalized:
         return None
-    return normalized, prompt_hash(normalized)
+    return normalized, prompt_hash(normalized), path
 
 
 def _generation_id_from_payload(payload: dict) -> str:
@@ -82,7 +84,7 @@ def maybe_deferred_pre_tool_use(
     )
     if resolved is None:
         return None
-    prompt_text, ph = resolved
+    prompt_text, ph, transcript_path = resolved
 
     if prompt_ack.exists(cfg, session_id, ph):
         return None
@@ -118,6 +120,7 @@ def maybe_deferred_pre_tool_use(
                 prompt=prompt_text,
                 project_id=project_id,
                 turn_index=payload.get("turn_index"),
+                transcript_path=transcript_path,
             )
         except RetrieveFailed as e:
             log.warning("cursor deferred retrieve failed (%s); fail-open", e)

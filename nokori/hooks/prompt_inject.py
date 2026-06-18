@@ -8,6 +8,7 @@ Split into two independently testable layers:
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
 from ..config import Config
 from ..db import Db, fetch_rules
@@ -149,12 +150,30 @@ def _record_fire_events(
     level: str,
     *,
     turn_index: int | None = None,
-    prompt_text: str | None = None,
+    transcript_path: Path | None = None,
     project_id: str | None = None,
 ) -> None:
-    """Create fire events for injected WARM/HOT rules."""
-    if prompt_text and len(prompt_text) > 64:
-        bounded_ref = prompt_text[:4000]
+    """Create fire events for injected WARM/HOT rules.
+
+    bounded_window_ref is a reference (not prompt text):
+    - "transcript:<path>" when transcript_path is available, so posthoc can
+      re-read the real transcript and locate the injection turn via prompt_hash.
+    - "session:<sid>:prompt:<ph>" fallback when transcript_path is unknown.
+    Storing user_prompt_submit prompt text here was a bug: that field frequently
+    contains skill system prompts / task-notifications rather than the real
+    conversation, which poisoned posthoc evaluation (see task
+    06-18-fix-posthoc-window-active-fire-loop).
+    """
+    if transcript_path is not None:
+        # Resolve to an absolute path so the posthoc worker (which may run with
+        # a different cwd) can re-read the transcript reliably. If resolution
+        # fails, fall back to a session:prompt ref rather than persisting an
+        # unreliable (possibly relative) transcript ref.
+        try:
+            resolved = transcript_path.expanduser().resolve()
+            bounded_ref = f"transcript:{resolved}"
+        except (OSError, RuntimeError):
+            bounded_ref = f"session:{session_id}:prompt:{ph}"
     else:
         bounded_ref = f"session:{session_id}:prompt:{ph}"
 
@@ -186,7 +205,7 @@ def _record_rendered_fire_events(
     rendered_entries: list[tuple[str, str]],
     *,
     turn_index: int | None = None,
-    prompt_text: str | None = None,
+    transcript_path: Path | None = None,
     project_id: str | None = None,
 ) -> None:
     results_by_id = {r.rule.id: r for r in [*hot, *warm]}
@@ -201,7 +220,7 @@ def _record_rendered_fire_events(
             [result],
             level,
             turn_index=turn_index,
-            prompt_text=prompt_text,
+            transcript_path=transcript_path,
             project_id=project_id,
         )
 
@@ -253,7 +272,7 @@ def record_injection_events(
     *,
     session_id: str,
     turn_index: int | None = None,
-    prompt_text: str | None = None,
+    transcript_path: Path | None = None,
     record_injections: bool = True,
     record_shadow_hits: bool = True,
     project_id: str | None = None,
@@ -263,10 +282,12 @@ def record_injection_events(
     This is the side-effect counterpart to retrieve_and_format().
 
     Args:
-        prompt_text: The original prompt text (strongly recommended). When provided,
-            fire events store a truncated copy (up to 4000 chars) for posthoc
-            evaluation access. Without it, events only contain a hash reference
-            and posthoc evaluator cannot access the original prompt.
+        transcript_path: Path to the session transcript (.jsonl). When provided,
+            fire events store a "transcript:<path>" reference in
+            bounded_window_ref so posthoc evaluation can re-read the real
+            transcript and locate the injection turn via prompt_hash. Without it,
+            events fall back to a "session:<sid>:prompt:<ph>" reference and
+            posthoc evaluation is skipped (no real window available).
     """
     if record_injections:
         _record_rendered_fire_events(
@@ -277,7 +298,7 @@ def record_injection_events(
             outcome.warm,
             outcome.rendered_entries,
             turn_index=turn_index,
-            prompt_text=prompt_text,
+            transcript_path=transcript_path,
             project_id=project_id,
         )
 
@@ -325,6 +346,7 @@ def inject_for_prompt(
     prompt: str,
     project_id: str | None,
     turn_index: int | None = None,
+    transcript_path: Path | None = None,
     record_injections: bool = True,
     record_shadow_hits: bool = True,
     engine: RetrievalEngine | None = None,
@@ -348,7 +370,7 @@ def inject_for_prompt(
         outcome,
         session_id=session_id,
         turn_index=turn_index,
-        prompt_text=prompt,
+        transcript_path=transcript_path,
         record_injections=record_injections,
         record_shadow_hits=record_shadow_hits,
         project_id=project_id,

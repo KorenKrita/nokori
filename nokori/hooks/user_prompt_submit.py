@@ -21,6 +21,7 @@ from ..utils.host import Host, effective_session_id
 from ..utils.logging import get_logger
 from ..utils.prompt_text import normalize_prompt_for_hash
 from ..utils.time import iso_of, local_now, now_iso
+from ..utils.transcript import resolve_transcript_path
 from .context import ErrorCategory, HotPathContext
 from .prompt_inject import (
     RetrieveFailed,
@@ -117,6 +118,7 @@ def handle(payload: dict, cfg: Config, *, host: Host) -> dict:
                 prompt=prompt,
                 project_id=project_id,
                 turn_index=payload.get("turn_index"),
+                transcript_path=resolve_transcript_path(payload),
             )
         except RetrieveFailed as e:
             ctx_log.warning("retrieve failed (%s); continuing without rules", e)
