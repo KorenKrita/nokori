@@ -88,7 +88,7 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
                 raise NokoriError(f"internal error: disallowed column {col!r}")
         updated_cols = {col for col, _ in updates}
         if updated_cols & _MATCHER_REVALIDATE_COLUMNS:
-            proposed_values = {col: val for col, val in updates}
+            proposed_values = dict(updates)
             proposed_rule = replace(
                 rule,
                 trigger_canonical=proposed_values.get(
