@@ -45,7 +45,7 @@ class Rule:
     excluded_contexts: list[dict] = field(default_factory=list)
     non_generalization_boundaries: list[str] = field(default_factory=list)
     near_miss_examples: list[str] = field(default_factory=list)
-    trigger_variants: list[dict] = field(default_factory=list)
+    trigger_variants: list[dict | str] = field(default_factory=list)
     trigger_variants_zh: list[str] = field(default_factory=list)
     search_terms: dict[str, list[str]] = field(default_factory=dict)
 

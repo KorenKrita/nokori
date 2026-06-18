@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import replace
+from typing import cast
 
 from ..config import Config
 from ..db import dumps_json, fetch_rule_by_short_id, open_db
@@ -88,13 +89,13 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
                 raise NokoriError(f"internal error: disallowed column {col!r}")
         updated_cols = {col for col, _ in updates}
         if updated_cols & _MATCHER_REVALIDATE_COLUMNS:
-            proposed_values = dict(updates)
             proposed_rule = replace(
                 rule,
-                trigger_canonical=proposed_values.get(
-                    "trigger_canonical", rule.trigger_canonical
-                ),
-                trigger_variants=split_csv(args.variants)
+                trigger_canonical=args.trigger
+                if args.trigger is not None
+                else rule.trigger_canonical,
+                # ponytail: split_csv → list[str] is a valid list[dict|str]; cast around mypy list invariance
+                trigger_variants=cast(list[dict | str], split_csv(args.variants))
                 if args.variants is not None
                 else rule.trigger_variants,
                 search_terms=terms
