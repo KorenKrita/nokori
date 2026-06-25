@@ -42,15 +42,21 @@ class LLMAdapter:
         user: str,
         max_tokens: int = 2000,
         timeout: int = 30,
+        response_format: dict | None = None,
     ) -> str:
         """Direct LLM call with explicit model. Raises on failure.
 
         Note: when llm_base_url is not configured, falls back to claude CLI
         which uses a hardcoded model; the `model` parameter is ignored in that path.
+
+        `response_format` is forwarded to the OpenAI-compatible endpoint only.
+        When None, the endpoint default `{"type": "json_object"}` is used.
+        The claude CLI fallback path ignores `response_format` (CLI has no
+        equivalent parameter).
         """
         if self.cfg.llm_base_url:
             result = self._call_openai_compatible(
-                system, user, max_tokens, timeout, model_id=model
+                system, user, max_tokens, timeout, model_id=model, response_format=response_format
             )
         else:
             result = self._fallback_claude_cli(system, user, timeout)
@@ -143,8 +149,8 @@ class LLMAdapter:
         except urllib.error.HTTPError as e:
             log.warning("LLM HTTP error %s on %s", e.code, safe_log_url(url))
             if e.code == 429:
-                raise LlmRateLimitError(f"HTTP {e.code}") from e
-            raise LlmError(f"HTTP {e.code}") from e
+                raise LlmRateLimitError(f"HTTP {e.code}", status_code=e.code) from e
+            raise LlmError(f"HTTP {e.code}", status_code=e.code) from e
         except (urllib.error.URLError, TimeoutError) as e:
             log.warning("LLM connection failed: %s", type(e).__name__)
             raise LlmTimeoutError(str(e)) from e

@@ -15,7 +15,11 @@ class DbError(NokoriError):
 
 
 class LlmError(NokoriError):
-    pass
+    def __init__(
+        self, *args: object, remediation: str | None = None, status_code: int | None = None
+    ) -> None:
+        super().__init__(*args, remediation=remediation)
+        self.status_code = status_code
 
 
 class LlmTimeoutError(LlmError):

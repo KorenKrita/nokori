@@ -28,7 +28,7 @@ def _make_llm_mock(responses: dict[str, str | Exception]) -> MagicMock:
     """
     mock = MagicMock()
 
-    def _call(*, model, system, user, max_tokens, timeout):
+    def _call(*, model, system, user, max_tokens, timeout, response_format=None):
         for keyword, resp in responses.items():
             if keyword in system:
                 if isinstance(resp, Exception):

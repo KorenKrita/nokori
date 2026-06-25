@@ -425,6 +425,26 @@ ROLE_SPECS: dict[str, RoleSpec] = {
 }
 
 
+# --- Response Format Helpers ---
+
+
+def _build_role_response_format(role: str) -> dict[str, Any] | None:
+    """Build a `response_format` payload for OpenAI-compatible json_schema mode.
+
+    Returns the loose-mode (no `strict: true`) json_schema wrapper for the role,
+    or None if the role is unknown. Loose mode is used because existing
+    ROLE_SCHEMAS do not satisfy strict mode's `additionalProperties: false`
+    + all-fields-required preconditions.
+    """
+    spec = ROLE_SPECS.get(role)
+    if spec is None:
+        return None
+    return {
+        "type": "json_schema",
+        "json_schema": {"name": role, "schema": spec.schema},
+    }
+
+
 # --- Schema Validation Helpers ---
 
 

@@ -61,7 +61,7 @@ def _make_llm_mock(responses: dict[str, str | Exception]) -> MagicMock:
     """
     mock = MagicMock()
 
-    def _call(*, model, system, user, max_tokens, timeout):
+    def _call(*, model, system, user, max_tokens, timeout, response_format=None):
         for keyword, resp in responses.items():
             if keyword in system:
                 if isinstance(resp, Exception):
@@ -1361,7 +1361,7 @@ class TestSplitRequired:
 
         call_count = {"merge": 0}
 
-        def _dynamic_call(*, model, system, user, max_tokens, timeout):
+        def _dynamic_call(*, model, system, user, max_tokens, timeout, response_format=None):
             if "merge planner" in system:
                 call_count["merge"] += 1
                 if call_count["merge"] == 1:

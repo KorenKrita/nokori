@@ -525,7 +525,7 @@ def test_batch_extract_keeps_job_on_cold_pipeline_role_failure(monkeypatch, tmp_
 
         # ponytail: cold pipeline (admission/rewriter/final/merge) uses call_raw;
         # raise to simulate an LLM role failure → pipeline leaves the job pending.
-        def call_raw(self, model, system, user, *, max_tokens=2000, timeout=30):
+        def call_raw(self, model, system, user, *, max_tokens=2000, timeout=30, response_format=None):
             raise RuntimeError("llm role down")
 
         def _fallback_claude_cli(self, system, user, timeout):

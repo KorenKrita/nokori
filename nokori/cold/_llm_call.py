@@ -13,6 +13,7 @@ from collections.abc import Callable
 from typing import Any
 
 from ..db import Db, dumps_json
+from ..errors import LlmError
 from ..utils.logging import get_logger
 from .jobs import (
     enqueue_job,
@@ -25,6 +26,7 @@ from .roles import (
     DEFAULT_MAX_TOKENS,
     DEFAULT_TIMEOUTS,
     PROMPT_VERSIONS,
+    _build_role_response_format,
 )
 
 log = get_logger("nokori.cold.pipeline")
@@ -90,9 +92,16 @@ def call_llm_role(
     )
     job_id = enqueue_job(db, role, model_id, prompt_version, input_hash)
 
+    # Schema-level generation-time constraint (loose json_schema mode). Backend
+    # that rejects json_schema (HTTP 400/422) triggers a one-shot downgrade to
+    # json_object; other errors flow through the existing retry path.
+    rf: dict | None = _build_role_response_format(role)
+    downgraded = False
+
     _MAX_IMMEDIATE_RETRIES = 2
     last_error: Exception | None = None
-    for attempt in range(_MAX_IMMEDIATE_RETRIES):
+    attempt = 0
+    while attempt < _MAX_IMMEDIATE_RETRIES:
         try:
             response = llm.call_raw(
                 model=model_id,
@@ -100,9 +109,27 @@ def call_llm_role(
                 user=user,
                 max_tokens=max_tokens,
                 timeout=timeout,
+                response_format=rf,
             )
         except Exception as exc:
             last_error = exc
+            # One-shot downgrade: if the backend rejected json_schema with an
+            # explicit HTTP 400/422, retry the same attempt with json_object.
+            # Does not consume the immediate-retry quota.
+            if (
+                not downgraded
+                and rf is not None
+                and isinstance(exc, LlmError)
+                and exc.status_code in (400, 422)
+            ):
+                log.warning(
+                    "role=%s model=%s backend rejected json_schema (HTTP %s); "
+                    "downgrading to json_object and retrying",
+                    role, model_id, exc.status_code,
+                )
+                rf = {"type": "json_object"}
+                downgraded = True
+                continue
             if attempt < _MAX_IMMEDIATE_RETRIES - 1:
                 log.warning(
                     "role=%s model=%s attempt %d/%d LLM call failed: %s, retrying",
@@ -112,6 +139,7 @@ def call_llm_role(
                     _MAX_IMMEDIATE_RETRIES,
                     exc,
                 )
+                attempt += 1
                 continue
             error_info = f"{type(exc).__name__}: {exc}"
             mark_job_failed(db, job_id, error_info=error_info)
@@ -133,6 +161,7 @@ def call_llm_role(
                     _MAX_IMMEDIATE_RETRIES,
                     exc,
                 )
+                attempt += 1
                 continue
             error_info = f"schema validation failed: {exc}"
             mark_job_failed(db, job_id, error_info=error_info)
