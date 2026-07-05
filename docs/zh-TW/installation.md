@@ -112,17 +112,25 @@ nokori install --enable
 
 ---
 
-## Claude Code 與 Cursor
+## Claude Code、Cursor 與 OMP
 
-預設裝 **Claude Code**；也支援 **Cursor**（原生 hook 或從 Claude 匯入）。同一台機器上請只選一種 Cursor 註冊方式。
+預設裝 **Claude Code**；**Cursor** 保留原生 hook 與從 Claude 匯入兩條路；**OMP** 會安裝一個小型 TypeScript 橋接到 `~/.omp/agent/extensions/nokori.ts`，把執行時事件轉進 Nokori 既有的 Python dispatcher。同一台機器上請只選一種 Cursor 註冊方式。
 
 ### 裝哪條指令？
 
-| 目標 | 指令 |
-|------|------|
-| 僅 Claude Code | `nokori install` |
-| 僅 Cursor（原生 `~/.cursor/hooks.json`） | `nokori install --cursor` |
-| 兩個平台都裝 | `nokori install --all` |
+`--all` 仍然只代表 Claude Code + Cursor，不包含 OMP。
+
+| 目標 | 指令 | 寫入 |
+|------|------|------|
+| 僅 Claude Code | `nokori install` | `~/.claude/settings.json` |
+| 僅 Cursor（原生 `~/.cursor/hooks.json`） | `nokori install --cursor` | `~/.cursor/hooks.json` |
+| 僅 OMP | `nokori install --omp` | `~/.omp/agent/extensions/nokori.ts` |
+| Claude Code + Cursor | `nokori install --all` | 上面兩個檔案 |
+### 驗證 OMP 安裝
+
+- 想先看會寫什麼，可先跑：`nokori install --omp --dry-run`
+- 安裝後確認橋接檔存在：`ls ~/.omp/agent/extensions/nokori.ts`
+- 開一個新的 OMP session。recall 會在 `before_agent_start` 注入，Gate 會在 `tool_call` 檢查，關會話後則由 `session_shutdown` 依 OMP session manager 提供的目前 session 檔案啟動提取。
 
 ### Cursor 只選一條路（不要混用）
 

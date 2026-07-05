@@ -4,7 +4,7 @@
 
 ---
 
-セッション終了後に実行されるコールドパス。対話のホットパスには乗らない。LLM を設定しておけば、Nokori はそのセッションの transcript を読み、候補ルールを抽出し、コールドパスパイプラインに通す。
+セッション終了後に実行されるコールドパス。対話のホットパスには乗らない。LLM を設定しておけば、Nokori はそのセッションの transcript を読み、候補ルールを抽出し、コールドパスパイプラインに通す。Claude Code・Cursor・OMP は同じ抽出器を共有し、OMP では TypeScript ブリッジが `session_shutdown` を受けて OMP の session manager から現在のセッションファイルを取り出し、そのローカル JSONL を既存の Python ディスパッチャへ渡す。
 
 ```bash
 # LLM を設定（任意の OpenAI-compatible エンドポイント）
@@ -13,11 +13,11 @@ export NOKORI_LLM_MODEL="qwen2.5:7b"
 
 # 手動抽出
 nokori extract --session ~/.claude/projects/.../session.jsonl
+nokori extract --session ~/.omp/agent/sessions/.../session.jsonl
 nokori extract --session .../session.jsonl --project myrepo-a1b2c3d4
 
 # dry-run プレビュー
-nokori extract --session ~/.claude/projects/.../session.jsonl --dry-run
-
+nokori extract --session ~/.omp/agent/sessions/.../session.jsonl --dry-run
 # 保留中の job をすべて消化
 nokori extract
 ```
@@ -28,7 +28,7 @@ nokori extract
 
 コールドパスはホットパスより意図的に慎重だ。曖昧なルールを正式プールに入れないため、多段階で判定する：
 
-1. **読み込み**：transcript を読む。単一ファイル上限 50MB
+1. **読み込み**：transcript を読む。単一ファイル上限 50MB。OMP の場合は `session_shutdown` が session manager 経由で現在の `~/.omp/agent/sessions/**/*.jsonl` を渡す
 2. **圧縮**：ユーザーメッセージは原文保持、AI 応答は先頭 200 字 + 末尾 100 字に切り詰め。全体を約 30k token 以内に圧縮
 3. **抽出**：extractor ロールが構造化 candidate を出力
 4. **判定 / 書き換え / 再判定**：admission judge と final judge が弱いエビデンス・広すぎるスコープを拒否

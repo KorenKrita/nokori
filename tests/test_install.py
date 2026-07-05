@@ -187,6 +187,135 @@ def test_install_cursor_records_platform_only(tmp_path):
     assert "project-level" not in r.stdout
 
 
+def test_install_omp_dry_run_shows_diff(tmp_path):
+    data = tmp_path / "data"
+    omp_home = tmp_path / "omp-agent"
+    ext = omp_home / "extensions" / "nokori.ts"
+    r = _run(
+        "install", "--omp", "--dry-run",
+        env_extra={
+            "NOKORI_DATA_DIR": str(data),
+            "NOKORI_OMP_HOME": str(omp_home),
+        },
+    )
+    assert r.returncode == 0, r.stderr
+    assert str(ext) in r.stdout
+    assert "spawnSync" in r.stdout
+    assert 'input: JSON.stringify(payload)' in r.stdout
+    assert 'import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent/extensibility/extensions"' in r.stdout
+    assert 'import type HookAPI from "@oh-my-pi/pi-coding-agent/extensibility/hooks"' not in r.stdout
+    assert 'export default function nokori(pi: ExtensionAPI): void {' in r.stdout
+    assert 'pi.on("session_start"' in r.stdout
+    assert 'pi.on("before_agent_start"' in r.stdout
+    assert 'pi.on("tool_call"' in r.stdout
+    assert 'pi.on("session_shutdown"' in r.stdout
+    assert 'session_' + 'stop' not in r.stdout
+    assert 'runNokori("session-end", buildCommonPayload(ctx), 2_000);' in r.stdout
+    assert 'timeout: timeoutMs' in r.stdout
+    assert 'event.session_id' not in r.stdout
+    assert 'event.session_file' not in r.stdout
+    assert 'continue: true' not in r.stdout
+    assert " as HookAPI" not in r.stdout
+    assert not ext.exists()
+
+
+def test_install_omp_writes_extension(tmp_path):
+    data = tmp_path / "data"
+    omp_home = tmp_path / "omp-agent"
+    ext = omp_home / "extensions" / "nokori.ts"
+    r = _run(
+        "install", "--omp",
+        env_extra={
+            "NOKORI_DATA_DIR": str(data),
+            "NOKORI_OMP_HOME": str(omp_home),
+        },
+    )
+    assert r.returncode == 0, r.stderr
+    assert "Recorded install platforms: omp" in r.stdout
+    assert ext.exists()
+    text = ext.read_text()
+    assert 'import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent/extensibility/extensions"' in text
+    assert 'import type HookAPI from "@oh-my-pi/pi-coding-agent/extensibility/hooks"' not in text
+    assert 'export default function nokori(pi: ExtensionAPI): void {' in text
+    assert f'spawnSync({json.dumps(sys.executable)}, ["-I", "-m", "nokori", "hook", event]' in text
+    assert 'input: JSON.stringify(payload)' in text
+    assert 'env: { ...process.env, NOKORI_HOST: "omp" }' in text
+    assert 'customType: "nokori"' in text
+    assert 'details: { source: "nokori" }' in text
+    assert 'tool_name: event.toolName' in text
+    assert 'tool_input: event.input' in text
+    assert 'pi.on("session_shutdown"' in text
+    assert 'session_' + 'stop' not in text
+    assert 'runNokori("session-end", buildCommonPayload(ctx), 2_000);' in text
+    assert 'timeout: timeoutMs' in text
+    assert 'runNokori("session-start", buildCommonPayload(ctx), 5_000);' in text
+    assert 'runNokori("pre-tool-use", {' in text
+    assert '}, 5_000);' in text
+    assert 'event.session_id' not in text
+    assert 'event.session_file' not in text
+    assert 'continue: true' not in text
+    assert " as HookAPI" not in text
+
+
+def test_install_omp_idempotent(tmp_path):
+    omp_home = tmp_path / "omp-agent"
+    env = {
+        "NOKORI_DATA_DIR": str(tmp_path / "data"),
+        "NOKORI_OMP_HOME": str(omp_home),
+    }
+    _run("install", "--omp", env_extra=env)
+    ext = omp_home / "extensions" / "nokori.ts"
+    before = ext.read_text()
+    r = _run("install", "--omp", env_extra=env)
+    after = ext.read_text()
+    assert r.returncode == 0, r.stderr
+    assert "no changes needed" in r.stdout
+    assert before == after
+    assert after.count('pi.on("tool_call"') == 1
+    assert after.count('pi.on("session_shutdown"') == 1
+    assert 'session_' + 'stop' not in after
+
+
+def test_uninstall_omp_removes_extension(tmp_path):
+    data = tmp_path / "data"
+    omp_home = tmp_path / "omp-agent"
+    env = {
+        "NOKORI_DATA_DIR": str(data),
+        "NOKORI_OMP_HOME": str(omp_home),
+    }
+    _run("install", "--omp", env_extra=env)
+    ext = omp_home / "extensions" / "nokori.ts"
+    assert ext.exists()
+    r = _run("install", "--uninstall", "--omp", env_extra=env)
+    assert r.returncode == 0, r.stderr
+    assert not ext.exists()
+    targets = json.loads((data / "install_targets.json").read_text())
+    assert targets["platforms"] == []
+    assert "Recorded install platforms: (none)" in r.stdout
+
+
+def test_install_omp_records_platform_only(tmp_path):
+    data = tmp_path / "data"
+    omp_home = tmp_path / "omp-agent"
+    claude_home = tmp_path / "claude"
+    cursor_home = tmp_path / "cursor"
+    r = _run(
+        "install", "--omp",
+        env_extra={
+            "NOKORI_DATA_DIR": str(data),
+            "NOKORI_OMP_HOME": str(omp_home),
+            "NOKORI_CLAUDE_HOME": str(claude_home),
+            "NOKORI_CURSOR_HOME": str(cursor_home),
+        },
+    )
+    assert r.returncode == 0, r.stderr
+    assert "Recorded install platforms: omp" in r.stdout
+    targets = json.loads((data / "install_targets.json").read_text())
+    assert targets["platforms"] == ["omp"]
+    assert not (claude_home / "settings.json").exists()
+    assert not (cursor_home / "hooks.json").exists()
+
+
 def test_disable_enable(tmp_path):
     home = tmp_path / "claude"
     env = {"NOKORI_DATA_DIR": str(tmp_path / "data"),

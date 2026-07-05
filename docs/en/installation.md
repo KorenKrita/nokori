@@ -7,7 +7,7 @@
 ## Before you begin
 
 - **Python ≥ 3.11** (hot-path hooks use only stdlib; base install includes fastapi + uvicorn + websockets for the web dashboard)
-- **Claude Code** or **Cursor** already installed (either one)
+- **Claude Code**, **Cursor**, or **OMP** already installed
 - For local semantic retrieval, leave about **220MB** of disk for the embedding model weights (optional)
 
 Three ways to install, pick one: local model (recommended), minimal install, or from source.
@@ -26,11 +26,11 @@ pipx ensurepath
 # open a new terminal, or source ~/.zshrc
 
 pipx install "nokori[local-embed]"
-nokori install --all        # or --cursor / Claude-only default
+nokori install --omp        # OMP only; use --all for Claude Code + Cursor
 nokori health
 ```
 
-`pipx` installs into an isolated app venv; the `nokori` command is usually `~/.local/bin/nokori`. `nokori install` registers hooks as that environment's `python -I -m nokori hook`.
+`pipx` installs into an isolated app venv; the `nokori` command is usually `~/.local/bin/nokori`. Claude Code and Cursor call that environment's `python -I -m nokori hook` directly. `--omp` writes a TypeScript bridge that forwards OMP runtime events into the same Python dispatcher.
 
 ### Option B: dedicated venv
 
@@ -41,7 +41,7 @@ python3 -m venv ~/.local/venvs/nokori
 echo 'export PATH="$HOME/.local/venvs/nokori/bin:$PATH"' >> ~/.zshrc
 source ~/.zshrc
 
-nokori install --all
+nokori install --omp
 nokori health
 ```
 
@@ -57,12 +57,13 @@ After installing via **pipx** or **venv** above:
 # Register hooks
 nokori install              # Claude Code  → ~/.claude/settings.json
 nokori install --cursor     # native Cursor only → ~/.cursor/hooks.json
-nokori install --all        # Claude + Cursor
+nokori install --omp        # OMP only -> ~/.omp/agent/extensions/nokori.ts
+nokori install --all        # Claude Code + Cursor
 
 # Verify
 nokori health
 nokori status
-nokori logs                 # hook / pipeline / async-extract logs
+ls ~/.omp/agent/extensions/nokori.ts   # OMP only
 ```
 
 Common side branches:
@@ -112,17 +113,26 @@ nokori install --enable
 
 ---
 
-## Claude Code and Cursor
+## Claude Code, Cursor, and OMP
 
-**Claude Code** by default; **Cursor** is supported too (native hooks or import from Claude). On one machine pick a single Cursor registration path.
+**Claude Code** stays the default. **Cursor** keeps its native and import paths. **OMP** installs a small TypeScript extension bridge at `~/.omp/agent/extensions/nokori.ts`, which forwards runtime events into the same Python dispatcher Nokori already uses elsewhere.
 
 ### Which install command?
 
-| Goal | Command |
-|------|---------|
-| Claude Code only | `nokori install` |
-| Cursor only (native `~/.cursor/hooks.json`) | `nokori install --cursor` |
-| Both platforms | `nokori install --all` |
+OMP is explicit: `--all` still means Claude Code + Cursor only.
+
+| Goal | Command | Writes |
+|------|---------|--------|
+| Claude Code only | `nokori install` | `~/.claude/settings.json` |
+| Cursor only (native `~/.cursor/hooks.json`) | `nokori install --cursor` | `~/.cursor/hooks.json` |
+| OMP only | `nokori install --omp` | `~/.omp/agent/extensions/nokori.ts` |
+| Claude Code + Cursor | `nokori install --all` | both files above |
+
+### Verify OMP install
+
+- Preview the write first if you want: `nokori install --omp --dry-run`
+- Confirm the extension file exists after install: `ls ~/.omp/agent/extensions/nokori.ts`
+- Start a fresh OMP session. Recall is injected on `before_agent_start`, Gate checks run on `tool_call`, and post-session extract starts from `session_shutdown` using the current session file from OMP's session manager.
 
 ### Pick exactly one Cursor path (do not mix)
 
@@ -137,6 +147,7 @@ nokori install --enable
 
 - **Terminal tool name**: Cursor uses `Shell`, Claude Code uses `Bash`. `nokori install --cursor` includes `Shell` in the preToolUse matcher.
 - **Deferred inject**: for a turn where Cursor never fired `beforeSubmitPrompt`, the first matching `preToolUse` may deny once and carry the rule text. Run the same tool again after the deny.
+
 
 ---
 

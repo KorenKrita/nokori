@@ -4,44 +4,38 @@
 
 ---
 
-> **What is Gate?** Not disabling tools for the whole session, but "before the first sensitive tool call this turn, let Claude see the relevant rule first." After one block the marker is cleared, and later tool calls in the same message run normally.
+> **What is Gate?** Not disabling tools for the whole session, but "before the first sensitive tool call this turn, let the agent see the relevant rule first." After one block the marker is cleared, and later tool calls in the same message run normally.
 
 ---
 
 ## Two-layer tool matching
 
-```
-Claude is about to call a tool
-    │
-    ▼
-┌─────────────────────────────────────────────────────────┐
-│ Layer 1: Claude Code settings.json PreToolUse.matcher   │
-│ "Should nokori hook pre-tool-use run at all?"           │
-│ Default: Edit|Write|MultiEdit|Bash|NotebookEdit         │
-│ Read / Grep etc. do not enter the hook by default       │
-└─────────────────────────────────────────────────────────┘
-    │ hook ran
-    ▼
-┌─────────────────────────────────────────────────────────┐
-│ Layer 2: Nokori [gate].matcher (NOKORI_GATE_MATCHER)    │
-│ "Inside the hook, should this tool_name be blocked?"    │
-│ Default: same as above; must be a Python regex,         │
-│ fullmatch against payload.tool_name                     │
-└─────────────────────────────────────────────────────────┘
-    │ marker present and matched
-    ▼
-  deny once → delete marker → retry same tool → allowed
-```
+Gate always has two decisions:
 
-When Gate blocks, the hook returns `hookSpecificOutput.permissionDecision: "deny"` and `permissionDecisionReason`.
+1. **Should this runtime call Nokori before the tool runs?**
+2. **If Nokori runs, should this `tool_name` be blocked once?**
+
+Runtime layer:
+
+- **Claude Code**: `~/.claude/settings.json` `PreToolUse.matcher`
+- **Cursor**: native pre-tool matcher in `~/.cursor/hooks.json`
+- **OMP**: the installed bridge at `~/.omp/agent/extensions/nokori.ts`, triggered on `tool_call`
+
+Nokori layer:
+
+- **Config**: `[gate] matcher` in `~/.nokori/config.toml`, or env var `NOKORI_GATE_MATCHER`
+- **Matching**: Python `re.fullmatch` against `payload.tool_name`
+
+When Gate blocks, Claude Code and Cursor return `hookSpecificOutput.permissionDecision: "deny"` plus a reason. OMP returns a tool-call block through the bridge with the same reason.
 
 ---
 
 ## Layer 1: which tools run the hook
 
-- **Config file**: `~/.claude/settings.json` (written by `nokori install`)
-- **Default**: `Edit|Write|MultiEdit|Bash|NotebookEdit`
-- **To run the hook on any tool**: set the matcher to `*`
+- **Runtime files**: `~/.claude/settings.json` for Claude Code, `~/.cursor/hooks.json` for native Cursor, `~/.omp/agent/extensions/nokori.ts` for OMP
+- **Claude Code / Cursor default**: `Edit|Write|MultiEdit|Bash|NotebookEdit`
+- **OMP note**: OMP emits lower-case tool names such as `bash`, `edit`, `write`, `grep`, `glob`, and `read`
+- **To run the hook on any tool**: set the runtime matcher accordingly; for Claude Code, set the matcher to `*`
 
 ```json
 {
@@ -68,7 +62,8 @@ When Gate blocks, the hook returns `hookSpecificOutput.permissionDecision: "deny
 
 - **Config file**: `[gate] matcher` in `~/.nokori/config.toml`, or env var `NOKORI_GATE_MATCHER`
 - **Python `re.fullmatch`** against the payload's `tool_name`
-- **Default**: `Edit|Write|MultiEdit|Bash|NotebookEdit`
+- **Claude Code / Cursor default**: `Edit|Write|MultiEdit|Bash|NotebookEdit`
+- **OMP examples**: lower-case patterns such as `edit|write|bash|grep|glob|read`
 - **To make any tool eligible for blocking**: set to `.*` (not `*`, which is invalid regex)
 
 ```toml

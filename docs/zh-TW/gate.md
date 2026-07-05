@@ -32,14 +32,15 @@ Claude 準備呼叫工具
   deny 一次 → 刪 marker → 重試同工具則放行
 ```
 
-Gate 阻斷時 hook 回傳 `hookSpecificOutput.permissionDecision: "deny"` 與 `permissionDecisionReason`。
+Gate 阻斷時，Claude Code 與 Cursor 的 hook 會回傳 `hookSpecificOutput.permissionDecision: "deny"` 與 `permissionDecisionReason`；OMP 則由已安裝的橋接在 `tool_call` 回傳同樣的阻斷理由。
 
 ---
 
 ## 第一層：讓 hook 在哪些工具上執行
 
-- **設定檔**：`~/.claude/settings.json`（`nokori install` 寫入）
-- **預設值**：`Edit|Write|MultiEdit|Bash|NotebookEdit`
+- **執行時檔案**：Claude Code 用 `~/.claude/settings.json`，Cursor 原生用 `~/.cursor/hooks.json`，OMP 用 `~/.omp/agent/extensions/nokori.ts`
+- **Claude Code / Cursor 預設值**：`Edit|Write|MultiEdit|Bash|NotebookEdit`
+- **OMP 補充**：OMP 是在 `tool_call` 進橋接，工具名會是 `bash`、`edit`、`write`、`grep`、`glob`、`read` 這類全小寫
 - **改成任意工具**：把 matcher 改為 `*`
 
 ```json
@@ -66,8 +67,9 @@ Gate 阻斷時 hook 回傳 `hookSpecificOutput.permissionDecision: "deny"` 與 `
 ## 第二層：hook 內對哪些 tool_name 真正 block
 
 - **設定檔**：`~/.nokori/config.toml` 的 `[gate] matcher`
-- **Python `re.fullmatch`** 匹配 payload 裡的 `tool_name`
-- **預設值**：`Edit|Write|MultiEdit|Bash|NotebookEdit`
+- **Python `re.fullmatch`**：匹配 payload 裡的 `tool_name`
+- **Claude Code / Cursor 預設值**：`Edit|Write|MultiEdit|Bash|NotebookEdit`
+- **OMP 範例**：用 `edit|write|bash|grep|glob|read` 這類全小寫 pattern
 - **改成任意工具**：設為 `.*`（不是 `*`）
 
 ```toml

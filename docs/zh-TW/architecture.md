@@ -21,7 +21,7 @@ Nokori 的核心是 autonomous quality flywheel（自治品質飛輪）：每條
 - **Conservative Gate（保守門閘）**：Gate 是給 `trusted + gate_eligible` 規則的一次性提醒煞車，不是權限系統。
 - **Hybrid retrieval（混合檢索）**：BM25 永遠可用；可選 remote embedding（遠端向量）或本地 Granite multilingual model 補語義召回；RRF 與 runtime applicability（適用性判斷）決定 HOT/WARM。
 - **本地優先**：SQLite、hook 日誌、job 佇列、Gate marker、embedding 權重、Web UI 狀態都在 `~/.nokori/` 下。遠端 LLM / embedding 端點按需啟用。
-- **跨工具可觀測**：Claude Code 與 Cursor 都支援；`nokori test`、`status`、`health`、`logs`、`extract`、`maintain` 與 Web UI 能解釋規則為什麼觸發、為什麼沒觸發。
+- **跨工具可觀測**：Claude Code 與 Cursor 走原生 hook；OMP 走 `~/.omp/agent/extensions/nokori.ts` 這個小型 TypeScript 橋接，把執行時事件轉進同一個 Python dispatcher。`nokori test`、`status`、`health`、`logs`、`extract`、`maintain` 與 Web UI 仍能解釋規則為什麼觸發、為什麼沒觸發。
 
 Nokori 最重要的承諾是 restraint（克制）：它可以早早 reminder（提醒），但必須攢夠 evidence（證據）才有資格變得強勢；開始幫忙之後，也要繼續接受 evidence review（證據審查）。
 
@@ -29,18 +29,18 @@ Nokori 最重要的承諾是 restraint（克制）：它可以早早 reminder（
 
 ## Hook 時序
 
-Nokori 在 Claude Code（與 Cursor）裡掛了 **4 個 hook**。你正常聊天時，它們只在本地查庫、算分、讀寫小檔案——**hook 裡絕不呼叫 LLM**，否則每條消息都會因等待模型而阻塞。
+Nokori 保留同一條熱路徑，再把不同 runtime 對應進來。Claude Code 與 Cursor 直接呼叫 Python hooks；OMP 載入 TypeScript 橋接，透過 stdin/stdout 重用同一個 dispatcher。本地優先的行為不變：檢索、Gate marker、jobs 與規則都還在 `~/.nokori/`，提取需要 transcript 時則直接讀 `~/.omp/agent/sessions/**/*.jsonl`。
 
-| Hook | 它做什麼 | 延遲預算 |
-|------|---------|----------|
-| `SessionStart` | 會話開始：可選注入上一場沒提取過的 user 片段，並觸發資料庫維護 | ≤ 1.5s |
-| `UserPromptSubmit` | 每次發消息：檢索規則 → 注入上下文 → 必要時寫下 Gate 標記 | ≤ 500ms |
-| `PreToolUse` | 工具呼叫前：若有標記就**攔一次**，隨後清除標記 | ≤ 50ms |
-| `SessionEnd` | 關會話：記一個「待提取」任務檔案，async 模式下可後台跑 extract | ≤ 200ms |
+| Claude Code / Cursor | OMP | 它做什麼 | 延遲預算 |
+|----------------------|-----|----------|----------|
+| `SessionStart` | `session_start` | 會話記帳：可選的上一場 transcript 熱快取，加上資料庫維護 | ≤ 1.5s |
+| `UserPromptSubmit` | `before_agent_start` | Agent 開始這輪前：檢索規則、注入上下文、必要時寫下 Gate 標記 | ≤ 500ms |
+| `PreToolUse` | `tool_call` | 工具呼叫前：若有標記就**攔一次**，隨後清除標記 | ≤ 50ms |
+| `SessionEnd` | `session_shutdown` | 關會話：根據 OMP session manager 回報的目前 session 檔案寫入待提取工作；async 模式下可直接對該本地 JSONL 在背景跑 extract | ≤ 200ms |
 
 落到實處就兩件事：
 
-1. **提醒（注入）**——命中的規矩按 HOT/WARM 檔位寫進 `additionalContext`，Claude 回覆前就看得見
+1. **提醒（注入）**——命中的規矩會經由各 runtime 的注入通道送回，Agent 回覆前就看得見
 2. **攔一次（Gate）**——只有 `trusted` 且 `severity=gate_eligible`、prompt 證據夠強、工具輸入證據也過關的規則才會攔工具；普通 active 只提醒
 
 ---

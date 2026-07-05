@@ -14,6 +14,7 @@
   <a href="https://github.com/KorenKrita/nokori/blob/main/LICENSE"><img src="https://img.shields.io/github/license/KorenKrita/nokori?style=for-the-badge&color=0f766e" alt="License" /></a>
   <img src="https://img.shields.io/badge/Claude%20Code-native-4f46e5?style=for-the-badge" alt="Claude Code native" />
   <img src="https://img.shields.io/badge/Cursor-native-2563eb?style=for-the-badge" alt="Cursor native" />
+  <img src="https://img.shields.io/badge/OMP-supported-0ea5e9?style=for-the-badge" alt="OMP supported" />
   <img src="https://img.shields.io/badge/set%20%26%20forget-fully%20autonomous-f59e0b?style=for-the-badge" alt="Set and forget" />
 </p>
 
@@ -86,7 +87,7 @@ Your data stays on your machine, in SQLite, the whole way through. Retrieval dur
 ## One minute overview
 
 ```
-You correct Claude / Cursor
+You correct Claude Code / Cursor / OMP
     └─▶ Nokori carves a rule (what scene + what to do)
             └─▶ Next time your words drift near that scene
                     └─▶ The rule auto-writes into the agent's context (reminder)
@@ -106,9 +107,9 @@ During a chat Nokori only does retrieval and small file I/O, never making you wa
 
 ## Quick install
 
-Four commands. Local memory. No hosted database.
+A few commands. Local memory. No hosted database.
 
-**Prerequisites**: Python >= 3.11, Claude Code or Cursor already installed
+**Prerequisites**: Python >= 3.11, Claude Code, Cursor, or OMP already installed
 
 ```bash
 # Recommended: pipx with local semantic retrieval
@@ -116,11 +117,15 @@ brew install pipx && pipx ensurepath
 pipx install "nokori[local-embed]"
 
 # Register hooks
-nokori install --all        # or --cursor / default is Claude Code only
+nokori install --omp        # OMP only -> ~/.omp/agent/extensions/nokori.ts
+# Use --all for Claude Code + Cursor, --cursor for Cursor, default for Claude Code only
 
 # Verify
 nokori health
+ls ~/.omp/agent/extensions/nokori.ts
 ```
+
+On OMP, recall is injected on `before_agent_start`, Gate checks run on `tool_call`, and post-session extraction starts on `session_shutdown` using the current session file from OMP's session manager.
 
 <details>
 <summary>Other install methods</summary>
@@ -142,7 +147,7 @@ pip install -e ".[local-embed,dev]"
 
 </details>
 
-> Full installation guide (Cursor config, updating, uninstalling) in [Installation](docs/en/installation.md)
+> Full installation guide (Claude Code / Cursor / OMP config, updating, uninstalling) in [Installation](docs/en/installation.md)
 
 ---
 
@@ -165,7 +170,7 @@ nokori maintain
 nokori dismiss <short_id>
 ```
 
-Just open Claude Code or Cursor and work as usual. When a rule matches, the agent sees the injected reminder before it replies. For `trusted` + `gate_eligible` rules, the first sensitive tool call is blocked once.
+Just open Claude Code, Cursor, or OMP and work as usual. When a rule matches, the agent sees the injected reminder before it replies. For `trusted` + `gate_eligible` rules, the first sensitive tool call is blocked once.
 
 <p align="center">
   <img src="docs/assets/readme-illustrations/03-gate-stops-risk.en.png" width="880" alt="Gate blocks a risky tool call before files are touched" />
@@ -211,7 +216,7 @@ Just open Claude Code or Cursor and work as usual. When a rule matches, the agen
   <tr>
     <td width="50%">
       <strong>Cross-tool support</strong><br />
-      Native support for both Claude Code and Cursor.
+      Native Claude Code and Cursor hooks, plus OMP through a small TypeScript bridge that reuses the same Python dispatcher.
     </td>
     <td width="50%">
       <strong>Web UI</strong><br />

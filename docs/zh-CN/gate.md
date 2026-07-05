@@ -4,43 +4,38 @@
 
 ---
 
-> **Gate 是什么？** 不是全程禁用工具，而是「本轮第一次调用敏感工具前，先让 Claude 看到相关规则」。拦截一次后清除标记，同一条消息内后续工具照常执行。
+> **Gate 是什么？** 不是全程禁用工具，而是「本轮第一次调用敏感工具前，先让 Agent 看到相关规则」。拦截一次后清除标记，同一条消息内后续工具照常执行。
 
 ---
 
 ## 两层「工具匹配」
 
-```
-Claude 准备调用工具
-    │
-    ▼
-┌─────────────────────────────────────────────────────────┐
-│ 第一层：Claude Code settings.json 的 PreToolUse.matcher │
-│ 「要不要执行 nokori hook pre-tool-use」                    │
-│ 默认：Edit|Write|MultiEdit|Bash|NotebookEdit            │
-│ Read / Grep 等默认不会进 hook                            │
-└─────────────────────────────────────────────────────────┘
-    │ hook 已执行
-    ▼
-┌─────────────────────────────────────────────────────────┐
-│ 第二层：Nokori [gate].matcher（NOKORI_GATE_MATCHER）       │
-│ 「hook 里要不要对这次 tool_name 做 block」               │
-│ 默认：同上；须为 Python 正则，对 payload.tool_name fullmatch│
-└─────────────────────────────────────────────────────────┘
-    │ 有 marker 且匹配
-    ▼
-  deny 一次 → 删 marker → 重试同工具则放行
-```
+Gate 永远有两层判断：
 
-Gate 阻断时 hook 返回 `hookSpecificOutput.permissionDecision: "deny"` 与 `permissionDecisionReason`。
+1. **当前 runtime 要不要在工具运行前先调用 Nokori？**
+2. **如果调用了，当前 `tool_name` 要不要被拦一次？**
+
+Runtime 层：
+
+- **Claude Code**：`~/.claude/settings.json` 的 `PreToolUse.matcher`
+- **Cursor**：`~/.cursor/hooks.json` 的原生 pre-tool matcher
+- **OMP**：安装到 `~/.omp/agent/extensions/nokori.ts` 的 bridge，在 `tool_call` 上触发
+
+Nokori 层：
+
+- **配置**：`~/.nokori/config.toml` 的 `[gate] matcher`，或环境变量 `NOKORI_GATE_MATCHER`
+- **匹配方式**：Python `re.fullmatch` 匹配 `payload.tool_name`
+
+Gate 阻断时，Claude Code / Cursor 返回 `hookSpecificOutput.permissionDecision: "deny"` 与 `permissionDecisionReason`；OMP 则通过 bridge 返回同样原因的 tool-call block。
 
 ---
 
-## 第一层：让 hook 在哪些工具上运行
+## 第一层：让 hook / bridge 在哪些工具上运行
 
-- **配置文件**：`~/.claude/settings.json`（`nokori install` 写入）
-- **默认值**：`Edit|Write|MultiEdit|Bash|NotebookEdit`
-- **改成任意工具**：把 matcher 改为 `*`
+- **运行时文件**：Claude Code 用 `~/.claude/settings.json`，Cursor 用 `~/.cursor/hooks.json`，OMP 用 `~/.omp/agent/extensions/nokori.ts`
+- **Claude Code / Cursor 默认值**：`Edit|Write|MultiEdit|Bash|NotebookEdit`
+- **OMP 说明**：OMP 的工具名是小写，如 `bash`、`edit`、`write`、`grep`、`glob`、`read`；Gate 对应的 runtime 事件是 `tool_call`
+- **想让任意工具都先进入这一层**：把运行时 matcher 改成对应平台支持的全匹配
 
 ```json
 {
@@ -63,19 +58,20 @@ Gate 阻断时 hook 返回 `hookSpecificOutput.permissionDecision: "deny"` 与 `
 
 ---
 
-## 第二层：hook 内对哪些 tool_name 真正 block
+## 第二层：对哪些 `tool_name` 真正 block
 
 - **配置文件**：`~/.nokori/config.toml` 的 `[gate] matcher`
-- **Python `re.fullmatch`** 匹配 payload 里的 `tool_name`
-- **默认值**：`Edit|Write|MultiEdit|Bash|NotebookEdit`
-- **改成任意工具**：设为 `.*`（不是 `*`）
+- **匹配方式**：Python `re.fullmatch` 匹配 payload 里的 `tool_name`
+- **Claude Code / Cursor 默认值**：`Edit|Write|MultiEdit|Bash|NotebookEdit`
+- **OMP 示例**：用小写模式，如 `edit|write|bash|grep|glob|read`
+- **想让任意工具都可被 Gate**：设为 `.*`（不是 `*`）
 
 ```toml
 [gate]
 matcher = ".*"
 ```
 
-两层要一起改才能达到「任意工具都可能被 Gate」。
+两层都要一起改，才能达到「任意工具都可能被 Gate」。
 
 ---
 

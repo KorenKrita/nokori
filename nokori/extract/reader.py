@@ -192,12 +192,14 @@ def _parse_multi(entry: dict) -> list[Turn]:
 
 
 def _parse_message_blocks(entry: dict) -> list[Turn]:
-    """Cursor / nested message.content[] (text, tool_use, tool_result)."""
+    """Cursor / OMP nested message payloads and content[] blocks."""
     role = entry.get("role") or entry.get("type")
     msg = entry.get("message")
     content = None
     if isinstance(msg, dict):
         role = msg.get("role") or role
+        if role in ("toolResult", "tool_result"):
+            return [_tool_result_turn(msg)]
         content = msg.get("content")
     if content is None:
         content = entry.get("content")
@@ -225,36 +227,44 @@ def _content_blocks_to_turns(role: str | None, blocks: list) -> list[Turn]:
             piece = str(block.get("text", ""))
             if piece:
                 texts.append(piece)
-        elif kind == "tool_use":
+        elif kind in ("tool_use", "toolCall"):
             flush_text()
-            tool_name = block.get("name") or block.get("tool_name") or "tool"
-            inp = block.get("input") or {}
-            turns.append(
-                Turn(
-                    role="tool_use",
-                    content="",
-                    tool_name=tool_name,
-                    input_summary=_summarize_tool_input(tool_name, inp),
-                )
-            )
-        elif kind == "tool_result":
+            inp = block.get("input")
+            if inp is None:
+                inp = block.get("arguments")
+            turns.append(_tool_use_turn(block.get("name") or block.get("tool_name"), inp))
+        elif kind in ("tool_result", "toolResult"):
             flush_text()
-            content = _coerce_text(block.get("content") or block.get("output") or "")
-            is_err = bool(block.get("is_error") or block.get("error"))
-            first_err_line = ""
-            if is_err:
-                first_err_line = content.splitlines()[0][:200] if content else ""
-            turns.append(
-                Turn(
-                    role="tool_result",
-                    content=content[:400] if not is_err else "",
-                    is_error=is_err,
-                    error_line=first_err_line,
-                )
-            )
+            turns.append(_tool_result_turn(block))
 
     flush_text()
     return turns
+
+
+def _tool_use_turn(tool_name: object, inp: object) -> Turn:
+    name = str(tool_name or "tool")
+    return Turn(
+        role="tool_use",
+        content="",
+        tool_name=name,
+        input_summary=_summarize_tool_input(name, inp),
+    )
+
+
+def _tool_result_turn(payload: dict) -> Turn:
+    tool_name = payload.get("toolName") or payload.get("tool_name")
+    content = _coerce_text(payload.get("content") or payload.get("output") or "")
+    is_err = bool(payload.get("isError") or payload.get("is_error") or payload.get("error"))
+    first_err_line = ""
+    if is_err:
+        first_err_line = content.splitlines()[0][:200] if content else ""
+    return Turn(
+        role="tool_result",
+        content=content[:400] if not is_err else "",
+        tool_name=str(tool_name) if tool_name else None,
+        is_error=is_err,
+        error_line=first_err_line,
+    )
 
 
 def _normalize_role(role: str | None) -> TurnRole:
@@ -262,9 +272,9 @@ def _normalize_role(role: str | None) -> TurnRole:
         return "human"
     if role == "assistant":
         return "assistant"
-    if role == "tool_use":
+    if role in ("tool_use", "toolCall"):
         return "tool_use"
-    if role == "tool_result":
+    if role in ("tool_result", "toolResult"):
         return "tool_result"
     return "assistant"
 
@@ -277,27 +287,13 @@ def _parse_legacy(entry: dict) -> Turn | None:
     if t == "assistant":
         content = _coerce_text(entry.get("message") or entry.get("content") or entry)
         return Turn(role="assistant", content=content)
-    if t == "tool_use":
-        name = entry.get("name") or entry.get("tool_name") or "tool"
-        inp = entry.get("input") or {}
-        return Turn(
-            role="tool_use",
-            content="",
-            tool_name=name,
-            input_summary=_summarize_tool_input(name, inp),
-        )
-    if t == "tool_result":
-        content = _coerce_text(entry.get("content") or entry.get("output") or "")
-        is_err = bool(entry.get("is_error") or entry.get("error"))
-        first_err_line = ""
-        if is_err:
-            first_err_line = content.splitlines()[0][:200] if content else ""
-        return Turn(
-            role="tool_result",
-            content=content[:400] if not is_err else "",
-            is_error=is_err,
-            error_line=first_err_line,
-        )
+    if t in ("tool_use", "toolCall"):
+        inp = entry.get("input")
+        if inp is None:
+            inp = entry.get("arguments")
+        return _tool_use_turn(entry.get("name") or entry.get("tool_name"), inp)
+    if t in ("tool_result", "toolResult"):
+        return _tool_result_turn(entry)
     return None
 
 

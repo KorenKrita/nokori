@@ -7,7 +7,7 @@
 ## はじめに
 
 - **Python >= 3.11**（ホットパス hook は stdlib のみ使用。ベースインストールには Web ダッシュボード用の fastapi + uvicorn + websockets を含む）
-- **Claude Code** または **Cursor** のいずれかがインストール済み
+- **Claude Code**、**Cursor**、または **OMP** のいずれかがインストール済み
 - ローカル意味検索を使う場合、埋め込みモデルのウェイト用に約 **220MB** のディスクを確保（オプション）
 
 インストール方法は 3 通り。用途に応じて一つ選ぶ：ローカルモデル（推奨）、最小インストール、ソースからの開発。
@@ -26,7 +26,7 @@ pipx ensurepath
 # 新しいターミナルを開く、または source ~/.zshrc
 
 pipx install "nokori[local-embed]"
-nokori install --all        # または --cursor / デフォルトは Claude Code のみ
+nokori install --all        # Claude + Cursor、OMP は --omp
 nokori health
 ```
 
@@ -42,6 +42,7 @@ echo 'export PATH="$HOME/.local/venvs/nokori/bin:$PATH"' >> ~/.zshrc
 source ~/.zshrc
 
 nokori install --all
+nokori install --omp
 nokori health
 ```
 
@@ -54,16 +55,16 @@ nokori health
 上記の **pipx** または **venv** でインストール後：
 
 ```bash
-# Hook を登録
+# Hook / bridge を登録
 nokori install              # Claude Code  → ~/.claude/settings.json
 nokori install --cursor     # Cursor ネイティブのみ → ~/.cursor/hooks.json
+nokori install --omp        # OMP のみ → ~/.omp/agent/extensions/nokori.ts
 nokori install --all        # Claude + Cursor
 
 # 動作確認
 nokori health
 nokori status
-nokori logs                 # hook / pipeline / async-extract ログ
-```
+ls ~/.omp/agent/extensions/nokori.ts   # OMP のみ
 
 よく使う補助操作：
 
@@ -96,7 +97,7 @@ pip install -e ".[local-embed,dev]"
 nokori install
 ```
 
-`nokori install` は hook を `~/.claude/settings.json` に**マージ**して書き込み、既存の他のプラグインには触れない。
+`nokori install` は hook を `~/.claude/settings.json` に**マージ**して書き込み、既存の他のプラグインには触れない。`nokori install --omp` は OMP 向け TypeScript ブリッジを `~/.omp/agent/extensions/nokori.ts` に書き込む。
 
 ```bash
 # 書き込み予定の変更をプレビュー（ディスクには書かない）
@@ -112,17 +113,26 @@ nokori install --enable
 
 ---
 
-## Claude Code と Cursor
+## Claude Code・Cursor・OMP
 
-デフォルトは **Claude Code**。**Cursor** にも対応（ネイティブ hook または Claude からのインポート）。同一マシンでは Cursor の登録方法を一つだけ選ぶこと。
+デフォルトは **Claude Code**。**Cursor** はネイティブ hook または Claude からのインポートに対応。**OMP** は `~/.omp/agent/extensions/nokori.ts` に小さな TypeScript ブリッジを入れ、既存の Python ディスパッチャへランタイムイベントを渡す。
 
 ### どのコマンドで入れる？
+
+`--all` は引き続き **Claude Code + Cursor** のみで、OMP は明示的に `--omp` を使う。
 
 | 目的 | コマンド |
 |------|------|
 | Claude Code のみ | `nokori install` |
 | Cursor のみ（ネイティブ `~/.cursor/hooks.json`） | `nokori install --cursor` |
-| 両プラットフォーム | `nokori install --all` |
+| OMP のみ | `nokori install --omp` |
+| Claude Code + Cursor | `nokori install --all` |
+
+### OMP の確認
+
+- 必要なら先に `nokori install --omp --dry-run` で書き込み内容を確認
+- インストール後に `ls ~/.omp/agent/extensions/nokori.ts` でブリッジの存在を確認
+- 新しい OMP セッションで、`before_agent_start` の注入・`tool_call` の Gate・`session_shutdown` 後の抽出が動くことを確認
 
 ### Cursor は一本道だけ（混ぜない）
 

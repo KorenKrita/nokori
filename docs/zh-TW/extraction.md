@@ -4,20 +4,20 @@
 
 ---
 
-關會話後執行，不在互動熱路徑上。設定 LLM 後，Nokori 讀取該場對話的 transcript，提取可能的規則，再讓每條候選走完冷路徑飛輪。
+關會話後執行，不在互動熱路徑上。設定 LLM 後，Nokori 讀取該場對話的 transcript，提取可能的規則，再讓每條候選走完冷路徑飛輪，不會卡住聊天。Claude Code、Cursor 與 OMP 都走同一套 extractor；在 OMP 上，已安裝的 TypeScript 橋接會轉送 `session_shutdown`，透過 session manager 讀出目前 session 檔案，再把本地 JSONL 路徑交給既有的 Python dispatcher。
 
 ```bash
 # 設定 LLM（任何 OpenAI-compatible 端點）
 export NOKORI_LLM_BASE_URL="http://localhost:11434/v1"
 export NOKORI_LLM_MODEL="qwen2.5:7b"
 
-# 手動提取
+# 手動提取指定 transcript
 nokori extract --session ~/.claude/projects/.../session.jsonl
+nokori extract --session ~/.omp/agent/sessions/.../session.jsonl
 nokori extract --session .../session.jsonl --project myrepo-a1b2c3d4
 
 # dry-run 預覽
-nokori extract --session ~/.claude/projects/.../session.jsonl --dry-run
-
+nokori extract --session ~/.omp/agent/sessions/.../session.jsonl --dry-run
 # 消費所有待處理 job
 nokori extract
 ```
@@ -29,11 +29,14 @@ nokori extract
 冷路徑故意比熱路徑囉嗦。它寧願多判幾輪，也不願把一條含糊規則直接塞進正式池：
 
 1. **讀** transcript，單檔案上限 50MB
+
+   OMP 的 session 日誌在 `~/.omp/agent/sessions/**/*.jsonl`；它們會留在本地，和 Claude Code / Cursor 的 transcript 走同一條壓縮與提取管線。
 2. **壓縮**：使用者消息原樣保留，AI 回覆砍成頭 200 字 + 尾 100 字；整體再壓到約 30k token
 3. **提取**：extractor 角色輸出結構化候選
-4. **判定 / 重寫 / 再判定**：admission judge 與 final judge 拒絕弱證據/過寬規則
-5. **合併規劃**：merge planner 與鄰近規則比較關係
+4. **判定 / 重寫 / 再判定**：admission judge 與 final judge 拒絕弱證據 / 過寬規則；必要時由 rewriter 收窄範圍
+5. **合併規劃**：merge planner 與鄰近規則比較關係，再由確定性策略決定結果
 6. **驗證入庫**：歸檔指紋、matcher 編譯、cold-fast-lane 閾值決定存為 candidate 還是 active
+
 
 **LLM 呼叫格式**：每個角色拆成 system + user 兩條消息。transcript 片段包在 `--- BEGIN UNTRUSTED DATA ---` / `--- END UNTRUSTED DATA ---` 分隔區塊中。
 

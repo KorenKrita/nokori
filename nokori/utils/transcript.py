@@ -19,6 +19,7 @@ def _allowed_roots() -> list[Path]:
     roots: list[Path] = [
         Path.home() / ".claude",
         Path.home() / ".cursor",
+        Path.home() / ".omp" / "agent",
     ]
     for env_name in ("CLAUDE_PROJECT_DIR", "NOKORI_DATA_DIR"):
         value = os.environ.get(env_name)
@@ -33,7 +34,7 @@ def _allowed_roots() -> list[Path]:
 
 
 def is_path_allowed(path: Path) -> bool:
-    """True when path resolves under ~/.claude, ~/.cursor, NOKORI_DATA_DIR, or extra roots."""
+    """True when path resolves under ~/.claude, ~/.cursor, ~/.omp/agent, or extra roots."""
     return _is_under_allowed_root(path)
 
 

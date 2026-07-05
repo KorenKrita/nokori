@@ -6,6 +6,7 @@ import difflib
 import json
 import os
 import sys
+import textwrap
 from pathlib import Path
 
 from ..config import Config
@@ -47,17 +48,18 @@ def resolve_install_targets(
     args: argparse.Namespace,
     *,
     uninstall: bool = False,
-) -> tuple[bool, bool]:
-    """Default: Claude only. --all: both. Uninstall with no flags: both."""
+) -> tuple[bool, bool, bool]:
+    """Default: Claude only. --all: Claude+Cursor. Use --omp for OMP. Uninstall with no flags: all."""
     if getattr(args, "all_platforms", False):
-        return True, True
+        return True, True, False
     claude = bool(getattr(args, "claude", False))
     cursor = bool(getattr(args, "cursor", False))
-    if not claude and not cursor:
+    omp = bool(getattr(args, "omp", False))
+    if not claude and not cursor and not omp:
         if uninstall:
-            return True, True
-        return True, False
-    return claude, cursor
+            return True, True, True
+        return True, False, False
+    return claude, cursor, omp
 
 
 def _settings_path() -> Path:
@@ -73,13 +75,163 @@ def _cursor_hooks_path() -> Path:
         return Path(base).expanduser() / "hooks.json"
     return Path("~/.cursor/hooks.json").expanduser()
 
+def _omp_extension_path() -> Path:
+    base = os.environ.get("NOKORI_OMP_HOME")
+    if base:
+        return Path(base).expanduser() / "extensions" / "nokori.ts"
+    return Path("~/.omp/agent/extensions/nokori.ts").expanduser()
+
+
+def _python_executable() -> str:
+    return sys.executable
+
 
 def _build_command() -> str:
     # -I: ignore PYTHONPATH / cwd so hooks always use the installed package
     # (avoids shadowing by a repo-local ``nokori/`` when cwd is the project).
     import shlex
 
-    return f"{shlex.quote(sys.executable)} -I -m nokori hook"
+    return f"{shlex.quote(_python_executable())} -I -m nokori hook"
+
+
+def _build_omp_hook_source() -> str:
+    python_executable = json.dumps(_python_executable())
+    return textwrap.dedent(
+        f"""\
+        import {{ spawnSync }} from \"node:child_process\";
+        import type {{ ExtensionAPI }} from \"@oh-my-pi/pi-coding-agent/extensibility/extensions\";
+
+        type JsonObject = Record<string, unknown>;
+
+        function asRecord(value: unknown): JsonObject | null {{
+          return value !== null && typeof value === \"object\" ? (value as JsonObject) : null;
+        }}
+
+        function getSessionFile(ctx: {{
+          sessionManager?: {{ getSessionFile?: () => string | null | undefined }};
+        }}): string | undefined {{
+          const sessionFile = ctx.sessionManager?.getSessionFile?.();
+          return typeof sessionFile === \"string\" && sessionFile.length > 0 ? sessionFile : undefined;
+        }}
+
+        function buildCommonPayload(ctx: {{
+          cwd?: string;
+          sessionManager?: {{ getSessionFile?: () => string | null | undefined }};
+        }}): JsonObject {{
+          const sessionFile = getSessionFile(ctx);
+          const payload: JsonObject = {{
+            host: \"omp\",
+            cwd: typeof ctx.cwd === \"string\" && ctx.cwd.length > 0 ? ctx.cwd : process.cwd(),
+          }};
+          if (sessionFile) {{
+            payload.session_id = sessionFile;
+            payload.transcript_path = sessionFile;
+          }}
+          return payload;
+        }}
+
+        function runNokori(event: string, payload: JsonObject, timeoutMs: number): JsonObject | null {{
+          const result = spawnSync({python_executable}, ["-I", "-m", "nokori", "hook", event], {{
+            input: JSON.stringify(payload),
+            encoding: "utf8",
+            env: {{ ...process.env, NOKORI_HOST: "omp" }},
+            timeout: timeoutMs,
+          }});
+          if (result.error || result.status !== 0) {{
+            return null;
+          }}
+          const stdout = typeof result.stdout === \"string\" ? result.stdout.trim() : \"\";
+          if (!stdout) {{
+            return null;
+          }}
+          try {{
+            return asRecord(JSON.parse(stdout));
+          }} catch {{
+            return null;
+          }}
+        }}
+
+        function extractInjection(result: JsonObject | null): string | undefined {{
+          if (!result) return undefined;
+          const hookSpecificOutput = asRecord(result.hookSpecificOutput);
+          const additionalContext = hookSpecificOutput?.additionalContext;
+          if (typeof additionalContext === \"string\" && additionalContext.length > 0) {{
+            return additionalContext;
+          }}
+          const legacy = result.additional_context;
+          return typeof legacy === \"string\" && legacy.length > 0 ? legacy : undefined;
+        }}
+
+        function extractBlock(result: JsonObject | null): {{ block: true; reason: string }} | undefined {{
+          if (!result) return undefined;
+          const hookSpecificOutput = asRecord(result.hookSpecificOutput);
+          const hookDecision = hookSpecificOutput?.permissionDecision;
+          const topLevelDecision = result.permission;
+          if (hookDecision !== \"deny\" && topLevelDecision !== \"deny\") {{
+            return undefined;
+          }}
+          const reason = hookSpecificOutput?.permissionDecisionReason;
+          if (typeof reason === \"string\" && reason.length > 0) {{
+            return {{ block: true, reason }};
+          }}
+          const userMessage = result.user_message;
+          if (typeof userMessage === \"string\" && userMessage.length > 0) {{
+            return {{ block: true, reason: userMessage }};
+          }}
+          const agentMessage = result.agent_message;
+          if (typeof agentMessage === \"string\" && agentMessage.length > 0) {{
+            return {{ block: true, reason: agentMessage }};
+          }}
+          return {{ block: true, reason: \"Nokori blocked this tool call.\" }};
+        }}
+
+        export default function nokori(pi: ExtensionAPI): void {{
+          pi.on(\"session_start\", (_event, ctx) => {{
+            const result = runNokori("session-start", buildCommonPayload(ctx), 5_000);
+            const text = extractInjection(result);
+            if (!text) return;
+            pi.sendMessage({{
+              customType: \"nokori\",
+              content: text,
+              display: true,
+              details: {{ source: \"nokori\" }},
+              attribution: \"agent\",
+            }});
+          }});
+
+          pi.on(\"before_agent_start\", (event, ctx) => {{
+            const result = runNokori("user-prompt-submit", {{
+              ...buildCommonPayload(ctx),
+              prompt: event.prompt,
+            }}, 10_000);
+            const text = extractInjection(result);
+            if (!text) return;
+            return {{
+              message: {{
+                customType: \"nokori\",
+                content: text,
+                display: true,
+                details: {{ source: \"nokori\" }},
+              }},
+            }};
+          }});
+
+          pi.on(\"tool_call\", (event, ctx) => {{
+            const result = runNokori("pre-tool-use", {{
+              ...buildCommonPayload(ctx),
+              tool_name: event.toolName,
+              tool: event.toolName,
+              tool_input: event.input,
+            }}, 5_000);
+            return extractBlock(result);
+          }});
+
+          pi.on(\"session_shutdown\", (_event, ctx) => {{
+            runNokori("session-end", buildCommonPayload(ctx), 2_000);
+          }});
+        }}
+        """
+    ).strip() + "\n"
 
 
 def _build_claude_hook_entry(matcher: str, command: str, event_arg: str, timeout: int) -> dict:
@@ -337,6 +489,12 @@ def _diff(before: dict, after: dict, path: Path) -> str:
     return "".join(difflib.unified_diff(a, b, fromfile=str(path), tofile=f"{path} (proposed)"))
 
 
+def _diff_text(before: str | None, after: str | None, path: Path) -> str:
+    a = (before or "").splitlines(keepends=True)
+    b = (after or "").splitlines(keepends=True)
+    return "".join(difflib.unified_diff(a, b, fromfile=str(path), tofile=f"{path} (proposed)"))
+
+
 def _set_env_flag(data: dict, key: str, value: str | None) -> None:
     env = data.setdefault("env", {})
     if value is None:
@@ -345,6 +503,30 @@ def _set_env_flag(data: dict, key: str, value: str | None) -> None:
             data.pop("env", None)
     else:
         env[key] = value
+
+
+def _read_text_file(path: Path) -> str | None:
+    if not path.exists():
+        return None
+    try:
+        return path.read_text(encoding="utf-8")
+    except OSError as e:
+        raise ValueError(f"cannot read {path}: {e}") from e
+
+
+def _write_text_file(path: Path, data: str) -> None:
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        path.write_text(data, encoding="utf-8")
+    except OSError as e:
+        raise ValueError(f"cannot write {path}: {e}") from e
+
+
+def _remove_text_file(path: Path) -> None:
+    try:
+        path.unlink(missing_ok=True)
+    except OSError as e:
+        raise ValueError(f"cannot remove {path}: {e}") from e
 
 
 def _install_one_target(
@@ -376,19 +558,55 @@ def _install_one_target(
     return True
 
 
+def _install_one_text_target(
+    *,
+    label: str,
+    path: Path,
+    before: str | None,
+    after: str | None,
+    dry_run: bool,
+    verb: str,
+) -> bool:
+    """Return True if file content changed."""
+    if dry_run:
+        diff = _diff_text(before, after, path)
+        if diff:
+            print(f"--- {label} ({path}) ---")
+            sys.stdout.write(diff)
+            if not diff.endswith("\n"):
+                sys.stdout.write("\n")
+        else:
+            print(f"({verb}) {label}: no changes needed")
+        return before != after
+
+    if before == after:
+        print(f"({verb}) {label}: no changes needed")
+        return False
+    if after is None:
+        _remove_text_file(path)
+        print(f"({verb}) {label}: removed {path}")
+        return True
+    _write_text_file(path, after)
+    print(f"({verb}) {label}: wrote {path}")
+    return True
+
+
 def run(args: argparse.Namespace, cfg: Config) -> int:
-    claude_target, cursor_target = resolve_install_targets(
+    claude_target, cursor_target, omp_target = resolve_install_targets(
         args,
         uninstall=bool(args.uninstall),
     )
     command = _build_command()
+    omp_source = _build_omp_hook_source()
 
     claude_path = _settings_path()
     cursor_path = _cursor_hooks_path()
+    omp_path = _omp_extension_path()
 
     try:
         claude_before = _read_json_file(claude_path) if claude_target else {}
         cursor_before = _read_json_file(cursor_path) if cursor_target else {}
+        omp_before = _read_text_file(omp_path) if omp_target else None
     except ValueError as e:
         print(f"nokori: {e}", file=sys.stderr)
         return 1
@@ -396,6 +614,7 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
     if args.uninstall:
         claude_after = _remove_nokori_claude(claude_before) if claude_target else claude_before
         cursor_after = _remove_nokori_cursor(cursor_before) if cursor_target else cursor_before
+        omp_after = None if omp_target else omp_before
         verb = "uninstall"
     elif args.disable:
         if not claude_target:
@@ -410,6 +629,7 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
         claude_after = copy.deepcopy(claude_before) or {}
         _set_env_flag(claude_after, "NOKORI_DISABLED", "1")
         cursor_after = cursor_before
+        omp_after = omp_before
         verb = "disable"
     elif args.enable:
         if not claude_target:
@@ -423,6 +643,7 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
         claude_after = copy.deepcopy(claude_before) or {}
         _set_env_flag(claude_after, "NOKORI_DISABLED", None)
         cursor_after = cursor_before
+        omp_after = omp_before
         verb = "enable"
     else:
         claude_after = (
@@ -431,6 +652,7 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
         cursor_after = (
             _merge_cursor_hooks(cursor_before, command) if cursor_target else cursor_before
         )
+        omp_after = omp_source if omp_target else omp_before
         verb = "install"
 
     dry_run = bool(args.dry_run)
@@ -451,6 +673,15 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
             path=cursor_path,
             before=cursor_before,
             after=cursor_after,
+            dry_run=dry_run,
+            verb=verb,
+        )
+    if omp_target:
+        any_change |= _install_one_text_target(
+            label="OMP",
+            path=omp_path,
+            before=omp_before,
+            after=omp_after,
             dry_run=dry_run,
             verb=verb,
         )
@@ -476,6 +707,7 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
     from ..install_targets import (
         PLATFORM_CLAUDE,
         PLATFORM_CURSOR,
+        PLATFORM_OMP,
         format_platforms_label,
         merge_platforms,
         remove_platforms,
@@ -484,7 +716,11 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
     if verb == "install":
         selected = [
             p
-            for p, on in ((PLATFORM_CLAUDE, claude_target), (PLATFORM_CURSOR, cursor_target))
+            for p, on in (
+                (PLATFORM_CLAUDE, claude_target),
+                (PLATFORM_CURSOR, cursor_target),
+                (PLATFORM_OMP, omp_target),
+            )
             if on
         ]
         if dry_run:
@@ -498,7 +734,11 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
     elif verb == "uninstall" and not dry_run:
         removed = [
             p
-            for p, on in ((PLATFORM_CLAUDE, claude_target), (PLATFORM_CURSOR, cursor_target))
+            for p, on in (
+                (PLATFORM_CLAUDE, claude_target),
+                (PLATFORM_CURSOR, cursor_target),
+                (PLATFORM_OMP, omp_target),
+            )
             if on
         ]
         recorded = remove_platforms(cfg, removed)

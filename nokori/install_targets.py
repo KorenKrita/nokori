@@ -11,7 +11,8 @@ from .utils.time import now_iso
 
 PLATFORM_CLAUDE = "claude"
 PLATFORM_CURSOR = "cursor"
-ALL_PLATFORMS = (PLATFORM_CLAUDE, PLATFORM_CURSOR)
+PLATFORM_OMP = "omp"
+ALL_PLATFORMS = (PLATFORM_CLAUDE, PLATFORM_CURSOR, PLATFORM_OMP)
 
 
 def targets_path(cfg: Config) -> Path:

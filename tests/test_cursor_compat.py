@@ -1,10 +1,10 @@
-"""Cursor host detection, transcript roots, gate matcher, JSONL reader."""
+"""Cursor, Claude, and OMP host detection, transcript roots, gate matcher, JSONL reader."""
 from __future__ import annotations
 
 from pathlib import Path
 
 from nokori.config import Config
-from nokori.constants import CURSOR_GATE_MATCHER, DEFAULT_GATE_MATCHER
+from nokori.constants import CURSOR_GATE_MATCHER, DEFAULT_GATE_MATCHER, OMP_GATE_MATCHER
 from nokori.extract.reader import read
 from nokori.gate import prompt_ack
 from nokori.gate.engine import tool_matches_gate
@@ -37,6 +37,11 @@ def test_detect_host_from_claude_transcript_path():
     assert detect_host_from_path(p) == Host.CLAUDE
 
 
+def test_detect_host_from_omp_transcript_path():
+    p = Path.home() / ".omp/agent/sessions/foo/s.jsonl"
+    assert detect_host_from_path(p) == Host.OMP
+
+
 def test_detect_host_from_payload_transcript_path():
     payload = {
         "transcript_path": str(
@@ -46,11 +51,27 @@ def test_detect_host_from_payload_transcript_path():
     assert detect_host_from_payload(payload) == Host.CURSOR
 
 
+def test_detect_host_from_payload_omp_transcript_path():
+    payload = {
+        "transcript_path": str(Path.home() / ".omp/agent/sessions/x/t.jsonl"),
+    }
+    assert detect_host_from_payload(payload) == Host.OMP
+
+
 def test_effective_gate_matcher_cursor_default():
     assert effective_gate_matcher(DEFAULT_GATE_MATCHER, Host.CURSOR) == CURSOR_GATE_MATCHER
     assert (
         effective_gate_matcher("Shell|Write", Host.CURSOR) == "Shell|Write"
     )
+
+
+def test_effective_gate_matcher_omp_default():
+    matcher = effective_gate_matcher(DEFAULT_GATE_MATCHER, Host.OMP)
+    assert matcher == OMP_GATE_MATCHER
+    for tool_name in ("bash", "edit", "write", "read", "grep", "glob"):
+        assert tool_matches_gate(tool_name, matcher)
+        assert not tool_matches_gate(tool_name, DEFAULT_GATE_MATCHER)
+    assert effective_gate_matcher("bash|write", Host.OMP) == "bash|write"
 
 
 def test_cursor_transcript_under_allowed_root(tmp_path, monkeypatch):
@@ -65,6 +86,18 @@ def test_cursor_transcript_under_allowed_root(tmp_path, monkeypatch):
     assert is_path_allowed(transcript)
     resolved = resolve_transcript_path({"transcript_path": str(transcript)})
     assert resolved == transcript
+
+def test_omp_transcript_under_allowed_root(tmp_path, monkeypatch):
+    omp_root = tmp_path / ".omp" / "agent" / "sessions" / "p"
+    omp_root.mkdir(parents=True)
+    transcript = omp_root / "sess.jsonl"
+    transcript.write_text('{"role":"user","message":{"content":[{"type":"text","text":"hi"}]}}\n')
+    monkeypatch.setattr(
+        "nokori.utils.transcript._allowed_roots",
+        lambda: [tmp_path / ".omp" / "agent"],
+    )
+    assert is_path_allowed(transcript)
+    assert resolve_transcript_path({"transcript_path": str(transcript)}) == transcript
 
 
 def test_reader_cursor_nested_content(tmp_path):
@@ -88,6 +121,35 @@ def test_detect_host_cursor_version_and_hook_event():
     assert detect_host_from_payload({"cursor_version": "2.0"}) == Host.CURSOR
     assert detect_host_from_payload({"hook_event_name": "sessionStart"}) == Host.CURSOR
     assert detect_host_from_payload({"composer_mode": "agent"}) == Host.CURSOR
+
+def test_detect_host_from_payload_omp_host_and_env(monkeypatch):
+    monkeypatch.delenv("CURSOR_TRACE_ID", raising=False)
+    monkeypatch.delenv("CURSOR_SESSION_ID", raising=False)
+    monkeypatch.delenv("CLAUDE_CODE_ENTRYPOINT", raising=False)
+    monkeypatch.delenv("OMP_SESSION_ID", raising=False)
+    monkeypatch.delenv("PI_CODING_AGENT_DIR", raising=False)
+    monkeypatch.delenv("NOKORI_HOST", raising=False)
+
+    assert detect_host_from_payload({"host": "omp"}) == Host.OMP
+
+    monkeypatch.setenv("NOKORI_HOST", "omp")
+    assert detect_host_from_payload({}) == Host.OMP
+    monkeypatch.delenv("NOKORI_HOST", raising=False)
+
+    monkeypatch.setenv("OMP_SESSION_ID", "sess-omp")
+    assert detect_host_from_payload({}) == Host.OMP
+    monkeypatch.delenv("OMP_SESSION_ID", raising=False)
+
+    monkeypatch.setenv("PI_CODING_AGENT_DIR", "/tmp/omp-agent")
+    assert detect_host_from_payload({}) == Host.OMP
+
+
+def test_cursor_and_claude_precedence_over_omp_signals(monkeypatch):
+    monkeypatch.setenv("OMP_SESSION_ID", "sess-omp")
+    assert detect_host_from_payload({"cursor_version": "2.0"}) == Host.CURSOR
+
+    monkeypatch.setenv("CLAUDE_CODE_ENTRYPOINT", "1")
+    assert detect_host_from_payload({}) == Host.CLAUDE
 
 
 def test_effective_session_id_prefers_conversation_id():

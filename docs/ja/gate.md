@@ -6,6 +6,8 @@
 
 > **Gate とは？** ツールを永続的に封じるのではなく、「このターンで敏感なツールを初めて呼ぶ前に、Claude に関連ルールを見せる」こと。一度差し止めたらマーカーを破棄し、同じメッセージ内の以降のツールは通常通り実行される。
 
+Claude Code / Cursor では Gate は `PreToolUse` に対応し、OMP では `~/.omp/agent/extensions/nokori.ts` のブリッジ経由で `tool_call` に対応する。OMP の tool 名は `bash`、`edit`、`write`、`read`、`grep`、`glob` のように小文字。
+
 ---
 
 ## 二層の「ツールマッチ」
@@ -34,6 +36,8 @@ Claude がツールを呼ぼうとする
 
 Gate 阻断時、hook は `hookSpecificOutput.permissionDecision: "deny"` と `permissionDecisionReason` を返す。
 
+OMP では同じ理由文を付けた tool-call block をブリッジが返す。
+
 ---
 
 ## 第1層：どのツールで hook を実行するか
@@ -41,6 +45,8 @@ Gate 阻断時、hook は `hookSpecificOutput.permissionDecision: "deny"` と `p
 - **設定ファイル**：`~/.claude/settings.json`（`nokori install` が書き込む）
 - **デフォルト値**：`Edit|Write|MultiEdit|Bash|NotebookEdit`
 - **任意のツールで hook を実行する**：matcher を `*` に変更
+
+- **OMP**：`~/.omp/agent/extensions/nokori.ts` のブリッジが `tool_call` で受ける。tool 名は小文字
 
 ```json
 {
@@ -69,6 +75,8 @@ Gate 阻断時、hook は `hookSpecificOutput.permissionDecision: "deny"` と `p
 - **Python `re.fullmatch`** で payload の `tool_name` をマッチ
 - **デフォルト値**：`Edit|Write|MultiEdit|Bash|NotebookEdit`
 - **任意のツールを block 対象にする**：`.*` を設定（リテラルの `*` ではない）
+
+OMP では `edit|write|bash|grep|glob|read` のような小文字パターンを使う。
 
 ```toml
 [gate]

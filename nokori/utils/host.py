@@ -1,4 +1,4 @@
-"""Detect Claude Code vs Cursor from transcript / session log paths."""
+"""Detect Claude Code, Cursor, or OMP from transcript / session log paths."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ from pathlib import Path
 class Host(StrEnum):
     CLAUDE = "claude"
     CURSOR = "cursor"
+    OMP = "omp"
     UNKNOWN = "unknown"
 
 
@@ -60,13 +61,16 @@ def detect_host_from_path(path: str | Path | None) -> Host:
         return Host.CURSOR
     if "/.claude/" in normalized:
         return Host.CLAUDE
+    if "/.omp/" in normalized:
+        return Host.OMP
     return Host.UNKNOWN
 
 
 def detect_host_from_payload(payload: dict) -> Host:
     """Best-effort host detection for hook payloads.
 
-    Priority: transcript path > strong Cursor fields > Cursor env > Claude env.
+    Priority: transcript path > strong Cursor fields > Cursor env > Claude env >
+    OMP payload/env. Cursor and Claude precedence stays intact.
     ``conversation_id`` alone is not treated as Cursor (Claude may add it later).
     ``cwd`` under ``~/.cursor`` only counts when ``cursor_version`` is present.
     """
@@ -98,13 +102,24 @@ def detect_host_from_payload(payload: dict) -> Host:
 
     if os.environ.get("CLAUDE_CODE_ENTRYPOINT"):
         return Host.CLAUDE
+
+    payload_host = payload.get("host")
+    if isinstance(payload_host, str) and payload_host.strip().lower() == Host.OMP.value:
+        return Host.OMP
+
+    if os.environ.get("NOKORI_HOST", "").strip().lower() == Host.OMP.value:
+        return Host.OMP
+    if os.environ.get("OMP_SESSION_ID") or os.environ.get("PI_CODING_AGENT_DIR"):
+        return Host.OMP
     return Host.UNKNOWN
 
 
 def effective_gate_matcher(base_matcher: str, host: Host) -> str:
-    """Cursor tool names differ (Shell vs Bash); use superset when on Cursor."""
-    from ..constants import CURSOR_GATE_MATCHER, DEFAULT_GATE_MATCHER
+    """Adjust the default gate matcher when a host uses different tool names."""
+    from ..constants import CURSOR_GATE_MATCHER, DEFAULT_GATE_MATCHER, OMP_GATE_MATCHER
 
     if host == Host.CURSOR and base_matcher == DEFAULT_GATE_MATCHER:
         return CURSOR_GATE_MATCHER
+    if host == Host.OMP and base_matcher == DEFAULT_GATE_MATCHER:
+        return OMP_GATE_MATCHER
     return base_matcher

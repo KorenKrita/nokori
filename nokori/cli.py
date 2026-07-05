@@ -191,11 +191,12 @@ def _build_parser() -> argparse.ArgumentParser:
 
     sp_install = sub.add_parser(
         "install",
-        help="install hooks for Claude Code and/or Cursor",
+        help="install hooks for Claude Code, Cursor, and/or OMP",
         description=(
             "Register Nokori hooks. Default: Claude only (~/.claude/settings.json). "
-            "Use --cursor for native ~/.cursor/hooks.json; --all for both "
-            "(prints duplicate-hook warning)."
+            "Use --cursor for native ~/.cursor/hooks.json; --omp for "
+            "~/.omp/agent/extensions/nokori.ts; --all for Claude Code and Cursor; "
+            "uninstall without platform flags removes all Nokori hooks."
         ),
     )
     sp_install.add_argument(
@@ -209,10 +210,15 @@ def _build_parser() -> argparse.ArgumentParser:
         help="install into ~/.cursor/hooks.json (native Cursor agent hooks)",
     )
     sp_install.add_argument(
+        "--omp",
+        action="store_true",
+        help="install into ~/.omp/agent/extensions/nokori.ts (OMP hook extension)",
+    )
+    sp_install.add_argument(
         "--all",
         dest="all_platforms",
         action="store_true",
-        help="install into Claude Code and Cursor (prints duplicate-hook warning)",
+        help="install into Claude Code and Cursor; use --omp separately",
     )
     sp_install.add_argument("--dry-run", action="store_true")
     sp_install.add_argument(
