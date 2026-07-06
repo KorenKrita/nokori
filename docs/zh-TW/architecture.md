@@ -43,11 +43,13 @@ Nokori 保留同一條熱路徑，再把不同 runtime 對應進來。Claude Cod
 1. **提醒（注入）**——命中的規矩會經由各 runtime 的注入通道送回，Agent 回覆前就看得見
 2. **攔一次（Gate）**——只有 `trusted` 且 `severity=gate_eligible`、prompt 證據夠強、工具輸入證據也過關的規則才會攔工具；普通 active 只提醒
 
+在 OMP 裡，`session_start` 走 `pi.sendMessage(...)`，因為這類 lifecycle handler 沒有返回結果式的注入通道；`before_agent_start` 則返回 `message`，因為 `BeforeAgentStartEventResult.message` 就是它的強型別注入通道。Bridge 裡的 timeout 值是 runtime budget，`session_shutdown` 則刻意保持 2s 的短 teardown budget。
+
 ---
 
 ## 注入 vs 阻斷
 
-| | 注入（`additionalContext`） | Gate（PreToolUse deny） |
+| | 注入（`additionalContext` / OMP bridge 訊息） | Gate（PreToolUse deny / OMP tool block） |
 |--|------------------------------|-------------------------|
 | 規則範圍 | 正式池 HOT + WARM | 正式池 HOT 的子集 |
 | 狀態 | `active` 與 `trusted` | 僅 `trusted` |

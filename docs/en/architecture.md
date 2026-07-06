@@ -43,6 +43,8 @@ In practice it comes down to two things:
 1. **Reminder (injection)**: matched rules are returned through the runtime's injection channel so the agent sees them before it replies
 2. **Block once (Gate)**: only `trusted` rules with `severity=gate_eligible`, strong prompt evidence, and passing tool-input evidence will gate tools; ordinary active rules only remind
 
+On OMP, `session_start` uses `pi.sendMessage(...)` because lifecycle handlers do not expose a return-result injection channel, while `before_agent_start` returns `message` because `BeforeAgentStartEventResult.message` is the typed injection channel. The bridge timeout values are runtime budgets, and `session_shutdown` intentionally keeps a short 2s teardown budget.
+
 ---
 
 ## Injection vs blocking
