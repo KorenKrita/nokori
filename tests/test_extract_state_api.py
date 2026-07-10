@@ -6,7 +6,7 @@ import uuid
 
 import pytest
 
-pytest.importorskip("httpx")
+pytest.importorskip("httpx2")
 
 from dataclasses import replace
 

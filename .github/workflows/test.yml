@@ -23,11 +23,36 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e ".[dev]"
-      - name: Lint
-        run: ruff check nokori/
-      - name: Type check
-        run: mypy nokori/
-      - name: Mypy ratchet check
-        run: python scripts/check_mypy_ratchet.py
-      - name: Run tests
-        run: python -m pytest tests/ -q
+      - name: Run verification suite
+        run: python scripts/verify.py
+
+  omp-bridge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+      - name: Install package
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+      - name: Build generated OMP bridge
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from nokori.commands.install import _build_omp_hook_source
+
+          Path(os.environ["RUNNER_TEMP"], "nokori.ts").write_text(
+              _build_omp_hook_source(),
+              encoding="utf-8",
+          )
+          PY
+          bun build "$RUNNER_TEMP/nokori.ts" \
+            --target=bun \
+            --external '@oh-my-pi/pi-coding-agent/*' \
+            --outfile "$RUNNER_TEMP/nokori.js"

@@ -9,8 +9,8 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 CHECKS = [
-    ("ruff check", ["ruff", "check", "nokori/"]),
-    ("mypy", ["mypy", "nokori/"]),
+    ("ruff check", [sys.executable, "-m", "ruff", "check", "nokori/"]),
+    ("mypy", [sys.executable, "-m", "mypy", "nokori/"]),
     ("mypy ratchet", [sys.executable, "scripts/check_mypy_ratchet.py"]),
     ("pytest", [sys.executable, "-m", "pytest", "tests/", "-q"]),
 ]

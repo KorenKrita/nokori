@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-pytest.importorskip("httpx")
+pytest.importorskip("httpx2")
 
 from dataclasses import replace
 

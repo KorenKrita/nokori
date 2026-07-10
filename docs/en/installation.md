@@ -163,4 +163,4 @@ pip install --upgrade nokori
 git pull && pip install -e ".[local-embed,dev]"
 ```
 
-After upgrading, run `nokori health` to confirm everything still checks out. Hook registrations are stable across upgrades (no need to re-run `nokori install`).
+After upgrading, run `nokori health` to confirm everything still checks out. Claude Code and Cursor hook registrations are stable across upgrades. If `hooks.omp` reports a stale generated bridge, refresh it with `nokori install --omp`.

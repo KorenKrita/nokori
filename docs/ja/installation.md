@@ -163,4 +163,4 @@ pip install --upgrade nokori
 git pull && pip install -e ".[local-embed,dev]"
 ```
 
-アップグレード後は `nokori health` で正常動作を確認する。Hook 登録はバージョン間で安定しており、アップグレード後に `nokori install` を再実行する必要はない。
+アップグレード後は `nokori health` で正常動作を確認する。Claude Code / Cursor の Hook 登録はバージョン間で安定している。`hooks.omp` が生成済みブリッジを stale と報告した場合だけ、`nokori install --omp` で更新する。

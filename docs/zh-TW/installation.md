@@ -162,4 +162,4 @@ pip install --upgrade nokori
 git pull && pip install -e ".[local-embed,dev]"
 ```
 
-升級後跑一下 `nokori health` 確認一切正常。Hook 註冊跨版本穩定，升級後不需要重新 `nokori install`。
+升級後跑一下 `nokori health` 確認一切正常。Claude Code 與 Cursor 的 Hook 註冊跨版本穩定；若 `hooks.omp` 提示產生的橋接已過期，執行 `nokori install --omp` 重新整理即可。
