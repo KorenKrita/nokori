@@ -85,7 +85,8 @@ def test_marker_path_sanitizes_session(monkeypatch, tmp_path):
     p = cfg.marker_path("abc/../etc", "deadbeef")
     assert ".." not in str(p)
     assert p.name == "deadbeef.json"
-    assert p.parent.name == "abc____etc"  # `/` and `.` both sanitized
+    assert p.parent.name.startswith("abc_etc-")
+    assert p.parent.name == cfg._safe_session_id("abc/../etc")
 
 
 def test_config_toml_loaded(monkeypatch, tmp_path):

@@ -188,8 +188,9 @@ class TestExtractSubprocessEnv:
                 clear=False,
             ),
         ):
-            _spawn_async_extract(cfg)
+            spawned = _spawn_async_extract(cfg)
 
+        assert spawned is True
         env = captured["env"]
         assert env["ANTHROPIC_API_KEY"] == "sk-test"
         assert env["ANTHROPIC_BASE_URL"] == "http://custom:8080"
@@ -199,6 +200,11 @@ class TestExtractSubprocessEnv:
         # Unlisted vars must NOT leak into the subprocess.
         assert "RANDOM_USER_VAR" not in env
         assert env.get("NOKORI_EXTRACTING") is None
+
+    def test_spawn_async_extract_reports_spawn_failure(self, session_env):
+        cfg, _ = session_env
+        with patch("subprocess.Popen", side_effect=OSError("spawn failed")):
+            assert _spawn_async_extract(cfg) is False
 
 
 # ---------------------------------------------------------------------------

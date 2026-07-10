@@ -139,6 +139,9 @@ def _check_embed(cfg: Config, rule_count: int) -> tuple[str, str]:
     if st["running"]:
         parts.append(f"server=running pid={st['pid']} socket={st['socket']}")
         return ("ok", "; ".join(parts))
+    if st.get("starting"):
+        parts.append(f"server=starting pid={st['pid']}")
+        return ("warn", "; ".join(parts) + " — model is still loading")
 
     parts.append("server=stopped")
     if cached:

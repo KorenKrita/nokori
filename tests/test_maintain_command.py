@@ -1,6 +1,7 @@
 """Tests for the maintain command production worker wiring."""
 
 import argparse
+from contextlib import contextmanager
 
 from nokori.commands import maintain
 from nokori.config import Config
@@ -12,6 +13,27 @@ class _FakeDb:
 
     def fetchone(self, sql, params=()):
         return None
+
+
+def test_maintain_skips_when_another_worker_holds_lock(monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+    cfg = Config.from_env()
+
+    @contextmanager
+    def _busy_lock(*args, **kwargs):
+        yield False
+
+    monkeypatch.setattr(maintain.file_lock, "acquire", _busy_lock)
+    monkeypatch.setattr(
+        maintain,
+        "open_db",
+        lambda path: (_ for _ in ()).throw(AssertionError("database should not open")),
+    )
+
+    rc = maintain.run(argparse.Namespace(), cfg)
+
+    assert rc == 0
+    assert "already running; skipping" in capsys.readouterr().out
 
 
 def test_maintain_runs_shadow_counterfactual_worker(monkeypatch, tmp_path, capsys):

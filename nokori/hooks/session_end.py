@@ -98,9 +98,9 @@ def handle(payload: dict, cfg: Config, *, host: Host) -> dict:
                 log.warning("is_locked check failed session=%s: %s", session_id, e)
                 ctx.add_error("extract_lock", ErrorCategory.DEGRADED, str(e), e)
             if not locked:
-                _spawn_async_extract(cfg)
-                async_spawned = True
-                log.info("spawned async extract after session end")
+                async_spawned = bool(_spawn_async_extract(cfg))
+                if async_spawned:
+                    log.info("spawned async extract after session end")
 
         ctx.record_event(
             "session_end",
@@ -368,8 +368,8 @@ def _try_fork_extract(
                 err_file.close()
 
 
-def _spawn_async_extract(cfg: Config) -> None:
-    """Fork a detached subprocess to run `nokori extract`. Best-effort."""
+def _spawn_async_extract(cfg: Config) -> bool:
+    """Fork a detached `nokori extract` subprocess. Return whether spawn succeeded."""
     import os
     import subprocess
     import sys
@@ -397,8 +397,10 @@ def _spawn_async_extract(cfg: Config) -> None:
             stderr=err_file if err_file is not None else subprocess.DEVNULL,
             start_new_session=True,
         )
+        return True
     except Exception as e:
         log.warning("async extract spawn failed: %s", e)
+        return False
     finally:
         if err_file is not None:
             with contextlib.suppress(OSError):

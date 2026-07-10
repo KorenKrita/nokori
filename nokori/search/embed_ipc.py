@@ -14,6 +14,8 @@ from pathlib import Path
 from typing import Any
 
 from ..config import Config
+from ..utils import file_lock
+from ..utils.fs import atomic_write_text
 from ..utils.logging import get_logger
 
 log = get_logger("nokori.search.embed_ipc")
@@ -31,6 +33,10 @@ def pid_path(cfg: Config) -> Path:
     return cfg.data_dir / "embed-server.pid"
 
 
+def server_lock_path(cfg: Config) -> Path:
+    return cfg.data_dir / "embed-server.lock"
+
+
 def _read_pid(cfg: Config) -> int | None:
     p = pid_path(cfg)
     if not p.exists():
@@ -43,7 +49,7 @@ def _read_pid(cfg: Config) -> int | None:
 
 
 def _write_pid(cfg: Config, pid: int) -> None:
-    pid_path(cfg).write_text(str(pid), encoding="utf-8")
+    atomic_write_text(pid_path(cfg), f"{pid}\n", mkdir=True)
 
 
 def _clear_pid(cfg: Config) -> None:
@@ -61,12 +67,43 @@ def _pid_alive(pid: int) -> bool:
         return False
 
 
-def cleanup_stale(cfg: Config) -> None:
+def _process_command(pid: int) -> str | None:
+    ps = next((p for p in ("/bin/ps", "/usr/bin/ps") if Path(p).exists()), None)
+    if ps is None:
+        return None
+    try:
+        result = subprocess.run(
+            [ps, "-p", str(pid), "-o", "command="],
+            capture_output=True,
+            text=True,
+            timeout=2.0,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    command = result.stdout.strip()
+    return command or None
+
+
+def _is_embed_server_process(pid: int) -> bool:
+    command = _process_command(pid)
+    return command is not None and " -m nokori embed serve" in f" {command}"
+
+
+def _server_lock_held(cfg: Config) -> bool:
+    try:
+        return file_lock.is_locked(server_lock_path(cfg))
+    except OSError as e:
+        log.warning("embed server lock check failed: %s", e)
+        return True
+
+
+def cleanup_stale(cfg: Config, *, force: bool = False) -> None:
+    if not force and _server_lock_held(cfg):
+        return
     pid = _read_pid(cfg)
-    if pid is not None and _pid_alive(pid):
-        if ping(cfg):
-            return
-        _clear_pid(cfg)
+    if pid is not None and _pid_alive(pid) and (ping(cfg) or _is_embed_server_process(pid)):
+        return
     if pid is not None:
         _clear_pid(cfg)
     sock = socket_path(cfg)
@@ -112,15 +149,15 @@ def ping(cfg: Config, *, timeout: float = 0.5) -> bool:
 
 
 def spawn_server(cfg: Config) -> None:
-    """Start detached embed server if not already running."""
+    """Start detached embed server if not already running or starting."""
+    if ping(cfg) or _server_lock_held(cfg):
+        return
     cleanup_stale(cfg)
-    if ping(cfg):
+    if ping(cfg) or _server_lock_held(cfg):
         return
     pid = _read_pid(cfg)
-    if pid is not None and _pid_alive(pid):
-        if ping(cfg):
-            return
-        _clear_pid(cfg)
+    if pid is not None and _pid_alive(pid) and _is_embed_server_process(pid):
+        return
 
     cfg.ensure_dirs()
     err_log = cfg.logs_dir / "embed-server.log"
@@ -186,23 +223,30 @@ def stop_server(cfg: Config) -> bool:
         except (OSError, json.JSONDecodeError):
             pass
     pid = _read_pid(cfg)
+    verified_server = pid is not None and _pid_alive(pid) and _is_embed_server_process(pid)
     if pid is not None and _pid_alive(pid):
-        with contextlib.suppress(OSError):
-            os.kill(pid, signal.SIGTERM)
-        for _ in range(30):
-            if not _pid_alive(pid):
-                break
-            time.sleep(0.1)
-    cleanup_stale(cfg)
+        if verified_server:
+            with contextlib.suppress(OSError):
+                os.kill(pid, signal.SIGTERM)
+            for _ in range(30):
+                if not _pid_alive(pid):
+                    break
+                time.sleep(0.1)
+        else:
+            log.warning("refusing to signal non-Nokori process from stale embed pid=%s", pid)
+    if not verified_server or pid is None or not _pid_alive(pid):
+        cleanup_stale(cfg, force=True)
     return not ping(cfg, timeout=0.3)
 
 
 def server_status(cfg: Config) -> dict[str, Any]:
     alive = ping(cfg, timeout=0.5)
     pid = _read_pid(cfg)
+    pid_alive = pid is not None and _pid_alive(pid)
     return {
         "running": alive,
-        "pid": pid if pid is not None and _pid_alive(pid) else None,
+        "starting": not alive and _server_lock_held(cfg),
+        "pid": pid if pid_alive else None,
         "socket": str(socket_path(cfg)),
         "idle_seconds": cfg.embed_server_idle_seconds,
     }

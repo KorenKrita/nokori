@@ -14,6 +14,7 @@ from ..search.idf_stats import (
     compute_eligible_rule_set_hash,
     store_idf_stats,
 )
+from ..utils import file_lock
 
 
 class _PosthocLLMAdapter:
@@ -24,11 +25,21 @@ class _PosthocLLMAdapter:
         return self._llm.complete_role(role, system, user)
 
 
-def run(_args: argparse.Namespace, cfg: Config) -> int:
+def run(args: argparse.Namespace, cfg: Config) -> int:
     if cfg.disabled:
         print("nokori: disabled (NOKORI_DISABLED)")
         return 0
 
+    cfg.ensure_dirs()
+    lock_path = cfg.data_dir / "maintain.lock"
+    with file_lock.acquire(lock_path, label="maintain") as acquired:
+        if not acquired:
+            print("maintain: already running; skipping")
+            return 0
+        return _run_locked(args, cfg)
+
+
+def _run_locked(_args: argparse.Namespace, cfg: Config) -> int:
     try:
         db = open_db(cfg.db_path)
     except Exception as exc:

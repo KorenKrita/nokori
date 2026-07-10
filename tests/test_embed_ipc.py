@@ -1,8 +1,10 @@
 import contextlib
 import json
+import os
 import socket
 import threading
 from pathlib import Path
+from unittest.mock import patch
 
 from nokori.config import Config
 from nokori.search import embed_ipc
@@ -58,6 +60,79 @@ def test_embed_ipc_ping_and_shutdown(monkeypatch, tmp_path):
     assert embed_ipc.embed_text(cfg, "hello", timeout=1.0)
     embed_ipc.stop_server(cfg)
     stop.wait(timeout=2.0)
+
+
+def test_cleanup_stale_preserves_server_that_is_starting(monkeypatch, tmp_path):
+    monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+    cfg = Config.from_env()
+    embed_ipc._write_pid(cfg, os.getpid())
+    sock = embed_ipc.socket_path(cfg)
+    sock.write_text("starting")
+    monkeypatch.setattr(embed_ipc.file_lock, "is_locked", lambda path: True)
+    monkeypatch.setattr(embed_ipc, "ping", lambda c, **kw: False)
+
+    embed_ipc.cleanup_stale(cfg)
+
+    assert embed_ipc.pid_path(cfg).exists()
+    assert sock.exists()
+
+
+def test_spawn_server_skips_when_start_lock_is_held(monkeypatch, tmp_path):
+    monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+    cfg = Config.from_env()
+    monkeypatch.setattr(embed_ipc, "ping", lambda c, **kw: False)
+    monkeypatch.setattr(embed_ipc.file_lock, "is_locked", lambda path: True)
+
+    with patch("subprocess.Popen") as popen:
+        embed_ipc.spawn_server(cfg)
+
+    popen.assert_not_called()
+
+
+def test_stop_server_never_signals_unrelated_stale_pid(monkeypatch, tmp_path):
+    monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+    cfg = Config.from_env()
+    embed_ipc._write_pid(cfg, os.getpid())
+    monkeypatch.setattr(embed_ipc, "ping", lambda c, **kw: False)
+    monkeypatch.setattr(embed_ipc, "_pid_alive", lambda pid: True)
+    monkeypatch.setattr(embed_ipc, "_is_embed_server_process", lambda pid: False)
+    signals: list[tuple[int, int]] = []
+    monkeypatch.setattr(embed_ipc.os, "kill", lambda pid, sig: signals.append((pid, sig)))
+
+    assert embed_ipc.stop_server(cfg) is True
+    assert signals == []
+    assert not embed_ipc.pid_path(cfg).exists()
+
+
+def test_embed_process_identity_requires_exact_serve_command(monkeypatch):
+    monkeypatch.setattr(
+        embed_ipc,
+        "_process_command",
+        lambda pid: "/usr/bin/python -m nokori embed serve",
+    )
+    assert embed_ipc._is_embed_server_process(123)
+    monkeypatch.setattr(embed_ipc, "_process_command", lambda pid: "/usr/bin/python worker.py")
+    assert not embed_ipc._is_embed_server_process(123)
+
+
+def test_run_server_skips_when_another_server_holds_lock(monkeypatch, tmp_path):
+    from nokori.search import embedding_server
+
+    monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+    cfg = Config.from_env()
+
+    @contextlib.contextmanager
+    def _busy_lock(*args, **kwargs):
+        yield False
+
+    monkeypatch.setattr(embedding_server.file_lock, "acquire", _busy_lock)
+    monkeypatch.setattr(
+        embedding_server,
+        "LocalEmbeddingClient",
+        lambda cfg: (_ for _ in ()).throw(AssertionError("model should not load")),
+    )
+
+    assert embedding_server.run_server(cfg) == 0
 
 
 def test_kickstart_spawns_without_blocking(monkeypatch, tmp_path):

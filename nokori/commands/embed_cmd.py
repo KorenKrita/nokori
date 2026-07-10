@@ -22,6 +22,7 @@ def run(args: argparse.Namespace, cfg: Config) -> int:
     if action == "status":
         st = embed_ipc.server_status(cfg)
         print(f"embed.running   {st['running']}")
+        print(f"embed.starting  {st.get('starting', False)}")
         print(f"embed.pid       {st['pid']}")
         print(f"embed.socket    {st['socket']}")
         print(f"embed.idle_s    {st['idle_seconds']}")

@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from ..config import Config
+from ..utils import file_lock
 from ..utils.logging import get_logger
 from . import embed_ipc
 from .embedding import EmbedKind, LocalEmbeddingClient
@@ -65,8 +66,9 @@ def _handle_connection(
     return True
 
 
-def _cleanup(sock: socket.socket, sock_path: Path, cfg: Config) -> None:
-    sock.close()
+def _cleanup(sock: socket.socket | None, sock_path: Path, cfg: Config) -> None:
+    if sock is not None:
+        sock.close()
     embed_ipc._clear_pid(cfg)
     with contextlib.suppress(FileNotFoundError):
         sock_path.unlink()
@@ -74,35 +76,30 @@ def _cleanup(sock: socket.socket, sock_path: Path, cfg: Config) -> None:
 
 def run_server(cfg: Config) -> int:
     """CLI entry: ``nokori embed serve``."""
-    embed_ipc.cleanup_stale(cfg)
-    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    cfg.ensure_dirs()
+    with file_lock.acquire(embed_ipc.server_lock_path(cfg), label="embed server") as acquired:
+        if not acquired:
+            log.info("embed server already running or starting")
+            return 0
+        return _run_server_locked(cfg)
+
+
+def _run_server_locked(cfg: Config) -> int:
+    if embed_ipc.ping(cfg):
+        return 0
+    existing_pid = embed_ipc._read_pid(cfg)
+    if (
+        existing_pid is not None
+        and existing_pid != os.getpid()
+        and embed_ipc._pid_alive(existing_pid)
+        and embed_ipc._is_embed_server_process(existing_pid)
+    ):
+        log.warning("legacy embed server process is still starting pid=%s", existing_pid)
+        return 0
+    embed_ipc.cleanup_stale(cfg, force=True)
     sock_path = embed_ipc.socket_path(cfg)
-    with contextlib.suppress(FileNotFoundError):
-        sock_path.unlink()
-    sock.bind(str(sock_path))
-    try:
-        os.chmod(sock_path, 0o600)
-    except OSError as e:
-        log.warning("could not chmod embed socket %s: %s", sock_path, e)
-    sock.listen(8)
+    sock: socket.socket | None = None
     embed_ipc._write_pid(cfg, os.getpid())
-
-    client = LocalEmbeddingClient(cfg)
-    if not client.available():
-        log.error("sentence-transformers not available; embed server exiting")
-        _cleanup(sock, sock_path, cfg)
-        return 1
-
-    try:
-        client.load_model()
-    except Exception:
-        log.exception("embed server model load failed")
-        _cleanup(sock, sock_path, cfg)
-        return 1
-
-    last_activity = time.monotonic()
-    idle_limit = float(cfg.embed_server_idle_seconds)
-    log.info("embed server listening on %s (idle=%ss)", sock_path, int(idle_limit))
 
     def _terminate(_signum: int, _frame: Any) -> None:
         raise SystemExit(0)
@@ -110,6 +107,31 @@ def run_server(cfg: Config) -> int:
     signal.signal(signal.SIGTERM, _terminate)
 
     try:
+        client = LocalEmbeddingClient(cfg)
+        if not client.available():
+            log.error("sentence-transformers not available; embed server exiting")
+            return 1
+
+        try:
+            client.load_model()
+        except Exception:
+            log.exception("embed server model load failed")
+            return 1
+
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        with contextlib.suppress(FileNotFoundError):
+            sock_path.unlink()
+        sock.bind(str(sock_path))
+        try:
+            os.chmod(sock_path, 0o600)
+        except OSError as e:
+            log.warning("could not chmod embed socket %s: %s", sock_path, e)
+        sock.listen(8)
+
+        last_activity = time.monotonic()
+        idle_limit = float(cfg.embed_server_idle_seconds)
+        log.info("embed server listening on %s (idle=%ss)", sock_path, int(idle_limit))
+
         while True:
             sock.settimeout(1.0)
             try:
@@ -122,6 +144,6 @@ def run_server(cfg: Config) -> int:
             if not _handle_connection(conn, client):
                 break
             last_activity = time.monotonic()
+        return 0
     finally:
         _cleanup(sock, sock_path, cfg)
-    return 0
