@@ -120,9 +120,8 @@ pipx install "nokori[local-embed]"
 nokori install --omp        # 仅 OMP -> ~/.omp/agent/extensions/nokori.ts
 # --all 仍是 Claude Code + Cursor，--cursor 仅装 Cursor，默认只装 Claude Code
 
-# 验证
+# 验证（OMP 安装会显示 hooks.omp）
 nokori health
-ls ~/.omp/agent/extensions/nokori.ts
 ```
 
 在 OMP 上，Recall 走 `before_agent_start`，Gate 检查走 `tool_call`，会话结束后的提取由 `session_shutdown` 触发，并使用 OMP session manager 提供的当前 session 文件。

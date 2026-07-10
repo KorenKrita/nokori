@@ -263,6 +263,19 @@ def _check_cursor_hooks_registered() -> tuple[str, str]:
     return ("ok", "registered")
 
 
+def _check_omp_extension_registered() -> tuple[str, str]:
+    from .install import describe_omp_extension
+
+    state = describe_omp_extension()
+    path = str(state["path"])
+    if state.get("installed") and state.get("current"):
+        return ("ok", f"registered ({path})")
+    note = str(state.get("note") or "not installed")
+    if "cannot read" in note:
+        return ("fail", note)
+    return ("warn", f"{note} ({path})")
+
+
 def _check_hook_host_detection() -> tuple[str, str]:
     from ..utils.host import Host, detect_host_from_payload
 
@@ -327,7 +340,12 @@ def run(_args: argparse.Namespace, cfg: Config) -> int:
     except Exception:
         rule_count = 0
 
-    from ..install_targets import PLATFORM_CLAUDE, PLATFORM_CURSOR, platforms_for_health
+    from ..install_targets import (
+        PLATFORM_CLAUDE,
+        PLATFORM_CURSOR,
+        PLATFORM_OMP,
+        platforms_for_health,
+    )
 
     platforms = platforms_for_health(cfg)
     rows = [
@@ -341,6 +359,8 @@ def run(_args: argparse.Namespace, cfg: Config) -> int:
     if PLATFORM_CURSOR in platforms:
         rows.append(("hooks.cursor", *_check_cursor_hooks_registered()))
         rows.append(("hooks.host", *_check_hook_host_detection()))
+    if PLATFORM_OMP in platforms:
+        rows.append(("hooks.omp", *_check_omp_extension_registered()))
     rows.append(("hooks.duplicate", *_check_dual_hook_registration()))
     rows.extend(
         [

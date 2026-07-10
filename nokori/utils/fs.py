@@ -9,6 +9,20 @@ import uuid
 from pathlib import Path
 
 
+def atomic_write_text(path: Path, text: str, *, mkdir: bool = False) -> None:
+    """Write UTF-8 text via unique temp file + os.replace (parallel-safe)."""
+    if mkdir or not path.parent.exists():
+        path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    tmp = path.with_name(f"{path.name}.{uuid.uuid4().hex}.tmp")
+    try:
+        tmp.write_text(text, encoding="utf-8")
+        os.replace(tmp, path)
+    finally:
+        if tmp.exists():
+            with contextlib.suppress(OSError):
+                tmp.unlink()
+
+
 def atomic_write_json(
     path: Path,
     payload: dict,
@@ -17,16 +31,7 @@ def atomic_write_json(
     indent: int | None = None,
 ) -> None:
     """Write JSON via unique temp file + os.replace (parallel-safe)."""
-    if mkdir or not path.parent.exists():
-        path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    tmp = path.with_name(f"{path.name}.{uuid.uuid4().hex}.tmp")
-    try:
-        text = json.dumps(payload, ensure_ascii=False, indent=indent)
-        if indent is not None:
-            text += "\n"
-        tmp.write_text(text, encoding="utf-8")
-        os.replace(tmp, path)
-    finally:
-        if tmp.exists():
-            with contextlib.suppress(OSError):
-                tmp.unlink()
+    text = json.dumps(payload, ensure_ascii=False, indent=indent)
+    if indent is not None:
+        text += "\n"
+    atomic_write_text(path, text, mkdir=mkdir)

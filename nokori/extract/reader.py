@@ -50,7 +50,62 @@ def _parse_jsonl_text(text: str, path: Path, label: str = "line") -> list[Turn]:
     return out
 
 
-_KNOWN_TYPES = frozenset(("user", "human", "assistant", "text", "tool_use", "tool_result"))
+_KNOWN_TYPES = frozenset(
+    (
+        "user",
+        "human",
+        "assistant",
+        "text",
+        "tool_use",
+        "tool_result",
+        "toolCall",
+        "toolResult",
+        "message",
+    )
+)
+
+
+def _large_tool_use_turn(line: str) -> Turn:
+    name_match = re.search(r'"(?:name|tool_name)"\s*:\s*"([^"]+)"', line[:3000])
+    name = name_match.group(1) if name_match else "tool"
+    return Turn(
+        role="tool_use",
+        content="",
+        tool_name=name,
+        input_summary="[large input truncated]",
+    )
+
+
+def _large_tool_result_turn(line: str) -> Turn:
+    head = line[:3000]
+    name_match = re.search(r'"(?:toolName|tool_name)"\s*:\s*"([^"]+)"', head)
+    is_err = bool(
+        re.search(r'"(?:isError|is_error|error)"\s*:\s*true', head)
+    )
+    error_line = ""
+    if is_err:
+        err_match = re.search(r'"(?:error_line|content)"\s*:\s*"([^"]{0,300})', head)
+        error_line = err_match.group(1) if err_match else "error"
+    return Turn(
+        role="tool_result",
+        content="",
+        tool_name=name_match.group(1) if name_match else None,
+        is_error=is_err,
+        error_line=error_line,
+    )
+
+
+def _parse_large_omp_message(line: str) -> list[Turn]:
+    head = line[:4000]
+    role_match = re.search(r'"role"\s*:\s*"([^"]+)"', head)
+    role = role_match.group(1) if role_match else None
+    if role in ("toolResult", "tool_result"):
+        return [_large_tool_result_turn(line)]
+    if re.search(r'"type"\s*:\s*"(?:toolCall|tool_use)"', head):
+        return [_large_tool_use_turn(line)]
+    text_match = re.search(r'"text"\s*:\s*"([^"]{0,500})', head)
+    content = text_match.group(1) if text_match else ""
+    return [Turn(role=_normalize_role(role), content=content)] if role else []
 
 
 def _parse_large_line(line: str) -> list[Turn]:
@@ -65,24 +120,12 @@ def _parse_large_line(line: str) -> list[Turn]:
             log.debug("Skipping unparseable large line (len=%d)", len(line))
             return []
     t = type_match.group(1)
-    if t == "tool_use":
-        name_match = re.search(r'"name"\s*:\s*"([^"]+)"', line[:2000])
-        name = name_match.group(1) if name_match else "tool"
-        return [
-            Turn(
-                role="tool_use", content="", tool_name=name, input_summary="[large input truncated]"
-            )
-        ]
-    if t == "tool_result":
-        is_err = bool(
-            re.search(r'"is_error"\s*:\s*true', line[:2000])
-            or re.search(r'"error"\s*:\s*true', line[:2000])
-        )
-        if is_err:
-            err_match = re.search(r'"(?:error_line|content)"\s*:\s*"([^"]{0,300})', line[:3000])
-            err = err_match.group(1) if err_match else "error"
-            return [Turn(role="tool_result", content="", is_error=True, error_line=err)]
-        return [Turn(role="tool_result", content="", is_error=False)]
+    if t == "message":
+        return _parse_large_omp_message(line)
+    if t in ("tool_use", "toolCall"):
+        return [_large_tool_use_turn(line)]
+    if t in ("tool_result", "toolResult"):
+        return [_large_tool_result_turn(line)]
     if t in ("assistant", "text"):
         content_match = re.search(r'"(?:content|message)"\s*:\s*"([^"]{0,500})', line[:2000])
         content = content_match.group(1) if content_match else ""

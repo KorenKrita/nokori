@@ -60,10 +60,10 @@ nokori install --cursor     # 仅原生 Cursor → ~/.cursor/hooks.json
 nokori install --omp        # 仅 OMP         → ~/.omp/agent/extensions/nokori.ts
 nokori install --all        # Claude + Cursor
 
-# 验证
+# 验证（安装 OMP 时会显示 hooks.omp）
 nokori health
 nokori status
-ls ~/.omp/agent/extensions/nokori.ts   # 仅 OMP
+```
 
 几个常用旁支：
 
@@ -130,7 +130,7 @@ OMP 需要显式安装：`--all` 仍只代表 Claude Code + Cursor。
 ### 验证 OMP 安装
 
 - 想先看写入内容：`nokori install --omp --dry-run`
-- 安装后确认文件存在：`ls ~/.omp/agent/extensions/nokori.ts`
+- 安装后运行 `nokori health`，确认 `hooks.omp` 显示 `ok registered`
 - 新开一场 OMP session；recall 注入走 `before_agent_start`，Gate 检查走 `tool_call`，会话结束后的提取从 `session_shutdown` 开始。
 
 ### Cursor 只选一条路（不要混用）

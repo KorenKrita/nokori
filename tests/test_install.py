@@ -278,6 +278,27 @@ def test_install_omp_idempotent(tmp_path):
     assert 'session_' + 'stop' not in after
 
 
+def test_install_omp_refuses_to_overwrite_unmanaged_extension(tmp_path):
+    data = tmp_path / "data"
+    omp_home = tmp_path / "omp-agent"
+    ext = omp_home / "extensions" / "nokori.ts"
+    ext.parent.mkdir(parents=True)
+    ext.write_text("export default function customExtension() {}\n")
+
+    r = _run(
+        "install", "--omp",
+        env_extra={
+            "NOKORI_DATA_DIR": str(data),
+            "NOKORI_OMP_HOME": str(omp_home),
+        },
+    )
+
+    assert r.returncode == 1
+    assert "refusing to overwrite unmanaged OMP extension" in r.stderr
+    assert ext.read_text() == "export default function customExtension() {}\n"
+    assert not (data / "install_targets.json").exists()
+
+
 def test_uninstall_omp_removes_extension(tmp_path):
     data = tmp_path / "data"
     omp_home = tmp_path / "omp-agent"
@@ -294,6 +315,65 @@ def test_uninstall_omp_removes_extension(tmp_path):
     targets = json.loads((data / "install_targets.json").read_text())
     assert targets["platforms"] == []
     assert "Recorded install platforms: (none)" in r.stdout
+
+
+def test_uninstall_omp_refuses_to_remove_unmanaged_extension(tmp_path):
+    data = tmp_path / "data"
+    omp_home = tmp_path / "omp-agent"
+    env = {
+        "NOKORI_DATA_DIR": str(data),
+        "NOKORI_OMP_HOME": str(omp_home),
+    }
+    installed = _run("install", "--omp", env_extra=env)
+    assert installed.returncode == 0, installed.stderr
+    ext = omp_home / "extensions" / "nokori.ts"
+    ext.write_text("export default function customExtension() {}\n")
+
+    r = _run("install", "--uninstall", "--omp", env_extra=env)
+
+    assert r.returncode == 1
+    assert "refusing to remove unmanaged OMP extension" in r.stderr
+    assert ext.read_text() == "export default function customExtension() {}\n"
+    targets = json.loads((data / "install_targets.json").read_text())
+    assert targets["platforms"] == ["omp"]
+
+
+def test_health_reports_omp_bridge(tmp_path):
+    data = tmp_path / "data"
+    omp_home = tmp_path / "omp-agent"
+    env = {
+        "NOKORI_DATA_DIR": str(data),
+        "NOKORI_OMP_HOME": str(omp_home),
+    }
+    installed = _run("install", "--omp", env_extra=env)
+    assert installed.returncode == 0, installed.stderr
+
+    health = _run("health", env_extra=env)
+
+    assert health.returncode == 0, health.stderr
+    assert "hooks.omp" in health.stdout
+    assert "registered" in health.stdout
+
+
+def test_health_warns_when_generated_omp_bridge_is_stale(tmp_path):
+    data = tmp_path / "data"
+    omp_home = tmp_path / "omp-agent"
+    env = {
+        "NOKORI_DATA_DIR": str(data),
+        "NOKORI_OMP_HOME": str(omp_home),
+    }
+    installed = _run("install", "--omp", env_extra=env)
+    assert installed.returncode == 0, installed.stderr
+    ext = omp_home / "extensions" / "nokori.ts"
+    ext.write_text(ext.read_text() + "// stale\n")
+
+    health = _run("health", env_extra=env)
+
+    assert health.returncode == 0, health.stderr
+    assert "hooks.omp" in health.stdout
+    assert "warn" in health.stdout
+    assert "stale" in health.stdout
+    assert "nokori install --omp" in health.stdout
 
 
 def test_install_omp_records_platform_only(tmp_path):

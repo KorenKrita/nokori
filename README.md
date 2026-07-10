@@ -120,9 +120,8 @@ pipx install "nokori[local-embed]"
 nokori install --omp        # OMP only -> ~/.omp/agent/extensions/nokori.ts
 # Use --all for Claude Code + Cursor, --cursor for Cursor, default for Claude Code only
 
-# Verify
+# Verify (OMP installs are reported as hooks.omp)
 nokori health
-ls ~/.omp/agent/extensions/nokori.ts
 ```
 
 On OMP, recall is injected on `before_agent_start`, Gate checks run on `tool_call`, and post-session extraction starts on `session_shutdown` using the current session file from OMP's session manager.

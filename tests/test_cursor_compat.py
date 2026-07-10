@@ -68,9 +68,11 @@ def test_effective_gate_matcher_cursor_default():
 def test_effective_gate_matcher_omp_default():
     matcher = effective_gate_matcher(DEFAULT_GATE_MATCHER, Host.OMP)
     assert matcher == OMP_GATE_MATCHER
-    for tool_name in ("bash", "edit", "write", "read", "grep", "glob"):
+    for tool_name in ("bash", "edit", "write"):
         assert tool_matches_gate(tool_name, matcher)
         assert not tool_matches_gate(tool_name, DEFAULT_GATE_MATCHER)
+    for tool_name in ("read", "grep", "glob"):
+        assert not tool_matches_gate(tool_name, matcher)
     assert effective_gate_matcher("bash|write", Host.OMP) == "bash|write"
 
 

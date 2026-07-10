@@ -34,7 +34,7 @@ When Gate blocks, Claude Code and Cursor return `hookSpecificOutput.permissionDe
 
 - **Runtime files**: `~/.claude/settings.json` for Claude Code, `~/.cursor/hooks.json` for native Cursor, `~/.omp/agent/extensions/nokori.ts` for OMP
 - **Claude Code / Cursor default**: `Edit|Write|MultiEdit|Bash|NotebookEdit`
-- **OMP note**: OMP emits lower-case tool names such as `bash`, `edit`, `write`, `grep`, `glob`, and `read`
+- **OMP note**: the bridge receives every `tool_call`; OMP emits lower-case names such as `bash`, `edit`, `write`, `grep`, `glob`, and `read`
 - **To run the hook on any tool**: set the runtime matcher accordingly; for Claude Code, set the matcher to `*`
 
 ```json
@@ -63,7 +63,7 @@ When Gate blocks, Claude Code and Cursor return `hookSpecificOutput.permissionDe
 - **Config file**: `[gate] matcher` in `~/.nokori/config.toml`, or env var `NOKORI_GATE_MATCHER`
 - **Python `re.fullmatch`** against the payload's `tool_name`
 - **Claude Code / Cursor default**: `Edit|Write|MultiEdit|Bash|NotebookEdit`
-- **OMP examples**: lower-case patterns such as `edit|write|bash|grep|glob|read`
+- **OMP default**: `bash|edit|write`; read-only tools such as `read`, `grep`, and `glob` remain allowed unless you configure a broader matcher
 - **To make any tool eligible for blocking**: set to `.*` (not `*`, which is invalid regex)
 
 ```toml

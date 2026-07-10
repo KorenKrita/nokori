@@ -34,7 +34,7 @@ Gate 阻断时，Claude Code / Cursor 返回 `hookSpecificOutput.permissionDecis
 
 - **运行时文件**：Claude Code 用 `~/.claude/settings.json`，Cursor 用 `~/.cursor/hooks.json`，OMP 用 `~/.omp/agent/extensions/nokori.ts`
 - **Claude Code / Cursor 默认值**：`Edit|Write|MultiEdit|Bash|NotebookEdit`
-- **OMP 说明**：OMP 的工具名是小写，如 `bash`、`edit`、`write`、`grep`、`glob`、`read`；Gate 对应的 runtime 事件是 `tool_call`
+- **OMP 说明**：bridge 会接收每个 `tool_call`；OMP 的工具名是小写，如 `bash`、`edit`、`write`、`grep`、`glob`、`read`
 - **想让任意工具都先进入这一层**：把运行时 matcher 改成对应平台支持的全匹配
 
 ```json
@@ -63,7 +63,7 @@ Gate 阻断时，Claude Code / Cursor 返回 `hookSpecificOutput.permissionDecis
 - **配置文件**：`~/.nokori/config.toml` 的 `[gate] matcher`
 - **匹配方式**：Python `re.fullmatch` 匹配 payload 里的 `tool_name`
 - **Claude Code / Cursor 默认值**：`Edit|Write|MultiEdit|Bash|NotebookEdit`
-- **OMP 示例**：用小写模式，如 `edit|write|bash|grep|glob|read`
+- **OMP 默认值**：`bash|edit|write`；`read`、`grep`、`glob` 等只读工具默认不会被 Gate，除非手动扩大 matcher
 - **想让任意工具都可被 Gate**：设为 `.*`（不是 `*`）
 
 ```toml

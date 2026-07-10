@@ -54,12 +54,13 @@ nokori health
 按上一節用 **pipx** 或 **venv** 安裝後：
 
 ```bash
-# 註冊 hooks
+# 註冊 hooks / bridge
 nokori install              # Claude Code  → ~/.claude/settings.json
 nokori install --cursor     # 僅原生 Cursor → ~/.cursor/hooks.json
+nokori install --omp        # 僅 OMP         → ~/.omp/agent/extensions/nokori.ts
 nokori install --all        # Claude + Cursor
 
-# 驗證
+# 驗證（安裝 OMP 時會顯示 hooks.omp）
 nokori health
 nokori status
 nokori logs                 # hook / pipeline / async-extract 日誌
@@ -129,7 +130,7 @@ nokori install --enable
 ### 驗證 OMP 安裝
 
 - 想先看會寫什麼，可先跑：`nokori install --omp --dry-run`
-- 安裝後確認橋接檔存在：`ls ~/.omp/agent/extensions/nokori.ts`
+- 執行 `nokori health`，確認 `hooks.omp` 顯示 `ok registered`
 - 開一個新的 OMP session。recall 會在 `before_agent_start` 注入，Gate 會在 `tool_call` 檢查，關會話後則由 `session_shutdown` 依 OMP session manager 提供的目前 session 檔案啟動提取。
 
 ### Cursor 只選一條路（不要混用）

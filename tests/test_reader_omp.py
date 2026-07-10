@@ -106,3 +106,33 @@ def test_read_after_parses_incremental_omp_jsonl_messages(tmp_path):
     assert turns[2].error_line == "ENOENT: missing"
     assert turns[2].tool_name == "read"
     assert new_offset == transcript.stat().st_size
+
+
+def test_read_uses_large_line_fast_path_for_omp_messages(tmp_path):
+    transcript = tmp_path / "omp-large.jsonl"
+    huge_tool_call = _omp_message(
+        "assistant",
+        content=[
+            {
+                "type": "toolCall",
+                "name": "write",
+                "arguments": {"path": "large.txt", "content": "x" * 6000},
+            }
+        ],
+    )
+    huge_error = _omp_message(
+        "toolResult",
+        toolName="write",
+        content="permission denied: " + "x" * 6000,
+        isError=True,
+    )
+    _write_jsonl(transcript, [huge_tool_call, huge_error])
+
+    turns = read(transcript)
+
+    assert [turn.role for turn in turns] == ["tool_use", "tool_result"]
+    assert turns[0].tool_name == "write"
+    assert turns[0].input_summary == "[large input truncated]"
+    assert turns[1].tool_name == "write"
+    assert turns[1].is_error is True
+    assert turns[1].error_line.startswith("permission denied")

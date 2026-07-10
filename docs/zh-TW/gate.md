@@ -40,7 +40,7 @@ Gate 阻斷時，Claude Code 與 Cursor 的 hook 會回傳 `hookSpecificOutput.p
 
 - **執行時檔案**：Claude Code 用 `~/.claude/settings.json`，Cursor 原生用 `~/.cursor/hooks.json`，OMP 用 `~/.omp/agent/extensions/nokori.ts`
 - **Claude Code / Cursor 預設值**：`Edit|Write|MultiEdit|Bash|NotebookEdit`
-- **OMP 補充**：OMP 是在 `tool_call` 進橋接，工具名會是 `bash`、`edit`、`write`、`grep`、`glob`、`read` 這類全小寫
+- **OMP 補充**：橋接會接收每個 `tool_call`，工具名會是 `bash`、`edit`、`write`、`grep`、`glob`、`read` 這類全小寫
 - **改成任意工具**：把 matcher 改為 `*`
 
 ```json
@@ -69,7 +69,7 @@ Gate 阻斷時，Claude Code 與 Cursor 的 hook 會回傳 `hookSpecificOutput.p
 - **設定檔**：`~/.nokori/config.toml` 的 `[gate] matcher`
 - **Python `re.fullmatch`**：匹配 payload 裡的 `tool_name`
 - **Claude Code / Cursor 預設值**：`Edit|Write|MultiEdit|Bash|NotebookEdit`
-- **OMP 範例**：用 `edit|write|bash|grep|glob|read` 這類全小寫 pattern
+- **OMP 預設值**：`bash|edit|write`；`read`、`grep`、`glob` 等唯讀工具預設不會被 Gate，除非手動擴大 matcher
 - **改成任意工具**：設為 `.*`（不是 `*`）
 
 ```toml

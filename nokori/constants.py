@@ -5,12 +5,9 @@ DEFAULT_GATE_MATCHER = "Edit|Write|MultiEdit|Bash|NotebookEdit"
 # Cursor PreToolUse uses Shell/Read/Write/Grep/Task instead of Bash/Edit/MultiEdit.
 CURSOR_GATE_MATCHER = "Edit|Write|MultiEdit|Bash|Shell|NotebookEdit|Delete|Grep|Task"
 
-# OMP tool names are lowercase; keep the default PascalCase tools plus OMP
-# names used at the Python boundary.
-OMP_GATE_MATCHER = (
-    "Edit|Write|MultiEdit|Bash|NotebookEdit|"
-    "bash|edit|write|read|grep|glob"
-)
+# OMP tool names are lowercase. Map the default sensitive write/execute tools
+# without making read-only tools eligible for Gate by default.
+OMP_GATE_MATCHER = "bash|edit|write"
 
 # Extract / hot_cache transcript reads
 MAX_TRANSCRIPT_BYTES = 50 * 1024 * 1024

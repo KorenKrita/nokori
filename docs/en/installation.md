@@ -60,10 +60,9 @@ nokori install --cursor     # native Cursor only → ~/.cursor/hooks.json
 nokori install --omp        # OMP only -> ~/.omp/agent/extensions/nokori.ts
 nokori install --all        # Claude Code + Cursor
 
-# Verify
+# Verify (hooks.omp is shown when OMP is installed)
 nokori health
 nokori status
-ls ~/.omp/agent/extensions/nokori.ts   # OMP only
 ```
 
 Common side branches:
@@ -131,7 +130,7 @@ OMP is explicit: `--all` still means Claude Code + Cursor only.
 ### Verify OMP install
 
 - Preview the write first if you want: `nokori install --omp --dry-run`
-- Confirm the extension file exists after install: `ls ~/.omp/agent/extensions/nokori.ts`
+- Run `nokori health` and confirm `hooks.omp` reports `ok registered`
 - Start a fresh OMP session. Recall is injected on `before_agent_start`, Gate checks run on `tool_call`, and post-session extract starts from `session_shutdown` using the current session file from OMP's session manager.
 
 ### Pick exactly one Cursor path (do not mix)

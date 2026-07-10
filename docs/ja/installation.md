@@ -61,10 +61,10 @@ nokori install --cursor     # Cursor ネイティブのみ → ~/.cursor/hooks.j
 nokori install --omp        # OMP のみ → ~/.omp/agent/extensions/nokori.ts
 nokori install --all        # Claude + Cursor
 
-# 動作確認
+# 動作確認（OMP 導入時は hooks.omp が表示される）
 nokori health
 nokori status
-ls ~/.omp/agent/extensions/nokori.ts   # OMP のみ
+```
 
 よく使う補助操作：
 
@@ -131,7 +131,7 @@ nokori install --enable
 ### OMP の確認
 
 - 必要なら先に `nokori install --omp --dry-run` で書き込み内容を確認
-- インストール後に `ls ~/.omp/agent/extensions/nokori.ts` でブリッジの存在を確認
+- `nokori health` を実行し、`hooks.omp` が `ok registered` と表示されることを確認
 - 新しい OMP セッションで、`before_agent_start` の注入・`tool_call` の Gate・`session_shutdown` 後の抽出が動くことを確認
 
 ### Cursor は一本道だけ（混ぜない）
