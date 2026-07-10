@@ -266,10 +266,7 @@ def _check_cursor_hooks_registered() -> tuple[str, str]:
     return ("ok", "registered")
 
 
-def _check_omp_extension_registered() -> tuple[str, str]:
-    from .install import describe_omp_extension
-
-    state = describe_omp_extension()
+def _check_extension_registered(state: dict[str, object]) -> tuple[str, str]:
     path = str(state["path"])
     if state.get("installed") and state.get("current"):
         return ("ok", f"registered ({path})")
@@ -277,6 +274,18 @@ def _check_omp_extension_registered() -> tuple[str, str]:
     if "cannot read" in note:
         return ("fail", note)
     return ("warn", f"{note} ({path})")
+
+
+def _check_pi_extension_registered() -> tuple[str, str]:
+    from .install import describe_pi_extension
+
+    return _check_extension_registered(describe_pi_extension())
+
+
+def _check_omp_extension_registered() -> tuple[str, str]:
+    from .install import describe_omp_extension
+
+    return _check_extension_registered(describe_omp_extension())
 
 
 def _check_hook_host_detection() -> tuple[str, str]:
@@ -300,6 +309,15 @@ def _check_hook_host_detection() -> tuple[str, str]:
     conv_only = detect_host_from_payload({"conversation_id": "conv-x"})
     if conv_only == Host.CURSOR:
         return ("fail", "conversation_id alone must not imply cursor")
+
+    pi = detect_host_from_payload(
+        {
+            "host": "pi",
+            "transcript_path": "/home/user/.pi/agent/sessions/--p--/s.jsonl",
+        }
+    )
+    if pi != Host.PI:
+        return ("fail", f"Pi payload expected pi, got {pi}")
 
     return ("ok", "host detection")
 
@@ -347,6 +365,7 @@ def run(_args: argparse.Namespace, cfg: Config) -> int:
         PLATFORM_CLAUDE,
         PLATFORM_CURSOR,
         PLATFORM_OMP,
+        PLATFORM_PI,
         platforms_for_health,
     )
 
@@ -361,9 +380,12 @@ def run(_args: argparse.Namespace, cfg: Config) -> int:
         rows.append(("hooks.claude", *_check_claude_hooks_registered()))
     if PLATFORM_CURSOR in platforms:
         rows.append(("hooks.cursor", *_check_cursor_hooks_registered()))
-        rows.append(("hooks.host", *_check_hook_host_detection()))
+    if PLATFORM_PI in platforms:
+        rows.append(("hooks.pi", *_check_pi_extension_registered()))
     if PLATFORM_OMP in platforms:
         rows.append(("hooks.omp", *_check_omp_extension_registered()))
+    if PLATFORM_CURSOR in platforms or PLATFORM_PI in platforms or PLATFORM_OMP in platforms:
+        rows.append(("hooks.host", *_check_hook_host_detection()))
     rows.append(("hooks.duplicate", *_check_dual_hook_registration()))
     rows.extend(
         [

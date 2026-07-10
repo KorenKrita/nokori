@@ -7,7 +7,7 @@
 ## Before you begin
 
 - **Python ≥ 3.11** (hot-path hooks use only stdlib; base install includes fastapi + uvicorn + websockets for the web dashboard)
-- **Claude Code**, **Cursor**, or **OMP** already installed
+- **Claude Code**, **Cursor**, **Pi**, or **OMP** already installed
 - For local semantic retrieval, leave about **220MB** of disk for the embedding model weights (optional)
 
 Three ways to install, pick one: local model (recommended), minimal install, or from source.
@@ -16,9 +16,22 @@ Three ways to install, pick one: local model (recommended), minimal install, or 
 
 ## macOS / Linux: do not `pip install` into system Python
 
-Python from Homebrew and many Linux distros is [PEP 668](https://peps.python.org/pep-0668/) **externally managed**. A bare `pip install nokori` fails with **`externally-managed-environment`**. Use **pipx** (recommended) or a **dedicated venv** — not `--break-system-packages`.
+Python from Homebrew and many Linux distros is [PEP 668](https://peps.python.org/pep-0668/) **externally managed**. A bare `pip install nokori` fails with **`externally-managed-environment`**. Use **uv tool** (recommended), **pipx**, or a **dedicated venv** — not `--break-system-packages`.
 
-### Option A: `pipx` (recommended for CLI use)
+### Option A: `uv tool` (recommended for CLI use)
+
+```bash
+# macOS; see https://docs.astral.sh/uv/getting-started/installation/ for other platforms
+brew install uv
+uv tool install "nokori[local-embed]"
+
+nokori install --pi         # Pi only; use --omp for OMP or --all for Claude Code + Cursor
+nokori health
+```
+
+`uv tool` creates an isolated environment and exposes the `nokori` command without modifying system Python. Claude Code and Cursor call that environment's `python -I -m nokori hook` directly. `--pi` and `--omp` write TypeScript bridges that forward runtime events into the same Python dispatcher.
+
+### Option B: `pipx`
 
 ```bash
 brew install pipx
@@ -26,13 +39,11 @@ pipx ensurepath
 # open a new terminal, or source ~/.zshrc
 
 pipx install "nokori[local-embed]"
-nokori install --omp        # OMP only; use --all for Claude Code + Cursor
-nokori health
 ```
 
-`pipx` installs into an isolated app venv; the `nokori` command is usually `~/.local/bin/nokori`. Claude Code and Cursor call that environment's `python -I -m nokori hook` directly. `--omp` writes a TypeScript bridge that forwards OMP runtime events into the same Python dispatcher.
+`pipx` provides the same isolated CLI model and is a supported alternative.
 
-### Option B: dedicated venv
+### Option C: dedicated venv
 
 ```bash
 python3 -m venv ~/.local/venvs/nokori
@@ -41,7 +52,7 @@ python3 -m venv ~/.local/venvs/nokori
 echo 'export PATH="$HOME/.local/venvs/nokori/bin:$PATH"' >> ~/.zshrc
 source ~/.zshrc
 
-nokori install --omp
+nokori install --pi
 nokori health
 ```
 
@@ -51,16 +62,17 @@ nokori health
 
 This path runs semantic retrieval on your own machine, no embedding API key required. It installs **sentence-transformers** and, on `nokori install`, prefetches the local embedding model **[IBM Granite Embedding 97M](https://huggingface.co/ibm-granite/granite-embedding-97m-multilingual-r2)** (`ibm-granite/granite-embedding-97m-multilingual-r2`) into `~/.nokori/models/`: **97M params / 384-dim**, ~**220MB** download.
 
-After installing via **pipx** or **venv** above:
+After installing via **uv tool**, **pipx**, or **venv** above:
 
 ```bash
 # Register hooks
 nokori install              # Claude Code  → ~/.claude/settings.json
 nokori install --cursor     # native Cursor only → ~/.cursor/hooks.json
+nokori install --pi         # Pi only  -> ~/.pi/agent/extensions/nokori.ts
 nokori install --omp        # OMP only -> ~/.omp/agent/extensions/nokori.ts
 nokori install --all        # Claude Code + Cursor
 
-# Verify (hooks.omp is shown when OMP is installed)
+# Verify (hooks.pi / hooks.omp are shown when installed)
 nokori health
 nokori status
 ```
@@ -76,11 +88,11 @@ Common side branches:
 ## Minimal install (no local model)
 
 ```bash
-pipx install nokori
+uv tool install nokori
 nokori install
 ```
 
-BM25 keyword retrieval works out of the box and is plenty. When you want semantic retrieval, two paths: point at any OpenAI-compatible embedding API (set `NOKORI_EMBED_BASE_URL`, `NOKORI_EMBED_MODEL`), or add `pip install "nokori[local-embed]"` later.
+BM25 keyword retrieval works out of the box and is plenty. When you want semantic retrieval, either point at any OpenAI-compatible embedding API (set `NOKORI_EMBED_BASE_URL`, `NOKORI_EMBED_MODEL`) or reinstall the tool with `uv tool install --force "nokori[local-embed]"`.
 
 ---
 
@@ -112,26 +124,29 @@ nokori install --enable
 
 ---
 
-## Claude Code, Cursor, and OMP
+## Claude Code, Cursor, Pi, and OMP
 
-**Claude Code** stays the default. **Cursor** keeps its native and import paths. **OMP** installs a small TypeScript extension bridge at `~/.omp/agent/extensions/nokori.ts`, which forwards runtime events into the same Python dispatcher Nokori already uses elsewhere.
+**Claude Code** stays the default. **Cursor** keeps its native and import paths. **Pi** and **OMP** install small TypeScript extension bridges at `~/.pi/agent/extensions/nokori.ts` and `~/.omp/agent/extensions/nokori.ts`, forwarding runtime events into the same Python dispatcher Nokori already uses elsewhere.
 
 ### Which install command?
 
-OMP is explicit: `--all` still means Claude Code + Cursor only.
+Pi and OMP are explicit: `--all` still means Claude Code + Cursor only.
 
 | Goal | Command | Writes |
 |------|---------|--------|
 | Claude Code only | `nokori install` | `~/.claude/settings.json` |
 | Cursor only (native `~/.cursor/hooks.json`) | `nokori install --cursor` | `~/.cursor/hooks.json` |
+| Pi only | `nokori install --pi` | `~/.pi/agent/extensions/nokori.ts` |
 | OMP only | `nokori install --omp` | `~/.omp/agent/extensions/nokori.ts` |
 | Claude Code + Cursor | `nokori install --all` | both files above |
 
-### Verify OMP install
+### Verify Pi / OMP install
 
-- Preview the write first if you want: `nokori install --omp --dry-run`
-- Run `nokori health` and confirm `hooks.omp` reports `ok registered`
-- Start a fresh OMP session. Recall is injected on `before_agent_start`, Gate checks run on `tool_call`, and post-session extract starts from `session_shutdown` using the current session file from OMP's session manager.
+- Preview the write first if you want: `nokori install --pi --dry-run` or `nokori install --omp --dry-run`
+- Run `nokori health` and confirm `hooks.pi` or `hooks.omp` reports `ok registered`
+- Start a fresh session. Recall is injected on `before_agent_start`, Gate checks run on `tool_call`, and post-session extract starts from `session_shutdown` using the current session file from the runtime's session manager.
+- Pi's `/reload` lifecycle is ignored by the bridge, so reloading extensions does not end or extract the active Nokori session.
+- If `PI_CODING_AGENT_DIR` is set, `nokori install --pi` and transcript validation use that directory instead of `~/.pi/agent`.
 
 ### Pick exactly one Cursor path (do not mix)
 
@@ -153,6 +168,9 @@ OMP is explicit: `--all` still means Claude Code + Cursor only.
 ## Updating
 
 ```bash
+# uv tool
+uv tool upgrade nokori
+
 # pipx
 pipx upgrade nokori
 
@@ -163,4 +181,4 @@ pip install --upgrade nokori
 git pull && pip install -e ".[local-embed,dev]"
 ```
 
-After upgrading, run `nokori health` to confirm everything still checks out. Claude Code and Cursor hook registrations are stable across upgrades. If `hooks.omp` reports a stale generated bridge, refresh it with `nokori install --omp`.
+After upgrading, run `nokori health` to confirm everything still checks out. Claude Code and Cursor hook registrations are stable across upgrades. If `hooks.pi` or `hooks.omp` reports a stale generated bridge, refresh it with `nokori install --pi` or `nokori install --omp` respectively.

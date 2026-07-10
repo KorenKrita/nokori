@@ -19,22 +19,22 @@ Runtime layer:
 
 - **Claude Code**: `~/.claude/settings.json` `PreToolUse.matcher`
 - **Cursor**: native pre-tool matcher in `~/.cursor/hooks.json`
-- **OMP**: the installed bridge at `~/.omp/agent/extensions/nokori.ts`, triggered on `tool_call`
+- **Pi / OMP**: installed bridges at `~/.pi/agent/extensions/nokori.ts` and `~/.omp/agent/extensions/nokori.ts`, triggered on `tool_call`
 
 Nokori layer:
 
 - **Config**: `[gate] matcher` in `~/.nokori/config.toml`, or env var `NOKORI_GATE_MATCHER`
 - **Matching**: Python `re.fullmatch` against `payload.tool_name`
 
-When Gate blocks, Claude Code and Cursor return `hookSpecificOutput.permissionDecision: "deny"` plus a reason. OMP returns a tool-call block through the bridge with the same reason.
+When Gate blocks, Claude Code and Cursor return `hookSpecificOutput.permissionDecision: "deny"` plus a reason. Pi and OMP return a tool-call block through their bridges with the same reason.
 
 ---
 
 ## Layer 1: which tools run the hook
 
-- **Runtime files**: `~/.claude/settings.json` for Claude Code, `~/.cursor/hooks.json` for native Cursor, `~/.omp/agent/extensions/nokori.ts` for OMP
+- **Runtime files**: `~/.claude/settings.json` for Claude Code, `~/.cursor/hooks.json` for native Cursor, `~/.pi/agent/extensions/nokori.ts` for Pi, and `~/.omp/agent/extensions/nokori.ts` for OMP
 - **Claude Code / Cursor default**: `Edit|Write|MultiEdit|Bash|NotebookEdit`
-- **OMP note**: the bridge receives every `tool_call`; OMP emits lower-case names such as `bash`, `edit`, `write`, `grep`, `glob`, and `read`
+- **Pi / OMP note**: each bridge receives every `tool_call`; both runtimes emit lower-case names such as `bash`, `edit`, `write`, `grep`, and `read` (OMP also exposes `glob`)
 - **To run the hook on any tool**: set the runtime matcher accordingly; for Claude Code, set the matcher to `*`
 
 ```json
@@ -63,7 +63,7 @@ When Gate blocks, Claude Code and Cursor return `hookSpecificOutput.permissionDe
 - **Config file**: `[gate] matcher` in `~/.nokori/config.toml`, or env var `NOKORI_GATE_MATCHER`
 - **Python `re.fullmatch`** against the payload's `tool_name`
 - **Claude Code / Cursor default**: `Edit|Write|MultiEdit|Bash|NotebookEdit`
-- **OMP default**: `bash|edit|write`; read-only tools such as `read`, `grep`, and `glob` remain allowed unless you configure a broader matcher
+- **Pi / OMP default**: `bash|edit|write`; read-only tools such as `read`, `grep`, and `glob` remain allowed unless you configure a broader matcher
 - **To make any tool eligible for blocking**: set to `.*` (not `*`, which is invalid regex)
 
 ```toml
@@ -86,4 +86,4 @@ Both layers must be changed to achieve "any tool may be gated."
 
 ## Prompt-hash safety
 
-`UserPromptSubmit` records the current prompt's hash when writing a marker. `PreToolUse` verifies hash consistency — if it doesn't match (the user already sent the next message), the marker is deleted and the tool is allowed, no block.
+`UserPromptSubmit` (or `before_agent_start` on Pi / OMP) records the current prompt's hash when writing a marker. `PreToolUse` (or `tool_call`) verifies hash consistency — if it does not match because the user already sent the next message, the marker is deleted and the tool is allowed.

@@ -21,7 +21,7 @@ Nokori 的核心是 autonomous quality flywheel（自治质量飞轮）：每条
 - **Conservative Gate（保守门闸）**：Gate 是给 `trusted + gate_eligible` 规则的一次性提醒刹车，不是权限系统。
 - **Hybrid retrieval（混合检索）**：BM25 永远可用；可选 remote embedding（远程向量）或本地 Granite multilingual model 补语义召回；RRF 与 runtime applicability（适用性判断）决定 HOT/WARM。
 - **本地优先**：SQLite、hook 日志、job 队列、Gate marker、embedding 权重、Web UI 状态都在 `~/.nokori/` 下。远程 LLM / embedding 端点按需启用。
-- **跨工具可观测**：Claude Code、Cursor 与 OMP 都支持；OMP 通过 `~/.omp/agent/extensions/nokori.ts` 这个小型 TypeScript bridge，把 runtime 事件转给同一套 Python dispatcher。`nokori test`、`status`、`health`、`logs`、`extract`、`maintain` 与 Web UI 仍能解释规则为什么触发、为什么没触发。
+- **跨工具可观测**：Claude Code 与 Cursor 使用原生 hook；Pi 和 OMP 分别通过 `~/.pi/agent/extensions/nokori.ts` 与 `~/.omp/agent/extensions/nokori.ts` 的小型 TypeScript bridge，把 runtime 事件转给同一套 Python dispatcher。`nokori test`、`status`、`health`、`logs`、`extract`、`maintain` 与 Web UI 仍能解释规则为什么触发、为什么没触发。
 
 Nokori 最重要的承诺是 restraint（克制）：它可以早早 reminder（提醒），但必须攒够 evidence（证据）才有资格变得强势；开始帮忙之后，也要继续接受 evidence review（证据审查）。
 
@@ -29,27 +29,27 @@ Nokori 最重要的承诺是 restraint（克制）：它可以早早 reminder（
 
 ## Hook 时序
 
-Nokori 只有一条热路径，再把不同 runtime 映射进去。Claude Code 与 Cursor 直接调用 Python hook；OMP 则加载 `~/.omp/agent/extensions/nokori.ts` 这个 TypeScript bridge，经 stdin/stdout 复用同一个 dispatcher。检索、Gate marker、job 队列和规则库仍都在 `~/.nokori/`；需要提取时，OMP 会从本地 `~/.omp/agent/sessions/**/*.jsonl` 读取当前 session JSONL。
+Nokori 只有一条热路径，再把不同 runtime 映射进去。Claude Code 与 Cursor 直接调用 Python hook；Pi 和 OMP 则加载生成的 TypeScript bridge，经 stdin/stdout 复用同一个 dispatcher。检索、Gate marker、job 队列和规则库仍都在 `~/.nokori/`；需要提取时，会从本地 `~/.pi/agent/sessions/**/*.jsonl` 或 `~/.omp/agent/sessions/**/*.jsonl` 读取当前 session JSONL。
 
-| Claude Code / Cursor | OMP | 它做什么 | 延迟预算 |
-|----------------------|-----|----------|----------|
+| Claude Code / Cursor | Pi / OMP | 它做什么 | 延迟预算 |
+|----------------------|----------|----------|----------|
 | `SessionStart` | `session_start` | 会话簿记：可选注入上一场 transcript 热缓存，并触发数据库维护 | ≤ 1.5s |
 | `UserPromptSubmit` | `before_agent_start` | Agent 开始本轮前：检索规则、注入上下文，必要时写下 Gate marker | ≤ 500ms |
 | `PreToolUse` | `tool_call` | 工具调用前：若有 marker 就**拦一次**，随后清除 | ≤ 50ms |
-| `SessionEnd` | `session_shutdown` | 会话结束：根据 OMP session manager 报告的当前 session 文件写入待提取任务；`async` 模式下可直接对这个本地 JSONL 跑 extract | ≤ 200ms |
+| `SessionEnd` | `session_shutdown` | 会话结束：根据 runtime session manager 报告的当前 session 文件写入待提取任务；`async` 模式下可直接对这个本地 JSONL 跑 extract | ≤ 200ms |
 
 落到实处就两件事：
 
 1. **提醒（注入）**——命中的规矩会经对应 runtime 的注入通道返回，让 Agent 在回复前先看见
 2. **拦一次（Gate）**——只有 `trusted` 且 `severity=gate_eligible`、prompt 证据够强、工具输入证据也过关的规则才会拦工具；普通 active 只提醒
 
-在 OMP 里，`session_start` 走 `pi.sendMessage(...)`，因为这类 lifecycle handler 没有返回结果式的注入通道；`before_agent_start` 则返回 `message`，因为 `BeforeAgentStartEventResult.message` 就是它的强类型注入通道。Bridge 里的 timeout 值是 runtime budget，`session_shutdown` 则刻意保持 2s 的短 teardown budget。
+在 Pi 与 OMP 里，`session_start` 走 `pi.sendMessage(...)`，因为这类 lifecycle handler 没有返回结果式的注入通道；`before_agent_start` 则返回 `message`，因为 `BeforeAgentStartEventResult.message` 就是它的强类型注入通道。Pi 会忽略 reason 为 `reload` 的 `session_start` / `session_shutdown`，所以 `/reload` 不会重复启动注入，也不会把当前 Nokori session 误判为结束。Bridge 里的 timeout 值是 runtime budget，`session_shutdown` 则刻意保持 2s 的短 teardown budget。
 
 ---
 
 ## 注入 vs 阻断
 
-| | 注入（`additionalContext` / OMP bridge 消息） | Gate（PreToolUse deny / OMP tool block） |
+| | 注入（`additionalContext` / Pi 或 OMP bridge 消息） | Gate（PreToolUse deny / Pi 或 OMP tool block） |
 |--|------------------------------|-------------------------|
 | 规则范围 | 正式池 HOT + WARM | 正式池 HOT 的子集 |
 | 状态 | `active` 与 `trusted` | 仅 `trusted` |
@@ -86,7 +86,7 @@ SessionStart 要找「上一场 transcript」，两步走：
 
 | 词 | 说明 |
 |----|------|
-| **hook** | Claude Code / Cursor 的 hook，或 OMP bridge 在固定时机触发的一小段命令 |
+| **hook** | Claude Code / Cursor 的原生 hook，或 Pi / OMP bridge 在固定生命周期事件触发的 handler |
 | **injection**（注入） | 把匹配到的规矩写进 Agent 当轮能看到的上下文里 |
 | **Gate**（门闸） | 对 `trusted` + `gate_eligible` 的规矩：第一次匹配的工具调用先 deny 一次 |
 | **marker**（标记） | 本轮「请先读 Gate 规则」的临时标记，用一次即清除 |

@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nokori"
-version = "0.5.53"
-description = "Local rule memory for Claude Code, Cursor, and OMP—corrections distilled into lasting guidance, recalled in context, one deliberate gate when stakes are high. 经验留下的痕迹，比记忆更深。"
+version = "0.5.54"
+description = "Local rule memory for Claude Code, Cursor, Pi, and OMP—corrections distilled into lasting guidance, recalled in context, one deliberate gate when stakes are high. 经验留下的痕迹，比记忆更深。"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.11"
@@ -14,6 +14,8 @@ keywords = [
     "claude-code",
     "cursor",
     "cursor-ide",
+    "pi-coding-agent",
+    "pi",
     "oh-my-pi",
     "omp",
     "hooks",

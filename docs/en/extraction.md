@@ -4,7 +4,7 @@
 
 ---
 
-This runs after a session closes, off the interactive path. With an LLM configured, Nokori reads that session's transcript, extracts possible rules, and sends each candidate through the cold pipeline. It does not block chat while it runs. Claude Code, Cursor, and OMP all feed the same extractor. On OMP, the installed TypeScript bridge forwards `session_shutdown`, reads the current session file from OMP's session manager, and passes that local JSONL path into the existing Python dispatcher.
+This runs after a session closes, off the interactive path. With an LLM configured, Nokori reads that session's transcript, extracts possible rules, and sends each candidate through the cold pipeline. It does not block chat while it runs. Claude Code, Cursor, Pi, and OMP all feed the same extractor. On Pi and OMP, the installed TypeScript bridge forwards `session_shutdown`, reads the current session file from the runtime's session manager, and passes that local JSONL path into the existing Python dispatcher. Pi events with `reason: "reload"` are ignored, so `/reload` never queues an early extract.
 
 ```bash
 # Configure the LLM (any OpenAI-compatible endpoint)
@@ -13,11 +13,12 @@ export NOKORI_LLM_MODEL="qwen2.5:7b"
 
 # Manually extract a given transcript
 nokori extract --session ~/.claude/projects/.../session.jsonl
+nokori extract --session ~/.pi/agent/sessions/.../session.jsonl
 nokori extract --session ~/.omp/agent/sessions/.../session.jsonl
 nokori extract --session .../session.jsonl --project myrepo-a1b2c3d4
 
 # Dry-run preview
-nokori extract --session ~/.omp/agent/sessions/.../session.jsonl --dry-run
+nokori extract --session ~/.pi/agent/sessions/.../session.jsonl --dry-run
 
 # Consume all pending extract jobs
 nokori extract
@@ -31,7 +32,7 @@ The cold path is deliberately more fussy than the hot path. It prefers multiple 
 
 1. **Read** the transcript, single-file cap 50MB
 
-   OMP session logs live under `~/.omp/agent/sessions/**/*.jsonl`; they stay local and go through the same compression and extraction pipeline as Claude Code and Cursor transcripts.
+   Pi and OMP session logs live under `~/.pi/agent/sessions/**/*.jsonl` and `~/.omp/agent/sessions/**/*.jsonl`; they stay local and go through the same compression and extraction pipeline as Claude Code and Cursor transcripts.
 2. **Compress**: user messages kept verbatim, AI replies cut to the first 200 chars + last 100 chars; the whole thing is squeezed under about 30k tokens
 3. **Extract**: the extractor role emits structured candidates with concepts, required concept groups, variants, excluded contexts, evidence quotes, and source metadata
 4. **Judge / rewrite / judge**: admission and final-judge roles reject weak or over-broad rules; a rewriter may tighten scope

@@ -5,8 +5,9 @@ DEFAULT_GATE_MATCHER = "Edit|Write|MultiEdit|Bash|NotebookEdit"
 # Cursor PreToolUse uses Shell/Read/Write/Grep/Task instead of Bash/Edit/MultiEdit.
 CURSOR_GATE_MATCHER = "Edit|Write|MultiEdit|Bash|Shell|NotebookEdit|Delete|Grep|Task"
 
-# OMP tool names are lowercase. Map the default sensitive write/execute tools
-# without making read-only tools eligible for Gate by default.
+# Pi and OMP tool names are lowercase. Map the default sensitive write/execute
+# tools without making read-only tools eligible for Gate by default.
+PI_GATE_MATCHER = "bash|edit|write"
 OMP_GATE_MATCHER = "bash|edit|write"
 
 # Extract / hot_cache transcript reads

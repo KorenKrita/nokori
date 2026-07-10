@@ -19,22 +19,22 @@ Runtime 层：
 
 - **Claude Code**：`~/.claude/settings.json` 的 `PreToolUse.matcher`
 - **Cursor**：`~/.cursor/hooks.json` 的原生 pre-tool matcher
-- **OMP**：安装到 `~/.omp/agent/extensions/nokori.ts` 的 bridge，在 `tool_call` 上触发
+- **Pi / OMP**：分别安装到 `~/.pi/agent/extensions/nokori.ts` 与 `~/.omp/agent/extensions/nokori.ts` 的 bridge，在 `tool_call` 上触发
 
 Nokori 层：
 
 - **配置**：`~/.nokori/config.toml` 的 `[gate] matcher`，或环境变量 `NOKORI_GATE_MATCHER`
 - **匹配方式**：Python `re.fullmatch` 匹配 `payload.tool_name`
 
-Gate 阻断时，Claude Code / Cursor 返回 `hookSpecificOutput.permissionDecision: "deny"` 与 `permissionDecisionReason`；OMP 则通过 bridge 返回同样原因的 tool-call block。
+Gate 阻断时，Claude Code / Cursor 返回 `hookSpecificOutput.permissionDecision: "deny"` 与 `permissionDecisionReason`；Pi / OMP 则通过各自的 bridge 返回同样原因的 tool-call block。
 
 ---
 
 ## 第一层：让 hook / bridge 在哪些工具上运行
 
-- **运行时文件**：Claude Code 用 `~/.claude/settings.json`，Cursor 用 `~/.cursor/hooks.json`，OMP 用 `~/.omp/agent/extensions/nokori.ts`
+- **运行时文件**：Claude Code 用 `~/.claude/settings.json`，Cursor 用 `~/.cursor/hooks.json`，Pi 用 `~/.pi/agent/extensions/nokori.ts`，OMP 用 `~/.omp/agent/extensions/nokori.ts`
 - **Claude Code / Cursor 默认值**：`Edit|Write|MultiEdit|Bash|NotebookEdit`
-- **OMP 说明**：bridge 会接收每个 `tool_call`；OMP 的工具名是小写，如 `bash`、`edit`、`write`、`grep`、`glob`、`read`
+- **Pi / OMP 说明**：bridge 会接收每个 `tool_call`；两者工具名都是小写，如 `bash`、`edit`、`write`、`grep`、`read`，OMP 另有 `glob`
 - **想让任意工具都先进入这一层**：把运行时 matcher 改成对应平台支持的全匹配
 
 ```json
@@ -63,7 +63,7 @@ Gate 阻断时，Claude Code / Cursor 返回 `hookSpecificOutput.permissionDecis
 - **配置文件**：`~/.nokori/config.toml` 的 `[gate] matcher`
 - **匹配方式**：Python `re.fullmatch` 匹配 payload 里的 `tool_name`
 - **Claude Code / Cursor 默认值**：`Edit|Write|MultiEdit|Bash|NotebookEdit`
-- **OMP 默认值**：`bash|edit|write`；`read`、`grep`、`glob` 等只读工具默认不会被 Gate，除非手动扩大 matcher
+- **Pi / OMP 默认值**：`bash|edit|write`；`read`、`grep`、`glob` 等只读工具默认不会被 Gate，除非手动扩大 matcher
 - **想让任意工具都可被 Gate**：设为 `.*`（不是 `*`）
 
 ```toml
@@ -86,4 +86,4 @@ matcher = ".*"
 
 ## Prompt-hash 安全
 
-`UserPromptSubmit` 写入 marker 时记录 prompt hash。`PreToolUse` 校验 hash 一致性——若不一致（用户已发下一条消息），删除 marker 并放行，不 block。
+`UserPromptSubmit`（Pi / OMP 上对应 `before_agent_start`）写入 marker 时记录 prompt hash；`PreToolUse`（对应 `tool_call`）校验 hash 一致性。若用户已经发出下一条消息导致 hash 不一致，就删除 marker 并放行。

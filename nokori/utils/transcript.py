@@ -19,9 +19,10 @@ def _allowed_roots() -> list[Path]:
     roots: list[Path] = [
         Path.home() / ".claude",
         Path.home() / ".cursor",
+        Path.home() / ".pi" / "agent",
         Path.home() / ".omp" / "agent",
     ]
-    for env_name in ("CLAUDE_PROJECT_DIR", "NOKORI_DATA_DIR"):
+    for env_name in ("CLAUDE_PROJECT_DIR", "PI_CODING_AGENT_DIR", "NOKORI_DATA_DIR"):
         value = os.environ.get(env_name)
         if value:
             roots.append(Path(value).expanduser().resolve())
@@ -34,7 +35,7 @@ def _allowed_roots() -> list[Path]:
 
 
 def is_path_allowed(path: Path) -> bool:
-    """True when path resolves under ~/.claude, ~/.cursor, ~/.omp/agent, or extra roots."""
+    """True under a supported host data directory or an explicitly allowed extra root."""
     return _is_under_allowed_root(path)
 
 

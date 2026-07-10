@@ -75,9 +75,11 @@ JSON `version` field = rules.db schema, currently 2.
 ## Installation management
 
 ```bash
-nokori install [--claude | --cursor | --all]
+nokori install [--claude] [--cursor] [--pi] [--omp] [--all]
                [--dry-run | --uninstall | --disable | --enable | --no-prefetch-embed]
 ```
+
+`--all` means Claude Code + Cursor; combine it with explicit `--pi` / `--omp` when needed.
 
 ---
 

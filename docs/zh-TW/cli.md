@@ -75,9 +75,11 @@ JSON 的 `version` 欄位 = rules.db schema，當前為 2。
 ## 安裝管理
 
 ```bash
-nokori install [--claude | --cursor | --all]
+nokori install [--claude] [--cursor] [--pi] [--omp] [--all]
                [--dry-run | --uninstall | --disable | --enable | --no-prefetch-embed]
 ```
+
+`--all` 表示 Claude Code + Cursor；需要時可再組合明確的 `--pi` / `--omp`。
 
 ---
 

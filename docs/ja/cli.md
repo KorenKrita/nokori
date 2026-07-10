@@ -75,9 +75,11 @@ JSON の `version` フィールド = rules.db スキーマ。現在は 2。
 ## インストール管理
 
 ```bash
-nokori install [--claude | --cursor | --all]
+nokori install [--claude] [--cursor] [--pi] [--omp] [--all]
                [--dry-run | --uninstall | --disable | --enable | --no-prefetch-embed]
 ```
+
+`--all` は Claude Code + Cursor を意味する。必要なら明示的な `--pi` / `--omp` と組み合わせられる。
 
 ---
 

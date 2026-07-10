@@ -7,6 +7,8 @@ from ..commands.install import (
     describe_claude_hooks,
     describe_cursor_hooks,
     describe_dual_hook_registration,
+    describe_omp_extension,
+    describe_pi_extension,
 )
 from ..config import Config
 from ..db import fetch_rules, open_db
@@ -39,10 +41,9 @@ def _print_hook_platform(label: str, state: dict[str, object], *, disable_hint: 
                 print(f"hooks.{label}.note      {note}")
     else:
         print(f"hooks.{label}.disabled  n/a ({disable_hint})")
-        if not installed:
-            note = state.get("note")
-            if note:
-                print(f"hooks.{label}.note      {note}")
+        note = state.get("note")
+        if note:
+            print(f"hooks.{label}.note      {note}")
     path = state.get("path")
     if path:
         print(f"hooks.{label}.path      {path}")
@@ -105,6 +106,16 @@ def run(_args: argparse.Namespace, cfg: Config) -> int:
         "cursor",
         describe_cursor_hooks(),
         disable_hint="use: nokori install --uninstall --cursor",
+    )
+    _print_hook_platform(
+        "pi",
+        describe_pi_extension(),
+        disable_hint="use: nokori install --uninstall --pi",
+    )
+    _print_hook_platform(
+        "omp",
+        describe_omp_extension(),
+        disable_hint="use: nokori install --uninstall --omp",
     )
     dual = describe_dual_hook_registration()
     print(f"hooks.duplicate_risk  {_yn(bool(dual.get('both_installed')))}")

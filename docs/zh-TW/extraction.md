@@ -4,7 +4,7 @@
 
 ---
 
-關會話後執行，不在互動熱路徑上。設定 LLM 後，Nokori 讀取該場對話的 transcript，提取可能的規則，再讓每條候選走完冷路徑飛輪，不會卡住聊天。Claude Code、Cursor 與 OMP 都走同一套 extractor；在 OMP 上，已安裝的 TypeScript 橋接會轉送 `session_shutdown`，透過 session manager 讀出目前 session 檔案，再把本地 JSONL 路徑交給既有的 Python dispatcher。
+關會話後執行，不在互動熱路徑上。設定 LLM 後，Nokori 讀取該場對話的 transcript，提取可能的規則，再讓每條候選走完冷路徑飛輪，不會卡住聊天。Claude Code、Cursor、Pi 與 OMP 都走同一套 extractor；在 Pi / OMP 上，已安裝的 TypeScript 橋接會轉送 `session_shutdown`，透過 runtime session manager 讀出目前 session 檔案，再把本地 JSONL 路徑交給既有的 Python dispatcher。Pi 會忽略 `reason: "reload"` 的事件，所以 `/reload` 不會提早排入提取工作。
 
 ```bash
 # 設定 LLM（任何 OpenAI-compatible 端點）
@@ -13,11 +13,12 @@ export NOKORI_LLM_MODEL="qwen2.5:7b"
 
 # 手動提取指定 transcript
 nokori extract --session ~/.claude/projects/.../session.jsonl
+nokori extract --session ~/.pi/agent/sessions/.../session.jsonl
 nokori extract --session ~/.omp/agent/sessions/.../session.jsonl
 nokori extract --session .../session.jsonl --project myrepo-a1b2c3d4
 
 # dry-run 預覽
-nokori extract --session ~/.omp/agent/sessions/.../session.jsonl --dry-run
+nokori extract --session ~/.pi/agent/sessions/.../session.jsonl --dry-run
 # 消費所有待處理 job
 nokori extract
 ```
@@ -30,7 +31,7 @@ nokori extract
 
 1. **讀** transcript，單檔案上限 50MB
 
-   OMP 的 session 日誌在 `~/.omp/agent/sessions/**/*.jsonl`；它們會留在本地，和 Claude Code / Cursor 的 transcript 走同一條壓縮與提取管線。
+   Pi / OMP 的 session 日誌分別在 `~/.pi/agent/sessions/**/*.jsonl` 與 `~/.omp/agent/sessions/**/*.jsonl`；它們會留在本地，和 Claude Code / Cursor 的 transcript 走同一條壓縮與提取管線。
 2. **壓縮**：使用者消息原樣保留，AI 回覆砍成頭 200 字 + 尾 100 字；整體再壓到約 30k token
 3. **提取**：extractor 角色輸出結構化候選
 4. **判定 / 重寫 / 再判定**：admission judge 與 final judge 拒絕弱證據 / 過寬規則；必要時由 rewriter 收窄範圍

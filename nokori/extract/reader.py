@@ -95,7 +95,7 @@ def _large_tool_result_turn(line: str) -> Turn:
     )
 
 
-def _parse_large_omp_message(line: str) -> list[Turn]:
+def _parse_large_nested_message(line: str) -> list[Turn]:
     head = line[:4000]
     role_match = re.search(r'"role"\s*:\s*"([^"]+)"', head)
     role = role_match.group(1) if role_match else None
@@ -121,7 +121,7 @@ def _parse_large_line(line: str) -> list[Turn]:
             return []
     t = type_match.group(1)
     if t == "message":
-        return _parse_large_omp_message(line)
+        return _parse_large_nested_message(line)
     if t in ("tool_use", "toolCall"):
         return [_large_tool_use_turn(line)]
     if t in ("tool_result", "toolResult"):
@@ -235,7 +235,7 @@ def _parse_multi(entry: dict) -> list[Turn]:
 
 
 def _parse_message_blocks(entry: dict) -> list[Turn]:
-    """Cursor / OMP nested message payloads and content[] blocks."""
+    """Cursor / Pi / OMP nested message payloads and content[] blocks."""
     role = entry.get("role") or entry.get("type")
     msg = entry.get("message")
     content = None

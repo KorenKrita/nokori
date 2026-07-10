@@ -21,7 +21,7 @@ What makes that loop useful:
 - **Conservative Gate**: a one-turn reminder brake for `trusted + gate_eligible` rules with strong runtime evidence. It is not a permission system.
 - **Hybrid retrieval**: BM25 is always available; optional remote embeddings or the local Granite multilingual model add semantic recall; RRF and runtime applicability decide HOT/WARM.
 - **Local-first operations**: SQLite, hook logs, job queues, gate markers, embedding weights, and web dashboard state all live under `~/.nokori/`. Remote LLM/embedding endpoints are opt-in.
-- **Cross-tool inspectability**: Claude Code and Cursor use native hook files; OMP uses a small TypeScript bridge at `~/.omp/agent/extensions/nokori.ts` that forwards runtime events into the same Python dispatcher. `nokori test`, `status`, `health`, `logs`, `extract`, `maintain`, plus the Web UI still explain why a rule did or did not fire.
+- **Cross-tool inspectability**: Claude Code and Cursor use native hook files; Pi and OMP use small TypeScript bridges at `~/.pi/agent/extensions/nokori.ts` and `~/.omp/agent/extensions/nokori.ts` that forward runtime events into the same Python dispatcher. `nokori test`, `status`, `health`, `logs`, `extract`, `maintain`, plus the Web UI still explain why a rule did or did not fire.
 
 The important product promise is restraint: Nokori is allowed to remind early, but it must collect evidence before it becomes authoritative, and it must keep collecting evidence after it starts helping.
 
@@ -29,27 +29,27 @@ The important product promise is restraint: Nokori is allowed to remind early, b
 
 ## Hook timing
 
-Nokori keeps one hot path and maps each runtime onto it. Claude Code and Cursor call the Python hooks directly. OMP loads the TypeScript bridge, which reuses the same dispatcher over stdin/stdout. Local-first behavior stays the same: retrieval, gate markers, jobs, and rules still live under `~/.nokori/`, and OMP session transcripts are read locally from `~/.omp/agent/sessions/**/*.jsonl` when extraction needs them.
+Nokori keeps one hot path and maps each runtime onto it. Claude Code and Cursor call the Python hooks directly. Pi and OMP load generated TypeScript bridges, which reuse the same dispatcher over stdin/stdout. Local-first behavior stays the same: retrieval, gate markers, jobs, and rules still live under `~/.nokori/`; Pi and OMP transcripts are read locally from `~/.pi/agent/sessions/**/*.jsonl` and `~/.omp/agent/sessions/**/*.jsonl` when extraction needs them.
 
-| Claude Code / Cursor | OMP | What it does | Latency budget |
-|----------------------|-----|--------------|----------------|
+| Claude Code / Cursor | Pi / OMP | What it does | Latency budget |
+|----------------------|----------|--------------|----------------|
 | `SessionStart` | `session_start` | Session bookkeeping: optional previous-transcript hot cache, plus DB maintenance | ≤ 1.5s |
 | `UserPromptSubmit` | `before_agent_start` | Before the agent starts a turn: retrieve rules, inject context, write a Gate marker if needed | ≤ 500ms |
 | `PreToolUse` | `tool_call` | Before a tool call: if a marker exists, **block once**, then clear the marker | ≤ 50ms |
-| `SessionEnd` | `session_shutdown` | Session close: write a pending extract job from the current session file reported by OMP's session manager; in async mode may run extract in the background against that local JSONL | ≤ 200ms |
+| `SessionEnd` | `session_shutdown` | Session close: write a pending extract job from the current session file reported by the runtime's session manager; in async mode may run extract in the background against that local JSONL | ≤ 200ms |
 
 In practice it comes down to two things:
 
 1. **Reminder (injection)**: matched rules are returned through the runtime's injection channel so the agent sees them before it replies
 2. **Block once (Gate)**: only `trusted` rules with `severity=gate_eligible`, strong prompt evidence, and passing tool-input evidence will gate tools; ordinary active rules only remind
 
-On OMP, `session_start` uses `pi.sendMessage(...)` because lifecycle handlers do not expose a return-result injection channel, while `before_agent_start` returns `message` because `BeforeAgentStartEventResult.message` is the typed injection channel. The bridge timeout values are runtime budgets, and `session_shutdown` intentionally keeps a short 2s teardown budget.
+On Pi and OMP, `session_start` uses `pi.sendMessage(...)` because lifecycle handlers do not expose a return-result injection channel, while `before_agent_start` returns `message` because `BeforeAgentStartEventResult.message` is the typed injection channel. Pi ignores `session_start` and `session_shutdown` events whose reason is `reload`, so `/reload` neither duplicates startup injection nor closes the active Nokori session. Bridge timeout values are runtime budgets, and `session_shutdown` intentionally keeps a short 2s teardown budget.
 
 ---
 
 ## Injection vs blocking
 
-| | Injection (`additionalContext` / OMP bridge message) | Gate (PreToolUse deny / OMP tool block) |
+| | Injection (`additionalContext` / Pi or OMP bridge message) | Gate (PreToolUse deny / Pi or OMP tool block) |
 |--|----------------------------------|-------------------------|
 | Rule scope | Formal pool HOT + WARM | A subset of formal pool HOT |
 | Status | `active` and `trusted` | `trusted` only |
@@ -86,7 +86,7 @@ If the previous session hasn't been extracted yet, it injects the last 3 user me
 
 | Term | Meaning |
 |------|---------|
-| **hook** | A small command Claude Code / Cursor runs automatically at fixed moments |
+| **hook** | A native Claude Code / Cursor hook or a Pi / OMP bridge handler that runs at a fixed lifecycle event |
 | **injection** | Writing matched rules into the context the agent sees for the current turn |
 | **Gate** | For `trusted` + `gate_eligible` rules: deny the first matching tool call once |
 | **marker** | A temporary "read Gate rules first" flag for the current turn; cleared after one use |

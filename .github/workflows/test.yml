@@ -26,7 +26,7 @@ jobs:
       - name: Run verification suite
         run: python scripts/verify.py
 
-  omp-bridge:
+  extension-bridges:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -40,19 +40,22 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e .
-      - name: Build generated OMP bridge
+      - name: Build generated Pi and OMP bridges
         run: |
           python - <<'PY'
           import os
           from pathlib import Path
-          from nokori.commands.install import _build_omp_hook_source
+          from nokori.commands.install import _build_omp_hook_source, _build_pi_hook_source
 
-          Path(os.environ["RUNNER_TEMP"], "nokori.ts").write_text(
-              _build_omp_hook_source(),
-              encoding="utf-8",
-          )
+          temp = Path(os.environ["RUNNER_TEMP"])
+          temp.joinpath("nokori-pi.ts").write_text(_build_pi_hook_source(), encoding="utf-8")
+          temp.joinpath("nokori-omp.ts").write_text(_build_omp_hook_source(), encoding="utf-8")
           PY
-          bun build "$RUNNER_TEMP/nokori.ts" \
+          bun build "$RUNNER_TEMP/nokori-pi.ts" \
+            --target=bun \
+            --external '@earendil-works/pi-coding-agent' \
+            --outfile "$RUNNER_TEMP/nokori-pi.js"
+          bun build "$RUNNER_TEMP/nokori-omp.ts" \
             --target=bun \
             --external '@oh-my-pi/pi-coding-agent/*' \
-            --outfile "$RUNNER_TEMP/nokori.js"
+            --outfile "$RUNNER_TEMP/nokori-omp.js"

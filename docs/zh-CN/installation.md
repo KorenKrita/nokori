@@ -7,7 +7,7 @@
 ## 开始之前
 
 - **Python ≥ 3.11**（热路径 hook 仅使用 stdlib；基础安装包含 fastapi + uvicorn + websockets 用于 Web 仪表盘）
-- 已装好 **Claude Code**、**Cursor** 或 **OMP** 任意一个
+- 已装好 **Claude Code**、**Cursor**、**Pi** 或 **OMP** 任意一个
 - 想用本地语义检索，预留约 **220MB** 磁盘装嵌入模型权重（可选）
 
 三种装法，按需挑一种：本地模型（推荐）、最小安装、从源码开发。
@@ -16,9 +16,22 @@
 
 ## macOS / Linux：别用系统 `pip` 直装
 
-Homebrew 等自带的 Python 受 [PEP 668](https://peps.python.org/pep-0668/) 保护，直接 `pip install nokori` 会报 **`externally-managed-environment`**。请用 **pipx**（推荐）或 **专用 venv**，不要用 `--break-system-packages`。
+Homebrew 等自带的 Python 受 [PEP 668](https://peps.python.org/pep-0668/) 保护，直接 `pip install nokori` 会报 **`externally-managed-environment`**。请用 **uv tool**（推荐）、**pipx** 或 **专用 venv**，不要用 `--break-system-packages`。
 
-### 方式 A：`pipx`（推荐，适合 CLI）
+### 方式 A：`uv tool`（推荐，适合 CLI）
+
+```bash
+# macOS；其它平台见 https://docs.astral.sh/uv/getting-started/installation/
+brew install uv
+uv tool install "nokori[local-embed]"
+
+nokori install --pi         # 仅 Pi；OMP 用 --omp，Claude Code + Cursor 用 --all
+nokori health
+```
+
+`uv tool` 会创建隔离环境并暴露 `nokori` 命令，不修改系统 Python；Claude Code / Cursor 的 hook 会调用该环境里的 `python -I -m nokori hook`，`--pi` 与 `--omp` 则写入 TypeScript bridge，把对应 runtime 事件转给同一套 Python dispatcher。
+
+### 方式 B：`pipx`
 
 ```bash
 brew install pipx
@@ -26,13 +39,11 @@ pipx ensurepath
 # 新开一个终端，或 source ~/.zshrc
 
 pipx install "nokori[local-embed]"
-nokori install --omp        # 仅 OMP；--all 仍只装 Claude Code + Cursor
-nokori health
 ```
 
-`pipx` 把 `nokori` 装进独立环境，命令一般在 `~/.local/bin/nokori`；Claude Code / Cursor 的 hook 仍会调用该环境里的 `python -I -m nokori hook`，`--omp` 则额外写入一个 TypeScript bridge，把 OMP runtime 事件转给同一套 Python dispatcher。
+`pipx` 同样使用隔离的 CLI 环境，可作为备选。
 
-### 方式 B：专用 venv
+### 方式 C：专用 venv
 
 ```bash
 python3 -m venv ~/.local/venvs/nokori
@@ -41,7 +52,7 @@ python3 -m venv ~/.local/venvs/nokori
 echo 'export PATH="$HOME/.local/venvs/nokori/bin:$PATH"' >> ~/.zshrc
 source ~/.zshrc
 
-nokori install --omp
+nokori install --pi
 nokori health
 ```
 
@@ -51,16 +62,17 @@ nokori health
 
 这条路在本机跑语义检索，不需要任何 embedding API key。它会装上 **sentence-transformers**，并在 `nokori install` 时从 Hugging Face 预取本地嵌入模型 **[IBM Granite Embedding 97M](https://huggingface.co/ibm-granite/granite-embedding-97m-multilingual-r2)**（`ibm-granite/granite-embedding-97m-multilingual-r2`）到 `~/.nokori/models/`：**97M 参数 / 384 维**，下载约 **220MB**。
 
-按上一节用 **pipx** 或 **venv** 安装后：
+按上一节用 **uv tool**、**pipx** 或 **venv** 安装后：
 
 ```bash
 # 注册 hooks / bridge
 nokori install              # Claude Code  → ~/.claude/settings.json
 nokori install --cursor     # 仅原生 Cursor → ~/.cursor/hooks.json
+nokori install --pi         # 仅 Pi          → ~/.pi/agent/extensions/nokori.ts
 nokori install --omp        # 仅 OMP         → ~/.omp/agent/extensions/nokori.ts
 nokori install --all        # Claude + Cursor
 
-# 验证（安装 OMP 时会显示 hooks.omp）
+# 验证（安装 Pi / OMP 时会显示 hooks.pi / hooks.omp）
 nokori health
 nokori status
 ```
@@ -76,11 +88,11 @@ nokori status
 ## 最小安装（不要本地模型）
 
 ```bash
-pipx install nokori
+uv tool install nokori
 nokori install
 ```
 
-开箱就有 BM25 关键词检索，够用。想要语义检索时，接任意 OpenAI 兼容的 embedding API（设 `NOKORI_EMBED_BASE_URL`、`NOKORI_EMBED_MODEL`），或者哪天再补 `pip install "nokori[local-embed]"`。
+开箱就有 BM25 关键词检索，够用。想要语义检索时，可以接任意 OpenAI 兼容的 embedding API（设 `NOKORI_EMBED_BASE_URL`、`NOKORI_EMBED_MODEL`），或用 `uv tool install --force "nokori[local-embed]"` 重新安装并加入本地模型依赖。
 
 ---
 
@@ -112,26 +124,29 @@ nokori install --enable
 
 ---
 
-## Claude Code、Cursor 与 OMP
+## Claude Code、Cursor、Pi 与 OMP
 
-默认装 **Claude Code**；也支持 **Cursor** 与 **OMP**。OMP 会在 `~/.omp/agent/extensions/nokori.ts` 安装一个小型 TypeScript bridge，把 runtime 事件转给 Nokori 现有的 Python dispatcher。
+默认装 **Claude Code**；也支持 **Cursor**、**Pi** 与 **OMP**。Pi 和 OMP 会分别在 `~/.pi/agent/extensions/nokori.ts` 与 `~/.omp/agent/extensions/nokori.ts` 安装小型 TypeScript bridge，把 runtime 事件转给 Nokori 现有的 Python dispatcher。
 
 ### 装哪条命令？
 
-OMP 需要显式安装：`--all` 仍只代表 Claude Code + Cursor。
+Pi 与 OMP 都需要显式安装：`--all` 仍只代表 Claude Code + Cursor。
 
 | 目标 | 命令 | 写入位置 |
 |------|------|----------|
 | 仅 Claude Code | `nokori install` | `~/.claude/settings.json` |
 | 仅 Cursor（原生 `~/.cursor/hooks.json`） | `nokori install --cursor` | `~/.cursor/hooks.json` |
+| 仅 Pi | `nokori install --pi` | `~/.pi/agent/extensions/nokori.ts` |
 | 仅 OMP | `nokori install --omp` | `~/.omp/agent/extensions/nokori.ts` |
 | Claude Code + Cursor | `nokori install --all` | 上面两个文件 |
 
-### 验证 OMP 安装
+### 验证 Pi / OMP 安装
 
-- 想先看写入内容：`nokori install --omp --dry-run`
-- 安装后运行 `nokori health`，确认 `hooks.omp` 显示 `ok registered`
-- 新开一场 OMP session；recall 注入走 `before_agent_start`，Gate 检查走 `tool_call`，会话结束后的提取从 `session_shutdown` 开始。
+- 想先看写入内容：`nokori install --pi --dry-run` 或 `nokori install --omp --dry-run`
+- 安装后运行 `nokori health`，确认 `hooks.pi` 或 `hooks.omp` 显示 `ok registered`
+- 新开一场 session；recall 注入走 `before_agent_start`，Gate 检查走 `tool_call`，会话结束后的提取从 `session_shutdown` 开始，并使用 runtime session manager 提供的当前 session 文件。
+- Pi 的 `/reload` 生命周期会被 bridge 忽略，不会把当前会话误判为已结束或提前触发提取。
+- 如果设置了 `PI_CODING_AGENT_DIR`，`nokori install --pi` 与 transcript 校验会使用该目录，而不是默认的 `~/.pi/agent`。
 
 ### Cursor 只选一条路（不要混用）
 
@@ -151,6 +166,9 @@ OMP 需要显式安装：`--all` 仍只代表 Claude Code + Cursor。
 ## 更新
 
 ```bash
+# uv tool
+uv tool upgrade nokori
+
 # pipx
 pipx upgrade nokori
 
@@ -161,4 +179,4 @@ pip install --upgrade nokori
 git pull && pip install -e ".[local-embed,dev]"
 ```
 
-升级后跑一下 `nokori health` 确认一切正常。Claude Code 与 Cursor 的 Hook 注册跨版本稳定；如果 `hooks.omp` 提示生成的 bridge 已过期，运行 `nokori install --omp` 刷新即可。
+升级后跑一下 `nokori health` 确认一切正常。Claude Code 与 Cursor 的 Hook 注册跨版本稳定；如果 `hooks.pi` 或 `hooks.omp` 提示生成的 bridge 已过期，分别运行 `nokori install --pi` 或 `nokori install --omp` 刷新即可。
