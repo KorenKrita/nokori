@@ -2,9 +2,9 @@ name: test
 
 on:
   push:
-    branches: [main, fresh-main]
+    branches: [main]
   pull_request:
-    branches: [main, fresh-main]
+    branches: [main]
 
 jobs:
   pytest:
@@ -25,6 +25,45 @@ jobs:
           python -m pip install -e ".[dev]"
       - name: Run verification suite
         run: python scripts/verify.py
+
+  coverage:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Install package and coverage deps
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+      - name: Optional hot-path coverage
+        run: bash scripts/coverage.sh
+
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install and verify web UI
+        run: |
+          npm ci
+          npm run lint
+          npm test
+          npm run build
+      - name: Ensure committed static assets stay in sync
+        working-directory: .
+        run: git diff --exit-code -- nokori/web/static
 
   extension-bridges:
     runs-on: ubuntu-latest

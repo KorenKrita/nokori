@@ -68,8 +68,28 @@ target-version = "py311"
 line-length = 100
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "B", "UP", "SIM", "C4", "PERF"]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "C4", "PERF", "C901"]
 ignore = ["E501", "SIM115"]
+
+[tool.ruff.lint.mccabe]
+# Ratchet: tighten over time; offenders above this use per-file ignores below.
+max-complexity = 20
+
+[tool.ruff.lint.per-file-ignores]
+# Complexity >20: defer safe extractions; do not mass-refactor in this pass.
+"nokori/cold/roles.py" = ["C901"]  # _normalize_role_output (~55)
+"nokori/merge/policy.py" = ["C901"]  # find_merge_neighbors (~33)
+"nokori/search/selector.py" = ["C901"]  # select_injection (~24)
+"nokori/search/applicability.py" = ["C901"]  # evaluate_applicability (~24)
+"nokori/commands/show.py" = ["C901"]  # run (~24)
+"nokori/cli.py" = ["C901"]  # _dispatch (~22)
+"nokori/commands/edit.py" = ["C901"]  # run (~22)
+"nokori/commands/install.py" = ["C901"]  # run (~22)
+"nokori/commands/extract.py" = ["C901"]  # run (~21)
+"nokori/matcher/runtime.py" = ["C901"]  # evaluate_match (~22)
+"nokori/posthoc/jobs.py" = ["C901"]  # _compute_window_from_transcript (~22)
+"nokori/web/api/logs.py" = ["C901"]  # logs_ws (~22)
+"nokori/config_editor.py" = ["C901"]  # write_document (~21)
 
 [tool.ruff.lint.isort]
 known-first-party = ["nokori"]

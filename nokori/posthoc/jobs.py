@@ -10,7 +10,6 @@ from __future__ import annotations
 import hashlib
 import uuid
 from pathlib import Path
-from typing import Any
 
 from ..db import Db, loads_json
 from ..events.fire import get_fire_events_for_session, update_first_observed_useful
@@ -22,7 +21,7 @@ from ..utils.logging import get_logger
 from ..utils.prompt_text import normalize_prompt_for_hash
 from ..utils.time import now_iso
 from ..utils.transcript import is_path_allowed
-from .evaluator import run_posthoc_evaluation
+from .evaluator import PosthocLlmCaller, run_posthoc_evaluation
 
 log = get_logger("nokori.posthoc.jobs")
 
@@ -137,7 +136,7 @@ def mark_posthoc_job_unclear(db: Db, job_id: str) -> None:
     mark_posthoc_job_complete(db, job_id, "unclear", None)
 
 
-def process_pending_posthoc_jobs(db: Db, llm: Any, *, limit: int = 20) -> dict[str, int]:
+def process_pending_posthoc_jobs(db: Db, llm: PosthocLlmCaller, *, limit: int = 20) -> dict[str, int]:
     """Evaluate pending posthoc jobs, mark done, update scores, trigger transitions."""
     from ..lifecycle.transitions import evaluate_transitions, update_derived_scores
 

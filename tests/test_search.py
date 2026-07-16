@@ -171,3 +171,25 @@ def test_bm25_matches_chinese_trigger_zh():
     results = bm25.search("强制推送", rules)
     assert len(results) > 0
     assert results[0].rule.short_id == "zh001"
+
+
+def test_bm25_index_key_uses_updated_at_and_version():
+    """Cache key is cheap identity; content changes via updated_at/version invalidate."""
+    from dataclasses import replace as dreplace
+
+    bm25.clear_index_cache()
+    rules = [_rule("aaa111", "git push force", variants=("force push",))]
+    bm25.search("git push", rules)
+    assert len(bm25._INDEX_CACHE) == 1
+
+    # Same identity → cache hit (no new entry)
+    bm25.search("git push", rules)
+    assert len(bm25._INDEX_CACHE) == 1
+
+    bumped = [dreplace(rules[0], updated_at="2099-01-01T00:00:00Z")]
+    bm25.search("git push", bumped)
+    assert len(bm25._INDEX_CACHE) == 2
+
+    versioned = [dreplace(rules[0], rule_version=2)]
+    bm25.search("git push", versioned)
+    assert len(bm25._INDEX_CACHE) == 3

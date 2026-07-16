@@ -7,10 +7,12 @@ IDF computation, applicability evaluation, result decoration — all internal.
 
 from __future__ import annotations
 
+from collections import OrderedDict
 from dataclasses import replace
+from typing import Any
 
 from ..db import SCHEMA_VERSION
-from ..matcher.compiler import CompilationError, compile_rule
+from ..matcher.compiler import COMPILER_VERSION, CompilationError, compile_rule
 from ..matcher.runtime import evaluate_match
 from ..models import InjectionLevel, Rule, ScoredResult
 from ..policy import RUNTIME_POLICY_VERSION
@@ -18,6 +20,35 @@ from .applicability import evaluate_applicability, meets_min_evidence
 from .idf_stats import IdfPoolStats, compute_trigger_idf_sum
 from .selector import compute_base_utility
 from .tokenizer import tokenize
+
+# Process-local LRU for compiled matchers (hot path recompiles every prompt otherwise).
+_MATCHER_CACHE: OrderedDict[tuple[Any, ...], Any] = OrderedDict()
+_MATCHER_CACHE_MAX = 256
+
+
+def _compile_rule_cached(rule: Rule, trigger_data: dict) -> Any:
+    """Compile a rule matcher, reusing process-local cache across prompts."""
+    key = (
+        rule.id,
+        rule.rule_version,
+        rule.schema_version,
+        rule.updated_at,
+        COMPILER_VERSION,
+    )
+    cached = _MATCHER_CACHE.get(key)
+    if cached is not None:
+        _MATCHER_CACHE.move_to_end(key)
+        return cached
+    matcher = compile_rule(trigger_data, search_terms=rule.search_terms)
+    _MATCHER_CACHE[key] = matcher
+    if len(_MATCHER_CACHE) > _MATCHER_CACHE_MAX:
+        _MATCHER_CACHE.popitem(last=False)
+    return matcher
+
+
+def clear_matcher_cache() -> None:
+    """Clear the process-local matcher cache (tests / rule reloads)."""
+    _MATCHER_CACHE.clear()
 
 
 def _legacy_pass_result(
@@ -80,10 +111,7 @@ def evaluate_evidence(
         return None
 
     try:
-        matcher = compile_rule(
-            trigger_data,
-            search_terms=result.rule.search_terms,
-        )
+        matcher = _compile_rule_cached(result.rule, trigger_data)
     except CompilationError:
         if result.rule.schema_version >= SCHEMA_VERSION:
             return None

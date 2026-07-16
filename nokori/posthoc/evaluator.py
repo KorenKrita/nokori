@@ -9,11 +9,27 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import Any
+from typing import Any, Protocol, TypedDict
 
 from ..utils.logging import get_logger
 
 logger = get_logger(__name__)
+
+
+class PosthocLlmCaller(Protocol):
+    """Minimal LLM surface used by posthoc evaluation."""
+
+    def call(self, *, system: str, user: str, role: str) -> str | None: ...
+
+
+class PosthocEvaluatorInput(TypedDict, total=False):
+    """Loose shape for posthoc prompt inputs (keys vary by caller)."""
+
+    fire_event_id: str
+    injected_suggestion: str
+    window_content: str
+    rule_tool_tags: list[str]
+    decision_features: dict[str, Any]
 
 
 # ---------------------------------------------------------------------------
@@ -326,7 +342,7 @@ def _compute_input_hash(evaluator_input: dict) -> str:
 _POSTHOC_MAX_ATTEMPTS = 2
 
 
-def run_posthoc_evaluation(llm: Any, evaluator_input: dict) -> dict | None:
+def run_posthoc_evaluation(llm: PosthocLlmCaller, evaluator_input: dict[str, Any]) -> dict[str, Any] | None:
     """Call LLM with posthoc role, parse and validate output.
 
     Args:
@@ -357,6 +373,10 @@ def run_posthoc_evaluation(llm: Any, evaluator_input: dict) -> dict | None:
             )
         except Exception as exc:
             logger.warning("posthoc_evaluator LLM call failed (attempt %d): %s", _attempt + 1, exc)
+            continue
+
+        if raw_response is None:
+            logger.warning("posthoc_evaluator LLM returned None (attempt %d)", _attempt + 1)
             continue
 
         try:

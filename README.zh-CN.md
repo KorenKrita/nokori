@@ -268,7 +268,14 @@ nokori dismiss <short_id>
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[local-embed,dev]"
-python -m pytest tests/
+pre-commit install
+python scripts/verify.py          # ruff + mypy ratchet + pytest
+```
+
+Web UI（源码在 `web/`，构建产物提交到 `nokori/web/static/`）：
+
+```bash
+cd web && npm ci && npm run lint && npm run build
 ```
 
 项目约束：热路径 hook 仅使用 stdlib + urllib（prompt 到回复之间无 LLM 调用），所有 hook 顶层 try/except fail-open。基础安装包含 fastapi + uvicorn 用于 Web 仪表盘。

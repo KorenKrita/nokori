@@ -7,7 +7,8 @@ directly, without needing loads_json().
 import pytest
 
 from nokori.config import Config
-from nokori.db import dumps_json, open_db, row_to_rule
+from nokori.db import dumps_json, fetch_rules, open_db, row_to_rule
+from nokori.db.queries import SEARCH_RULE_COLUMNS, row_to_search_rule
 
 
 @pytest.fixture
@@ -115,3 +116,20 @@ class TestRuleParsedFields:
         rule = row_to_rule(row)
         assert isinstance(rule.search_terms, dict)
         assert rule.search_terms["en"] == ["deploy"]
+
+    def test_search_rule_row_skips_heavy_json(self, db_with_rule):
+        row = db_with_rule.fetchone(f"SELECT {SEARCH_RULE_COLUMNS} FROM rules WHERE id = 'rule-1'")
+        rule = row_to_search_rule(row)
+        assert rule.concepts[0]["id"] == "deploy"
+        assert rule.search_terms["en"] == ["deploy"]
+        # Slim path leaves archival/review fields at defaults.
+        assert rule.evidence_quotes == []
+        assert rule.near_miss_examples == []
+        assert rule.tool_tags == []
+
+    def test_fetch_rules_for_retrieval(self, db_with_rule):
+        rules = fetch_rules(db_with_rule, statuses=("active",), for_retrieval=True)
+        assert len(rules) == 1
+        assert rules[0].id == "rule-1"
+        assert rules[0].trigger_canonical
+        assert rules[0].evidence_quotes == []

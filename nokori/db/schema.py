@@ -6,6 +6,10 @@ from ..errors import DbError
 
 SCHEMA_VERSION = 10
 
+# One-shot marker: skip remedial ALTER TABLE when schema is already current.
+# Older v10 DBs created before last_error was in the DDL still need one remediations pass.
+_REMEDIATION_KEY = f"schema_remediation_v{SCHEMA_VERSION}"
+
 _SCHEMA_DDL = """
 CREATE TABLE IF NOT EXISTS rules (
     id TEXT PRIMARY KEY,
@@ -329,13 +333,48 @@ def _create_index_safe(conn: sqlite3.Connection, ddl: str) -> None:
             raise
 
 
+def _remediation_done(conn: sqlite3.Connection) -> bool:
+    """True when one-shot current-schema remediation has already run."""
+    try:
+        row = conn.execute(
+            "SELECT 1 FROM maintenance_meta WHERE key = ? LIMIT 1",
+            (_REMEDIATION_KEY,),
+        ).fetchone()
+    except sqlite3.OperationalError:
+        return False
+    return row is not None
+
+
+def _mark_remediation_done(conn: sqlite3.Connection) -> None:
+    """Record that current-schema remedial ALTERs have been applied."""
+    import contextlib
+
+    from ..utils.time import now_iso
+
+    # Table missing on broken/partial DBs — migrate paths create it via DDL.
+    with contextlib.suppress(sqlite3.OperationalError):
+        conn.execute(
+            "INSERT INTO maintenance_meta (key, last_run) VALUES (?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET last_run = excluded.last_run",
+            (_REMEDIATION_KEY, now_iso()),
+        )
+
+def _run_current_schema_remediation(conn: sqlite3.Connection) -> None:
+    """Idempotent remedial columns for DBs already at SCHEMA_VERSION."""
+    # ponytail: older v10 DBs created before this column was added to the DDL
+    _add_column_if_missing(conn, "transcript_ingest_jobs", "last_error", "TEXT")
+    _mark_remediation_done(conn)
+
+
 def _migrate(conn: sqlite3.Connection) -> None:
     current = _read_version(conn)
     if current > SCHEMA_VERSION:
         raise DbError("rules.db was created by a newer nokori; upgrade this installation")
-    if current >= SCHEMA_VERSION:
-        # ponytail: remedial — older v10 DBs created before this column was added to the DDL
-        _add_column_if_missing(conn, "transcript_ingest_jobs", "last_error", "TEXT")
+    if current == SCHEMA_VERSION:
+        # Skip remedial PRAGMA table_info work once the one-shot marker is set.
+        if _remediation_done(conn):
+            return
+        _run_current_schema_remediation(conn)
         return
     if current == 0:
         script = f"BEGIN;\n{_SCHEMA_DDL}\nPRAGMA user_version = {int(SCHEMA_VERSION)};\nCOMMIT;\n"
@@ -383,6 +422,7 @@ def _migrate(conn: sqlite3.Connection) -> None:
         _create_index_safe(conn, "CREATE INDEX IF NOT EXISTS idx_synthetic_evals_rule ON rule_synthetic_evals(rule_id, rule_version, created_at)")
         _create_index_safe(conn, "CREATE INDEX IF NOT EXISTS idx_reviews_rule ON rule_reviews(rule_id, decision, created_at)")
         _create_index_safe(conn, "CREATE INDEX IF NOT EXISTS idx_rule_embeddings_model ON rule_embeddings(model_version, rule_id)")
+        _mark_remediation_done(conn)
         return
     elif current == 7:
         script = (
@@ -401,6 +441,7 @@ def _migrate(conn: sqlite3.Connection) -> None:
         _create_index_safe(conn, "CREATE INDEX IF NOT EXISTS idx_synthetic_evals_rule ON rule_synthetic_evals(rule_id, rule_version, created_at)")
         _create_index_safe(conn, "CREATE INDEX IF NOT EXISTS idx_reviews_rule ON rule_reviews(rule_id, decision, created_at)")
         _create_index_safe(conn, "CREATE INDEX IF NOT EXISTS idx_rule_embeddings_model ON rule_embeddings(model_version, rule_id)")
+        _mark_remediation_done(conn)
         return
     elif current == 8:
         _add_column_if_missing(conn, "transcript_ingest_jobs", "last_error", "TEXT")
@@ -410,6 +451,7 @@ def _migrate(conn: sqlite3.Connection) -> None:
         _create_index_safe(conn, "CREATE INDEX IF NOT EXISTS idx_reviews_rule ON rule_reviews(rule_id, decision, created_at)")
         _create_index_safe(conn, "CREATE INDEX IF NOT EXISTS idx_rule_embeddings_model ON rule_embeddings(model_version, rule_id)")
         conn.execute(f"PRAGMA user_version = {int(SCHEMA_VERSION)}")
+        _mark_remediation_done(conn)
         return
     elif current == 9:
         _add_column_if_missing(conn, "transcript_ingest_jobs", "last_error", "TEXT")
@@ -417,6 +459,7 @@ def _migrate(conn: sqlite3.Connection) -> None:
         _create_index_safe(conn, "CREATE INDEX IF NOT EXISTS idx_reviews_rule ON rule_reviews(rule_id, decision, created_at)")
         _create_index_safe(conn, "CREATE INDEX IF NOT EXISTS idx_rule_embeddings_model ON rule_embeddings(model_version, rule_id)")
         conn.execute(f"PRAGMA user_version = {int(SCHEMA_VERSION)}")
+        _mark_remediation_done(conn)
         return
     else:
         raise DbError(
@@ -427,3 +470,6 @@ def _migrate(conn: sqlite3.Connection) -> None:
         conn.executescript(script)
     except Exception as e:
         raise DbError(f"failed to initialize rules.db: {e}") from e
+    # Fresh DDL already includes remedial columns — mark so open path skips re-checks.
+    if current == 0:
+        _mark_remediation_done(conn)

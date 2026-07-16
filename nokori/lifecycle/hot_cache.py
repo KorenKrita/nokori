@@ -16,10 +16,46 @@ HOT_CACHE_RECENT_TURNS = 3
 TRUSTED_RECENT_WINDOW_DAYS = 7
 _TRUSTED_RULES_BUDGET = 500
 
+# Dir listing cache: invalidate when parent directory mtime changes.
+# Maps resolved parent path -> (dir_mtime, sorted [(file_mtime, path), ...]).
+_DIR_LISTING_CACHE: dict[str, tuple[float, list[tuple[float, Path]]]] = {}
+
+
+def clear_dir_listing_cache() -> None:
+    """Clear transcript directory listing cache (useful in tests)."""
+    _DIR_LISTING_CACHE.clear()
+
 
 def find_previous_transcript(current: Path) -> Path | None:
     """Previous session transcript via directory scan."""
     return _find_previous_transcript_glob(current)
+
+
+def _list_jsonl_by_mtime(parent: Path) -> list[tuple[float, Path]]:
+    """Return *.jsonl entries as (mtime, path), newest first, cached by dir mtime."""
+    try:
+        dir_mtime = parent.stat().st_mtime
+    except OSError:
+        return []
+
+    cache_key = str(parent)
+    cached = _DIR_LISTING_CACHE.get(cache_key)
+    if cached is not None and cached[0] == dir_mtime:
+        return cached[1]
+
+    entries: list[tuple[float, Path]] = []
+    try:
+        for candidate in parent.glob("*.jsonl"):
+            try:
+                entries.append((candidate.stat().st_mtime, candidate))
+            except OSError:
+                continue
+    except OSError:
+        return []
+
+    entries.sort(key=lambda t: t[0], reverse=True)
+    _DIR_LISTING_CACHE[cache_key] = (dir_mtime, entries)
+    return entries
 
 
 def _find_previous_transcript_glob(current: Path) -> Path | None:
@@ -39,14 +75,7 @@ def _find_previous_transcript_glob(current: Path) -> Path | None:
     best: Path | None = None
     best_mtime = -1.0
 
-    def _mtime_key(p: Path) -> float:
-        try:
-            return p.stat().st_mtime
-        except OSError:
-            return 0.0
-
-    candidates = sorted(parent.glob("*.jsonl"), key=_mtime_key, reverse=True)
-    for candidate in candidates[:50]:
+    for mtime, candidate in _list_jsonl_by_mtime(parent)[:50]:
         try:
             resolved = candidate.resolve()
         except OSError:
@@ -54,10 +83,6 @@ def _find_previous_transcript_glob(current: Path) -> Path | None:
         if not is_path_allowed(resolved):
             continue
         if resolved == current:
-            continue
-        try:
-            mtime = candidate.stat().st_mtime
-        except OSError:
             continue
         if mtime > current_mtime:
             continue

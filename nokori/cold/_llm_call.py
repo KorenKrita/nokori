@@ -10,7 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Callable
-from typing import Any
+from typing import Any, Protocol
 
 from ..db import Db, dumps_json
 from ..errors import LlmError
@@ -30,6 +30,20 @@ from .roles import (
 )
 
 log = get_logger("nokori.cold.pipeline")
+
+
+class LlmRawCaller(Protocol):
+    """Minimal LLM surface used by cold-path role calls."""
+
+    def call_raw(
+        self,
+        model: str,
+        system: str,
+        user: str,
+        max_tokens: int = 2000,
+        timeout: int = 30,
+        response_format: dict | None = None,
+    ) -> str: ...
 
 
 class CircuitBreakerOpenError(RuntimeError):
@@ -59,7 +73,7 @@ def llm_input_hash(role: str, system: str, user: str, model_id: str = "") -> str
 
 def call_llm_role(
     db: Db,
-    llm: Any,
+    llm: LlmRawCaller,
     *,
     role: str,
     model_id: str,

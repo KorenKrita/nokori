@@ -267,7 +267,14 @@ nokori dismiss <short_id>
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[local-embed,dev]"
-python -m pytest tests/
+pre-commit install
+python scripts/verify.py          # ruff + mypy ratchet + pytest
+```
+
+Web UI（ソースは `web/`、ビルド成果物は `nokori/web/static/` にコミット）：
+
+```bash
+cd web && npm ci && npm run lint && npm run build
 ```
 
 プロジェクト制約：ホットパス hook は stdlib + urllib のみ使用（prompt と返答の間に LLM 呼び出しなし）、すべての hook はトップレベル try/except で fail-open。ベースインストールには Web ダッシュボード用の fastapi + uvicorn を含む。

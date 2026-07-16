@@ -7,7 +7,7 @@ from nokori.search import bm25
 from nokori.utils.time import now_iso
 
 
-def test_bm25_index_cache_ignores_updated_at(monkeypatch, tmp_path):
+def test_bm25_index_cache_invalidates_on_updated_at(monkeypatch, tmp_path):
     monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
     bm25._INDEX_CACHE.clear()
     now = now_iso()
@@ -36,7 +36,10 @@ def test_bm25_index_cache_ignores_updated_at(monkeypatch, tmp_path):
     from dataclasses import replace as dreplace
     bumped = dreplace(rule, updated_at="2099-01-01T00:00:00Z")
     bm25.search("git push", [bumped])
-    assert len(bm25._INDEX_CACHE) == 1
+    assert len(bm25._INDEX_CACHE) == 2
+    versioned = dreplace(rule, rule_version=2)
+    bm25.search("git push", [versioned])
+    assert len(bm25._INDEX_CACHE) == 3
 
 
 def test_export_atomic_replace(tmp_path, monkeypatch):

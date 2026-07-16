@@ -9,7 +9,10 @@ from pathlib import Path
 
 from nokori.db import open_db
 from nokori.lifecycle.hot_cache import (
+    _DIR_LISTING_CACHE,
+    _list_jsonl_by_mtime,
     _recent_trusted_rules_summary,
+    clear_dir_listing_cache,
     find_previous_transcript,
     maybe_inject,
 )
@@ -160,6 +163,7 @@ def _make_transcript(directory: Path, name: str, content: str = "", mtime_offset
 class TestFindPreviousTranscript:
     def test_no_glob_matches_returns_none(self, tmp_path, monkeypatch):
         monkeypatch.setenv("NOKORI_TRANSCRIPT_EXTRA_ROOTS", str(tmp_path))
+        clear_dir_listing_cache()
         current = tmp_path / "current.jsonl"
         current.write_text("")
         # No other jsonl files exist
@@ -168,6 +172,7 @@ class TestFindPreviousTranscript:
 
     def test_returns_previous_file(self, tmp_path, monkeypatch):
         monkeypatch.setenv("NOKORI_TRANSCRIPT_EXTRA_ROOTS", str(tmp_path))
+        clear_dir_listing_cache()
         # Create files with distinct mtimes
         prev = _make_transcript(tmp_path, "prev.jsonl", '{"type":"user","message":"hello"}\n', mtime_offset=-2)
         current = _make_transcript(tmp_path, "current.jsonl", '{"type":"user","message":"now"}\n', mtime_offset=0)
@@ -177,11 +182,61 @@ class TestFindPreviousTranscript:
 
     def test_picks_newest_previous(self, tmp_path, monkeypatch):
         monkeypatch.setenv("NOKORI_TRANSCRIPT_EXTRA_ROOTS", str(tmp_path))
+        clear_dir_listing_cache()
         _make_transcript(tmp_path, "oldest.jsonl", "", mtime_offset=-10)
         newer = _make_transcript(tmp_path, "newer.jsonl", "", mtime_offset=-2)
         current = _make_transcript(tmp_path, "current.jsonl", "", mtime_offset=0)
         result = find_previous_transcript(current)
         assert result == newer.resolve()
+
+    def test_reuses_dir_listing_when_mtime_unchanged(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("NOKORI_TRANSCRIPT_EXTRA_ROOTS", str(tmp_path))
+        clear_dir_listing_cache()
+        prev = _make_transcript(tmp_path, "prev.jsonl", "", mtime_offset=-2)
+        current = _make_transcript(tmp_path, "current.jsonl", "", mtime_offset=0)
+
+        assert find_previous_transcript(current) == prev.resolve()
+        cache_key = str(tmp_path.resolve())
+        assert cache_key in _DIR_LISTING_CACHE
+        cached_mtime, cached_entries = _DIR_LISTING_CACHE[cache_key]
+
+        # Second lookup must reuse the cached listing (same dir mtime).
+        glob_calls: list[int] = []
+        real_glob = Path.glob
+
+        def tracking_glob(self, pattern):
+            if pattern == "*.jsonl":
+                glob_calls.append(1)
+            return real_glob(self, pattern)
+
+        monkeypatch.setattr(Path, "glob", tracking_glob)
+        assert find_previous_transcript(current) == prev.resolve()
+        assert glob_calls == []
+        assert _DIR_LISTING_CACHE[cache_key][0] == cached_mtime
+        assert _DIR_LISTING_CACHE[cache_key][1] is cached_entries
+
+    def test_dir_listing_cache_invalidates_on_new_file(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("NOKORI_TRANSCRIPT_EXTRA_ROOTS", str(tmp_path))
+        clear_dir_listing_cache()
+        _make_transcript(tmp_path, "oldest.jsonl", "", mtime_offset=-10)
+        current = _make_transcript(tmp_path, "current.jsonl", "", mtime_offset=0)
+        assert find_previous_transcript(current) is not None
+
+        # Adding a newer sibling updates directory mtime and must refresh the cache.
+        newer = _make_transcript(tmp_path, "newer.jsonl", "", mtime_offset=-1)
+        # Ensure directory mtime advances past the cached value (some FS coarsen stamps).
+        time.sleep(0.01)
+        os.utime(tmp_path, None)
+        result = find_previous_transcript(current)
+        assert result == newer.resolve()
+
+    def test_list_jsonl_by_mtime_cache_hit(self, tmp_path):
+        clear_dir_listing_cache()
+        _make_transcript(tmp_path, "a.jsonl", "", mtime_offset=-1)
+        first = _list_jsonl_by_mtime(tmp_path)
+        second = _list_jsonl_by_mtime(tmp_path)
+        assert first is second
+        assert len(first) == 1
 
 
 # ---------------------------------------------------------------------------

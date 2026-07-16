@@ -26,6 +26,49 @@ from ..utils.time import local_days_ago
 # ---------------------------------------------------------------------------
 
 
+def compute_fire_counts(recent_rows: list) -> dict:
+    """Compute fire evidence counts from pre-fetched rows (single + batch paths).
+
+    Spec 10.2: only strong-attribution observed_useful events count toward trusted
+    promotion. NULL posthoc_score = legacy → treated as strong for compat.
+    """
+    counts: dict[str, int | float | dict[str, int]] = {
+        "observed_useful": 0,
+        "observed_useful_strong": 0,
+        "plausible_useful": 0,
+        "irrelevant": 0,
+        "harmful": 0,
+        "unclear": 0,
+        "total_evaluated": len(recent_rows),
+    }
+    reason_counts: dict[str, int] = {}
+    useful_sessions: set[str] = set()
+    strong_useful_sessions: set[str] = set()
+
+    for r in recent_rows:
+        label = r["posthoc_label"]
+        if label in counts and label != "total_evaluated":
+            counts[label] = cast(int, counts[label]) + 1
+        rc = r["posthoc_reason_code"]
+        if rc:
+            reason_counts[rc] = reason_counts.get(rc, 0) + 1
+        if label == "observed_useful" and r["session_id"]:
+            useful_sessions.add(r["session_id"])
+            attribution_weight = r["posthoc_score"]
+            if attribution_weight is None or attribution_weight > 0.5:
+                counts["observed_useful_strong"] = cast(int, counts["observed_useful_strong"]) + 1
+                strong_useful_sessions.add(r["session_id"])
+
+    counts["reason_counts"] = reason_counts
+    counts["distinct_observed_useful_sessions"] = len(useful_sessions)
+    counts["distinct_strong_useful_sessions"] = len(strong_useful_sessions)
+    counts["false_positive_rate"] = compute_false_positive_rate(counts)
+    counts["irrelevant_in_last_5"] = sum(
+        1 for r in recent_rows[:5] if r["posthoc_label"] == "irrelevant"
+    )
+    return counts
+
+
 def gather_fire_evidence(db: Db, rule_id: str, *, window_days: int = 30) -> dict:
     """Count fire event labels using BOTH count window (last 10) AND time window (30 days) per spec 3.4.
 
@@ -45,45 +88,7 @@ def gather_fire_evidence(db: Db, rule_id: str, *, window_days: int = 30) -> dict
         (rule_id, cutoff, RECENT_EVENT_WINDOW),
     )
 
-    counts: dict[str, int | float | dict[str, int]] = {
-        "observed_useful": 0,
-        "observed_useful_strong": 0,
-        "plausible_useful": 0,
-        "irrelevant": 0,
-        "harmful": 0,
-        "total_evaluated": len(recent_rows),
-    }
-    reason_counts: dict[str, int] = {}
-    useful_sessions: set[str] = set()
-    strong_useful_sessions: set[str] = set()
-
-    for r in recent_rows:
-        label = r["posthoc_label"]
-        if label in counts and label != "total_evaluated":
-            counts[label] = cast(int, counts[label]) + 1
-        rc = r["posthoc_reason_code"]
-        if rc:
-            reason_counts[rc] = reason_counts.get(rc, 0) + 1
-        if label == "observed_useful" and r["session_id"]:
-            useful_sessions.add(r["session_id"])
-            # Spec 10.2: only strong-attribution events count toward trusted promotion.
-            # NULL = legacy event (pre-attribution system) -> treated as strong for compat.
-            # > 0.5 = new system confirmed strong causal attribution.
-            # <= 0.5 = weak/redundant attribution -> excluded from promotion count.
-            attribution_weight = r["posthoc_score"]
-            if attribution_weight is None or attribution_weight > 0.5:
-                counts["observed_useful_strong"] = cast(int, counts["observed_useful_strong"]) + 1
-                strong_useful_sessions.add(r["session_id"])
-
-    counts["reason_counts"] = reason_counts
-    counts["distinct_observed_useful_sessions"] = len(useful_sessions)
-    counts["distinct_strong_useful_sessions"] = len(strong_useful_sessions)
-    counts["false_positive_rate"] = compute_false_positive_rate(counts)
-
-    # Irrelevant in last 5 evaluated fire events
-    counts["irrelevant_in_last_5"] = sum(
-        1 for r in recent_rows[:5] if r["posthoc_label"] == "irrelevant"
-    )
+    counts = compute_fire_counts(recent_rows)
 
     # CRITICAL: harmful events do NOT decay by time (section 3.4).
     # Count ALL lifetime harmful events for suppression decisions.

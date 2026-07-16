@@ -39,6 +39,38 @@ def test_open_db_idempotent(tmp_path):
         db.close()
 
 
+def test_open_db_skips_remediation_when_current(tmp_path, monkeypatch):
+    """Re-opening a current-schema DB must not run remedial ALTER/INDEX work."""
+    from nokori.db import schema as schema_mod
+
+    path = tmp_path / "rules.db"
+    open_db(path).close()
+
+    calls: list[str] = []
+    monkeypatch.setattr(
+        schema_mod,
+        "_add_column_if_missing",
+        lambda *a, **k: calls.append("add_column"),
+    )
+    monkeypatch.setattr(
+        schema_mod,
+        "_create_index_safe",
+        lambda *a, **k: calls.append("create_index"),
+    )
+    monkeypatch.setattr(
+        schema_mod,
+        "_run_current_schema_remediation",
+        lambda *a, **k: calls.append("remediate"),
+    )
+
+    db = open_db(path)
+    try:
+        assert db.schema_version() == SCHEMA_VERSION
+        assert calls == []
+    finally:
+        db.close()
+
+
 def test_check_constraints(tmp_path):
     import sqlite3
 

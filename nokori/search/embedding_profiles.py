@@ -11,6 +11,9 @@ from dataclasses import dataclass
 
 from nokori.policy import SAFETY_MARGIN_COSINE
 
+# Canonical profile schema version for checked-in embedding thresholds.
+EMBEDDING_PROFILE_VERSION: str = "1.0.0"
+
 
 @dataclass(frozen=True)
 class BucketThresholds:
@@ -91,7 +94,7 @@ _GRANITE_CODE = BucketThresholds(
 CHECKED_IN_PROFILES: dict[str, EmbeddingProfile] = {
     "ibm-granite/granite-embedding-97m-multilingual-r2": EmbeddingProfile(
         model_id="ibm-granite/granite-embedding-97m-multilingual-r2",
-        profile_version="1.0.0",
+        profile_version=EMBEDDING_PROFILE_VERSION,
         dimension=384,
         normalization="cosine",
         overall=_GRANITE_OVERALL,

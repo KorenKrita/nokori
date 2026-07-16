@@ -4,7 +4,7 @@ from unittest.mock import patch
 from nokori.config import Config
 from nokori.db import open_db
 from nokori.models import Rule, ScoredResult
-from nokori.search.engine import RetrievalEngine, TierResult
+from nokori.search.engine import RetrievalEngine
 
 
 def _rule(rule_id: str, *, project_id: str = "proj-a") -> Rule:
@@ -45,34 +45,34 @@ def test_shadow_hot_excludes_formal_overlap(monkeypatch, tmp_path):
             rrf_score=0.02,
             bm25_score=1.5,
             matched_trigger_tokens=frozenset({"git", "force"}),
+            trigger_idf_sum=2.0,
+            ranking_utility=3.0,
+            trigger_evidence_passed=True,
+            level="hot",
         )
         hot_shadow_only = ScoredResult(
             rule=shadow_rules[1],
             rrf_score=0.01,
             bm25_score=1.0,
             matched_trigger_tokens=frozenset({"git"}),
+            trigger_idf_sum=1.5,
+            ranking_utility=2.0,
+            trigger_evidence_passed=True,
+            level="hot",
         )
 
-        def fake_retrieve(prompt, rules, **kwargs):
-            rule_ids = {r.id for r in rules}
-            if rule_ids == {"shared-rule-id"}:
-                return TierResult(
-                    hot=[hot_shared],
-                    warm=[],
-                    bm25_matches=1,
-                    embed_mode="off",
-                )
-            if rule_ids == {"shadow-only"}:
-                return TierResult(
-                    hot=[hot_shadow_only],
-                    warm=[],
-                    bm25_matches=1,
-                    embed_mode="off",
-                )
-            return TierResult(hot=[], warm=[], bm25_matches=0, embed_mode="off")
+        def fake_score(prompt, rules, **kwargs):
+            by_id = {r.rule.id: r for r in (hot_shared, hot_shadow_only)}
+            return [by_id[r.id] for r in rules if r.id in by_id]
 
         engine = RetrievalEngine(cfg, db)
-        with patch.object(engine, "retrieve_and_tier", side_effect=fake_retrieve):
+        with (
+            patch.object(engine._scorer, "score", side_effect=fake_score),
+            patch(
+                "nokori.search.engine.evaluate_evidence",
+                side_effect=lambda result, prompt, **kwargs: result,
+            ),
+        ):
             result = engine.retrieve(
                 "git push --force",
                 formal_rules,
@@ -99,24 +99,34 @@ def test_shadow_selection_does_not_consume_formal_hot_slot(monkeypatch, tmp_path
             rrf_score=0.02,
             bm25_score=1.5,
             matched_trigger_tokens=frozenset({"git", "force"}),
+            trigger_idf_sum=2.0,
+            ranking_utility=3.0,
+            trigger_evidence_passed=True,
+            level="hot",
         )
         shadow_hit = ScoredResult(
             rule=shadow,
             rrf_score=0.03,
             bm25_score=2.0,
             matched_trigger_tokens=frozenset({"git", "force", "push"}),
+            trigger_idf_sum=2.5,
+            ranking_utility=4.0,
+            trigger_evidence_passed=True,
+            level="hot",
         )
 
-        def fake_retrieve(prompt, rules, **kwargs):
-            rule_ids = {r.id for r in rules}
-            if rule_ids == {"formal-rule"}:
-                return TierResult(hot=[formal_hit], warm=[], bm25_matches=1, embed_mode="off")
-            if rule_ids == {"shadow-rule"}:
-                return TierResult(hot=[shadow_hit], warm=[], bm25_matches=1, embed_mode="off")
-            return TierResult(hot=[], warm=[], bm25_matches=0, embed_mode="off")
+        def fake_score(prompt, rules, **kwargs):
+            by_id = {r.rule.id: r for r in (formal_hit, shadow_hit)}
+            return [by_id[r.id] for r in rules if r.id in by_id]
 
         engine = RetrievalEngine(cfg, db)
-        with patch.object(engine, "retrieve_and_tier", side_effect=fake_retrieve):
+        with (
+            patch.object(engine._scorer, "score", side_effect=fake_score),
+            patch(
+                "nokori.search.engine.evaluate_evidence",
+                side_effect=lambda result, prompt, **kwargs: result,
+            ),
+        ):
             result = engine.retrieve(
                 "git push --force",
                 [formal],
@@ -125,5 +135,29 @@ def test_shadow_selection_does_not_consume_formal_hot_slot(monkeypatch, tmp_path
 
         assert [r.rule.id for r in result.hot] == ["formal-rule"]
         assert [r.rule.id for r in result.shadow_hot] == ["shadow-rule"]
+    finally:
+        db.close()
+
+
+def test_retrieve_scores_union_once(monkeypatch, tmp_path):
+    """Formal+shadow retrieve must score the union in a single scorer call."""
+    monkeypatch.setenv("NOKORI_DATA_DIR", str(tmp_path))
+    cfg = Config.from_env()
+    db = open_db(cfg.db_path)
+    try:
+        formal = _rule("formal-rule")
+        shadow = _rule("shadow-rule")
+        calls: list[set[str]] = []
+
+        def fake_score(prompt, rules, **kwargs):
+            calls.append({r.id for r in rules})
+            return []
+
+        engine = RetrievalEngine(cfg, db)
+        with patch.object(engine._scorer, "score", side_effect=fake_score):
+            engine.retrieve("git push --force", [formal], [shadow])
+
+        assert len(calls) == 1
+        assert calls[0] == {"formal-rule", "shadow-rule"}
     finally:
         db.close()

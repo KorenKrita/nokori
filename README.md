@@ -265,10 +265,19 @@ All data lives in one local directory, `~/.nokori/`. There is no network sync. R
 
 ## Development
 
+See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, verify, web UI, and release notes.
+
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[local-embed,dev]"
-python -m pytest tests/
+pre-commit install
+python scripts/verify.py          # ruff + mypy ratchet + pytest
+```
+
+Web UI (source in `web/`, built assets committed under `nokori/web/static/`):
+
+```bash
+cd web && npm ci && npm run lint && npm test && npm run build
 ```
 
 Project constraints: hot-path hooks use only stdlib + urllib (no LLM calls between prompt and reply), all hooks wrapped in top-level try/except fail-open. Base install includes fastapi + uvicorn for the web dashboard.

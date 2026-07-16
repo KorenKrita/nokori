@@ -72,8 +72,13 @@ class RetrievalEngine:
         shadow_rules: Sequence[Rule],
         *,
         interaction: InteractionKind = "hook",
+        top_k: int = 10,
     ) -> RetrievalResult:
-        """Main interface: retrieve, score, decide HOT/WARM/COLD for formal + shadow pools."""
+        """Main interface: retrieve, score, decide HOT/WARM/COLD for formal + shadow pools.
+
+        Scores the union once (shared BM25/embed/IDF), then partitions and runs
+        select_injection separately so shadow never steals formal injection slots.
+        """
         formal_ids = {r.id for r in formal_rules}
         shadow_only = [r for r in shadow_rules if r.id not in formal_ids]
         combined = list(formal_rules) + shadow_only
@@ -81,30 +86,53 @@ class RetrievalEngine:
             return RetrievalResult([], [], [], [], 0, "off")
 
         effective_pool = len(combined)
+        if self._embed_enabled is None or self._embed_cached_pool != effective_pool:
+            self._embed_enabled = _embedding.auto_enabled(self._cfg, effective_pool)
+            self._embed_cached_pool = effective_pool
 
-        formal_result = self.retrieve_and_tier(
+        fused = self._scorer.score(
             prompt,
-            formal_rules,
+            combined,
+            top_k=top_k,
             interaction=interaction,
             pool_size=effective_pool,
+            embed_enabled=self._embed_enabled,
         )
 
-        shadow_result = self.retrieve_and_tier(
-            prompt,
-            shadow_only,
-            interaction=interaction,
-            pool_size=effective_pool,
-            background_idf_rules=formal_rules,
+        # IDF baseline from formal active/trusted (same as prior shadow path).
+        idf_stats = self._build_idf_stats(combined, background_idf_rules=formal_rules or None)
+
+        eligible = [
+            applied
+            for r in fused
+            if (applied := evaluate_evidence(r, prompt, idf_stats=idf_stats)) is not None
+        ]
+
+        formal_eligible = [r for r in eligible if r.rule.id in formal_ids]
+        shadow_eligible = [r for r in eligible if r.rule.id not in formal_ids]
+
+        formal_selection = select_injection(
+            formal_eligible,
+            max_injection_chars=self._cfg.max_injection_chars,
+            pool_size=idf_stats.rule_pool_size,
+        )
+        shadow_selection = select_injection(
+            shadow_eligible,
+            max_injection_chars=self._cfg.max_injection_chars,
+            pool_size=idf_stats.rule_pool_size,
         )
 
+        formal_bm25_ids = frozenset(
+            r.rule.id for r in fused if r.bm25_score > 0 and r.rule.id in formal_ids
+        )
         return RetrievalResult(
-            hot=formal_result.hot,
-            warm=formal_result.warm,
-            shadow_hot=shadow_result.hot,
-            shadow_warm=shadow_result.warm,
-            bm25_matches=formal_result.bm25_matches,
-            embed_mode=formal_result.embed_mode,
-            bm25_rule_ids=formal_result.bm25_rule_ids,
+            hot=formal_selection.hot,
+            warm=formal_selection.warm,
+            shadow_hot=shadow_selection.hot,
+            shadow_warm=shadow_selection.warm,
+            bm25_matches=len(formal_bm25_ids),
+            embed_mode=self._scorer.last_embed_mode,
+            bm25_rule_ids=formal_bm25_ids,
         )
 
     def retrieve_and_tier(

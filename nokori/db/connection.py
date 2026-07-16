@@ -62,6 +62,9 @@ def open_db(path: Path) -> Db:
         try:
             conn = _connect(path)
             try:
+                # Always enter _migrate: upgrade paths run when version differs;
+                # when already at SCHEMA_VERSION it only runs one-shot remediation
+                # until maintenance_meta marks it done (then a cheap SELECT).
                 _migrate(conn)
             except Exception:
                 conn.close()

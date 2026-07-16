@@ -384,6 +384,72 @@ class TestStaticFiles:
         assert resp.status_code != 200 or "def create_app" not in resp.text
 
 
+# --- Embed ---
+
+
+class TestEmbed:
+    def test_embed_status(self, client):
+        resp = client.get("/api/embed/status")
+        assert resp.status_code == 200
+        data = resp.json()["data"]
+        assert "running" in data
+        assert "package_installed" in data
+        assert "model_cached" in data
+        assert isinstance(data["running"], bool)
+
+
+# --- Config editor GET ---
+
+
+class TestConfigEditorGet:
+    def test_config_editor_get(self, client):
+        resp = client.get("/api/config/editor")
+        assert resp.status_code == 200
+        data = resp.json()["data"]
+        assert "schema" in data or "groups" in data or "values" in data or isinstance(data, dict)
+
+
+# --- Lifecycle detail endpoints ---
+
+
+class TestLifecycleDetail:
+    def test_fire_events(self, client_with_rule):
+        resp = client_with_rule.get("/api/lifecycle/rules/abc/fire-events")
+        assert resp.status_code == 200
+        data = resp.json()["data"]
+        assert isinstance(data, list)
+        assert len(data) >= 1
+        assert data[0]["level"] in ("hot", "warm", "gate")
+
+    def test_shadow_events_empty(self, client_with_rule):
+        resp = client_with_rule.get("/api/lifecycle/rules/abc/shadow-events")
+        assert resp.status_code == 200
+        assert isinstance(resp.json()["data"], list)
+
+    def test_posthoc_summary(self, client_with_rule):
+        resp = client_with_rule.get("/api/lifecycle/rules/abc/posthoc")
+        assert resp.status_code == 200
+        data = resp.json()["data"]
+        assert data["short_id"] == "abc"
+        assert "total_evaluated" in data
+
+    def test_synthetic_eval_empty(self, client_with_rule):
+        resp = client_with_rule.get("/api/lifecycle/rules/abc/synthetic-eval")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert "data" in body
+
+    def test_transitions(self, client_with_rule):
+        resp = client_with_rule.get("/api/lifecycle/rules/abc/transitions")
+        assert resp.status_code == 200
+        data = resp.json()["data"]
+        assert isinstance(data, (list, dict))
+
+    def test_fire_events_not_found(self, client):
+        resp = client.get("/api/lifecycle/rules/zzz/fire-events")
+        assert resp.status_code == 404
+
+
 # --- Health ---
 
 class TestHealth:

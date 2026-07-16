@@ -19,6 +19,7 @@ from ..matcher.compiler import COMPILER_VERSION as MATCHER_COMPILER_VERSION, Com
 from ..matcher.runtime import MatchResult, evaluate_match
 from ..policy import RUNTIME_POLICY_VERSION
 from ..search.applicability import ApplicabilityDecision, evaluate_applicability
+from ..search.embedding_profiles import EMBEDDING_PROFILE_VERSION
 from ..search.idf_stats import TOKENIZER_VERSION, IdfPoolStats, compute_trigger_idf_sum
 from ..utils.time import now_iso
 
@@ -28,10 +29,8 @@ from ..utils.time import now_iso
 
 DECISION_RANK: dict[str, int] = {"cold": 0, "warm": 1, "hot": 2, "gate": 3}
 
-# TODO: import from source module once a canonical definition exists
-CONCEPT_COMPILER_VERSION: str = "1.0.0"
-# TODO: import from source module once a canonical definition exists
-EMBEDDING_PROFILE_VERSION: str = "1.0.0"
+# Concept matcher shares the same compiler version as the rule matcher.
+CONCEPT_COMPILER_VERSION: str = MATCHER_COMPILER_VERSION
 BENCHMARK_VERSION: str = "1.0.0"
 
 

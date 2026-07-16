@@ -10,8 +10,8 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from nokori.db import Db, open_db
+from nokori.lifecycle.evidence import compute_false_positive_rate
 from nokori.lifecycle.transitions import (
-    compute_false_positive_rate,
     evaluate_transitions,
     update_derived_scores,
 )
@@ -364,15 +364,15 @@ class TestCandidateToActiveSingleSession:
     ):
         db = _fresh_db(tmp_path)
         try:
-            import nokori.lifecycle.transitions as transitions
+            import nokori.lifecycle.transition_evaluate as transition_evaluate
 
             monkeypatch.setattr(
-                transitions,
+                transition_evaluate,
                 "CANDIDATE_TO_ACTIVE",
                 CandidateToActiveThresholds(distinct_shadow_sessions_min=99),
             )
             monkeypatch.setattr(
-                transitions,
+                transition_evaluate,
                 "CANDIDATE_TO_ACTIVE_SINGLE_SESSION",
                 CandidateToActiveSingleSessionThresholds(
                     shadow_strong_match_count_min=2,

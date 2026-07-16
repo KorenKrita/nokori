@@ -9,7 +9,9 @@ export function usePolling<T>(
   const fetcherRef = useRef(fetcher)
   const isFetchingRef = useRef(false)
 
-  fetcherRef.current = fetcher
+  useEffect(() => {
+    fetcherRef.current = fetcher
+  }, [fetcher])
 
   const poll = useCallback(async () => {
     if (isFetchingRef.current) return

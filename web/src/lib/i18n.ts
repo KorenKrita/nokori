@@ -899,4 +899,13 @@ export function lz(en: string | null | undefined, zh: string | null | undefined)
   return (getLocale() === 'zh' && zh ? zh : en) ?? ''
 }
 
+/** Key sets per locale — used by tests to enforce i18n parity. */
+export function localeKeySets(): Record<Locale, Set<string>> {
+  return {
+    zh: new Set(Object.keys(translations.zh)),
+    en: new Set(Object.keys(translations.en)),
+    ja: new Set(Object.keys(translations.ja)),
+  }
+}
+
 export type { Locale }

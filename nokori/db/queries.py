@@ -111,6 +111,58 @@ RULE_COLUMNS = (
     "created_at, updated_at"
 )
 
+# Hot-path retrieval: skip archival/review JSON columns that BM25/evidence never read.
+SEARCH_RULE_COLUMNS = (
+    "id, short_id, schema_version, rule_version, "
+    "created_by_pipeline_version, runtime_policy_version, last_rewritten_by_role, "
+    "status, severity, "
+    "trigger_canonical, trigger_canonical_zh, "
+    "concepts, required_concept_groups, excluded_contexts, "
+    "trigger_variants, trigger_variants_zh, search_terms, "
+    "action_instruction, action_instruction_zh, "
+    "domain_tags, "
+    "observed_usefulness_score, false_positive_score, "
+    "source_origin, first_observed_useful_at, "
+    "project_scope, project_id, "
+    "created_at, updated_at"
+)
+
+
+def row_to_search_rule(row: sqlite3.Row) -> Rule:
+    """Build a Rule for retrieval with defaults for columns not selected."""
+    from ..models import Rule
+
+    return Rule(
+        id=row["id"],
+        short_id=row["short_id"],
+        schema_version=row["schema_version"],
+        rule_version=row["rule_version"],
+        created_by_pipeline_version=row["created_by_pipeline_version"],
+        runtime_policy_version=row["runtime_policy_version"],
+        last_rewritten_by_role=row["last_rewritten_by_role"],
+        status=row["status"],
+        severity=row["severity"],
+        trigger_canonical=row["trigger_canonical"],
+        trigger_canonical_zh=row["trigger_canonical_zh"],
+        concepts=loads_json(row["concepts"], []),
+        required_concept_groups=loads_json(row["required_concept_groups"], []),
+        excluded_contexts=loads_json(row["excluded_contexts"], []),
+        trigger_variants=loads_json(row["trigger_variants"], []),
+        trigger_variants_zh=loads_json(row["trigger_variants_zh"], []),
+        search_terms=loads_json(row["search_terms"], {}),
+        action_instruction=row["action_instruction"],
+        action_instruction_zh=row["action_instruction_zh"],
+        domain_tags=loads_json(row["domain_tags"], []),
+        observed_usefulness_score=row["observed_usefulness_score"],
+        false_positive_score=row["false_positive_score"],
+        source_origin=row["source_origin"],
+        first_observed_useful_at=row["first_observed_useful_at"],
+        project_scope=row["project_scope"],
+        project_id=row["project_id"],
+        created_at=row["created_at"],
+        updated_at=row["updated_at"],
+    )
+
 
 def total_rule_count(db: Db) -> int:
     """Rules in injection pool (active + trusted)."""
@@ -135,6 +187,7 @@ def fetch_rules(
     project_scope_exact: bool = False,
     source_origins: tuple[str, ...] | None = None,
     severities: tuple[str, ...] | None = None,
+    for_retrieval: bool = False,
 ) -> list[Rule]:
     where = []
     params: list = []
@@ -158,11 +211,13 @@ def fetch_rules(
         else:
             where.append("(project_scope = 'global' OR project_id = ?)")
         params.append(project_id)
-    sql = f"SELECT {RULE_COLUMNS} FROM rules"
+    columns = SEARCH_RULE_COLUMNS if for_retrieval else RULE_COLUMNS
+    mapper = row_to_search_rule if for_retrieval else row_to_rule
+    sql = f"SELECT {columns} FROM rules"
     if where:
         sql += " WHERE " + " AND ".join(where)
     sql += " ORDER BY updated_at DESC"
-    return [row_to_rule(r) for r in db.fetchall(sql, tuple(params))]
+    return [mapper(r) for r in db.fetchall(sql, tuple(params))]
 
 
 def fetch_rule_by_short_id(db: Db, short_id: str) -> Rule | None:

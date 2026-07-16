@@ -12,7 +12,7 @@ from .tokenizer import tokenize
 K1 = 1.2
 B = 0.75
 
-# Reuse IDF/doc index when BM25-relevant fields are unchanged (not updated_at).
+# Reuse IDF/doc index keyed by cheap rule identity (id, updated_at, rule_version).
 _INDEX_CACHE: OrderedDict[frozenset, tuple] = OrderedDict()
 _INDEX_CACHE_MAX = 64
 
@@ -108,20 +108,8 @@ def _build_fielded_doc(rule: Rule) -> _FieldedDoc:
 
 
 def _index_key(rules_list: list[Rule]) -> frozenset:
-    def _rule_key(r: Rule) -> tuple:
-        terms = tuple((lang, tuple(sorted(vals))) for lang, vals in sorted(r.search_terms.items()))
-        return (
-            r.id,
-            r.trigger_canonical,
-            r.action_instruction,
-            r.trigger_variants if isinstance(r.trigger_variants, str) else str(r.trigger_variants),
-            tuple(r.trigger_variants_zh),
-            terms,
-            r.trigger_canonical_zh,
-            r.action_instruction_zh,
-        )
-
-    return frozenset(_rule_key(r) for r in rules_list)
+    """Cheap identity key; invalidate when updated_at or rule_version changes."""
+    return frozenset((r.id, r.updated_at, r.rule_version) for r in rules_list)
 
 
 def _build_index(rules_list: list[Rule]) -> tuple[list[_FieldedDoc], Mapping[str, float], float]:

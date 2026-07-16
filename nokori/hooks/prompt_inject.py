@@ -51,14 +51,28 @@ class PromptInjectOutcome:
 def _fetch_formal_and_shadow(db: Db, cfg: Config, project_id: str | None) -> tuple[list, list]:
     """Fetch injection pool (active+trusted) and shadow pool (candidate+suppressed)."""
     if project_id is None:
-        formal_rules = fetch_rules(db, statuses=("active", "trusted"), global_only=True)
+        formal_rules = fetch_rules(
+            db, statuses=("active", "trusted"), global_only=True, for_retrieval=True
+        )
     else:
-        formal_rules = fetch_rules(db, statuses=("active", "trusted"), project_id=project_id)
+        formal_rules = fetch_rules(
+            db, statuses=("active", "trusted"), project_id=project_id, for_retrieval=True
+        )
     if cfg.promotion_enabled:
         if project_id is None:
-            shadow_rules = fetch_rules(db, statuses=("candidate", "suppressed"), global_only=True)
+            shadow_rules = fetch_rules(
+                db,
+                statuses=("candidate", "suppressed"),
+                global_only=True,
+                for_retrieval=True,
+            )
         else:
-            shadow_rules = fetch_rules(db, statuses=("candidate", "suppressed"), project_id=project_id)
+            shadow_rules = fetch_rules(
+                db,
+                statuses=("candidate", "suppressed"),
+                project_id=project_id,
+                for_retrieval=True,
+            )
     else:
         shadow_rules = []
     return formal_rules, shadow_rules

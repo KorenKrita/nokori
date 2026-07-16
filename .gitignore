@@ -48,4 +48,5 @@ web/node_modules
 .cursor/
 .memsearch/
 .hive/
+.optimize-loop-state.json
 .DS_Store
