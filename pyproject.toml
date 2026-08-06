@@ -39,7 +39,7 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Topic :: Software Development :: Libraries",
 ]
-dependencies = ["fastapi>=0.136,<1.0", "pydantic>=2.13,<3", "uvicorn[standard]>=0.49,<1.0", "websockets>=12,<17", "json-repair>=0.30,<1"]
+dependencies = ["fastapi>=0.136,<1.0", "pydantic>=2.13,<3", "uvicorn[standard]>=0.49,<1.0", "websockets>=12,<18", "json-repair>=0.30,<1"]
 
 [project.optional-dependencies]
 dev = ["pytest>=7.0", "pytest-xdist>=3.0", "httpx2>=2,<3", "setuptools>=68.0", "ruff>=0.8", "mypy>=1.13", "pre-commit>=3.0"]
